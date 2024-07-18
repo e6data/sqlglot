@@ -4,7 +4,7 @@ import typing as t
 
 import sqlglot
 
-from sqlglot import exp, generator, parser, tokens, transforms
+from sqlglot import exp, generator, parser, tokens
 from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
@@ -15,20 +15,12 @@ from sqlglot.dialects.dialect import (
     min_or_least,
     locate_to_strposition,
     rename_func,
-
     unit_to_str,
 )
 from sqlglot.helper import flatten, is_float, is_int, seq_get
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
-
-def format_time(expression):
-    # format_str = expression.this if isinstance(expression, exp.Literal) else expression
-    format_str = expression.args['format'].this
-    for key, value in E6().TIME_MAPPING.items():
-        format_str = format_str.replace(key, value)
-    return format_str
 
 
 def _build_datetime(
@@ -128,14 +120,14 @@ def _build_formatted_time_with_or_without_zone(
         if len(args) == 2:
             return exp_class(
                 this=seq_get(args, 1),
-                format=E6().format_time_for_parsefunctions(
+                format=format_time_for_parsefunctions(
                     seq_get(args, 0)
                     or (E6().TIME_FORMAT if default is True else default or None)
                 )
             )
         return exp_class(
             this=seq_get(args, 1),
-            format=E6().format_time_for_parsefunctions(
+            format=format_time_for_parsefunctions(
                 seq_get(args, 0)
                 or (E6().TIME_FORMAT if default is True else default or None)
             ),
@@ -246,6 +238,7 @@ def extract_sql(self: E6.Generator, expression: exp.Extract) -> str:
     extract_str = f"EXTRACT({unit} FROM {expression_sql})"
     return extract_str
 
+
 def interval_sql(self: E6.Generator, expression: exp.Interval) -> str:
     if expression.this and expression.unit:
         value = expression.this.name
@@ -254,6 +247,13 @@ def interval_sql(self: E6.Generator, expression: exp.Interval) -> str:
         return interval_str
     else:
         return ""
+
+
+def format_time_for_parsefunctions(expression):
+    format_str = expression.this if isinstance(expression, exp.Literal) else expression
+    for key, value in E6().TIME_MAPPING_for_parse_functions.items():
+        format_str = format_str.replace(key, value)
+    return format_str
 
 
 class E6(Dialect):
@@ -323,14 +323,9 @@ class E6(Dialect):
         "'quarter'": "QUARTER"
     }
 
-    def format_time_for_parsefunctions(self, expression):
-        format_str = expression.this if isinstance(expression, exp.Literal) else expression
-        for key, value in E6().TIME_MAPPING_for_parse_functions.items():
-            format_str = format_str.replace(key, value)
-        return format_str
-
     def format_time(self, expression):
-        # format_str = expression.this if isinstance(expression, exp.Literal) else expression
+        if expression.args.get("format") is None:
+            return None
         format_str = expression.args.get("format").this,
         format_string = format_str[0]
         for key, value in E6().TIME_MAPPING.items():
@@ -367,15 +362,15 @@ class E6(Dialect):
             "SPLIT": exp.Split.from_arg_list,
             "SPLIT_PART": exp.RegexpSplit.from_arg_list,
             "STRPOS": exp.StrPosition.from_arg_list,
-            "TO_CHAR": build_formatted_time(exp.TimeToStr, "e6"),
-            "TO_VARCHAR": build_formatted_time(exp.TimeToStr, "e6"),
+            "TO_CHAR": build_formatted_time(exp.TimeToStr, "E6"),
+            "TO_VARCHAR": build_formatted_time(exp.TimeToStr, "E6"),
             "STARTS_WITH": exp.StartsWith,
             "STARTSWITH": exp.StartsWith,
             "CURRENT_DATE": exp.CurrentDate.from_arg_list,
             "CURRENT_TIMESTAMP": exp.CurrentTimestamp.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
-            "TO_DATE": build_formatted_time(exp.StrToDate, "e6"),
+            "TO_DATE": build_formatted_time(exp.StrToDate, "E6"),
             "DATE": _build_date,
             "TIMESTAMP": _build_timestamp,
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
@@ -451,6 +446,14 @@ class E6(Dialect):
             for key, value in E6().TIME_MAPPING.items():
                 format_string = format_string.replace(value, key)
             return format_string
+
+        def cast_sql(self, expression: exp.Cast, safe_prefix: t.Optional[str] = None) -> str:
+            # Get the target type of the cast expression
+            target_type = expression.to.this
+            # Find the corresponding type in E6 from the mapping
+            e6_type = self.CAST_SUPPORTED_TYPE_MAPPING.get(target_type, target_type)
+            # Generate the SQL for casting with the mapped type
+            return f"CAST({self.sql(expression.this)} AS {e6_type})"
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -537,7 +540,6 @@ class E6(Dialect):
             exp.Lead: lambda self, e: self.func("LEAD", e.this, e.args.get("offset")),
             exp.FirstValue: rename_func("FIRST_VALUE"),
             exp.LastValue: rename_func("LAST_VALUE"),
-            exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.Stddev: rename_func("STDDEV"),
             exp.StddevPop: rename_func("STDDEV_POP"),
             exp.BitwiseLeftShift: lambda self, e: self.func("SHIFTLEFT", e.this, e.expression),
@@ -545,6 +547,7 @@ class E6(Dialect):
             exp.BitwiseOr: lambda self, e: self.func("BITWISE_OR", e.this, e.expression),
             exp.BitwiseXor: lambda self, e: self.func("BITWISE_XOR", e.this, e.expression),
             exp.BitwiseRightShift: lambda self, e: self.func("SHIFTRIGHT", e.this, e.expression),
+            exp.cast: cast_sql,
 
         }
 
@@ -654,3 +657,39 @@ class E6(Dialect):
             "row_number",
         }
 
+        UNSIGNED_TYPE_MAPPING = {
+            exp.DataType.Type.UBIGINT: "BIGINT",
+            exp.DataType.Type.UINT: "INT",
+            exp.DataType.Type.UMEDIUMINT: "INT",
+            exp.DataType.Type.USMALLINT: "INT",
+            exp.DataType.Type.UTINYINT: "INT",
+            exp.DataType.Type.UDECIMAL: "DECIMAL",
+        }
+
+        CAST_SUPPORTED_TYPE_MAPPING = {
+            exp.DataType.Type.NCHAR: "CHAR",
+            exp.DataType.Type.VARCHAR: "VARCHAR",
+            exp.DataType.Type.INT: "INT",
+            exp.DataType.Type.TINYINT: "INT",
+            exp.DataType.Type.SMALLINT: "INT",
+            exp.DataType.Type.MEDIUMINT: "INT",
+            exp.DataType.Type.BIGINT: "BIGINT",
+            exp.DataType.Type.BOOLEAN: "BOOLEAN",
+            exp.DataType.Type.DATE: "DATE",
+            exp.DataType.Type.DATE32: "DATE",
+            exp.DataType.Type.FLOAT: "FLOAT",
+            exp.DataType.Type.DOUBLE: "DOUBLE",
+            exp.DataType.Type.TIMESTAMP: "TIMESTAMP",
+            exp.DataType.Type.TIMESTAMPTZ: "TIMESTAMP",
+            exp.DataType.Type.TIMESTAMPNTZ: "TIMESTAMP",
+            exp.DataType.Type.TEXT: "VARCHAR",
+            exp.DataType.Type.TINYTEXT: "VARCHAR",
+            exp.DataType.Type.MEDIUMTEXT: "VARCHAR"
+        }
+
+        TYPE_MAPPING = {
+            **UNSIGNED_TYPE_MAPPING,
+            **CAST_SUPPORTED_TYPE_MAPPING,
+            exp.DataType.Type.JSON: "JSON",
+            exp.DataType.Type.STRUCT: "STRUCT",
+        }
