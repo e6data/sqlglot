@@ -4,7 +4,7 @@ import typing as t
 
 import sqlglot
 
-from sqlglot import exp, generator, parser, tokens, TokenType, ParseError
+from sqlglot import exp, generator, parser, tokens
 from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
@@ -346,8 +346,10 @@ class E6(Dialect):
         return format_str
 
     class Tokenizer(tokens.Tokenizer):
+        STRING_ESCAPES = ["\\"]
+        # identifiers ' worked fine for strings in functions
         IDENTIFIERS = ['"']
-        QUOTES = ['"']
+        QUOTES = ["'"]
         COMMENTS = ["--", "//", ("/*", "*/")]
 
         KEYWORDS = {
@@ -371,26 +373,34 @@ class E6(Dialect):
 
             return cast_expression
 
+        # this is the temporary implementation assuming we don't support agg functions in any part of lambda function
         def _parse_filter_array(self) -> ValueError | ArrayFilter:
             array_expr = seq_get(self, 0)
             lambda_expr = seq_get(self, 1)
 
-            # Check for aggregate functions in lambda_condition
-            # if isinstance(lambda_expr.this.left,exp.AggFunc):
-            #    ValueError("Aggregate functions are not supported in filter functions")
-            #    # return ValueError("Aggregate functions are not supported in filter functions")
-            #    self.raise_error("Aggregate functions are not supported in filter functions")
+            root_node = lambda_expr.args.get('this')
 
-            # Check for 'IN' clause in lambda_condition
-            if any(isinstance(node, (exp.In, exp.AggFunc)) for node in lambda_expr):
-                self.raise_error(
+            def does_root_node_contain_AGG_expr(root_node) -> bool:
+                # check if root is of Agg
+                if isinstance(root_node, exp.AggFunc):
+                    return True
+                # traverse through all the children and check for the same
+
+                if not isinstance(root_node, exp.Expression):  # check if root_node is leaf node
+                    return False
+
+                child_nodes: dict = root_node.args
+                for key, value in child_nodes.items():
+                    contains_agg: bool = does_root_node_contain_AGG_expr(value)
+                    if contains_agg:
+                        return True
+                return False
+
+            if does_root_node_contain_AGG_expr(root_node):
+                # parser.Parser.raise_error(parser.Parser,message=
+                #                           f"Lambda expressions in filter functions are not supported in 'IN' clause or on aggregate functions")
+                raise ValueError(
                     "Lambda expressions in filter functions are not supported in 'IN' clause or on aggregate functions")
-            #
-            # # Construct the lambda expression
-            # lambda_expr = exp.Lambda(
-            #     expressions=[lambda_param],
-            #     this=lambda_condition
-            # )
 
             return exp.ArrayFilter(this=array_expr, expression=lambda_expr)
 
@@ -399,7 +409,7 @@ class E6(Dialect):
 
             if (isinstance(array_expr, exp.Cast) and not isinstance(array_expr.to.this, exp.DataType.Type.ARRAY)) or (
                     not isinstance(array_expr, exp.Array)):
-                self.raise_error(f"UNNEST function only supports array type")
+                raise ValueError(f"UNNEST function only supports array type")
 
             return exp.Explode(this=array_expr)
 
@@ -448,6 +458,7 @@ class E6(Dialect):
             ),
             "FROM_UNIXTIME_WITHUNIT": _build_from_unixtime_withunit,
             "GREATEST": exp.Max,
+            "json_extract": exp.JSONExtract.from_arg_list,
             "LAST_DAY": lambda args: exp.LastDay(this=seq_get(args, 0)),
             "LAST_VALUE": exp.LastValue,
             "LAG": lambda args: exp.Lag(
@@ -544,22 +555,22 @@ class E6(Dialect):
 
             # Check for aggregate functions
             if any(isinstance(node, exp.AggFunc) for node in cond.find_all(exp.Expression)):
-                self.unsupported("Aggregate functions are not supported in filter functions")
-                return ""
-
-            # Check for 'IN' clause
-            if any(isinstance(node, exp.In) for node in cond.find_all(exp.Expression)):
-                self.unsupported("Lambda expressions are not supported in 'IN' clause")
+                raise ValueError("array filter's Lambda expression are not supported with aggregate functions")
                 return ""
 
             lambda_expr = f"{alias} -> {self.sql(cond)}"
             return f"FILTER_ARRAY({self.sql(expression.this)}, {lambda_expr})"
 
+        def date_trunc_sql(self: E6.Generator, expression: exp.DateTrunc|exp.TimestampTrunc) -> str:
+            unit = expression.unit
+            date_expr = expression.this
+            return f"DATE_TRUNC('{unit}',{date_expr})"
+
         def unnest_sql(self: E6.Generator, expression: exp.Explode) -> str:
             array_expr = expression.this
             if (isinstance(array_expr, exp.Cast) and not isinstance(array_expr.to.this, exp.DataType.Type.ARRAY)) or (
                     not isinstance(array_expr, exp.Array)):
-                self.unsupported("UNNEST will only support Type ARRAY")
+                raise ValueError("UNNEST in E6 will only support Type ARRAY")
                 return ""
             return f"UNNEST({array_expr})"
 
@@ -572,6 +583,7 @@ class E6(Dialect):
             exp.ArrayContains: rename_func("ARRAY_CONTAINS"),
             exp.ArrayFilter: filter_array_sql,
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
+            exp.ArraySize: rename_func("size"),
             exp.AtTimeZone: lambda self, e: self.func(
                 "DATETIME", e.this, e.args.get("zone")
             ),
@@ -580,6 +592,7 @@ class E6(Dialect):
             exp.BitwiseOr: lambda self, e: self.func("BITWISE_OR", e.this, e.expression),
             exp.BitwiseRightShift: lambda self, e: self.func("SHIFTRIGHT", e.this, e.expression),
             exp.BitwiseXor: lambda self, e: self.func("BITWISE_XOR", e.this, e.expression),
+            exp.Bracket: lambda self, e: self.func("ELEMENT_AT", e.this, e.expression),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.Date: lambda self, e: f"CAST({self.sql(e.this)} AS DATE)",
@@ -595,7 +608,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", e.text("unit"), e.this),
+            exp.DateTrunc: date_trunc_sql,
             exp.Explode: unnest_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
@@ -608,7 +621,8 @@ class E6(Dialect):
                 e.args.get("separator") or exp.Literal.string(',')
             ),
             exp.Interval: interval_sql,
-            exp.JSONExtract: lambda self, e: self.func("JSON_VALUE", e.this, e.expression),
+            exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
+            exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
             exp.Lag: lambda self, e: self.func("LAG", e.this, e.args.get("offset")),
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
@@ -646,7 +660,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", e.text("unit"), e.this),
+            exp.TimestampTrunc: date_trunc_sql,
             exp.ToChar: lambda self, e: self.func(
                 "TO_CHAR", exp.cast(e.this, exp.DataType.Type.TIMESTAMP), self.format_time(e)
             ),
