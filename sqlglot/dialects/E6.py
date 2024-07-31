@@ -561,11 +561,6 @@ class E6(Dialect):
             lambda_expr = f"{alias} -> {self.sql(cond)}"
             return f"FILTER_ARRAY({self.sql(expression.this)}, {lambda_expr})"
 
-        def date_trunc_sql(self: E6.Generator, expression: exp.DateTrunc|exp.TimestampTrunc) -> str:
-            unit = expression.unit
-            date_expr = expression.this
-            return f"DATE_TRUNC('{unit}',{date_expr})"
-
         def unnest_sql(self: E6.Generator, expression: exp.Explode) -> str:
             array_expr = expression.this
             if (isinstance(array_expr, exp.Cast) and not isinstance(array_expr.to.this, exp.DataType.Type.ARRAY)) or (
@@ -608,7 +603,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.DateTrunc: date_trunc_sql,
+            exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.Explode: unnest_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
@@ -660,7 +655,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.TimestampTrunc: date_trunc_sql,
+            exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: lambda self, e: self.func(
                 "TO_CHAR", exp.cast(e.this, exp.DataType.Type.TIMESTAMP), self.format_time(e)
             ),
