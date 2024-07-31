@@ -148,9 +148,15 @@ def build_datediff(expression_class: t.Type[E]) -> t.Callable[[t.List], E]:
             date_expr2 = args[1]
             unit = exp.Literal.string("day")  # Default unit when not provided
         elif len(args) == 3:
-            unit = args[0]
-            date_expr1 = args[1]
-            date_expr2 = args[2]
+            # Check if the first argument is a unit (which should be a string or a recognized type for units)
+            if isinstance(args[0], exp.Literal) and args[0].is_string:
+                unit = args[0]
+                date_expr1 = args[2]
+                date_expr2 = args[1]
+            else:
+                date_expr1 = args[0]
+                date_expr2 = args[1]
+                unit = args[2]  # Assume the third argument is a unit if not a recognized type
         else:
             raise ValueError("Incorrect number of arguments for DATEDIFF function")
 
