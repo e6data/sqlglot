@@ -31,8 +31,8 @@ This project aims to simplify the problem of query conversions among different S
 
 6. **Convert Queries**:
    - Enter your query or upload a CSV.
-   - Select `FROM_SQL`: the current dialect of the query(ies) you want to convert.
-   - Select `TO_SQL`: the dialect you want to convert the query(ies) to.
+   - Select `FROM_SQL`: the current dialect of the query(ies) you want to convert. (Added Snowflake, Databricks, Postgres, Presto, Athena, bigquery, E6 for now)
+   - Select `TO_SQL`: the dialect you want to convert the query(ies) to. (Added Snowflake, Databricks, Postgres, Presto, Athena, bigquery, E6 for now)
    - Click `Submit` or `Process CSV`.
 
 ### Using Terminal
