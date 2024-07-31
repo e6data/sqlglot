@@ -767,7 +767,7 @@ class Snowflake(Dialect):
             ),
             exp.GroupConcat: rename_func("LISTAGG"),
             exp.If: if_sql(name="IFF", false_value="NULL"),
-            exp.JSONExtract: lambda self, e: self.func("GET_PATH", e.this, e.expression),
+            exp.JSONExtract: lambda self, e: self.func("JSON_EXTRACT_PATH_TEXT", e.this, e.expression),
             exp.JSONExtractScalar: lambda self, e: self.func(
                 "JSON_EXTRACT_PATH_TEXT", e.this, e.expression
             ),
@@ -807,6 +807,7 @@ class Snowflake(Dialect):
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.Stuff: rename_func("INSERT"),
             exp.TimeAdd: date_delta_sql("TIMEADD"),
+            exp.TimestampAdd: date_delta_sql("TIMESTAMPADD"),
             exp.TimestampDiff: lambda self, e: self.func(
                 "TIMESTAMPDIFF", e.unit, e.expression, e.this
             ),
