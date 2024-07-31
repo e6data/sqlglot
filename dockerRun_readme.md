@@ -1,6 +1,6 @@
 # SQL Query Converter
 
-This project aims to simplify the problem of query conversions from E6 to X and vice-verca, in a time and cost-efficient manner. The project is available on Docker Hub with a simple UI.
+This project aims to simplify the problem of query conversions among different SQL dialects in a time and cost-efficient manner. The project is available on Docker Hub with a simple UI.
 
 ## How to Use the Docker Container
 
@@ -31,8 +31,8 @@ This project aims to simplify the problem of query conversions from E6 to X and 
 
 6. **Convert Queries**:
    - Enter your query or upload a CSV.
-   - Select `FROM_SQL`: the current dialect of the query(ies) you want to convert. (Added Snowflake, Databricks, Postgres, Presto, Athena, bigquery, E6 for now)
-   - Select `TO_SQL`: the dialect you want to convert the query(ies) to. (Added Snowflake, Databricks, Postgres, Presto, Athena, bigquery, E6 for now)
+   - Select `FROM_SQL`: the current dialect of the query(ies) you want to convert.
+   - Select `TO_SQL`: the dialect you want to convert the query(ies) to.
    - Click `Submit` or `Process CSV`.
 
 ### Using Terminal
@@ -58,7 +58,4 @@ If you do not have Docker Desktop, you can run the project through the terminal:
 
 - Make sure Docker Desktop is up to date.
 - Ensure you have pulled the latest image for the best performance and new features.
-- If you are using csv mode, make sure that you have columns with column names `UNQ_ALIAS`(for uniquely identifying the query) and `QUERY_TEXT`(for queries you want to convert) 
-
-
 
