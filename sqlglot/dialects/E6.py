@@ -20,7 +20,7 @@ from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
 )
 from sqlglot.expressions import ArrayFilter, RegexpExtract
-from sqlglot.helper import flatten, is_float, is_int, seq_get
+from sqlglot.helper import flatten, is_float, is_int, seq_get, is_type
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -169,10 +169,12 @@ def build_datediff(expression_class: t.Type[E]) -> t.Callable[[t.List], E]:
 def _from_unixtime_withunit_sql(self: E6.Generator, expression: exp.UnixToTime) -> str:
     timestamp = self.sql(expression, "this")
     scale = expression.args.get("scale")
+    # this by default value for seconds is been kept for now
     if scale is None:
-        raise ValueError("Unit 'seconds' or 'milliseconds' need to be provided")
-    if scale not in (exp.UnixToTime.SECONDS, exp.UnixToTime.MILLIS):
-        raise ValueError(f"Scale (unit) must be provided for FROM_UNIXTIME_WITHUNIT")
+        scale = "'seconds'"
+    #     raise ValueError("Unit 'seconds' or 'milliseconds' need to be provided")
+    # if scale not in (exp.UnixToTime.SECONDS, exp.UnixToTime.MILLIS):
+    #     raise ValueError(f"Scale (unit) must be provided for FROM_UNIXTIME_WITHUNIT")
 
     scale_str = self.sql(scale).lower()
     if scale_str == "'seconds'":
@@ -232,13 +234,14 @@ def _build_datetime_for_DT(args: t.List) -> exp.AtTimeZone:
     return exp.AtTimeZone(this=seq_get(args, 0), zone=seq_get(args, 1))
 
 
-def _build_regexp_extract(args: t.List) -> RegexpExtract | ParseError:
+def _build_regexp_extract(args: t.List) -> RegexpExtract:
     expr = seq_get(args, 0)
     pattern = seq_get(args, 1)
-    if isinstance(pattern, (exp.DataType.Type.TEXT, exp.DataType.Type.INT)):
+
+    if exp.DataType.is_type(pattern, exp.DataType.Type.TEXT) or exp.DataType.is_type(pattern, exp.DataType.Type.INT):
         return exp.RegexpExtract(this=expr, expression=pattern)
     else:
-        return exp.ParseError("regexp_extract only supports integer and string datatypes")
+        raise ValueError("regexp_extract only supports integer and string datatypes")
 
 
 # Need to look at the problem here regarding double casts appearing
@@ -348,7 +351,7 @@ class E6(Dialect):
         format_str = expression.args.get("format").this,
         format_string = format_str[0]
         for key, value in E6().TIME_MAPPING.items():
-            format_string = format_string.replace(value, key)
+            format_string = format_string.replace(key, value)
         return format_str
 
     class Tokenizer(tokens.Tokenizer):
@@ -365,7 +368,7 @@ class E6(Dialect):
     class Parser(parser.Parser):
         SUPPORTED_CAST_TYPES = {
             "CHAR", "VARCHAR", "INT", "BIGINT", "BOOLEAN",
-            "DATE", "FLOAT", "DOUBLE", "TIMESTAMP"
+            "DATE", "FLOAT", "DOUBLE", "TIMESTAMP", "DECIMAL"
         }
 
         def _parse_cast(self, strict: bool, safe: t.Optional[bool] = None) -> exp.Expression:
@@ -530,12 +533,95 @@ class E6(Dialect):
         NVL2_SUPPORTED = True
         LAST_DAY_SUPPORTS_DATE_PART = False
         INTERVAL_ALLOWS_PLURAL_FORM = False
+        NULL_ORDERING_SUPPORTED = None
+
+        # def select_sql(self, expression: exp.Select) -> str:
+        #     def collect_aliases_and_projections(expressions):
+        #         aliases = {}
+        #         projections = []
+        #         for e in expressions:
+        #             if isinstance(e, exp.Alias):
+        #                 alias = e.args.get("alias").sql(dialect=self.dialect)
+        #                 aliases[alias] = e.this
+        #                 projections.append(e)
+        #             else:
+        #                 projections.append(e)
+        #         return aliases, projections
+        #
+        #     def find_reused_aliases(projections, aliases):
+        #         reused_aliases = set()
+        #         for e in projections:
+        #             if isinstance(e, exp.Alias):
+        #                 alias = e.args.get("alias").sql(dialect=self.dialect)
+        #                 for other_e in projections:
+        #                     if other_e is not e and alias in other_e.sql(dialect=self.dialect):
+        #                         reused_aliases.add(alias)
+        #                         break
+        #         return reused_aliases
+        #
+        #     def create_subquery(projections, reused_aliases):
+        #         subquery_expressions = []
+        #         new_projections = []
+        #         for e in projections:
+        #             if isinstance(e, exp.Alias):
+        #                 alias = e.args.get("alias")
+        #                 # subquery_expressions.append(e.this.as_(alias))
+        #                 if alias.sql(dialect=self.dialect) in reused_aliases:
+        #                     subquery_expressions.append(e.this.as_(alias))
+        #                     new_projections.append(exp.column(f"t.{alias.sql(dialect=self.dialect)}"))
+        #                 else:
+        #                     new_projections.append(e)
+        #             else:
+        #                 new_projections.append(e)
+        #
+        #         subquery = exp.Select(expressions=subquery_expressions).subquery(alias="t")
+        #         # Adjust projections to replace reused aliases with subquery reference
+        #         adjusted_projections = []
+        #         for e in new_projections:
+        #             if isinstance(e, exp.Alias):
+        #                 alias = e.args.get("alias").sql(dialect=self.dialect)
+        #                 for alias_re in reused_aliases:
+        #                     if alias_re in e.this.sql(dialect=self.dialect):
+        #                         e = e.transform(lambda node: exp.column(f"t.{alias_re}") if isinstance(node,
+        #                                                                                                exp.Column) and node.sql(
+        #                             dialect=self.dialect) == alias_re else node)
+        #                 adjusted_projections.append(e)
+        #             else:
+        #                 for alias_re in reused_aliases:
+        #                     if alias_re in e.this.sql(dialect=self.dialect):
+        #                         e = e.transform(lambda node: exp.column(f"t.{alias_re}") if isinstance(node,
+        #                                                                                                exp.Column) and node.sql(
+        #                             dialect=self.dialect) == alias_re else node)
+        #                 adjusted_projections.append(e)
+        #
+        #         return adjusted_projections, subquery
+        #
+        #     # Collect all the aliases and projections defined in the SELECT clause
+        #     aliases, projections = collect_aliases_and_projections(expression.expressions)
+        #
+        #     # Find reused aliases in the projections
+        #     reused_aliases = find_reused_aliases(projections, aliases)
+        #
+        #     if reused_aliases:
+        #         new_projections, subquery = create_subquery(projections, reused_aliases)
+        #
+        #         # Ensure the FROM clause is added if missing
+        #         if expression.args.get("from"):
+        #             from_clause = expression.args["from"]
+        #             from_clause.append(subquery)
+        #         else:
+        #             # expression.set("from", subquery)
+        #             expression.set("from",subquery)
+        #
+        #         expression.set("expressions", new_projections)
+        #
+        #     return super().select_sql(expression)
 
         def format_time(self, expression, **kwargs):
             if expression.args.get("format") is None:
                 return None
-            format_str = expression.args.get("format").this,
-            format_string = format_str[0]
+            format_str = expression.args.get("format").this
+            format_string = format_str
             for key, value in E6().TIME_MAPPING.items():
                 format_string = format_string.replace(value, key)
             return format_string
@@ -639,6 +725,7 @@ class E6(Dialect):
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             exp.RegexpReplace: regexp_replace_sql,
             exp.RegexpSplit: rename_func("SPLIT_PART"),
+            # exp.Select: select_sql,
             exp.Stddev: rename_func("STDDEV"),
             exp.StddevPop: rename_func("STDDEV_POP"),
             exp.StrPosition: lambda self, e: self.func(
@@ -648,7 +735,7 @@ class E6(Dialect):
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.StartsWith: rename_func("STARTS_WITH"),
             exp.TimeToStr: lambda self, e: self.func(
-                "TO_CHAR", exp.cast(e.this, exp.DataType.Type.TIMESTAMP), self.format_time(e)
+                "FORMAT_DATE", exp.cast(e.this, exp.DataType.Type.TIMESTAMP), self.format_time(e)
             ),
             exp.TimeToUnix: rename_func("TO_UNIX_TIMESTAMP"),
             exp.Timestamp: lambda self, e: f"CAST({self.sql(e.this)} AS TIMESTAMP)",
@@ -814,7 +901,8 @@ class E6(Dialect):
             exp.DataType.Type.TIMESTAMPNTZ: "TIMESTAMP",
             exp.DataType.Type.TEXT: "VARCHAR",
             exp.DataType.Type.TINYTEXT: "VARCHAR",
-            exp.DataType.Type.MEDIUMTEXT: "VARCHAR"
+            exp.DataType.Type.MEDIUMTEXT: "VARCHAR",
+            exp.DataType.Type.DECIMAL: "DECIMAL"
         }
 
         TYPE_MAPPING = {
