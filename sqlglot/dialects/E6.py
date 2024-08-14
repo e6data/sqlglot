@@ -351,7 +351,7 @@ class E6(Dialect):
         format_str = expression.args.get("format").this,
         format_string = format_str[0]
         for key, value in E6().TIME_MAPPING.items():
-            format_string = format_string.replace(key, value)
+            format_string = format_string.replace(value, key)
         return format_str
 
     class Tokenizer(tokens.Tokenizer):
@@ -425,6 +425,7 @@ class E6(Dialect):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "APPROX_COUNT_DISTINCT": exp.ApproxDistinct,
+            "APPROX_QUANTILES": exp.ApproxQuantile.from_arg_list,
             "ARBITRARY": exp.AnyValue,
             "ARRAY_AGG": exp.ArrayAgg.from_arg_list,
             "ARRAY_CONCAT": exp.ArrayConcat,
@@ -437,7 +438,7 @@ class E6(Dialect):
             "CAST": _parse_cast,
             "CHARACTER_LENGTH": _build_with_arg_as_text(exp.Length),
             "CHARINDEX": locate_to_strposition,
-            "CHAR_LEN": _build_with_arg_as_text(exp.Length),
+            "CHAR_LENGTH": _build_with_arg_as_text(exp.Length),
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "CONVERT_TIMEZONE": _build_convert_timezone,
             "CURRENT_DATE": exp.CurrentDate.from_arg_list,
@@ -478,6 +479,7 @@ class E6(Dialect):
             ),
             "LEFT": _build_with_arg_as_text(exp.Left),
             "LEN": _build_with_arg_as_text(exp.Length),
+            "LENGTH": _build_with_arg_as_text(exp.Length),
             "LEAST": exp.Min,
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "LOCATE": locate_to_strposition,
@@ -655,16 +657,30 @@ class E6(Dialect):
 
         def unnest_sql(self: E6.Generator, expression: exp.Explode) -> str:
             array_expr = expression.this
-            if (isinstance(array_expr, exp.Cast) and not isinstance(array_expr.to.this, exp.DataType.Type.ARRAY)) or (
+            if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
+                                                                              exp.DataType.Type.ARRAY)) or (
                     not isinstance(array_expr, exp.Array)):
                 raise ValueError("UNNEST in E6 will only support Type ARRAY")
                 return ""
             return f"UNNEST({array_expr})"
 
+        def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
+            date_expr = expression.this
+            if not exp.DataType.is_type(date_expr, exp.DataType.Type.DATE) or exp.DataType.is_type(date_expr,
+                                                                                                   exp.DataType.Type.TIMESTAMP):
+                date_expr = f"CAST({date_expr} AS DATE)"
+            format_expr = self.format_time(expression)
+            return f"FORMAT_DATE({date_expr},'{format_expr}')"
+
+        # def struct_sql(self, expression: exp.Struct) -> str:
+        #     struct_expr = expression.expressions
+        #     return f"{struct_expr}"
+
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.AnyValue: rename_func("ARBITRARY"),
             exp.ApproxDistinct: approx_count_distinct_sql,
+            exp.ApproxQuantile: rename_func("APPROX_QUANTILES"),
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
             exp.ArrayContains: rename_func("ARRAY_CONTAINS"),
@@ -714,7 +730,7 @@ class E6(Dialect):
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
             exp.Lead: lambda self, e: self.func("LEAD", e.this, e.args.get("offset")),
-            exp.Length: rename_func("CHAR_LEN"),
+            exp.Length: rename_func("LENGTH"),
             exp.Log: rename_func("LN"),
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
@@ -726,6 +742,7 @@ class E6(Dialect):
             exp.RegexpReplace: regexp_replace_sql,
             exp.RegexpSplit: rename_func("SPLIT_PART"),
             # exp.Select: select_sql,
+            exp.Split: rename_func("SPLIT"),
             exp.Stddev: rename_func("STDDEV"),
             exp.StddevPop: rename_func("STDDEV_POP"),
             exp.StrPosition: lambda self, e: self.func(
@@ -734,9 +751,8 @@ class E6(Dialect):
             exp.StrToDate: lambda self, e: self.func("TO_DATE", e.this, self.format_time(e)),
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.StartsWith: rename_func("STARTS_WITH"),
-            exp.TimeToStr: lambda self, e: self.func(
-                "FORMAT_DATE", exp.cast(e.this, exp.DataType.Type.TIMESTAMP), self.format_time(e)
-            ),
+            # exp.Struct: struct_sql,
+            exp.TimeToStr: format_date_sql,
             exp.TimeToUnix: rename_func("TO_UNIX_TIMESTAMP"),
             exp.Timestamp: lambda self, e: f"CAST({self.sql(e.this)} AS TIMESTAMP)",
             exp.TimestampAdd: lambda self, e: self.func(
