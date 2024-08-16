@@ -415,8 +415,8 @@ class E6(Dialect):
 
         def _parse_unnest_sql(self) -> exp.Expression:
             array_expr = seq_get(self, 0)
-
-            if (isinstance(array_expr, exp.Cast) and not isinstance(array_expr.to.this, exp.DataType.Type.ARRAY)) or (
+            if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
+                                                                              exp.DataType.Type.ARRAY)) or (
                     not isinstance(array_expr, exp.Array)):
                 raise ValueError(f"UNNEST function only supports array type")
 
@@ -461,10 +461,10 @@ class E6(Dialect):
             "FILTER_ARRAY": _parse_filter_array,
             "FIRST_VALUE": exp.FirstValue,
             "FORMAT_DATE": lambda args: exp.TimeToStr(
-                this=exp.TsOrDsToDate(this=seq_get(args, 1)), format=seq_get(args, 0)
+                this=exp.TsOrDsToDate(this=seq_get(args, 0)), format=seq_get(args, 1)
             ),
             "FORMAT_TIMESTAMP": lambda args: exp.TimeToStr(
-                this=exp.TsOrDsToTimestamp(this=seq_get(args, 1)), format=seq_get(args, 0)
+                this=exp.TsOrDsToTimestamp(this=seq_get(args, 0)), format=seq_get(args, 1)
             ),
             "FROM_UNIXTIME_WITHUNIT": _build_from_unixtime_withunit,
             "GREATEST": exp.Max,
@@ -672,6 +672,15 @@ class E6(Dialect):
             format_expr = self.format_time(expression)
             return f"FORMAT_DATE({date_expr},'{format_expr}')"
 
+        def tochar_sql(self, expression: exp.ToChar) -> str:
+            date_expr = expression.this
+            if (isinstance(date_expr, exp.Cast) and not (date_expr.to.this.name == 'TIMESTAMP')) or ( not isinstance(date_expr, exp.Cast) and
+                    not exp.DataType.is_type(date_expr, exp.DataType.Type.DATE) or exp.DataType.is_type(date_expr,
+                                                                                                        exp.DataType.Type.TIMESTAMP)):
+                date_expr = f"CAST({date_expr} AS TIMESTAMP)"
+            format_expr = self.format_time(expression)
+            return f"TO_CHAR({date_expr},'{format_expr}')"
+
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
@@ -765,9 +774,7 @@ class E6(Dialect):
                 e.this,
             ),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
-            exp.ToChar: lambda self, e: self.func(
-                "TO_CHAR", exp.cast(e.this, exp.DataType.Type.TIMESTAMP), self.format_time(e)
-            ),
+            exp.ToChar: tochar_sql,
             exp.Trim: lambda self, e: self.func("TRIM", e.this, ' '),
             exp.TsOrDsAdd: lambda self, e: self.func(
                 "DATE_ADD",
