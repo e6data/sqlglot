@@ -194,8 +194,8 @@ def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
         value = exp.Cast(this=value, to=exp.DataType(this="TIMESTAMP"))
 
     # Check if the value is a cast to TIMESTAMP
-    if not (isinstance(value, exp.Cast) and value.to.is_type(exp.DataType.Type.TIMESTAMP)):
-        raise ValueError("Argument for TO_UNIX_TIMESTAMP must be of type TIMESTAMP")
+    # if not (isinstance(value, exp.Cast) and value.to.is_type(exp.DataType.Type.TIMESTAMP)):
+    #     raise ValueError("Argument for TO_UNIX_TIMESTAMP must be of type TIMESTAMP")
 
     return exp.TimeToUnix(this=value)
 
@@ -238,38 +238,12 @@ def _build_regexp_extract(args: t.List) -> RegexpExtract:
     expr = seq_get(args, 0)
     pattern = seq_get(args, 1)
 
-    if exp.DataType.is_type(pattern, exp.DataType.Type.TEXT) or exp.DataType.is_type(pattern, exp.DataType.Type.INT):
-        return exp.RegexpExtract(this=expr, expression=pattern)
-    else:
-        raise ValueError("regexp_extract only supports integer and string datatypes")
+    # if exp.DataType.is_type(pattern, exp.DataType.Type.TEXT) or exp.DataType.is_type(pattern, exp.DataType.Type.INT) or isinstance():
+    #     return exp.RegexpExtract(this=expr, expression=pattern)
+    # else:
+    #     raise ValueError("regexp_extract only supports integer and string datatypes")
 
-
-# Need to look at the problem here regarding double casts appearing
-def _last_day_sql(self: E6.Generator, expression: exp.LastDay) -> str:
-    # date_expr = self.sql(expression,"this")
-    date_expr = expression.args.get("this")
-    date_expr = date_expr
-    if isinstance(date_expr, exp.Literal):
-        date_expr = f"CAST({date_expr} AS DATE)"
-    return f"LAST_DAY({date_expr})"
-
-
-def extract_sql(self: E6.Generator, expression: exp.Extract) -> str:
-    unit = expression.this.name
-    expression_sql = self.sql(expression, "expression")
-    extract_str = f"EXTRACT({unit} FROM {expression_sql})"
-    return extract_str
-
-
-def interval_sql(self: E6.Generator, expression: exp.Interval) -> str:
-    if expression.this and expression.unit:
-        value = expression.this.name
-        unit = expression.unit.name
-        interval_str = f"INTERVAL {value} {unit}"
-        return interval_str
-    else:
-        return ""
-
+    return exp.RegexpExtract(this=expr, expression=pattern)
 
 def format_time_for_parsefunctions(expression):
     format_str = expression.this if isinstance(expression, exp.Literal) else expression
@@ -354,6 +328,17 @@ class E6(Dialect):
             format_string = format_string.replace(value, key)
         return format_str
 
+    def quote_identifier(self, expression: E, identify: bool = False) -> E:
+        keywords_to_quote = ["date", "timestamp", "week", "hour", "minute", "second", "day", "year", "millisecond",
+                             "month", "new","period", "check"]
+        if (
+                isinstance(expression, exp.Identifier)
+                and expression.name.lower() in keywords_to_quote
+        ):
+            expression.set("quoted", True)
+            return expression
+        return expression
+
     class Tokenizer(tokens.Tokenizer):
         STRING_ESCAPES = ["\\"]
         # identifiers ' worked fine for strings in functions
@@ -415,8 +400,8 @@ class E6(Dialect):
 
         def _parse_unnest_sql(self) -> exp.Expression:
             array_expr = seq_get(self, 0)
-
-            if (isinstance(array_expr, exp.Cast) and not isinstance(array_expr.to.this, exp.DataType.Type.ARRAY)) or (
+            if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
+                                                                              exp.DataType.Type.ARRAY)) or (
                     not isinstance(array_expr, exp.Array)):
                 raise ValueError(f"UNNEST function only supports array type")
 
@@ -461,10 +446,10 @@ class E6(Dialect):
             "FILTER_ARRAY": _parse_filter_array,
             "FIRST_VALUE": exp.FirstValue,
             "FORMAT_DATE": lambda args: exp.TimeToStr(
-                this=exp.TsOrDsToDate(this=seq_get(args, 1)), format=seq_get(args, 0)
+                this=exp.TsOrDsToDate(this=seq_get(args, 0)), format=seq_get(args, 1)
             ),
             "FORMAT_TIMESTAMP": lambda args: exp.TimeToStr(
-                this=exp.TsOrDsToTimestamp(this=seq_get(args, 1)), format=seq_get(args, 0)
+                this=exp.TsOrDsToTimestamp(this=seq_get(args, 0)), format=seq_get(args, 1)
             ),
             "FROM_UNIXTIME_WITHUNIT": _build_from_unixtime_withunit,
             "GREATEST": exp.Max,
@@ -636,6 +621,30 @@ class E6(Dialect):
             # Generate the SQL for casting with the mapped type
             return f"CAST({self.sql(expression.this)} AS {e6_type})"
 
+        def interval_sql(self: E6.Generator, expression: exp.Interval) -> str:
+            if expression.this and expression.unit:
+                value = expression.this.name
+                unit = expression.unit.name
+                interval_str = f"INTERVAL {value} {unit}"
+                return interval_str
+            else:
+                return ""
+
+        # Need to look at the problem here regarding double casts appearing
+        def _last_day_sql(self: E6.Generator, expression: exp.LastDay) -> str:
+            # date_expr = self.sql(expression,"this")
+            date_expr = expression.args.get("this")
+            date_expr = date_expr
+            if isinstance(date_expr, exp.Literal):
+                date_expr = f"CAST({date_expr} AS DATE)"
+            return f"LAST_DAY({date_expr})"
+
+        def extract_sql(self: E6.Generator, expression: exp.Extract) -> str:
+            unit = expression.this.name
+            expression_sql = self.sql(expression, "expression")
+            extract_str = f"EXTRACT({unit} FROM {expression_sql})"
+            return extract_str
+
         def filter_array_sql(self: E6.Generator, expression: exp.ArrayFilter) -> str:
             cond = expression.expression
             if isinstance(cond, exp.Lambda) and len(cond.expressions) == 1:
@@ -666,11 +675,26 @@ class E6(Dialect):
 
         def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
             date_expr = expression.this
-            if not exp.DataType.is_type(date_expr, exp.DataType.Type.DATE) or exp.DataType.is_type(date_expr,
-                                                                                                   exp.DataType.Type.TIMESTAMP):
-                date_expr = f"CAST({date_expr} AS DATE)"
             format_expr = self.format_time(expression)
+            if isinstance(date_expr, exp.CurrentDate) or isinstance(date_expr, exp.CurrentTimestamp) or isinstance(
+                    date_expr, exp.TsOrDsToDate):
+                return f"FORMAT_DATE({date_expr},'{format_expr}')"
+            if (not exp.DataType.is_type(date_expr, exp.DataType.Type.DATE) or exp.DataType.is_type(date_expr,
+                                                                                                    exp.DataType.Type.TIMESTAMP)) or (
+                    (isinstance(date_expr, exp.Cast) and not (date_expr.to.this.name == 'TIMESTAMP')) or (
+                    isinstance(date_expr, exp.Cast) and not (date_expr.to.this.name == 'DATE'))):
+                date_expr = f"CAST({date_expr} AS DATE)"
             return f"FORMAT_DATE({date_expr},'{format_expr}')"
+
+        def tochar_sql(self, expression: exp.ToChar) -> str:
+            date_expr = expression.this
+            if (isinstance(date_expr, exp.Cast) and not (date_expr.to.this.name == 'TIMESTAMP')) or (
+                    not isinstance(date_expr, exp.Cast) and
+                    not exp.DataType.is_type(date_expr, exp.DataType.Type.DATE) or exp.DataType.is_type(date_expr,
+                                                                                                        exp.DataType.Type.TIMESTAMP)):
+                date_expr = f"CAST({date_expr} AS TIMESTAMP)"
+            format_expr = self.format_time(expression)
+            return f"TO_CHAR({date_expr},'{format_expr}')"
 
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
@@ -698,7 +722,7 @@ class E6(Dialect):
             exp.Bracket: lambda self, e: self.func("ELEMENT_AT", e.this, e.expression),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
-            exp.Date: lambda self, e: f"CAST({self.sql(e.this)} AS DATE)",
+            exp.Date: lambda self, e: self.func("DATE", e.this),
             exp.DateAdd: lambda self, e: self.func(
                 "DATE_ADD",
                 unit_to_str(e),
@@ -754,7 +778,7 @@ class E6(Dialect):
             # exp.Struct: struct_sql,
             exp.TimeToStr: format_date_sql,
             exp.TimeToUnix: rename_func("TO_UNIX_TIMESTAMP"),
-            exp.Timestamp: lambda self, e: f"CAST({self.sql(e.this)} AS TIMESTAMP)",
+            exp.Timestamp: lambda self, e: self.func("TIMESTAMP", e.this),
             exp.TimestampAdd: lambda self, e: self.func(
                 "TIMESTAMP_ADD", unit_to_str(e), e.expression, e.this
             ),
@@ -765,9 +789,7 @@ class E6(Dialect):
                 e.this,
             ),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
-            exp.ToChar: lambda self, e: self.func(
-                "TO_CHAR", exp.cast(e.this, exp.DataType.Type.TIMESTAMP), self.format_time(e)
-            ),
+            exp.ToChar: tochar_sql,
             exp.Trim: lambda self, e: self.func("TRIM", e.this, ' '),
             exp.TsOrDsAdd: lambda self, e: self.func(
                 "DATE_ADD",
