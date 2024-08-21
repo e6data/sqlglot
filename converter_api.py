@@ -4,6 +4,8 @@ import uvicorn
 import re
 
 import sqlglot
+from sqlglot.optimizer.qualify_columns import quote_identifiers
+from sqlglot import parse_one
 
 app = FastAPI()
 
@@ -30,9 +32,11 @@ async def convert_query(
         to_sql: Optional[str] = Form("E6")
 ):
     try:
-        converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=True)[0]
+        converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
         converted_query = replace_struct_in_query(converted_query)
-        return {"converted_query": converted_query}
+        converted_query_ast = parse_one(converted_query, read=to_sql)
+        double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(dialect=to_sql)
+        return {"converted_query": double_quotes_added_query}
     except Exception as e:
         return {"error": str(e)}
 
