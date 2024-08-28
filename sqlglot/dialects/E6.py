@@ -333,7 +333,7 @@ class E6(Dialect):
 
         if (
                 isinstance(expression, exp.Identifier)
-                and expression.name.lower() in keywords_to_quote
+                and expression.name.upper() in keywords_to_quote
         ):
             expression.set("quoted", True)
             return expression
