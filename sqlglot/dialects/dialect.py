@@ -1132,9 +1132,13 @@ def regexp_replace_sql(self: Generator, expression: exp.RegexpReplace) -> str:
     bad_args = list(filter(expression.args.get, ("position", "occurrence", "modifiers")))
     if bad_args:
         self.unsupported(f"REGEXP_REPLACE does not support the following arg(s): {bad_args}")
+    if not "replacement" in expression.args.keys():
+        replacement = ''
+    else:
+        replacement = expression.args["replacement"]
 
     return self.func(
-        "REGEXP_REPLACE", expression.this, expression.expression, expression.args["replacement"]
+        "REGEXP_REPLACE", expression.this, expression.expression, replacement
     )
 
 
