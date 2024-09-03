@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, HTTPException
 from typing import Optional
 import uvicorn
 import re
@@ -38,7 +38,7 @@ async def convert_query(
         double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(dialect=to_sql)
         return {"converted_query": double_quotes_added_query}
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")
