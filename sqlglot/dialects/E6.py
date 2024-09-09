@@ -178,9 +178,9 @@ def _from_unixtime_withunit_sql(self: E6.Generator, expression: exp.UnixToTime) 
 
     scale_str = self.sql(scale).lower()
     if scale_str == "'seconds'":
-        return f"CAST(FROM_UNIXTIME_WITHUNIT({timestamp}, 'seconds') AS TIMESTAMP)"
+        return f"FROM_UNIXTIME_WITHUNIT({timestamp}, 'seconds')"
     elif scale_str == "'milliseconds'":
-        return f"CAST(FROM_UNIXTIME_WITHUNIT({timestamp}, 'milliseconds') AS TIMESTAMP)"
+        return f"(ROM_UNIXTIME_WITHUNIT({timestamp}, 'milliseconds')"
     else:
         raise ValueError(
             f"Unsupported unit for FROM_UNIXTIME_WITHUNIT: {scale_str} and we only support 'seconds' and 'milliseconds'")
@@ -502,7 +502,9 @@ class E6(Dialect):
             "TIMESTAMP_ADD": lambda args: exp.TimestampAdd(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
-            "TIMESTAMP_DIFF": exp.TimestampDiff.from_arg_list,
+            "TIMESTAMP_DIFF": lambda args: exp.TimestampDiff(
+                this=seq_get(args, 1), expression=seq_get(args, 2), unit=seq_get(args, 0)
+            ),
             "TO_CHAR": build_formatted_time(exp.TimeToStr, "E6"),
             "TO_DATE": build_formatted_time(exp.StrToDate, "E6"),
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
