@@ -400,10 +400,10 @@ class E6(Dialect):
 
         def _parse_unnest_sql(self) -> exp.Expression:
             array_expr = seq_get(self, 0)
-            if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
-                                                                              exp.DataType.Type.ARRAY)) or (
-                    not isinstance(array_expr, exp.Array)):
-                raise ValueError(f"UNNEST function only supports array type")
+            # if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
+            #                                                                   exp.DataType.Type.ARRAY)) or (
+            #         not isinstance(array_expr, exp.Array)):
+            #     raise ValueError(f"UNNEST function only supports array type")
 
             return exp.Explode(this=array_expr)
 
@@ -670,11 +670,11 @@ class E6(Dialect):
 
         def unnest_sql(self: E6.Generator, expression: exp.Explode) -> str:
             array_expr = expression.this
-            if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
-                                                                              exp.DataType.Type.ARRAY)) or (
-                    not isinstance(array_expr, exp.Array)):
-                raise ValueError("UNNEST in E6 will only support Type ARRAY")
-                return ""
+            # if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
+            #                                                                   exp.DataType.Type.ARRAY)) or (
+            #         not isinstance(array_expr, exp.Array)):
+            #     raise ValueError("UNNEST in E6 will only support Type ARRAY")
+            #     return ""
             return f"UNNEST({array_expr})"
 
         def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
