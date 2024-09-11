@@ -470,7 +470,7 @@ class E6(Dialect):
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "LOCATE": locate_to_strposition,
             "LOG": exp.Log.from_arg_list,
-            "MAX_BY": exp.ArgMax.from_arg_list(),
+            "MAX_BY": exp.ArgMax.from_arg_list,
             "MD5": exp.MD5Digest.from_arg_list,
             "MOD": lambda args: parser.build_mod(args),
             "NOW": exp.CurrentTimestamp.from_arg_list,
