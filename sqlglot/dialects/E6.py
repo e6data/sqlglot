@@ -487,6 +487,7 @@ class E6(Dialect):
             ),
             "REPLACE": exp.RegexpReplace.from_arg_list,
             "RIGHT": _build_with_arg_as_text(exp.Right),
+            "SEQUENCE" : exp.GenerateSeries.from_arg_list,
             "SHIFTRIGHT": binary_from_function(exp.BitwiseRightShift),
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
             "SIZE": exp.ArraySize.from_arg_list,
@@ -668,14 +669,33 @@ class E6(Dialect):
             lambda_expr = f"{alias} -> {self.sql(cond)}"
             return f"FILTER_ARRAY({self.sql(expression.this)}, {lambda_expr})"
 
-        def unnest_sql(self: E6.Generator, expression: exp.Explode) -> str:
-            array_expr = expression.this
-            # if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
-            #                                                                   exp.DataType.Type.ARRAY)) or (
-            #         not isinstance(array_expr, exp.Array)):
-            #     raise ValueError("UNNEST in E6 will only support Type ARRAY")
-            #     return ""
-            return f"UNNEST({array_expr})"
+        def unnest_sql(self, expression: exp.Explode) -> str:
+            # Extract array expressions
+            array_expr = expression.args.get("expressions")
+
+            # Format array expressions to SQL
+            if isinstance(array_expr, list):
+                array_expr_sql = ', '.join(self.sql(arg) for arg in array_expr)
+            else:
+                array_expr_sql = self.sql(array_expr)
+
+            # Process the alias
+            alias = self.sql(expression, "alias")
+
+            # Handle the columns for alias arguments (e.g., t(x))
+            alias_args = expression.args.get("alias")
+            alias_columns = ""
+
+            if alias_args and alias_args.args.get("columns"):
+                # Extract the columns for alias arguments
+                alias_columns_list = [self.sql(col) for col in alias_args.args["columns"]]
+                alias_columns = f"({', '.join(alias_columns_list)})"
+
+            # Construct the alias string
+            alias_sql = f" AS {alias}{alias_columns}" if alias else ""
+
+            # Generate the final UNNEST SQL
+            return f"UNNEST({array_expr_sql}){alias_sql}"
 
         def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
             date_expr = expression.this
@@ -699,6 +719,13 @@ class E6(Dialect):
                 date_expr = f"CAST({date_expr} AS TIMESTAMP)"
             format_expr = self.format_time(expression)
             return f"TO_CHAR({date_expr},'{format_expr}')"
+
+        def generateseries_sql(self, expression: exp.GenerateSeries) -> str:
+            start = expression.args["start"]
+            end = expression.args["end"]
+            step = expression.args.get("step")
+
+            return self.func("SEQUENCE", start, end, step)
 
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
@@ -747,6 +774,7 @@ class E6(Dialect):
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", "'UTC'", e.args.get("zone"), e.this
             ),
+            exp.GenerateSeries: generateseries_sql,
             exp.GroupConcat: lambda self, e: self.func(
                 "LISTAGG" if e.args.get("within_group") else "STRING_AGG",
                 e.this,
