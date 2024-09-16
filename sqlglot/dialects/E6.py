@@ -526,6 +526,7 @@ class E6(Dialect):
         LAST_DAY_SUPPORTS_DATE_PART = False
         INTERVAL_ALLOWS_PLURAL_FORM = False
         NULL_ORDERING_SUPPORTED = None
+        SUPPORTS_TABLE_ALIAS_COLUMNS = False
 
         # def select_sql(self, expression: exp.Select) -> str:
         #     def collect_aliases_and_projections(expressions):
@@ -720,6 +721,12 @@ class E6(Dialect):
             format_expr = self.format_time(expression)
             return f"TO_CHAR({date_expr},'{format_expr}')"
 
+        def date_trunc_sql(self, expression: exp.Expression|exp.TimestampTrunc):
+            unit = unit_to_str(expression.unit)
+            date = expression.this
+            return self.func("DATE_TRUNC",unit,date)
+
+
         def generateseries_sql(self, expression: exp.GenerateSeries) -> str:
             start = expression.args["start"]
             end = expression.args["end"]
@@ -767,7 +774,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
+            exp.DateTrunc: date_trunc_sql,
             exp.Explode: unnest_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
@@ -811,7 +818,7 @@ class E6(Dialect):
             exp.StartsWith: rename_func("STARTS_WITH"),
             # exp.Struct: struct_sql,
             exp.TimeToStr: format_date_sql,
-            exp.TimeToUnix: rename_func("TO_UNIX_TIMESTAMP"),
+            exp.TimeToUnix: _to_unix_timestamp_sql,
             exp.Timestamp: lambda self, e: self.func("TIMESTAMP", e.this),
             exp.TimestampAdd: lambda self, e: self.func(
                 "TIMESTAMP_ADD", unit_to_str(e), e.expression, e.this
