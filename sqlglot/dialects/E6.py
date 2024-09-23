@@ -20,7 +20,7 @@ from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
 )
 from sqlglot.expressions import ArrayFilter, RegexpExtract
-from sqlglot.helper import flatten, is_float, is_int, seq_get, is_type
+from sqlglot.helper import flatten, is_float, is_int, seq_get, is_type, apply_index_offset
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -261,6 +261,7 @@ def format_time_for_parsefunctions(expression):
 
 class E6(Dialect):
     NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
+    INDEX_OFFSET = 1
 
     TIME_MAPPING = {
         "y": "%Y",
@@ -732,6 +733,20 @@ class E6(Dialect):
             date = expression.this
             return self.func("DATE_TRUNC", unit, date)
 
+        def bracket_sql(self, expression: exp.Bracket) -> str:
+            return self.func(
+                    "ELEMENT_AT",
+                    expression.this,
+                    seq_get(
+                        apply_index_offset(
+                            expression.this,
+                            expression.expressions,
+                            1 - expression.args.get("offset", 0),
+                        ),
+                        0,
+                    ),
+                )
+
         def generateseries_sql(self, expression: exp.GenerateSeries) -> str:
             start = expression.args["start"]
             end = expression.args["end"]
@@ -763,7 +778,7 @@ class E6(Dialect):
             exp.BitwiseOr: lambda self, e: self.func("BITWISE_OR", e.this, e.expression),
             exp.BitwiseRightShift: lambda self, e: self.func("SHIFTRIGHT", e.this, e.expression),
             exp.BitwiseXor: lambda self, e: self.func("BITWISE_XOR", e.this, e.expression),
-            exp.Bracket: lambda self, e: self.func("ELEMENT_AT", e.this, e.expression),
+            exp.Bracket: bracket_sql,
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.Date: lambda self, e: self.func("DATE", e.this),
