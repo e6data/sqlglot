@@ -18,6 +18,8 @@ from sqlglot.dialects.dialect import (
     unit_to_str,
     regexp_replace_sql,
     approx_count_distinct_sql,
+    timestrtotime_sql,
+    datestrtodate_sql
 )
 from sqlglot.expressions import ArrayFilter, RegexpExtract
 from sqlglot.helper import flatten, is_float, is_int, seq_get, is_type, apply_index_offset
@@ -839,6 +841,8 @@ class E6(Dialect):
             exp.StartsWith: rename_func("STARTS_WITH"),
             # exp.Struct: struct_sql,
             exp.TimeToStr: format_date_sql,
+            exp.TimeStrToTime: timestrtotime_sql,
+            exp.TimeStrToDate: datestrtodate_sql,
             exp.TimeToUnix: _to_unix_timestamp_sql,
             exp.Timestamp: lambda self, e: self.func("TIMESTAMP", e.this),
             exp.TimestampAdd: lambda self, e: self.func(
