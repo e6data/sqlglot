@@ -620,7 +620,7 @@ class E6(Dialect):
         def format_time(self, expression, **kwargs):
             if expression.args.get("format") is None:
                 return None
-            format_str = expression.args.get("format").this
+            format_str = expression.args.get("format").name
             format_string = format_str
             for key, value in E6().TIME_MAPPING.items():
                 format_string = format_string.replace(value, key)
@@ -708,15 +708,14 @@ class E6(Dialect):
         def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
             date_expr = expression.this
             format_expr = self.format_time(expression)
+            format_expr_quoted = f"'{format_expr}'"
             if isinstance(date_expr, exp.CurrentDate) or isinstance(date_expr, exp.CurrentTimestamp) or isinstance(
                     date_expr, exp.TsOrDsToDate):
-                return f"FORMAT_DATE({date_expr},'{format_expr}')"
-            if (not exp.DataType.is_type(date_expr, exp.DataType.Type.DATE) or exp.DataType.is_type(date_expr,
-                                                                                                    exp.DataType.Type.TIMESTAMP)) or (
-                    (isinstance(date_expr, exp.Cast) and not (date_expr.to.this.name == 'TIMESTAMP')) or (
-                    isinstance(date_expr, exp.Cast) and not (date_expr.to.this.name == 'DATE'))):
+                return self.func("FORMAT_DATE", date_expr, format_expr_quoted)
+            if isinstance(date_expr, exp.Cast) and not (
+                    date_expr.to.this.name == 'TIMESTAMP' or date_expr.to.this.name == 'DATE'):
                 date_expr = f"CAST({date_expr} AS DATE)"
-            return f"FORMAT_DATE({date_expr},'{format_expr}')"
+            return self.func("FORMAT_DATE", date_expr, format_expr_quoted)
 
         def tochar_sql(self, expression: exp.ToChar) -> str:
             date_expr = expression.this
