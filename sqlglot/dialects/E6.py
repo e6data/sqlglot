@@ -99,8 +99,8 @@ def _build_from_unixtime_withunit(args: t.List[exp.Expression]) -> exp.Func:
     this = seq_get(args, 0)
     unit = seq_get(args, 1)
 
-    if unit is None or unit.this.lower() not in {'seconds', 'milliseconds'}:
-        raise ValueError(f"Unsupported unit for FROM_UNIXTIME_WITHUNIT: {unit if unit else 'Nothing'}")
+    # if unit is None or unit.this.lower() not in {'seconds', 'milliseconds'}:
+    #     raise ValueError(f"Unsupported unit for FROM_UNIXTIME_WITHUNIT: {unit if unit else 'Nothing'}")
 
     return exp.UnixToTime(this=this, scale=unit)
 
@@ -166,24 +166,31 @@ def build_datediff(expression_class: t.Type[E]) -> t.Callable[[t.List], E]:
 
 
 # how others use use from_unixtime_withunit and how E6 differs.
-def _from_unixtime_withunit_sql(self: E6.Generator, expression: exp.UnixToTime) -> str:
-    timestamp = self.sql(expression, "this")
-    scale = expression.args.get("scale")
-    # this by default value for seconds is been kept for now
-    if scale is None:
-        scale = "'seconds'"
-    #     raise ValueError("Unit 'seconds' or 'milliseconds' need to be provided")
-    # if scale not in (exp.UnixToTime.SECONDS, exp.UnixToTime.MILLIS):
-    #     raise ValueError(f"Scale (unit) must be provided for FROM_UNIXTIME_WITHUNIT")
+def _from_unixtime_withunit_sql(self: E6.Generator, expression: exp.UnixToTime | exp.UnixToStr) -> str:
+    seconds_str = f"'seconds'"
+    milliseconds_str = f"'milliseconds'"
+    if isinstance(expression, exp.UnixToTime):
+        timestamp = self.sql(expression, "this")
+        # scale = expression.args.get("scale")
+        # # this by default value for seconds is been kept for now
+        # if scale is None:
+        #     scale = 'seconds'
+        scale = expression.args.get("scale", exp.Literal.string('seconds'))  # Default to 'seconds' if scale is None
 
-    scale_str = self.sql(scale).lower()
-    if scale_str == "'seconds'":
-        return f"FROM_UNIXTIME_WITHUNIT({timestamp}, 'seconds')"
-    elif scale_str == "'milliseconds'":
-        return f"(ROM_UNIXTIME_WITHUNIT({timestamp}, 'milliseconds')"
+        # Extract scale string, ensure it is lowercase and strip any extraneous quotes
+        scale_str = self.sql(scale).lower().strip('"').strip("'")
+        if scale_str == 'seconds':
+            return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, seconds_str)
+        elif scale_str == 'milliseconds':
+            return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, milliseconds_str)
+        else:
+            raise ValueError(
+                f"Unsupported unit for FROM_UNIXTIME_WITHUNIT: {scale_str} and we only support 'seconds' and 'milliseconds'")
     else:
-        raise ValueError(
-            f"Unsupported unit for FROM_UNIXTIME_WITHUNIT: {scale_str} and we only support 'seconds' and 'milliseconds'")
+        timestamp = self.sql(expression, "this")
+        if isinstance(expression.this, exp.Div) and (expression.this.right.this == '1000'):
+            return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, seconds_str)
+        return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, milliseconds_str)
 
 
 def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
@@ -200,12 +207,12 @@ def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
     return exp.TimeToUnix(this=value)
 
 
-def _to_unix_timestamp_sql(self: E6.Generator, expression: exp.TimeToUnix) -> str:
+def _to_unix_timestamp_sql(self: E6.Generator, expression: exp.TimeToUnix | exp.StrToUnix) -> str:
     timestamp = self.sql(expression, "this")
     # if not (isinstance(timestamp, exp.Cast) and timestamp.to.is_type(exp.DataType.Type.TIMESTAMP)):
-    if isinstance(timestamp, exp.Literal):
-        timestamp = f"CAST({timestamp} AS TIMESTAMP)"
-    return f"TO_UNIX_TIMESTAMP({timestamp})"
+    # if isinstance(timestamp, (exp.Literal, exp.Column)):
+    #     timestamp = f"CAST({timestamp} AS TIMESTAMP)"
+    return self.func("TO_UNIX_TIMESTAMP", timestamp)
 
 
 # need to remove below but kept it for reference to write other methods.
@@ -815,6 +822,7 @@ class E6(Dialect):
             ),
             exp.StrToDate: lambda self, e: self.func("TO_DATE", e.this, self.format_time(e)),
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
+            exp.StrToUnix: _to_unix_timestamp_sql,
             exp.StartsWith: rename_func("STARTS_WITH"),
             # exp.Struct: struct_sql,
             exp.TimeToStr: format_date_sql,
@@ -845,6 +853,7 @@ class E6(Dialect):
                 e.this,
             ),
             exp.UnixToTime: _from_unixtime_withunit_sql,
+            exp.UnixToStr: _from_unixtime_withunit_sql
         }
 
         RESERVED_KEYWORDS = {
