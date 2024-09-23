@@ -494,7 +494,7 @@ class E6(Dialect):
             ),
             "REPLACE": exp.RegexpReplace.from_arg_list,
             "RIGHT": _build_with_arg_as_text(exp.Right),
-            "SEQUENCE" : exp.GenerateSeries.from_arg_list,
+            "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SHIFTRIGHT": binary_from_function(exp.BitwiseRightShift),
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
             "SIZE": exp.ArraySize.from_arg_list,
@@ -727,11 +727,10 @@ class E6(Dialect):
             format_expr = self.format_time(expression)
             return f"TO_CHAR({date_expr},'{format_expr}')"
 
-        def date_trunc_sql(self, expression: exp.Expression|exp.TimestampTrunc):
+        def date_trunc_sql(self, expression: exp.DateTrunc | exp.TimestampTrunc):
             unit = unit_to_str(expression.unit)
             date = expression.this
-            return self.func("DATE_TRUNC",unit,date)
-
+            return self.func("DATE_TRUNC", unit, date)
 
         def generateseries_sql(self, expression: exp.GenerateSeries) -> str:
             start = expression.args["start"]
@@ -836,7 +835,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
+            exp.TimestampTrunc: date_trunc_sql,
             exp.ToChar: tochar_sql,
             exp.Trim: lambda self, e: self.func("TRIM", e.this, ' '),
             exp.TsOrDsAdd: lambda self, e: self.func(
