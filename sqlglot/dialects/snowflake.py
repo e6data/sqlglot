@@ -28,7 +28,7 @@ from sqlglot.dialects.dialect import (
     no_make_interval_sql,
 )
 from sqlglot.generator import unsupported_args
-from sqlglot.helper import flatten, is_float, is_int, seq_get
+from sqlglot.helper import flatten, is_float, is_int, seq_get, apply_index_offset
 from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
@@ -325,6 +325,7 @@ def _json_extract_value_array_sql(
 class Snowflake(Dialect):
     # https://docs.snowflake.com/en/sql-reference/identifiers-syntax
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
+    INDEX_OFFSET = 0
     NULL_ORDERING = "nulls_are_large"
     TIME_FORMAT = "'YYYY-MM-DD HH24:MI:SS'"
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -419,6 +420,9 @@ class Snowflake(Dialect):
                 this=seq_get(args, 0), expression=seq_get(args, 1), max_dist=seq_get(args, 2)
             ),
             "FLATTEN": exp.Explode.from_arg_list,
+            "GET": lambda args: exp.Bracket(
+                this=seq_get(args, 0), expressions=[seq_get(args, 1)], offset=0, safe=True
+            ),
             "GET_PATH": lambda args, dialect: exp.JSONExtract(
                 this=seq_get(args, 0), expression=dialect.to_json_path(seq_get(args, 1))
             ),
