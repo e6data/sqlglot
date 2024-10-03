@@ -23,7 +23,7 @@ from sqlglot.dialects.dialect import (
     var_map_sql,
     map_date_part,
 )
-from sqlglot.helper import flatten, is_float, is_int, seq_get
+from sqlglot.helper import flatten, is_float, is_int, seq_get, apply_index_offset
 from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
@@ -189,6 +189,7 @@ def _flatten_structured_types_unless_iceberg(expression: exp.Expression) -> exp.
 class Snowflake(Dialect):
     # https://docs.snowflake.com/en/sql-reference/identifiers-syntax
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
+    INDEX_OFFSET = 0
     NULL_ORDERING = "nulls_are_large"
     TIME_FORMAT = "'YYYY-MM-DD HH24:MI:SS'"
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -275,6 +276,9 @@ class Snowflake(Dialect):
             "DATEDIFF": _build_datediff,
             "DIV0": _build_if_from_div0,
             "FLATTEN": exp.Explode.from_arg_list,
+            "GET": lambda args: exp.Bracket(
+                this=seq_get(args, 0), expressions=[seq_get(args, 1)], offset=0, safe=True
+            ),
             "GET_PATH": lambda args, dialect: exp.JSONExtract(
                 this=seq_get(args, 0), expression=dialect.to_json_path(seq_get(args, 1))
             ),
