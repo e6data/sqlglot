@@ -28,7 +28,7 @@ from sqlglot.dialects.dialect import (
     no_make_interval_sql,
 )
 from sqlglot.generator import unsupported_args
-from sqlglot.helper import flatten, is_float, is_int, seq_get
+from sqlglot.helper import flatten, is_float, is_int, seq_get, apply_index_offset
 from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
