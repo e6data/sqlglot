@@ -262,6 +262,11 @@ def format_time_for_parsefunctions(expression):
     return format_str
 
 
+def add_single_quotes(expression) -> str:
+    quoted_str = f"'{expression}'"
+    return quoted_str
+
+
 class E6(Dialect):
     NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
     INDEX_OFFSET = 1
@@ -985,7 +990,7 @@ class E6(Dialect):
             exp.StrPosition: lambda self, e: self.func(
                 "LOCATE", e.args.get("substr"), e.this, e.args.get("position")
             ),
-            exp.StrToDate: lambda self, e: self.func("TO_DATE", e.this, self.format_time(e)),
+            exp.StrToDate: lambda self, e: self.func("TO_DATE", e.this, add_single_quotes(self.format_time(e))),
             exp.StrToTime: to_timestamp_sql,
             exp.StrToUnix: _to_unix_timestamp_sql,
             exp.StartsWith: rename_func("STARTS_WITH"),
