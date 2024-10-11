@@ -532,6 +532,9 @@ class E6(Dialect):
             "ARRAY_CONTAINS": exp.ArrayContains.from_arg_list,
             "ARRAY_JOIN": exp.ArrayToString.from_arg_list,
             "ARRAY_TO_STRING": exp.ArrayToString.from_arg_list,
+            "ARRAY_POSITION": lambda args: exp.ArrayPosition(
+                this=seq_get(args, 1), expression=seq_get(args, 0)
+            ),
             "BITWISE_NOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BITWISE_OR": binary_from_function(exp.BitwiseOr),
             "BITWISE_XOR": binary_from_function(exp.BitwiseXor),
@@ -904,6 +907,9 @@ class E6(Dialect):
             exp.ArrayFilter: filter_array_sql,
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArraySize: rename_func("size"),
+            exp.ArrayPosition: lambda self, e: self.func(
+                "ARRAY_POSITION", e.expression, e.this
+            ),
             exp.AtTimeZone: lambda self, e: self.func(
                 "DATETIME", e.this, e.args.get("zone")
             ),
