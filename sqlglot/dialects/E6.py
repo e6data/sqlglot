@@ -871,19 +871,25 @@ class E6(Dialect):
             return f"ARRAY[{expressions_sql}]"
 
         def anonymous_sql(self, expression: exp.Anonymous) -> str:
-            # Map the function names that need to be rewritten
-            function_mapping = {
+            # Map the function names that need to be rewritten with same order of arguments
+            function_mapping_normal = {
                 "REGEXP_INSTR": "INSTR",
                 "CONTAINS": "CONTAINS_SUBSTR"
             }
             # Extract the function name from the expression
             function_name = self.sql(expression, "this")
 
-            # Check if the function name needs to be mapped to a different one
-            mapped_function = function_mapping.get(function_name, function_name)
+            if function_name in function_mapping_normal:
+                # Check if the function name needs to be mapped to a different one
+                mapped_function = function_mapping_normal.get(function_name, function_name)
 
-            # Generate the SQL for the mapped function with its expressions
-            return self.func(mapped_function, *expression.expressions)
+                # Generate the SQL for the mapped function with its expressions
+                return self.func(mapped_function, *expression.expressions)
+
+            elif function_name.lower() == 'table':
+                return f"{self.sql(*expression.expressions)}"
+
+            return self.func(function_name, *expression.expressions)
 
         def to_timestamp_sql(self: E6.Generator, expression: exp.StrToTime) -> str:
             date_expr = expression.this
