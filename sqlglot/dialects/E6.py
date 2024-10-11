@@ -254,6 +254,7 @@ def _build_regexp_extract(args: t.List) -> RegexpExtract:
 
     return exp.RegexpExtract(this=expr, expression=pattern)
 
+
 def format_time_for_parsefunctions(expression):
     format_str = expression.this if isinstance(expression, exp.Literal) else expression
     for key, value in E6().TIME_MAPPING_for_parse_functions.items():
@@ -794,6 +795,8 @@ class E6(Dialect):
         def unnest_sql(self, expression: exp.Explode) -> str:
             # Extract array expressions
             array_expr = expression.args.get("expressions")
+            if expression.this:
+                return self.func("UNNEST", expression.this)
 
             # Format array expressions to SQL
             if isinstance(array_expr, list):
