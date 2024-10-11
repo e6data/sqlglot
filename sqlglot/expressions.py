@@ -5294,6 +5294,10 @@ class ArrayAny(Func):
     arg_types = {"this": True, "expression": True}
 
 
+class ArrayPosition(Func):
+    arg_types = {"this": True, "expression": True}
+
+
 class ArrayConcat(Func):
     _sql_names = ["ARRAY_CONCAT", "ARRAY_CAT"]
     arg_types = {"this": True, "expressions": False}
