@@ -761,7 +761,7 @@ class E6(Dialect):
             date_expr = date_expr
             if isinstance(date_expr, exp.Literal):
                 date_expr = f"CAST({date_expr} AS DATE)"
-            return f"LAST_DAY({date_expr})"
+            return self.func("LAST_DAY", date_expr)
 
         def extract_sql(self: E6.Generator, expression: exp.Extract) -> str:
             unit = expression.this.name
@@ -837,11 +837,6 @@ class E6(Dialect):
                 date_expr = f"CAST({date_expr} AS TIMESTAMP)"
             format_expr = self.format_time(expression)
             return f"TO_CHAR({date_expr},'{format_expr}')"
-
-        def date_trunc_sql(self, expression: exp.DateTrunc | exp.TimestampTrunc):
-            unit = unit_to_str(expression.unit)
-            date = expression.this
-            return self.func("DATE_TRUNC", unit, date)
 
         def bracket_sql(self, expression: exp.Bracket) -> str:
             return self.func(
@@ -933,7 +928,10 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.DateTrunc: date_trunc_sql,
+            exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
+            exp.Datetime: lambda self, e: self.func(
+                "DATETIME", e.this, e.expression
+            ),
             exp.Explode: unnest_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
@@ -991,7 +989,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.TimestampTrunc: date_trunc_sql,
+            exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
             exp.Trim: lambda self, e: self.func("TRIM", e.this, ' '),
             exp.TsOrDsAdd: lambda self, e: self.func(
