@@ -766,7 +766,12 @@ class E6(Dialect):
 
             # Get the sorting direction (ASC/DESC) based on the 'desc' argument in the expression
             desc = expression.args.get("desc")
-            sort_order = " DESC" if desc else " ASC"
+            if desc:
+                sort_order = " DESC"
+            elif desc is None:
+                sort_order = " "
+            else:
+                sort_order = " ASC"
 
             # Check if the expression has an explicit NULL ordering (NULLS FIRST/LAST)
             nulls_first = expression.args.get("nulls_first")
@@ -951,7 +956,6 @@ class E6(Dialect):
             format_expr = self.format_time(expression)
             format_str = f"'{format_expr}'"
             return self.func("TO_TIMESTAMP", date_expr, format_str)
-
 
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
