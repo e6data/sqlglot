@@ -736,6 +736,56 @@ class E6(Dialect):
         #
         #     return super().select_sql(expression)
 
+        def ordered_sql(self, expression: exp.Ordered) -> str:
+            """
+            Custom override for the `ordered_sql` method in the E6 dialect.
+
+            Original Purpose:
+            -----------------
+            In the base `sqlglot` generator, the `ordered_sql` method is responsible for generating the SQL
+            for `ORDER BY` clauses, including handling NULL ordering (`NULLS FIRST` or `NULLS LAST`) and sorting
+            directions (`ASC`, `DESC`). If null ordering is not supported in a dialect, the base method adds a
+            fallback "CASE WHEN" logic to simulate the desired behavior.
+
+            However, this fallback logic introduces a `CASE WHEN` clause to handle NULLs, which is often
+            unnecessary and can clutter the final query.
+
+            Purpose of This Override:
+            -------------------------
+            In the E6 dialect, we do not want this "CASE WHEN" fallback logic or explicit null ordering
+            like `NULLS FIRST` or `NULLS LAST`. The goal is to keep the `ORDER BY` clause simple and
+            direct without any additional handling for NULL values. Thus, we are overriding the `ordered_sql`
+            method to remove the null ordering logic and simplify the output.
+
+            Args:
+                expression: The `Ordered` expression that contains the column, order direction, and null ordering.
+
+            Returns:
+                str: The SQL string for the `ORDER BY` clause in the E6 dialect.
+            """
+
+            # Get the sorting direction (ASC/DESC) based on the 'desc' argument in the expression
+            desc = expression.args.get("desc")
+            sort_order = " DESC" if desc else " ASC"
+
+            # Check if the expression has an explicit NULL ordering (NULLS FIRST/LAST)
+            nulls_first = expression.args.get("nulls_first")
+            nulls_sort_change = ""
+
+            # Only add NULLS FIRST/LAST if explicitly supported by the dialect
+            # Here, NULL_ORDERING_SUPPORTED is False, so we omit null handling altogether
+            if self.NULL_ORDERING_SUPPORTED:
+                if nulls_first:
+                    nulls_sort_change = " NULLS FIRST"
+                else:
+                    nulls_sort_change = " NULLS LAST"
+
+            # Generate the SQL for the expression (usually the column or expression being ordered)
+            this = self.sql(expression, "this")
+
+            # Return the simple ORDER BY clause without any fallback null ordering logic
+            return f"{this}{sort_order}{nulls_sort_change}"
+
         def format_time(self, expression, **kwargs):
             format_expr = expression.args.get("format")
             format_str = getattr(format_expr, "name", format_expr)
