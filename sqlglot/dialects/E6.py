@@ -545,9 +545,9 @@ class E6(Dialect):
             "BITWISE_OR": binary_from_function(exp.BitwiseOr),
             "BITWISE_XOR": binary_from_function(exp.BitwiseXor),
             "CAST": _parse_cast,
-            "CHARACTER_LENGTH": _build_with_arg_as_text(exp.Length),
+            "CHARACTER_LENGTH": exp.Length.from_arg_list,
             "CHARINDEX": locate_to_strposition,
-            "CHAR_LENGTH": _build_with_arg_as_text(exp.Length),
+            "CHAR_LENGTH": exp.Length.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "CONVERT_TIMEZONE": _build_convert_timezone,
             "CURRENT_DATE": exp.CurrentDate.from_arg_list,
@@ -587,8 +587,8 @@ class E6(Dialect):
                 this=seq_get(args, 0), offset=seq_get(args, 1)
             ),
             "LEFT": _build_with_arg_as_text(exp.Left),
-            "LEN": _build_with_arg_as_text(exp.Length),
-            "LENGTH": _build_with_arg_as_text(exp.Length),
+            "LEN": exp.Length.from_arg_list,
+            "LENGTH": exp.Length.from_arg_list,
             "LEAST": exp.Min.from_arg_list,
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "LOCATE": locate_to_strposition,
@@ -930,6 +930,29 @@ class E6(Dialect):
             # expressions_sql = f"[{expressions_sql}]"
             return f"ARRAY[{expressions_sql}]"
 
+        def length_sql(self, expression: exp.Length) -> str:
+            """
+            Overrides the Length SQL generation for E6.
+
+            Purpose:
+            --------
+            In Snowflake and BigQuery, the `Length` function has an optional `binary` argument that
+            defaults to `True`. This supports the length of binary/hex strings. In the E6 dialect, we
+            do not need this `binary` argument. So, this method strips out the `binary` behavior when
+            generating the SQL for `Length`.
+
+            Args:
+                expression (exp.Length): The Length expression from the AST.
+
+            Returns:
+                str: The SQL for the `Length` function in E6, without the binary argument.
+            """
+            # Get the SQL representation of the column or expression whose length is to be calculated
+            length_expr = self.sql(expression, "this")
+
+            # Directly return the Length function call without considering binary behavior
+            return f"LENGTH({length_expr})"
+
         def anonymous_sql(self, expression: exp.Anonymous) -> str:
             # Map the function names that need to be rewritten with same order of arguments
             function_mapping_normal = {
@@ -1025,7 +1048,7 @@ class E6(Dialect):
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
             exp.Lead: lambda self, e: self.func("LEAD", e.this, e.args.get("offset")),
-            exp.Length: rename_func("LENGTH"),
+            exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
