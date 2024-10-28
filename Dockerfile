@@ -2,6 +2,7 @@
 FROM python:3.9
 
 # Set the working directory in the container
+RUN adduser --home /app e6 --disabled-password
 WORKDIR /app
 
 # Copy the requirements file into the container
@@ -19,6 +20,10 @@ COPY . .
 
 # Make port 8000 available to the world outside this container
 EXPOSE 8100
+
+USER e6
+
+HEALTHCHECK none
 
 # Run the FastAPI app using Uvicorn
 CMD ["uvicorn", "converter_api:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "5"]
