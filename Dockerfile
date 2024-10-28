@@ -1,6 +1,7 @@
 FROM python:3.12-alpine
 
 # Set the working directory in the container
+RUN adduser --home /app e6 --disabled-password
 WORKDIR /app
 
 # Install dependencies required for building certain packages, including pyarrow
@@ -21,6 +22,10 @@ RUN pip install fastapi==0.115.4 uvicorn==0.32.0 python-multipart
 COPY . .
 
 # Make port 8100 available to the world outside this container
+USER e6
+
+HEALTHCHECK none
+
 USER e6
 
 HEALTHCHECK none
