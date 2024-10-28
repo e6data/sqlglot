@@ -254,11 +254,17 @@ def _build_regexp_extract(args: t.List) -> RegexpExtract:
 
     return exp.RegexpExtract(this=expr, expression=pattern)
 
+
 def format_time_for_parsefunctions(expression):
     format_str = expression.this if isinstance(expression, exp.Literal) else expression
     for key, value in E6().TIME_MAPPING_for_parse_functions.items():
         format_str = format_str.replace(key, value)
     return format_str
+
+
+def add_single_quotes(expression) -> str:
+    quoted_str = f"'{expression}'"
+    return quoted_str
 
 
 class E6(Dialect):
@@ -539,9 +545,9 @@ class E6(Dialect):
             "BITWISE_OR": binary_from_function(exp.BitwiseOr),
             "BITWISE_XOR": binary_from_function(exp.BitwiseXor),
             "CAST": _parse_cast,
-            "CHARACTER_LENGTH": _build_with_arg_as_text(exp.Length),
+            "CHARACTER_LENGTH": exp.Length.from_arg_list,
             "CHARINDEX": locate_to_strposition,
-            "CHAR_LENGTH": _build_with_arg_as_text(exp.Length),
+            "CHAR_LENGTH": exp.Length.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "CONVERT_TIMEZONE": _build_convert_timezone,
             "CURRENT_DATE": exp.CurrentDate.from_arg_list,
@@ -581,8 +587,8 @@ class E6(Dialect):
                 this=seq_get(args, 0), offset=seq_get(args, 1)
             ),
             "LEFT": _build_with_arg_as_text(exp.Left),
-            "LEN": _build_with_arg_as_text(exp.Length),
-            "LENGTH": _build_with_arg_as_text(exp.Length),
+            "LEN": exp.Length.from_arg_list,
+            "LENGTH": exp.Length.from_arg_list,
             "LEAST": exp.Min.from_arg_list,
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "LOCATE": locate_to_strposition,
@@ -730,6 +736,61 @@ class E6(Dialect):
         #
         #     return super().select_sql(expression)
 
+        def ordered_sql(self, expression: exp.Ordered) -> str:
+            """
+            Custom override for the `ordered_sql` method in the E6 dialect.
+
+            Original Purpose:
+            -----------------
+            In the base `sqlglot` generator, the `ordered_sql` method is responsible for generating the SQL
+            for `ORDER BY` clauses, including handling NULL ordering (`NULLS FIRST` or `NULLS LAST`) and sorting
+            directions (`ASC`, `DESC`). If null ordering is not supported in a dialect, the base method adds a
+            fallback "CASE WHEN" logic to simulate the desired behavior.
+
+            However, this fallback logic introduces a `CASE WHEN` clause to handle NULLs, which is often
+            unnecessary and can clutter the final query.
+
+            Purpose of This Override:
+            -------------------------
+            In the E6 dialect, we do not want this "CASE WHEN" fallback logic or explicit null ordering
+            like `NULLS FIRST` or `NULLS LAST`. The goal is to keep the `ORDER BY` clause simple and
+            direct without any additional handling for NULL values. Thus, we are overriding the `ordered_sql`
+            method to remove the null ordering logic and simplify the output.
+
+            Args:
+                expression: The `Ordered` expression that contains the column, order direction, and null ordering.
+
+            Returns:
+                str: The SQL string for the `ORDER BY` clause in the E6 dialect.
+            """
+
+            # Get the sorting direction (ASC/DESC) based on the 'desc' argument in the expression
+            desc = expression.args.get("desc")
+            if desc:
+                sort_order = " DESC"
+            elif desc is None:
+                sort_order = " "
+            else:
+                sort_order = " ASC"
+
+            # Check if the expression has an explicit NULL ordering (NULLS FIRST/LAST)
+            nulls_first = expression.args.get("nulls_first")
+            nulls_sort_change = ""
+
+            # Only add NULLS FIRST/LAST if explicitly supported by the dialect
+            # Here, NULL_ORDERING_SUPPORTED is False, so we omit null handling altogether
+            if self.NULL_ORDERING_SUPPORTED:
+                if nulls_first:
+                    nulls_sort_change = " NULLS FIRST"
+                else:
+                    nulls_sort_change = " NULLS LAST"
+
+            # Generate the SQL for the expression (usually the column or expression being ordered)
+            this = self.sql(expression, "this")
+
+            # Return the simple ORDER BY clause without any fallback null ordering logic
+            return f"{this}{sort_order}{nulls_sort_change}"
+
         def format_time(self, expression, **kwargs):
             format_expr = expression.args.get("format")
             format_str = getattr(format_expr, "name", format_expr)
@@ -794,6 +855,8 @@ class E6(Dialect):
         def unnest_sql(self, expression: exp.Explode) -> str:
             # Extract array expressions
             array_expr = expression.args.get("expressions")
+            if expression.this:
+                return self.func("UNNEST", expression.this)
 
             # Format array expressions to SQL
             if isinstance(array_expr, list):
@@ -867,27 +930,55 @@ class E6(Dialect):
             # expressions_sql = f"[{expressions_sql}]"
             return f"ARRAY[{expressions_sql}]"
 
+        def length_sql(self, expression: exp.Length) -> str:
+            """
+            Overrides the Length SQL generation for E6.
+
+            Purpose:
+            --------
+            In Snowflake and BigQuery, the `Length` function has an optional `binary` argument that
+            defaults to `True`. This supports the length of binary/hex strings. In the E6 dialect, we
+            do not need this `binary` argument. So, this method strips out the `binary` behavior when
+            generating the SQL for `Length`.
+
+            Args:
+                expression (exp.Length): The Length expression from the AST.
+
+            Returns:
+                str: The SQL for the `Length` function in E6, without the binary argument.
+            """
+            # Get the SQL representation of the column or expression whose length is to be calculated
+            length_expr = self.sql(expression, "this")
+
+            # Directly return the Length function call without considering binary behavior
+            return f"LENGTH({length_expr})"
+
         def anonymous_sql(self, expression: exp.Anonymous) -> str:
-            # Map the function names that need to be rewritten
-            function_mapping = {
+            # Map the function names that need to be rewritten with same order of arguments
+            function_mapping_normal = {
                 "REGEXP_INSTR": "INSTR",
                 "CONTAINS": "CONTAINS_SUBSTR"
             }
             # Extract the function name from the expression
             function_name = self.sql(expression, "this")
 
-            # Check if the function name needs to be mapped to a different one
-            mapped_function = function_mapping.get(function_name, function_name)
+            if function_name in function_mapping_normal:
+                # Check if the function name needs to be mapped to a different one
+                mapped_function = function_mapping_normal.get(function_name, function_name)
 
-            # Generate the SQL for the mapped function with its expressions
-            return self.func(mapped_function, *expression.expressions)
+                # Generate the SQL for the mapped function with its expressions
+                return self.func(mapped_function, *expression.expressions)
+
+            elif function_name.lower() == 'table':
+                return f"{self.sql(*expression.expressions)}"
+
+            return self.func(function_name, *expression.expressions)
 
         def to_timestamp_sql(self: E6.Generator, expression: exp.StrToTime) -> str:
             date_expr = expression.this
             format_expr = self.format_time(expression)
             format_str = f"'{format_expr}'"
             return self.func("TO_TIMESTAMP", date_expr, format_str)
-
 
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
@@ -957,7 +1048,7 @@ class E6(Dialect):
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
             exp.Lead: lambda self, e: self.func("LEAD", e.this, e.args.get("offset")),
-            exp.Length: rename_func("LENGTH"),
+            exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
@@ -976,7 +1067,7 @@ class E6(Dialect):
             exp.StrPosition: lambda self, e: self.func(
                 "LOCATE", e.args.get("substr"), e.this, e.args.get("position")
             ),
-            exp.StrToDate: lambda self, e: self.func("TO_DATE", e.this, self.format_time(e)),
+            exp.StrToDate: lambda self, e: self.func("TO_DATE", e.this, add_single_quotes(self.format_time(e))),
             exp.StrToTime: to_timestamp_sql,
             exp.StrToUnix: _to_unix_timestamp_sql,
             exp.StartsWith: rename_func("STARTS_WITH"),
