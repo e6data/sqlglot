@@ -616,6 +616,7 @@ class E6(Dialect):
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT": exp.Split.from_arg_list,
+            # Function node for split_part is not there with equivalent functionality
             "SPLIT_PART": exp.RegexpSplit.from_arg_list,
             "STARTSWITH": exp.StartsWith.from_arg_list,
             "STARTS_WITH": exp.StartsWith.from_arg_list,
@@ -1059,7 +1060,7 @@ class E6(Dialect):
             exp.RegexpExtract: rename_func("REGEXP_EXTRACT"),
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             exp.RegexpReplace: regexp_replace_sql,
-            exp.RegexpSplit: rename_func("SPLIT_PART"),
+            exp.RegexpSplit: rename_func("SPLIT"),
             # exp.Select: select_sql,
             exp.Split: rename_func("SPLIT"),
             exp.Stddev: rename_func("STDDEV"),
