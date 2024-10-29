@@ -5,7 +5,8 @@ WORKDIR /app
 
 # Install dependencies required for building certain packages, including pyarrow
 RUN apk add --no-cache gcc g++ cmake make libxml2-dev libxslt-dev \
-    && apk add --no-cache py3-pyarrow
+    && apk add --no-cache py3-pyarrow && \
+    adduser --home /app e6 --disabled-password
 
 # Copy the requirements file into the container
 COPY requirements.txt .
@@ -20,7 +21,9 @@ RUN pip install fastapi==0.103.1 uvicorn==0.23.2 python-multipart
 COPY . .
 
 # Make port 8100 available to the world outside this container
-EXPOSE 8100
+USER E6
+
+HEALTHCHECK none
 
 # Run the FastAPI app using Uvicorn
 CMD ["uvicorn", "converter_api:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "5"]
