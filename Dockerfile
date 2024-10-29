@@ -15,7 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install specific FastAPI, Uvicorn, and multipart dependencies
-RUN pip install fastapi==0.103.1 uvicorn==0.23.2 python-multipart
+RUN pip install fastapi==0.115.4 uvicorn==0.32.0 python-multipart 
 
 # Copy the rest of the application code into the container
 COPY . .
