@@ -638,6 +638,9 @@ class E6(Dialect):
             "TO_DATE": build_formatted_time(exp.StrToDate, "E6"),
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
+            "TO_UTF8": lambda args: exp.Encode(
+                this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
+            ),
             "TO_UNIX_TIMESTAMP": _build_to_unix_timestamp,
             "TO_VARCHAR": build_formatted_time(exp.TimeToStr, "E6"),
             "TRUNC": date_trunc_to_time,
@@ -1030,6 +1033,7 @@ class E6(Dialect):
             exp.Datetime: lambda self, e: self.func(
                 "DATETIME", e.this, e.expression
             ),
+            exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: unnest_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
