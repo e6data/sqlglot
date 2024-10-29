@@ -21,7 +21,7 @@ RUN pip install fastapi==0.103.1 uvicorn==0.23.2 python-multipart
 COPY . .
 
 # Make port 8100 available to the world outside this container
-USER E6
+USER e6
 
 HEALTHCHECK none
 
