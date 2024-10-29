@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Install dependencies required for building certain packages, including pyarrow
 RUN apk add --no-cache gcc g++ cmake make libxml2-dev libxslt-dev \
-    && apk add --no-cache py3-pyarrow && \
+    && apk add --no-cache py3-pyarrow openssl==3.3.2-r1 && \
     adduser --home /app e6 --disabled-password
 
 # Copy the requirements file into the container
