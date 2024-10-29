@@ -1,6 +1,6 @@
 pipeline {
     environment {
-        RELEASE_NAME = "appserver"
+        RELEASE_NAME = "transpiler"
         IMAGE_TAG_PREFIX = "3.0.${BUILD_NUMBER}-"
         
         GCP_PROJECT_ID = credentials('GCP_PROJECT_ID')
