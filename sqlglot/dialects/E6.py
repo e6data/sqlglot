@@ -984,6 +984,38 @@ class E6(Dialect):
             format_str = f"'{format_expr}'"
             return self.func("TO_TIMESTAMP", date_expr, format_str)
 
+        def string_agg_sql(self: E6.Generator, expression: exp.GroupConcat) -> str:
+            """
+            Generate the SQL for the STRING_AGG or LISTAGG function in E6.
+
+            This method addresses an AST parsing issue where the separator for the STRING_AGG function
+            sometimes appears under the DISTINCT node due to parsing intricacies. Instead of modifying
+            expr_1 directly, this version clones expr_1 to retain DISTINCT while applying the separator
+            correctly.
+
+            Args:
+                expression (exp.GroupConcat): The AST expression for GROUP_CONCAT
+
+            Returns:
+                str: The SQL representation for STRING_AGG/LISTAGG with proper separator handling.
+            """
+            separator = expression.args.get("separator")
+            expr_1 = expression.this
+
+            # If no separator was found, check if it's embedded in DISTINCT
+            if separator is None and isinstance(expr_1, exp.Distinct):
+                # If DISTINCT has two expressions, the second may represent the separator
+                if len(expr_1.expressions) == 2 and isinstance(expr_1.expressions[1], exp.Literal):
+                    separator = expr_1.expressions[1]  # Use second expression as separator
+
+                    # Clone DISTINCT to keep it unchanged, then apply the first expression for aggregation
+                    distinct_expr_clone = expr_1.copy()
+                    distinct_expr_clone.set("expressions", [expr_1.expressions[0]])
+                    expr_1 = distinct_expr_clone
+
+            # Generate SQL using STRING_AGG/LISTAGG, with separator or default '-'
+            return self.func("STRING_AGG", expr_1, separator or exp.Literal.string('-'))
+
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
@@ -1041,11 +1073,7 @@ class E6(Dialect):
                 "CONVERT_TIMEZONE", "'UTC'", e.args.get("zone"), e.this
             ),
             exp.GenerateSeries: generateseries_sql,
-            exp.GroupConcat: lambda self, e: self.func(
-                "LISTAGG" if e.args.get("within_group") else "STRING_AGG",
-                e.this,
-                e.args.get("separator") or exp.Literal.string(',')
-            ),
+            exp.GroupConcat: string_agg_sql,
             exp.Interval: interval_sql,
             exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
             exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
