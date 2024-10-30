@@ -298,6 +298,7 @@ class Snowflake(Dialect):
             "REGEXP_SUBSTR": exp.RegexpExtract.from_arg_list,
             "RLIKE": exp.RegexpLike.from_arg_list,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
+            "SPLIT_PART": exp.SplitPart.from_arg_list,
             "TIMEADD": _build_date_time_add(exp.TimeAdd),
             "TIMEDIFF": _build_datediff,
             "TIMESTAMPADD": _build_date_time_add(exp.DateAdd),
@@ -803,6 +804,7 @@ class Snowflake(Dialect):
                 ]
             ),
             exp.SHA: rename_func("SHA1"),
+            exp.SplitPart: rename_func("SPLIT_PART"),
             exp.StarMap: rename_func("OBJECT_CONSTRUCT"),
             exp.StartsWith: rename_func("STARTSWITH"),
             exp.StrPosition: lambda self, e: self.func(

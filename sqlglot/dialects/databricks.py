@@ -7,6 +7,7 @@ from sqlglot.dialects.dialect import (
     date_delta_sql,
     build_date_delta,
     timestamptrunc_sql,
+    rename_func
 )
 from sqlglot.dialects.spark import Spark
 from sqlglot.tokens import TokenType
@@ -53,6 +54,7 @@ class Databricks(Spark):
             "DATE_DIFF": build_date_delta(exp.DateDiff),
             "TIMESTAMPDIFF": build_date_delta(exp.TimestampDiff),
             "GET_JSON_OBJECT": _build_json_extract,
+            "SPLIT_PART": exp.SplitPart.from_arg_list,
         }
 
         FACTOR = {
@@ -93,6 +95,7 @@ class Databricks(Spark):
             exp.JSONExtractScalar: _jsonextract_sql,
             exp.JSONPathRoot: lambda *_: "",
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
+            exp.SplitPart: rename_func("SPLIT_PART")
         }
 
         TRANSFORMS.pop(exp.TryCast)

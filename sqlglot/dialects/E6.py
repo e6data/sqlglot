@@ -617,7 +617,7 @@ class E6(Dialect):
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT": exp.Split.from_arg_list,
             # Function node for split_part is not there with equivalent functionality
-            "SPLIT_PART": exp.RegexpSplit.from_arg_list,
+            "SPLIT_PART": exp.SplitPart.from_arg_list,
             "STARTSWITH": exp.StartsWith.from_arg_list,
             "STARTS_WITH": exp.StartsWith.from_arg_list,
             "STDDEV": exp.Stddev.from_arg_list,
@@ -1095,6 +1095,7 @@ class E6(Dialect):
             exp.RegexpSplit: rename_func("SPLIT"),
             # exp.Select: select_sql,
             exp.Split: rename_func("SPLIT"),
+            exp.SplitPart: rename_func("SPLIT_PART"),
             exp.Stddev: rename_func("STDDEV"),
             exp.StddevPop: rename_func("STDDEV_POP"),
             exp.StrPosition: lambda self, e: self.func(
