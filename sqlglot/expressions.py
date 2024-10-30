@@ -5808,6 +5808,11 @@ class Split(Func):
     arg_types = {"this": True, "expression": True, "limit": False}
 
 
+# This is for the function split_part : Splits this around occurrences of expression and returns the partNum part.
+class SplitPart(Func):
+    arg_types = {"this": True, "expression": True, "partNum": False}
+
+
 # Start may be omitted in the case of postgres
 # https://www.postgresql.org/docs/9.1/functions-string.html @ Table 9-6
 class Substring(Func):
