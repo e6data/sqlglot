@@ -6395,9 +6395,15 @@ class Split(Func):
     arg_types = {"this": True, "expression": True, "limit": False}
 
 
+<<<<<<< HEAD
 # https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.split_part.html
 class SplitPart(Func):
     arg_types = {"this": True, "delimiter": True, "part_index": True}
+=======
+# This is for the function split_part : Splits this around occurrences of expression and returns the partNum part.
+class SplitPart(Func):
+    arg_types = {"this": True, "expression": True, "partNum": False}
+>>>>>>> 375c9c54 (Created splitPart class in expressions.py and mapped its equivalent function "SPLIT_PART" in snowflake.py, presto.py, databricks.py, E6.py)
 
 
 # Start may be omitted in the case of postgres
