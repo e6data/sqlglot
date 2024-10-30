@@ -290,6 +290,7 @@ class Presto(Dialect):
             "ROW": exp.Struct.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
+            "SPLIT_PART": exp.SplitPart.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
             "STRPOS": lambda args: exp.StrPosition(
                 this=seq_get(args, 0), substr=seq_get(args, 1), instance=seq_get(args, 2)
@@ -430,6 +431,7 @@ class Presto(Dialect):
                 ]
             ),
             exp.SortArray: _no_sort_array,
+            exp.SplitPart: rename_func("SPLIT_PART"),
             exp.StrPosition: lambda self, e: str_position_sql(self, e, generate_instance=True),
             exp.StrToDate: lambda self, e: f"CAST({_str_to_time_sql(self, e)} AS DATE)",
             exp.StrToMap: rename_func("SPLIT_TO_MAP"),
