@@ -66,7 +66,7 @@ pipeline {
           sh 'tar -xvf /tmp/trivy/db.tar.gz'
           script {
               def trivyResult = sh(
-                  script: "trivy fs --exit-code 1 --cache-dir='/tmp/trivy' ${TRIVY_OPTIONS} --no-progress --scanners vuln,misconfig .",
+                  script: "trivy fs --exit-code 1 --cache-dir='/tmp/trivy' ${TRIVY_OPTIONS} --no-progress --scanners vuln,misconfig,secret .",
                   returnStatus: true
               )
               if (trivyResult == 0) {
