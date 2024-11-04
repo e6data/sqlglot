@@ -35,6 +35,7 @@ async def convert_query(
         converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
         converted_query = replace_struct_in_query(converted_query)
         converted_query_ast = parse_one(converted_query, read=to_sql)
+        print(converted_query)
         double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(dialect=to_sql)
         return {"converted_query": double_quotes_added_query}
     except Exception as e:
