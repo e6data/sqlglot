@@ -27,7 +27,7 @@ from sqlglot.dialects.dialect import (
     timestampdiff_sql,
 )
 from sqlglot.generator import unsupported_args
-from sqlglot.helper import flatten, is_float, is_int, seq_get
+from sqlglot.helper import flatten, is_float, is_int, seq_get, apply_index_offset
 from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
@@ -238,6 +238,7 @@ def _unnest_generate_date_array(expression: exp.Expression) -> exp.Expression:
 class Snowflake(Dialect):
     # https://docs.snowflake.com/en/sql-reference/identifiers-syntax
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
+    INDEX_OFFSET = 0
     NULL_ORDERING = "nulls_are_large"
     TIME_FORMAT = "'YYYY-MM-DD HH24:MI:SS'"
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -323,6 +324,9 @@ class Snowflake(Dialect):
             "DATEDIFF": _build_datediff,
             "DIV0": _build_if_from_div0,
             "FLATTEN": exp.Explode.from_arg_list,
+            "GET": lambda args: exp.Bracket(
+                this=seq_get(args, 0), expressions=[seq_get(args, 1)], offset=0, safe=True
+            ),
             "GET_PATH": lambda args, dialect: exp.JSONExtract(
                 this=seq_get(args, 0), expression=dialect.to_json_path(seq_get(args, 1))
             ),
@@ -346,6 +350,7 @@ class Snowflake(Dialect):
             ),
             "RLIKE": exp.RegexpLike.from_arg_list,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
+            "SPLIT_PART": exp.SplitPart.from_arg_list,
             "TIMEADD": _build_date_time_add(exp.TimeAdd),
             "TIMEDIFF": _build_datediff,
             "TIMESTAMPADD": _build_date_time_add(exp.DateAdd),
@@ -834,6 +839,7 @@ class Snowflake(Dialect):
             ),
             exp.SafeDivide: lambda self, e: no_safe_divide_sql(self, e, "IFF"),
             exp.SHA: rename_func("SHA1"),
+            exp.SplitPart: rename_func("SPLIT_PART"),
             exp.StarMap: rename_func("OBJECT_CONSTRUCT"),
             exp.StartsWith: rename_func("STARTSWITH"),
             exp.StrPosition: lambda self, e: self.func(
