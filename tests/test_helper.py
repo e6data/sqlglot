@@ -29,6 +29,7 @@ class TestHelper(unittest.TestCase):
                 }
             )
 
+
     def test_name_sequence(self):
         s1 = name_sequence("a")
         s2 = name_sequence("b")
