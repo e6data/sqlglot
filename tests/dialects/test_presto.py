@@ -14,6 +14,23 @@ class TestPresto(Validator):
         self.validate_identity("CAST(x AS HYPERLOGLOG)")
 
         self.validate_all(
+            "CAST(x AS BOOLEAN)",
+            read={
+                "tsql": "CAST(x AS BIT)",
+            },
+            write={
+                "presto": "CAST(x AS BOOLEAN)",
+                "tsql": "CAST(x AS BIT)",
+            },
+        )
+        self.validate_all(
+            "SELECT FROM_ISO8601_TIMESTAMP('2020-05-11T11:15:05')",
+            write={
+                "duckdb": "SELECT CAST('2020-05-11T11:15:05' AS TIMESTAMPTZ)",
+                "presto": "SELECT FROM_ISO8601_TIMESTAMP('2020-05-11T11:15:05')",
+            },
+        )
+        self.validate_all(
             "CAST(x AS INTERVAL YEAR TO MONTH)",
             write={
                 "oracle": "CAST(x AS INTERVAL YEAR TO MONTH)",
@@ -151,8 +168,8 @@ class TestPresto(Validator):
             write={
                 "duckdb": "STR_SPLIT(x, 'a.')",
                 "presto": "SPLIT(x, 'a.')",
-                "hive": "SPLIT(x, CONCAT('\\\\Q', 'a.'))",
-                "spark": "SPLIT(x, CONCAT('\\\\Q', 'a.'))",
+                "hive": "SPLIT(x, CONCAT('\\\\Q', 'a.', '\\\\E'))",
+                "spark": "SPLIT(x, CONCAT('\\\\Q', 'a.', '\\\\E'))",
             },
         )
         self.validate_all(
@@ -269,10 +286,19 @@ class TestPresto(Validator):
         self.validate_all(
             "DATE_PARSE(SUBSTR(x, 1, 10), '%Y-%m-%d')",
             write={
-                "duckdb": "STRPTIME(SUBSTR(x, 1, 10), '%Y-%m-%d')",
-                "presto": "DATE_PARSE(SUBSTR(x, 1, 10), '%Y-%m-%d')",
-                "hive": "CAST(SUBSTR(x, 1, 10) AS TIMESTAMP)",
-                "spark": "TO_TIMESTAMP(SUBSTR(x, 1, 10), 'yyyy-MM-dd')",
+                "duckdb": "STRPTIME(SUBSTRING(x, 1, 10), '%Y-%m-%d')",
+                "presto": "DATE_PARSE(SUBSTRING(x, 1, 10), '%Y-%m-%d')",
+                "hive": "CAST(SUBSTRING(x, 1, 10) AS TIMESTAMP)",
+                "spark": "TO_TIMESTAMP(SUBSTRING(x, 1, 10), 'yyyy-MM-dd')",
+            },
+        )
+        self.validate_all(
+            "DATE_PARSE(SUBSTRING(x, 1, 10), '%Y-%m-%d')",
+            write={
+                "duckdb": "STRPTIME(SUBSTRING(x, 1, 10), '%Y-%m-%d')",
+                "presto": "DATE_PARSE(SUBSTRING(x, 1, 10), '%Y-%m-%d')",
+                "hive": "CAST(SUBSTRING(x, 1, 10) AS TIMESTAMP)",
+                "spark": "TO_TIMESTAMP(SUBSTRING(x, 1, 10), 'yyyy-MM-dd')",
             },
         )
         self.validate_all(
@@ -322,11 +348,20 @@ class TestPresto(Validator):
             },
         )
         self.validate_all(
-            "DAY_OF_WEEK(timestamp '2012-08-08 01:00:00')",
-            write={
+            "((DAY_OF_WEEK(CAST(TRY_CAST('2012-08-08 01:00:00' AS TIMESTAMP) AS DATE)) % 7) + 1)",
+            read={
                 "spark": "DAYOFWEEK(CAST('2012-08-08 01:00:00' AS TIMESTAMP))",
+            },
+        )
+        self.validate_all(
+            "DAY_OF_WEEK(CAST('2012-08-08 01:00:00' AS TIMESTAMP))",
+            read={
+                "duckdb": "ISODOW(CAST('2012-08-08 01:00:00' AS TIMESTAMP))",
+            },
+            write={
+                "spark": "((DAYOFWEEK(CAST('2012-08-08 01:00:00' AS TIMESTAMP)) % 7) + 1)",
                 "presto": "DAY_OF_WEEK(CAST('2012-08-08 01:00:00' AS TIMESTAMP))",
-                "duckdb": "DAYOFWEEK(CAST('2012-08-08 01:00:00' AS TIMESTAMP))",
+                "duckdb": "ISODOW(CAST('2012-08-08 01:00:00' AS TIMESTAMP))",
             },
         )
 
@@ -379,13 +414,6 @@ class TestPresto(Validator):
             "CAST(x AS TIMESTAMP)",
             read={"mysql": "TIMESTAMP(x)"},
         )
-        self.validate_all(
-            "TIMESTAMP(x, 'America/Los_Angeles')",
-            write={
-                "duckdb": "CAST(x AS TIMESTAMP) AT TIME ZONE 'America/Los_Angeles'",
-                "presto": "AT_TIMEZONE(CAST(x AS TIMESTAMP), 'America/Los_Angeles')",
-            },
-        )
         # this case isn't really correct, but it's a fall back for mysql's version
         self.validate_all(
             "TIMESTAMP(x, '12:00:00')",
@@ -410,6 +438,19 @@ class TestPresto(Validator):
             write={
                 "presto": "SELECT DATE_ADD('MINUTE', 30, col)",
                 "trino": "SELECT DATE_ADD('MINUTE', 30, col)",
+            },
+        )
+
+        self.validate_identity("DATE_ADD('DAY', FLOOR(5), y)")
+        self.validate_identity(
+            """SELECT DATE_ADD('DAY', MOD(5, 2.5), y), DATE_ADD('DAY', CEIL(5.5), y)""",
+            """SELECT DATE_ADD('DAY', CAST(5 % 2.5 AS BIGINT), y), DATE_ADD('DAY', CAST(CEIL(5.5) AS BIGINT), y)""",
+        )
+
+        self.validate_all(
+            "DATE_ADD('MINUTE', CAST(FLOOR(CAST(EXTRACT(MINUTE FROM CURRENT_TIMESTAMP) AS DOUBLE) / NULLIF(30, 0)) * 30 AS BIGINT), col)",
+            read={
+                "spark": "TIMESTAMPADD(MINUTE, FLOOR(EXTRACT(MINUTE FROM CURRENT_TIMESTAMP)/30)*30, col)",
             },
         )
 
@@ -501,6 +542,9 @@ class TestPresto(Validator):
                 "presto": """CREATE TABLE IF NOT EXISTS x ("cola" INTEGER, "ds" VARCHAR) COMMENT 'comment' WITH (PARTITIONED_BY=ARRAY['ds'])""",
             },
         )
+
+        self.validate_identity("""CREATE OR REPLACE VIEW v SECURITY DEFINER AS SELECT id FROM t""")
+        self.validate_identity("""CREATE OR REPLACE VIEW v SECURITY INVOKER AS SELECT id FROM t""")
 
     def test_quotes(self):
         self.validate_all(
@@ -614,6 +658,7 @@ class TestPresto(Validator):
                 },
             )
 
+        self.validate_identity("SELECT a FROM t GROUP BY a, ROLLUP (b), ROLLUP (c), ROLLUP (d)")
         self.validate_identity("SELECT a FROM test TABLESAMPLE BERNOULLI (50)")
         self.validate_identity("SELECT a FROM test TABLESAMPLE SYSTEM (75)")
         self.validate_identity("string_agg(x, ',')", "ARRAY_JOIN(ARRAY_AGG(x), ',')")
@@ -695,9 +740,6 @@ class TestPresto(Validator):
         )
         self.validate_all(
             "SELECT ROW(1, 2)",
-            read={
-                "spark": "SELECT STRUCT(1, 2)",
-            },
             write={
                 "presto": "SELECT ROW(1, 2)",
                 "spark": "SELECT STRUCT(1, 2)",
@@ -813,12 +855,6 @@ class TestPresto(Validator):
                 "presto": "ARRAY_AGG(x ORDER BY y DESC)",
                 "spark": "COLLECT_LIST(x)",
                 "trino": "ARRAY_AGG(x ORDER BY y DESC)",
-            },
-        )
-        self.validate_all(
-            "SELECT a FROM t GROUP BY a, ROLLUP(b), ROLLUP(c), ROLLUP(d)",
-            write={
-                "presto": "SELECT a FROM t GROUP BY a, ROLLUP (b, c, d)",
             },
         )
         self.validate_all(
@@ -942,8 +978,8 @@ class TestPresto(Validator):
             write={
                 "bigquery": "SELECT * FROM UNNEST(['7', '14'])",
                 "presto": "SELECT * FROM UNNEST(ARRAY['7', '14']) AS x",
-                "hive": "SELECT * FROM UNNEST(ARRAY('7', '14')) AS x",
-                "spark": "SELECT * FROM UNNEST(ARRAY('7', '14')) AS x",
+                "hive": "SELECT * FROM EXPLODE(ARRAY('7', '14')) AS x",
+                "spark": "SELECT * FROM EXPLODE(ARRAY('7', '14')) AS x",
             },
         )
         self.validate_all(
@@ -951,8 +987,8 @@ class TestPresto(Validator):
             write={
                 "bigquery": "SELECT * FROM UNNEST(['7', '14']) AS y",
                 "presto": "SELECT * FROM UNNEST(ARRAY['7', '14']) AS x(y)",
-                "hive": "SELECT * FROM UNNEST(ARRAY('7', '14')) AS x(y)",
-                "spark": "SELECT * FROM UNNEST(ARRAY('7', '14')) AS x(y)",
+                "hive": "SELECT * FROM EXPLODE(ARRAY('7', '14')) AS x(y)",
+                "spark": "SELECT * FROM EXPLODE(ARRAY('7', '14')) AS x(y)",
             },
         )
         self.validate_all(
@@ -1008,6 +1044,25 @@ class TestPresto(Validator):
             """SELECT JSON_FORMAT(JSON '[1, 2, 3]')""",
             write={
                 "spark": "SELECT REGEXP_EXTRACT(TO_JSON(FROM_JSON('[[1, 2, 3]]', SCHEMA_OF_JSON('[[1, 2, 3]]'))), '^.(.*).$', 1)",
+            },
+        )
+        self.validate_all(
+            "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+            read={
+                "presto": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "trino": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "duckdb": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "snowflake": "REGEXP_SUBSTR('abc', '(a)(b)(c)')",
+            },
+            write={
+                "presto": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "trino": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "duckdb": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "snowflake": "REGEXP_SUBSTR('abc', '(a)(b)(c)')",
+                "hive": "REGEXP_EXTRACT('abc', '(a)(b)(c)', 0)",
+                "spark2": "REGEXP_EXTRACT('abc', '(a)(b)(c)', 0)",
+                "spark": "REGEXP_EXTRACT('abc', '(a)(b)(c)', 0)",
+                "databricks": "REGEXP_EXTRACT('abc', '(a)(b)(c)', 0)",
             },
         )
 

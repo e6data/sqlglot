@@ -6,6 +6,7 @@ class TestOracle(Validator):
     dialect = "oracle"
 
     def test_oracle(self):
+        self.validate_identity("1 /* /* */")
         self.validate_all(
             "SELECT CONNECT_BY_ROOT x y",
             write={
@@ -13,8 +14,9 @@ class TestOracle(Validator):
                 "oracle": "SELECT CONNECT_BY_ROOT x AS y",
             },
         )
-        self.parse_one("ALTER TABLE tbl_name DROP FOREIGN KEY fk_symbol").assert_is(exp.AlterTable)
+        self.parse_one("ALTER TABLE tbl_name DROP FOREIGN KEY fk_symbol").assert_is(exp.Alter)
 
+        self.validate_identity("SYSDATE")
         self.validate_identity("CREATE GLOBAL TEMPORARY TABLE t AS SELECT * FROM orders")
         self.validate_identity("CREATE PRIVATE TEMPORARY TABLE t AS SELECT * FROM orders")
         self.validate_identity("REGEXP_REPLACE('source', 'search')")
@@ -44,6 +46,9 @@ class TestOracle(Validator):
         self.validate_identity("SELECT * FROM V$SESSION")
         self.validate_identity("SELECT TO_DATE('January 15, 1989, 11:00 A.M.')")
         self.validate_identity(
+            "SELECT * FROM test UNPIVOT INCLUDE NULLS (value FOR Description IN (col AS 'PREFIX ' || CHR(38) || ' SUFFIX'))"
+        )
+        self.validate_identity(
             "SELECT last_name, employee_id, manager_id, LEVEL FROM employees START WITH employee_id = 100 CONNECT BY PRIOR employee_id = manager_id ORDER SIBLINGS BY last_name"
         )
         self.validate_identity(
@@ -62,7 +67,20 @@ class TestOracle(Validator):
             "SELECT COUNT(1) INTO V_Temp FROM TABLE(CAST(somelist AS data_list)) WHERE col LIKE '%contact'"
         )
         self.validate_identity(
+            "SELECT department_id INTO v_department_id FROM departments FETCH FIRST 1 ROWS ONLY"
+        )
+        self.validate_identity(
+            "SELECT department_id BULK COLLECT INTO v_department_ids FROM departments"
+        )
+        self.validate_identity(
+            "SELECT department_id, department_name BULK COLLECT INTO v_department_ids, v_department_names FROM departments"
+        )
+        self.validate_identity(
             "SELECT MIN(column_name) KEEP (DENSE_RANK FIRST ORDER BY column_name DESC) FROM table_name"
+        )
+        self.validate_identity(
+            "SELECT TRUNC(SYSDATE)",
+            "SELECT TRUNC(SYSDATE, 'DD')",
         )
         self.validate_identity(
             """SELECT JSON_OBJECT(KEY 'key1' IS emp.column1, KEY 'key2' IS emp.column1) "emp_key" FROM emp""",
@@ -71,10 +89,6 @@ class TestOracle(Validator):
         self.validate_identity(
             "SELECT JSON_OBJECTAGG(KEY department_name VALUE department_id) FROM dep WHERE id <= 30",
             "SELECT JSON_OBJECTAGG(department_name: department_id) FROM dep WHERE id <= 30",
-        )
-        self.validate_identity(
-            "SYSDATE",
-            "CURRENT_TIMESTAMP",
         )
         self.validate_identity(
             "SELECT last_name, department_id, salary, MIN(salary) KEEP (DENSE_RANK FIRST ORDER BY commission_pct) "
@@ -88,7 +102,6 @@ class TestOracle(Validator):
         self.validate_identity(
             "SELECT * FROM T ORDER BY I OFFSET NVL(:variable1, 10) ROWS FETCH NEXT NVL(:variable2, 10) ROWS ONLY",
         )
-        self.validate_identity("NVL(x, y)").assert_is(exp.Anonymous)
         self.validate_identity(
             "SELECT * FROM t SAMPLE (.25)",
             "SELECT * FROM t SAMPLE (0.25)",
@@ -98,6 +111,24 @@ class TestOracle(Validator):
             "SELECT * FROM t START WITH col CONNECT BY NOCYCLE PRIOR col1 = col2"
         )
 
+        self.validate_all(
+            "SELECT department_id, department_name INTO v_department_id, v_department_name FROM departments FETCH FIRST 1 ROWS ONLY",
+            write={
+                "oracle": "SELECT department_id, department_name INTO v_department_id, v_department_name FROM departments FETCH FIRST 1 ROWS ONLY",
+                "postgres": UnsupportedError,
+                "tsql": UnsupportedError,
+            },
+        )
+        self.validate_all(
+            "SELECT * FROM test WHERE MOD(col1, 4) = 3",
+            read={
+                "duckdb": "SELECT * FROM test WHERE col1 % 4 = 3",
+            },
+            write={
+                "duckdb": "SELECT * FROM test WHERE col1 % 4 = 3",
+                "oracle": "SELECT * FROM test WHERE MOD(col1, 4) = 3",
+            },
+        )
         self.validate_all(
             "CURRENT_TIMESTAMP BETWEEN TO_DATE(f.C_SDATE, 'yyyy/mm/dd') AND TO_DATE(f.C_EDATE, 'yyyy/mm/dd')",
             read={
@@ -241,6 +272,21 @@ class TestOracle(Validator):
             """SELECT * FROM t ORDER BY a ASC NULLS LAST, b ASC NULLS FIRST, c DESC NULLS LAST, d DESC NULLS FIRST""",
             """SELECT * FROM t ORDER BY a ASC, b ASC NULLS FIRST, c DESC NULLS LAST, d DESC""",
         )
+        self.validate_all(
+            "NVL(NULL, 1)",
+            write={
+                "oracle": "NVL(NULL, 1)",
+                "": "COALESCE(NULL, 1)",
+                "clickhouse": "COALESCE(NULL, 1)",
+            },
+        )
+        self.validate_all(
+            "TRIM(BOTH 'h' FROM 'Hello World')",
+            write={
+                "oracle": "TRIM(BOTH 'h' FROM 'Hello World')",
+                "clickhouse": "TRIM(BOTH 'h' FROM 'Hello World')",
+            },
+        )
 
     def test_join_marker(self):
         self.validate_identity("SELECT e1.x, e2.x FROM e e1, e e2 WHERE e1.y (+) = e2.y")
@@ -276,6 +322,57 @@ class TestOracle(Validator):
         )
         self.validate_identity("INSERT /*+ APPEND */ INTO IAP_TBL (id, col1) VALUES (2, 'test2')")
         self.validate_identity("INSERT /*+ APPEND_VALUES */ INTO dest_table VALUES (i, 'Value')")
+        self.validate_identity(
+            "SELECT /*+ LEADING(departments employees) USE_NL(employees) */ * FROM employees JOIN departments ON employees.department_id = departments.department_id",
+            """SELECT /*+ LEADING(departments employees)
+  USE_NL(employees) */
+  *
+FROM employees
+JOIN departments
+  ON employees.department_id = departments.department_id""",
+            pretty=True,
+        )
+        self.validate_identity(
+            "SELECT /*+ USE_NL(bbbbbbbbbbbbbbbbbbbbbbbb) LEADING(aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb cccccccccccccccccccccccc dddddddddddddddddddddddd) INDEX(cccccccccccccccccccccccc) */ * FROM aaaaaaaaaaaaaaaaaaaaaaaa JOIN bbbbbbbbbbbbbbbbbbbbbbbb ON aaaaaaaaaaaaaaaaaaaaaaaa.id = bbbbbbbbbbbbbbbbbbbbbbbb.a_id JOIN cccccccccccccccccccccccc ON bbbbbbbbbbbbbbbbbbbbbbbb.id = cccccccccccccccccccccccc.b_id JOIN dddddddddddddddddddddddd ON cccccccccccccccccccccccc.id = dddddddddddddddddddddddd.c_id",
+        )
+        self.validate_identity(
+            "SELECT /*+ USE_NL(bbbbbbbbbbbbbbbbbbbbbbbb) LEADING(aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb cccccccccccccccccccccccc dddddddddddddddddddddddd) INDEX(cccccccccccccccccccccccc) */ * FROM aaaaaaaaaaaaaaaaaaaaaaaa JOIN bbbbbbbbbbbbbbbbbbbbbbbb ON aaaaaaaaaaaaaaaaaaaaaaaa.id = bbbbbbbbbbbbbbbbbbbbbbbb.a_id JOIN cccccccccccccccccccccccc ON bbbbbbbbbbbbbbbbbbbbbbbb.id = cccccccccccccccccccccccc.b_id JOIN dddddddddddddddddddddddd ON cccccccccccccccccccccccc.id = dddddddddddddddddddddddd.c_id",
+            """SELECT /*+ USE_NL(bbbbbbbbbbbbbbbbbbbbbbbb)
+  LEADING(
+    aaaaaaaaaaaaaaaaaaaaaaaa
+    bbbbbbbbbbbbbbbbbbbbbbbb
+    cccccccccccccccccccccccc
+    dddddddddddddddddddddddd
+  )
+  INDEX(cccccccccccccccccccccccc) */
+  *
+FROM aaaaaaaaaaaaaaaaaaaaaaaa
+JOIN bbbbbbbbbbbbbbbbbbbbbbbb
+  ON aaaaaaaaaaaaaaaaaaaaaaaa.id = bbbbbbbbbbbbbbbbbbbbbbbb.a_id
+JOIN cccccccccccccccccccccccc
+  ON bbbbbbbbbbbbbbbbbbbbbbbb.id = cccccccccccccccccccccccc.b_id
+JOIN dddddddddddddddddddddddd
+  ON cccccccccccccccccccccccc.id = dddddddddddddddddddddddd.c_id""",
+            pretty=True,
+        )
+        # Test that parsing error with keywords like select where etc falls back
+        self.validate_identity(
+            "SELECT /*+ LEADING(departments employees) USE_NL(employees) select where group by is order by */ * FROM employees JOIN departments ON employees.department_id = departments.department_id",
+            """SELECT /*+ LEADING(departments employees) USE_NL(employees) select where group by is order by */
+  *
+FROM employees
+JOIN departments
+  ON employees.department_id = departments.department_id""",
+            pretty=True,
+        )
+        # Test that parsing error with , inside hint function falls back
+        self.validate_identity(
+            "SELECT /*+ LEADING(departments, employees) */ * FROM employees JOIN departments ON employees.department_id = departments.department_id"
+        )
+        # Test that parsing error with keyword inside hint function falls back
+        self.validate_identity(
+            "SELECT /*+ LEADING(departments select) */ * FROM employees JOIN departments ON employees.department_id = departments.department_id"
+        )
 
     def test_xml_table(self):
         self.validate_identity("XMLTABLE('x')")
@@ -328,7 +425,7 @@ FROM warehouses, XMLTABLE(
 FROM XMLTABLE(
   'ROWSET/ROW'
   PASSING
-    dbms_xmlgen.GETXMLTYPE('SELECT table_name, column_name, data_default FROM user_tab_columns')
+    dbms_xmlgen.getxmltype('SELECT table_name, column_name, data_default FROM user_tab_columns')
   COLUMNS
     table_name VARCHAR2(128) PATH '*[1]',
     column_name VARCHAR2(128) PATH '*[2]',
@@ -420,3 +517,128 @@ WHERE
                     self.validate_identity(
                         f"CREATE VIEW view AS SELECT * FROM tbl WITH {restriction}{constraint_name}"
                     )
+
+    def test_multitable_inserts(self):
+        self.maxDiff = None
+        self.validate_identity(
+            "INSERT ALL "
+            "INTO dest_tab1 (id, description) VALUES (id, description) "
+            "INTO dest_tab2 (id, description) VALUES (id, description) "
+            "INTO dest_tab3 (id, description) VALUES (id, description) "
+            "SELECT id, description FROM source_tab"
+        )
+
+        self.validate_identity(
+            "INSERT ALL "
+            "INTO pivot_dest (id, day, val) VALUES (id, 'mon', mon_val) "
+            "INTO pivot_dest (id, day, val) VALUES (id, 'tue', tue_val) "
+            "INTO pivot_dest (id, day, val) VALUES (id, 'wed', wed_val) "
+            "INTO pivot_dest (id, day, val) VALUES (id, 'thu', thu_val) "
+            "INTO pivot_dest (id, day, val) VALUES (id, 'fri', fri_val) "
+            "SELECT * "
+            "FROM pivot_source"
+        )
+
+        self.validate_identity(
+            "INSERT ALL "
+            "WHEN id <= 3 THEN "
+            "INTO dest_tab1 (id, description) VALUES (id, description) "
+            "WHEN id BETWEEN 4 AND 7 THEN "
+            "INTO dest_tab2 (id, description) VALUES (id, description) "
+            "WHEN id >= 8 THEN "
+            "INTO dest_tab3 (id, description) VALUES (id, description) "
+            "SELECT id, description "
+            "FROM source_tab"
+        )
+
+        self.validate_identity(
+            "INSERT ALL "
+            "WHEN id <= 3 THEN "
+            "INTO dest_tab1 (id, description) VALUES (id, description) "
+            "WHEN id BETWEEN 4 AND 7 THEN "
+            "INTO dest_tab2 (id, description) VALUES (id, description) "
+            "WHEN 1 = 1 THEN "
+            "INTO dest_tab3 (id, description) VALUES (id, description) "
+            "SELECT id, description "
+            "FROM source_tab"
+        )
+
+        self.validate_identity(
+            "INSERT FIRST "
+            "WHEN id <= 3 THEN "
+            "INTO dest_tab1 (id, description) VALUES (id, description) "
+            "WHEN id <= 5 THEN "
+            "INTO dest_tab2 (id, description) VALUES (id, description) "
+            "ELSE "
+            "INTO dest_tab3 (id, description) VALUES (id, description) "
+            "SELECT id, description "
+            "FROM source_tab"
+        )
+
+        self.validate_identity(
+            "INSERT FIRST "
+            "WHEN id <= 3 THEN "
+            "INTO dest_tab1 (id, description) VALUES (id, description) "
+            "ELSE "
+            "INTO dest_tab2 (id, description) VALUES (id, description) "
+            "INTO dest_tab3 (id, description) VALUES (id, description) "
+            "SELECT id, description "
+            "FROM source_tab"
+        )
+
+        self.validate_identity(
+            "/* COMMENT */ INSERT FIRST "
+            "WHEN salary > 4000 THEN INTO emp2 "
+            "WHEN salary > 5000 THEN INTO emp3 "
+            "WHEN salary > 6000 THEN INTO emp4 "
+            "SELECT salary FROM employees"
+        )
+
+    def test_json_functions(self):
+        for format_json in ("", " FORMAT JSON"):
+            for on_cond in (
+                "",
+                " TRUE ON ERROR",
+                " NULL ON EMPTY",
+                " DEFAULT 1 ON ERROR TRUE ON EMPTY",
+            ):
+                for passing in ("", " PASSING 'name1' AS \"var1\", 'name2' AS \"var2\""):
+                    with self.subTest("Testing JSON_EXISTS()"):
+                        self.validate_identity(
+                            f"SELECT * FROM t WHERE JSON_EXISTS(name{format_json}, '$[1].middle'{passing}{on_cond})"
+                        )
+
+    def test_grant(self):
+        grant_cmds = [
+            "GRANT purchases_reader_role TO george, maria",
+            "GRANT USAGE ON TYPE price TO finance_role",
+            "GRANT USAGE ON DERBY AGGREGATE types.maxPrice TO sales_role",
+        ]
+
+        for sql in grant_cmds:
+            with self.subTest(f"Testing Oracles's GRANT command statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
+        self.validate_identity("GRANT SELECT ON TABLE t TO maria, harry")
+        self.validate_identity("GRANT SELECT ON TABLE s.v TO PUBLIC")
+        self.validate_identity("GRANT SELECT ON TABLE t TO purchases_reader_role")
+        self.validate_identity("GRANT UPDATE, TRIGGER ON TABLE t TO anita, zhi")
+        self.validate_identity("GRANT EXECUTE ON PROCEDURE p TO george")
+        self.validate_identity("GRANT USAGE ON SEQUENCE order_id TO sales_role")
+
+    def test_datetrunc(self):
+        self.validate_all(
+            "TRUNC(SYSDATE, 'YEAR')",
+            write={
+                "clickhouse": "DATE_TRUNC('YEAR', CURRENT_TIMESTAMP())",
+                "oracle": "TRUNC(SYSDATE, 'YEAR')",
+            },
+        )
+
+        # Make sure units are not normalized e.g 'Q' -> 'QUARTER' and 'W' -> 'WEEK'
+        # https://docs.oracle.com/en/database/oracle/oracle-database/21/sqlrf/ROUND-and-TRUNC-Date-Functions.html
+        for unit in (
+            "'Q'",
+            "'W'",
+        ):
+            self.validate_identity(f"TRUNC(x, {unit})")

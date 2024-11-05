@@ -7,6 +7,7 @@ from sqlglot.dialects.dialect import (
     date_delta_sql,
     build_date_delta,
     timestamptrunc_sql,
+    timestampdiff_sql,
     rename_func
 )
 from sqlglot.dialects.spark import Spark
@@ -18,12 +19,6 @@ def _build_json_extract(args: t.List) -> exp.JSONExtract:
     this = args[0]
     path = args[1].name.lstrip("$.")
     return exp.JSONExtract(this=this, expression=path)
-
-
-def _timestamp_diff(
-    self: Databricks.Generator, expression: exp.DatetimeDiff | exp.TimestampDiff
-) -> str:
-    return self.func("TIMESTAMPDIFF", expression.unit, expression.expression, expression.this)
 
 
 def _jsonextract_sql(
@@ -82,13 +77,14 @@ class Databricks(Spark):
                 exp.Mul(this=e.expression, expression=exp.Literal.number(-1)),
                 e.this,
             ),
-            exp.DatetimeDiff: _timestamp_diff,
-            exp.TimestampDiff: _timestamp_diff,
+            exp.DatetimeDiff: timestampdiff_sql,
+            exp.TimestampDiff: timestampdiff_sql,
             exp.DatetimeTrunc: timestamptrunc_sql(),
             exp.Select: transforms.preprocess(
                 [
                     transforms.eliminate_distinct_on,
                     transforms.unnest_to_explode,
+                    transforms.any_to_exists,
                 ]
             ),
             exp.JSONExtract: _jsonextract_sql,
@@ -118,3 +114,7 @@ class Databricks(Spark):
         ) -> str:
             expression.set("this", True)  # trigger ALWAYS in super class
             return super().generatedasidentitycolumnconstraint_sql(expression)
+
+        def jsonpath_sql(self, expression: exp.JSONPath) -> str:
+            expression.set("escape", None)
+            return super().jsonpath_sql(expression)

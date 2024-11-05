@@ -13,8 +13,9 @@ from sqlglot.dialects.dialect import (
     trim_sql,
 )
 from sqlglot.helper import seq_get
-from sqlglot.parser import OPTIONS_TYPE
+from sqlglot.parser import OPTIONS_TYPE, build_coalesce
 from sqlglot.tokens import TokenType
+from sqlglot.errors import ParseError
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -33,11 +34,21 @@ def _build_timetostr_or_tochar(args: t.List) -> exp.TimeToStr | exp.ToChar:
     return exp.ToChar.from_arg_list(args)
 
 
+def _trim_sql(self: Oracle.Generator, expression: exp.Trim) -> str:
+    position = expression.args.get("position")
+
+    if position and position.upper() in ("LEADING", "TRAILING"):
+        return self.trim_sql(expression)
+
+    return trim_sql(self, expression)
+
+
 class Oracle(Dialect):
     ALIAS_POST_TABLESAMPLE = True
     LOCKING_READS_SUPPORTED = True
     TABLESAMPLE_SIZE_IS_PERCENT = True
     NULL_ORDERING = "nulls_are_large"
+    ON_CONDITION_EMPTY_BEFORE_ERROR = False
 
     # See section 8: https://docs.oracle.com/cd/A97630_01/server.920/a96540/sql_elements9a.htm
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
@@ -78,11 +89,14 @@ class Oracle(Dialect):
             for prefix in ("U", "u")
         ]
 
+        NESTED_COMMENTS = False
+
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             "(+)": TokenType.JOIN_MARKER,
             "BINARY_DOUBLE": TokenType.DOUBLE,
             "BINARY_FLOAT": TokenType.FLOAT,
+            "BULK COLLECT INTO": TokenType.BULK_COLLECT_INTO,
             "COLUMNS": TokenType.COLUMN,
             "MATCH_RECOGNIZE": TokenType.MATCH_RECOGNIZE,
             "MINUS": TokenType.EXCEPT,
@@ -90,7 +104,6 @@ class Oracle(Dialect):
             "ORDER SIBLINGS BY": TokenType.ORDER_SIBLINGS_BY,
             "SAMPLE": TokenType.TABLE_SAMPLE,
             "START": TokenType.BEGIN,
-            "SYSDATE": TokenType.CURRENT_TIMESTAMP,
             "TOP": TokenType.TOP,
             "VARCHAR2": TokenType.VARCHAR,
         }
@@ -102,12 +115,22 @@ class Oracle(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            "NVL": lambda args: build_coalesce(args, is_nvl=True),
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "TO_CHAR": _build_timetostr_or_tochar,
             "TO_TIMESTAMP": build_formatted_time(exp.StrToTime, "oracle"),
             "TO_DATE": build_formatted_time(exp.StrToDate, "oracle"),
+            "TRUNC": lambda args: exp.DateTrunc(
+                unit=seq_get(args, 1) or exp.Literal.string("DD"),
+                this=seq_get(args, 0),
+                unabbreviate=False,
+            ),
         }
-        FUNCTIONS.pop("NVL")
+
+        NO_PAREN_FUNCTION_PARSERS = {
+            **parser.Parser.NO_PAREN_FUNCTION_PARSERS,
+            "SYSDATE": lambda self: self.expression(exp.CurrentTimestamp, sysdate=True),
+        }
 
         FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
             **parser.Parser.FUNCTION_PARSERS,
@@ -121,6 +144,7 @@ class Oracle(Dialect):
                 order=self._parse_order(),
             ),
             "XMLTABLE": lambda self: self._parse_xml_table(),
+            "JSON_EXISTS": lambda self: self._parse_json_exists(),
         }
 
         PROPERTY_PARSERS = {
@@ -184,6 +208,57 @@ class Oracle(Dialect):
             )
 
         def _parse_hint(self) -> t.Optional[exp.Hint]:
+            start_index = self._index
+            should_fallback_to_string = False
+
+            if not self._match(TokenType.HINT):
+                return None
+
+            hints = []
+
+            try:
+                for hint in iter(
+                    lambda: self._parse_csv(
+                        lambda: self._parse_hint_function_call() or self._parse_var(upper=True),
+                    ),
+                    [],
+                ):
+                    hints.extend(hint)
+            except ParseError:
+                should_fallback_to_string = True
+
+            if not self._match_pair(TokenType.STAR, TokenType.SLASH):
+                should_fallback_to_string = True
+
+            if should_fallback_to_string:
+                self._retreat(start_index)
+                return self._parse_hint_fallback_to_string()
+
+            return self.expression(exp.Hint, expressions=hints)
+
+        def _parse_hint_function_call(self) -> t.Optional[exp.Expression]:
+            if not self._curr or not self._next or self._next.token_type != TokenType.L_PAREN:
+                return None
+
+            this = self._curr.text
+
+            self._advance(2)
+            args = self._parse_hint_args()
+            this = self.expression(exp.Anonymous, this=this, expressions=args)
+            self._match_r_paren(this)
+            return this
+
+        def _parse_hint_args(self):
+            args = []
+            result = self._parse_var()
+
+            while result:
+                args.append(result)
+                result = self._parse_var()
+
+            return args
+
+        def _parse_hint_fallback_to_string(self) -> t.Optional[exp.Hint]:
             if self._match(TokenType.HINT):
                 start = self._curr
                 while self._curr and not self._match_pair(TokenType.STAR, TokenType.SLASH):
@@ -209,6 +284,36 @@ class Oracle(Dialect):
                 expression=self._match(TokenType.CONSTRAINT) and self._parse_field(),
             )
 
+        def _parse_json_exists(self) -> exp.JSONExists:
+            this = self._parse_format_json(self._parse_bitwise())
+            self._match(TokenType.COMMA)
+            return self.expression(
+                exp.JSONExists,
+                this=this,
+                path=self.dialect.to_json_path(self._parse_bitwise()),
+                passing=self._match_text_seq("PASSING")
+                and self._parse_csv(lambda: self._parse_alias(self._parse_bitwise())),
+                on_condition=self._parse_on_condition(),
+            )
+
+        def _parse_into(self) -> t.Optional[exp.Into]:
+            # https://docs.oracle.com/en/database/oracle/oracle-database/19/lnpls/SELECT-INTO-statement.html
+            bulk_collect = self._match(TokenType.BULK_COLLECT_INTO)
+            if not bulk_collect and not self._match(TokenType.INTO):
+                return None
+
+            index = self._index
+
+            expressions = self._parse_expressions()
+            if len(expressions) == 1:
+                self._retreat(index)
+                self._match(TokenType.TABLE)
+                return self.expression(
+                    exp.Into, this=self._parse_table(schema=True), bulk_collect=bulk_collect
+                )
+
+            return self.expression(exp.Into, bulk_collect=bulk_collect, expressions=expressions)
+
     class Generator(generator.Generator):
         LOCKING_READS_SUPPORTED = True
         JOIN_HINTS = False
@@ -220,6 +325,7 @@ class Oracle(Dialect):
         LAST_DAY_SUPPORTS_DATE_PART = False
         SUPPORTS_SELECT_INTO = True
         TZ_TO_WITH_TIME_ZONE = True
+        QUERY_HINT_SEP = " "
 
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,
@@ -245,8 +351,10 @@ class Oracle(Dialect):
             exp.DateStrToDate: lambda self, e: self.func(
                 "TO_DATE", e.this, exp.Literal.string("YYYY-MM-DD")
             ),
+            exp.DateTrunc: lambda self, e: self.func("TRUNC", e.this, e.unit),
             exp.Group: transforms.preprocess([transforms.unalias_group]),
             exp.ILike: no_ilike_sql,
+            exp.Mod: rename_func("MOD"),
             exp.Select: transforms.preprocess(
                 [
                     transforms.eliminate_distinct_on,
@@ -258,12 +366,12 @@ class Oracle(Dialect):
             exp.Subquery: lambda self, e: self.subquery_sql(e, sep=" "),
             exp.Substring: rename_func("SUBSTR"),
             exp.Table: lambda self, e: self.table_sql(e, sep=" "),
-            exp.TableSample: lambda self, e: self.tablesample_sql(e, sep=" "),
+            exp.TableSample: lambda self, e: self.tablesample_sql(e),
             exp.TemporaryProperty: lambda _, e: f"{e.name or 'GLOBAL'} TEMPORARY",
             exp.TimeToStr: lambda self, e: self.func("TO_CHAR", e.this, self.format_time(e)),
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
             exp.ToNumber: to_number_with_nls_param,
-            exp.Trim: trim_sql,
+            exp.Trim: _trim_sql,
             exp.UnixToTime: lambda self,
             e: f"TO_DATE('1970-01-01', 'YYYY-MM-DD') + ({self.sql(e, 'this')} / 86400)",
         }
@@ -274,6 +382,9 @@ class Oracle(Dialect):
         }
 
         def currenttimestamp_sql(self, expression: exp.CurrentTimestamp) -> str:
+            if expression.args.get("sysdate"):
+                return "SYSDATE"
+
             this = expression.this
             return self.func("CURRENT_TIMESTAMP", this) if this else "CURRENT_TIMESTAMP"
 
@@ -291,7 +402,7 @@ class Oracle(Dialect):
             )
             return f"XMLTABLE({self.sep('')}{self.indent(this + passing + by_ref + columns)}{self.seg(')', sep='')}"
 
-        def add_column_sql(self, expression: exp.AlterTable) -> str:
+        def add_column_sql(self, expression: exp.Alter) -> str:
             actions = self.expressions(expression, key="actions", flat=True)
             if len(expression.args.get("actions", [])) > 1:
                 return f"ADD ({actions})"
@@ -303,3 +414,26 @@ class Oracle(Dialect):
             value = f" CONSTRAINT {value}" if value else ""
 
             return f"{option}{value}"
+
+        def coalesce_sql(self, expression: exp.Coalesce) -> str:
+            func_name = "NVL" if expression.args.get("is_nvl") else "COALESCE"
+            return rename_func(func_name)(self, expression)
+
+        def into_sql(self, expression: exp.Into) -> str:
+            into = "INTO" if not expression.args.get("bulk_collect") else "BULK COLLECT INTO"
+            if expression.this:
+                return f"{self.seg(into)} {self.sql(expression, 'this')}"
+
+            return f"{self.seg(into)} {self.expressions(expression)}"
+
+        def hint_sql(self, expression: exp.Hint) -> str:
+            expressions = []
+
+            for expression in expression.expressions:
+                if isinstance(expression, exp.Anonymous):
+                    formatted_args = self.format_args(*expression.expressions, sep=" ")
+                    expressions.append(f"{self.sql(expression, 'this')}({formatted_args})")
+                else:
+                    expressions.append(self.sql(expression))
+
+            return f" /*+ {self.expressions(sqls=expressions, sep=self.QUERY_HINT_SEP).strip()} */"

@@ -26,6 +26,7 @@ class TestSQLite(Validator):
             """SELECT item AS "item", some AS "some" FROM data WHERE (item = 'value_1' COLLATE NOCASE) AND (some = 't' COLLATE NOCASE) ORDER BY item ASC LIMIT 1 OFFSET 0"""
         )
         self.validate_identity("SELECT * FROM GENERATE_SERIES(1, 5)")
+        self.validate_identity("SELECT INSTR(haystack, needle)")
 
         self.validate_all("SELECT LIKE(y, x)", write={"sqlite": "SELECT x LIKE y"})
         self.validate_all("SELECT GLOB('*y*', 'xyz')", write={"sqlite": "SELECT 'xyz' GLOB '*y*'"})
@@ -90,6 +91,10 @@ class TestSQLite(Validator):
             "MIN(x, y, z)",
             read={"snowflake": "LEAST(x, y, z)"},
             write={"snowflake": "LEAST(x, y, z)"},
+        )
+        self.validate_identity(
+            "SELECT * FROM station WHERE city IS NOT ''",
+            "SELECT * FROM station WHERE NOT city IS ''",
         )
 
     def test_strftime(self):
@@ -216,4 +221,8 @@ class TestSQLite(Validator):
                 "sqlite": """CREATE TABLE "x" ("Name" TEXT(200) NOT NULL)""",
                 "mysql": "CREATE TABLE `x` (`Name` VARCHAR(200) NOT NULL)",
             },
+        )
+
+        self.validate_identity(
+            "CREATE TABLE store (store_id INTEGER PRIMARY KEY AUTOINCREMENT, mgr_id INTEGER NOT NULL UNIQUE REFERENCES staff ON UPDATE CASCADE)"
         )

@@ -6,7 +6,6 @@ class TestRedshift(Validator):
     dialect = "redshift"
 
     def test_redshift(self):
-        self.validate_identity("1 div", "1 AS div")
         self.validate_all(
             "SELECT SPLIT_TO_ARRAY('12,345,6789')",
             write={
@@ -215,6 +214,12 @@ class TestRedshift(Validator):
             },
         )
         self.validate_all(
+            "CREATE TABLE a (b BINARY VARYING(10))",
+            write={
+                "redshift": "CREATE TABLE a (b VARBYTE(10))",
+            },
+        )
+        self.validate_all(
             "SELECT 'abc'::CHARACTER",
             write={
                 "redshift": "SELECT CAST('abc' AS CHAR)",
@@ -315,6 +320,7 @@ class TestRedshift(Validator):
         )
 
     def test_identity(self):
+        self.validate_identity("1 div", "1 AS div")
         self.validate_identity("LISTAGG(DISTINCT foo, ', ')")
         self.validate_identity("CREATE MATERIALIZED VIEW orders AUTO REFRESH YES AS SELECT 1")
         self.validate_identity("SELECT DATEADD(DAY, 1, 'today')")
@@ -337,6 +343,10 @@ class TestRedshift(Validator):
         self.validate_identity(
             """SELECT JSON_EXTRACT_PATH_TEXT('{"f2":{"f3":1},"f4":{"f5":99,"f6":"star"}', 'f4', 'f6', TRUE)"""
         )
+        self.validate_identity(
+            'DATE_PART(year, "somecol")',
+            'EXTRACT(year FROM "somecol")',
+        ).this.assert_is(exp.Var)
         self.validate_identity(
             "SELECT CONCAT('abc', 'def')",
             "SELECT 'abc' || 'def'",
@@ -429,6 +439,14 @@ ORDER BY
             "SELECT attr AS attr, JSON_TYPEOF(val) AS value_type FROM customer_orders_lineitem AS c, UNPIVOT c.c_orders AS val AT attr WHERE c_custkey = 9451"
         )
         self.validate_identity("SELECT JSON_PARSE('[]')")
+
+        self.validate_identity("SELECT ARRAY(1, 2, 3)")
+        self.validate_identity("SELECT ARRAY[1, 2, 3]")
+
+        self.validate_identity(
+            """SELECT CONVERT_TIMEZONE('America/New_York', '2024-08-06 09:10:00.000')""",
+            """SELECT CONVERT_TIMEZONE('UTC', 'America/New_York', '2024-08-06 09:10:00.000')""",
+        )
 
     def test_values(self):
         # Test crazy-sized VALUES clause to UNION ALL conversion to ensure we don't get RecursionError
@@ -608,3 +626,42 @@ FROM (
             "select a.foo, b.bar, a.baz from a, b where a.baz = b.baz (+)",
             "SELECT a.foo, b.bar, a.baz FROM a, b WHERE a.baz = b.baz (+)",
         )
+
+    def test_time(self):
+        self.validate_all(
+            "TIME_TO_STR(a, '%Y-%m-%d %H:%M:%S.%f')",
+            write={"redshift": "TO_CHAR(a, 'YYYY-MM-DD HH24:MI:SS.US')"},
+        )
+
+    def test_grant(self):
+        grant_cmds = [
+            "GRANT SELECT ON ALL TABLES IN SCHEMA qa_tickit TO fred",
+            "GRANT USAGE ON DATASHARE salesshare TO NAMESPACE '13b8833d-17c6-4f16-8fe4-1a018f5ed00d'",
+            "GRANT USAGE FOR SCHEMAS IN DATABASE Sales_db TO ROLE Sales",
+            "GRANT EXECUTE FOR FUNCTIONS IN SCHEMA Sales_schema TO bob",
+            "GRANT SELECT FOR TABLES IN DATABASE Sales_db TO alice WITH GRANT OPTION",
+            "GRANT ALL FOR TABLES IN SCHEMA ShareSchema DATABASE ShareDb TO ROLE Sales",
+            "GRANT ASSUMEROLE ON 'arn:aws:iam::123456789012:role/Redshift-Exfunc' TO reg_user1 FOR EXTERNAL FUNCTION",
+            "GRANT ROLE sample_role1 TO ROLE sample_role2",
+        ]
+
+        for sql in grant_cmds:
+            with self.subTest(f"Testing Redshift's GRANT command statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
+        self.validate_identity("GRANT SELECT ON TABLE sales TO fred")
+        self.validate_identity("GRANT ALL ON SCHEMA qa_tickit TO GROUP qa_users")
+        self.validate_identity("GRANT ALL ON TABLE qa_tickit.sales TO GROUP qa_users")
+        self.validate_identity(
+            "GRANT ALL ON TABLE qa_tickit.sales TO GROUP qa_users, GROUP ro_users"
+        )
+        self.validate_identity("GRANT ALL ON view_date TO view_user")
+        self.validate_identity(
+            "GRANT SELECT(cust_name, cust_phone), UPDATE(cust_contact_preference) ON cust_profile TO GROUP sales_group"
+        )
+        self.validate_identity(
+            "GRANT ALL(cust_name, cust_phone, cust_contact_preference) ON cust_profile TO GROUP sales_admin"
+        )
+        self.validate_identity("GRANT USAGE ON DATABASE sales_db TO Bob")
+        self.validate_identity("GRANT USAGE ON SCHEMA sales_schema TO ROLE Analyst_role")
+        self.validate_identity("GRANT SELECT ON sales_db.sales_schema.tickit_sales_redshift TO Bob")

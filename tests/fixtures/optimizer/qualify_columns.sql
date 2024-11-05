@@ -190,6 +190,17 @@ SELECT x._col_0 AS _col_0, x._col_1 AS _col_1 FROM (VALUES (1, 2)) AS x(_col_0, 
 SELECT SOME_UDF(data).* FROM t;
 SELECT SOME_UDF(t.data).* FROM t AS t;
 
+# execute: false
+# allow_partial_qualification: true
+# validate_qualify_columns: false
+SELECT a + 1 AS i, missing_column FROM x;
+SELECT x.a + 1 AS i, missing_column AS missing_column FROM x AS x;
+
+# execute: false
+# dialect: clickhouse
+SELECT s, arr1, arr2 FROM arrays_test LEFT ARRAY JOIN arr1, arrays_test.arr2;
+SELECT arrays_test.s AS s, arrays_test.arr1 AS arr1, arrays_test.arr2 AS arr2 FROM arrays_test AS arrays_test LEFT ARRAY JOIN arrays_test.arr1, arrays_test.arr2;
+
 --------------------------------------
 -- Derived tables
 --------------------------------------
@@ -342,6 +353,11 @@ WITH tbl1 AS (SELECT STRUCT(1 AS col1, Struct(5 AS col1)) AS col) SELECT tbl1.co
 # title: Cannot expand struct star with ambiguous fields
 WITH tbl1 AS (SELECT STRUCT(1 AS col1, 2 AS col1) AS col) SELECT tbl1.col.* FROM tbl1;
 WITH tbl1 AS (SELECT STRUCT(1 AS col1, 2 AS col1) AS col) SELECT tbl1.col.* FROM tbl1 AS tbl1;
+
+# title: CSV files are not scanned by default
+# execute: false
+SELECT * FROM READ_CSV('file.csv');
+SELECT * FROM READ_CSV('file.csv') AS _q_0;
 
 --------------------------------------
 -- CTEs
@@ -627,6 +643,7 @@ SELECT x.a + 1 AS i, x.a + 1 + 1 AS j, x.a + 1 + 1 + 1 AS k FROM x AS x;
 
 # title: noop - reference comes before alias
 # execute: false
+# validate_qualify_columns: false
 SELECT i + 1 AS j, x.a + 1 AS i FROM x;
 SELECT i + 1 AS j, x.a + 1 AS i FROM x AS x;
 
@@ -654,6 +671,16 @@ SELECT x.a + x.b AS f, x.a + x.b AS _col_1, x.a + x.b + 5 AS _col_2 FROM x AS x;
 # title: expand double agg if window func
 SELECT a, SUM(b) AS c, SUM(c) OVER(PARTITION BY a) AS d from x group by 1 ORDER BY a;
 SELECT x.a AS a, SUM(x.b) AS c, SUM(SUM(x.b)) OVER (PARTITION BY x.a) AS d FROM x AS x GROUP BY x.a ORDER BY a;
+
+# title: we can't expand aliases corresponding to recursive CTE columns (CTE names output columns)
+# execute: false
+WITH RECURSIVE t(c) AS (SELECT 1 AS c UNION ALL SELECT c + 1 AS c FROM t WHERE c <= 10) SELECT c FROM t;
+WITH RECURSIVE t(c) AS (SELECT 1 AS c UNION ALL SELECT t.c + 1 AS c FROM t AS t WHERE t.c <= 10) SELECT t.c AS c FROM t AS t;
+
+# title: we can't expand aliases corresponding to recursive CTE columns (CTE doesn't name output columns)
+# execute: false
+WITH RECURSIVE t AS (SELECT 1 AS c UNION ALL SELECT c + 1 AS c FROM t WHERE c <= 10) SELECT c FROM t;
+WITH RECURSIVE t AS (SELECT 1 AS c UNION ALL SELECT t.c + 1 AS c FROM t AS t WHERE t.c <= 10) SELECT t.c AS c FROM t AS t;
 
 --------------------------------------
 -- Wrapped tables / join constructs
@@ -689,3 +716,6 @@ SELECT _q_0.a AS a, _q_0.b AS b, _q_1.b AS b, _q_1.c AS c FROM ((SELECT x.a AS a
 
 SELECT b FROM ((SELECT a FROM x) INNER JOIN y ON a = b);
 SELECT y.b AS b FROM ((SELECT x.a AS a FROM x AS x) AS _q_0 INNER JOIN y AS y ON _q_0.a = y.b);
+
+SELECT a, c FROM x TABLESAMPLE SYSTEM (10 ROWS) CROSS JOIN y TABLESAMPLE SYSTEM (10 ROWS);
+SELECT x.a AS a, y.c AS c FROM x AS x TABLESAMPLE SYSTEM (10 ROWS) CROSS JOIN y AS y TABLESAMPLE SYSTEM (10 ROWS);

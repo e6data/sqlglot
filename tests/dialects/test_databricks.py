@@ -7,6 +7,9 @@ class TestDatabricks(Validator):
     dialect = "databricks"
 
     def test_databricks(self):
+        self.validate_identity("SELECT * FROM stream")
+        self.validate_identity("SELECT t.current_time FROM t")
+        self.validate_identity("ALTER TABLE labels ADD COLUMN label_score FLOAT")
         self.validate_identity("DESCRIBE HISTORY a.b")
         self.validate_identity("DESCRIBE history.tbl")
         self.validate_identity("CREATE TABLE t (a STRUCT<c: MAP<STRING, STRING>>)")
@@ -114,6 +117,17 @@ class TestDatabricks(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT ANY(col) FROM VALUES (TRUE), (FALSE) AS tab(col)",
+            read={
+                "databricks": "SELECT ANY(col) FROM VALUES (TRUE), (FALSE) AS tab(col)",
+                "spark": "SELECT ANY(col) FROM VALUES (TRUE), (FALSE) AS tab(col)",
+            },
+            write={
+                "spark": "SELECT ANY(col) FROM VALUES (TRUE), (FALSE) AS tab(col)",
+            },
+        )
+
     # https://docs.databricks.com/sql/language-manual/functions/colonsign.html
     def test_json(self):
         self.validate_identity("SELECT c1:price, c1:price.foo, c1:price.bar[1]")
@@ -140,6 +154,13 @@ class TestDatabricks(Validator):
         self.validate_identity(
             """SELECT raw:`zip code`, raw:`fb:testid`, raw:store['bicycle'], raw:store["zip code"]""",
             """SELECT raw:["zip code"], raw:["fb:testid"], raw:store.bicycle, raw:store["zip code"]""",
+        )
+        self.validate_all(
+            "SELECT col:`fr'uit`",
+            write={
+                "databricks": """SELECT col:["fr'uit"]""",
+                "postgres": "SELECT JSON_EXTRACT_PATH(col, 'fr''uit')",
+            },
         )
 
     def test_datediff(self):
@@ -255,3 +276,17 @@ class TestDatabricks(Validator):
                 "databricks": "WITH x AS (SELECT 1) SELECT * FROM x",
             },
         )
+
+    def test_streaming_tables(self):
+        self.validate_identity(
+            "CREATE STREAMING TABLE raw_data AS SELECT * FROM STREAM READ_FILES('abfss://container@storageAccount.dfs.core.windows.net/base/path')"
+        )
+        self.validate_identity(
+            "CREATE OR REFRESH STREAMING TABLE csv_data (id INT, ts TIMESTAMP, event STRING) AS SELECT * FROM STREAM READ_FILES('s3://bucket/path', format => 'csv', schema => 'id int, ts timestamp, event string')"
+        )
+
+    def test_grant(self):
+        self.validate_identity("GRANT CREATE ON SCHEMA my_schema TO `alf@melmak.et`")
+        self.validate_identity("GRANT SELECT ON TABLE sample_data TO `alf@melmak.et`")
+        self.validate_identity("GRANT ALL PRIVILEGES ON TABLE forecasts TO finance")
+        self.validate_identity("GRANT SELECT ON TABLE t TO `fab9e00e-ca35-11ec-9d64-0242ac120002`")

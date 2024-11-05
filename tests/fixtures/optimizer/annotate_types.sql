@@ -1,13 +1,25 @@
 5;
 INT;
 
+-5;
+INT;
+
+~5;
+INT;
+
+(5);
+INT;
+
 5.3;
 DOUBLE;
 
 'bla';
 VARCHAR;
 
-True;
+true;
+bool;
+
+not true;
 bool;
 
 false;
@@ -15,6 +27,13 @@ bool;
 
 null;
 null;
+
+null and false;
+bool;
+
+null + 1;
+int;
+
 CASE WHEN x THEN NULL ELSE 1 END;
 INT;
 
@@ -55,3 +74,15 @@ STRUCT<a INT, b DOUBLE>;
 # dialect: presto
 ROW(1, 2.5, 'foo');
 STRUCT<INT, DOUBLE, VARCHAR>;
+
+# dialect: bigquery
+EXTRACT(date from x);
+DATE;
+
+# dialect: bigquery
+EXTRACT(time from x);
+TIME;
+
+# dialect: bigquery
+EXTRACT(day from x);
+INT;

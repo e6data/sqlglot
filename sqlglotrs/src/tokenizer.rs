@@ -375,7 +375,7 @@ impl<'a> TokenizerState<'a> {
                 self.advance(1)?;
 
                 // Nested comments are allowed by some dialects, e.g. databricks, duckdb, postgres
-                if !self.is_end && self.chars(comment_start_size) == *comment_start {
+                if self.settings.nested_comments && !self.is_end && self.chars(comment_start_size) == *comment_start {
                     self.advance(comment_start_size as isize)?;
                     comment_count += 1
                 }
@@ -609,8 +609,11 @@ impl<'a> TokenizerState<'a> {
         let mut text = String::from("");
 
         loop {
+            let mut new_identifier_escapes;
             let escapes = if use_identifier_escapes {
-                &self.settings.identifier_escapes
+                new_identifier_escapes = self.settings.identifier_escapes.clone();
+                new_identifier_escapes.extend(delimiter.chars());
+                &new_identifier_escapes
             } else {
                 &self.settings.string_escapes
             };

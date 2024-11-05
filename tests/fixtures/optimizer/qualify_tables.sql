@@ -177,3 +177,13 @@ SELECT a.id, a_2.id FROM c.db1.a AS a JOIN c.db2.a AS a_2 ON a.id = a_2.id;
 
 SELECT cat.db1.a.id, db2.a.id FROM cat.db1.a JOIN db2.a ON cat.db1.a.id = db2.a.id;
 SELECT a.id, a_2.id FROM cat.db1.a AS a JOIN c.db2.a AS a_2 ON a.id = a_2.id;
+
+COPY INTO (SELECT * FROM x) TO 'data' WITH (FORMAT 'CSV');
+COPY INTO (SELECT * FROM c.db.x AS x) TO 'data' WITH (FORMAT 'CSV');
+
+# title: tablesample
+SELECT 1 FROM x TABLESAMPLE SYSTEM (10 PERCENT) CROSS JOIN y TABLESAMPLE SYSTEM (10 PERCENT);
+SELECT 1 FROM c.db.x AS x TABLESAMPLE SYSTEM (10 PERCENT) CROSS JOIN c.db.y AS y TABLESAMPLE SYSTEM (10 PERCENT);
+
+WITH cte_tbl AS (SELECT 1 AS col2) UPDATE y SET col1 = (SELECT * FROM x) WHERE EXISTS(SELECT 1 FROM cte_tbl);
+WITH cte_tbl AS (SELECT 1 AS col2) UPDATE c.db.y SET col1 = (SELECT * FROM c.db.x AS x) WHERE EXISTS(SELECT 1 FROM cte_tbl AS cte_tbl);

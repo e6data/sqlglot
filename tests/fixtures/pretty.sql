@@ -99,14 +99,14 @@ WITH cte1 AS (
       FOO(CASE WHEN a AND b THEN c AND d ELSE 3 END)
     GROUP BY
       x,
-    GROUPING SETS (
-      a,
-      (b, c)
-    ),
-    CUBE (
-      y,
-      z
-    )
+      GROUPING SETS (
+        a,
+        (b, c)
+      ),
+      CUBE (
+        y,
+        z
+      )
   ) AS x
 )
 SELECT
@@ -395,3 +395,57 @@ JOIN b
   JOIN d
     USING (f)
   USING (g);
+
+('aaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'ccccccccccccc', 'ddddddddddd', 'eeeeeeeeeeeeeeeeeeeee');
+(
+  'aaaaaaaaaaa',
+  'bbbbbbbbbbbbbbbb',
+  'ccccccccccccc',
+  'ddddddddddd',
+  'eeeeeeeeeeeeeeeeeeeee'
+);
+
+/* COMMENT */
+INSERT FIRST WHEN salary > 4000 THEN INTO emp2
+             WHEN salary > 5000 THEN INTO emp3
+             WHEN salary > 6000 THEN INTO emp4
+SELECT salary FROM employees;
+/* COMMENT */
+INSERT FIRST
+  WHEN salary > 4000 THEN INTO emp2
+  WHEN salary > 5000 THEN INTO emp3
+  WHEN salary > 6000 THEN INTO emp4
+SELECT
+  salary
+FROM employees;
+
+SELECT *
+FROM foo
+wHERE 1=1
+    AND
+        -- my comment
+        EXISTS (
+            SELECT 1
+            FROM bar
+        );
+SELECT
+  *
+FROM foo
+WHERE
+  1 = 1 AND EXISTS(
+    SELECT
+      1
+    FROM bar
+  ) /* my comment */;
+
+SELECT 1
+FROM foo
+WHERE 1=1
+AND -- first comment
+    -- second comment
+    foo.a = 1;
+SELECT
+  1
+FROM foo
+WHERE
+  1 = 1 AND /* first comment */ foo.a /* second comment */ = 1;

@@ -561,6 +561,39 @@ FROM x""",
         AND Z""",
             """SELECT X FROM catalog.db.table WHERE Y AND Z""",
         )
+        self.validate(
+            """with a as /* comment */ ( select * from b) select * from a""",
+            """WITH a /* comment */ AS (SELECT * FROM b) SELECT * FROM a""",
+        )
+        self.validate(
+            """
+  -- comment at the top
+WITH
+-- comment for tbl1
+tbl1 AS (SELECT 1)
+-- comment for tbl2
+, tbl2 AS (SELECT 2)
+-- comment for tbl3
+, tbl3 AS (SELECT 3)
+-- comment for final select
+SELECT * FROM tbl1""",
+            """/* comment at the top */
+WITH tbl1 /* comment for tbl1 */ AS (
+  SELECT
+    1
+), tbl2 /* comment for tbl2 */ AS (
+  SELECT
+    2
+), tbl3 /* comment for tbl3 */ AS (
+  SELECT
+    3
+)
+/* comment for final select */
+SELECT
+  *
+FROM tbl1""",
+            pretty=True,
+        )
 
     def test_types(self):
         self.validate("INT 1", "CAST(1 AS INT)")
@@ -729,6 +762,11 @@ FROM x""",
         self.validate("TIME_TO_STR(x, 'y')", "DATE_FORMAT(x, 'y')", write="hive")
 
         self.validate("TIME_STR_TO_TIME(x)", "TIME_STR_TO_TIME(x)", write=None)
+        self.validate(
+            "TIME_STR_TO_TIME(x, 'America/Los_Angeles')",
+            "TIME_STR_TO_TIME(x, 'America/Los_Angeles')",
+            write=None,
+        )
         self.validate("TIME_STR_TO_UNIX(x)", "TIME_STR_TO_UNIX(x)", write=None)
         self.validate("TIME_TO_TIME_STR(x)", "CAST(x AS TEXT)", write=None)
         self.validate("TIME_TO_STR(x, 'y')", "TIME_TO_STR(x, 'y')", write=None)
@@ -760,7 +798,7 @@ FROM x""",
         self.validate("STR_TO_TIME('x', 'y')", "DATE_PARSE('x', 'y')", write="presto")
         self.validate(
             "STR_TO_UNIX('x', 'y')",
-            "TO_UNIXTIME(COALESCE(TRY(DATE_PARSE(CAST('x' AS VARCHAR), 'y')), PARSE_DATETIME(CAST('x' AS VARCHAR), 'y')))",
+            "TO_UNIXTIME(COALESCE(TRY(DATE_PARSE(CAST('x' AS VARCHAR), 'y')), PARSE_DATETIME(DATE_FORMAT(CAST('x' AS TIMESTAMP), 'y'), 'y')))",
             write="presto",
         )
         self.validate("TIME_TO_STR(x, 'y')", "DATE_FORMAT(x, 'y')", write="presto")
@@ -811,10 +849,10 @@ FROM x""",
             self.assertEqual(
                 cm.output,
                 [
-                    "WARNING:sqlglot:Applying array index offset (1)",
-                    "WARNING:sqlglot:Applying array index offset (-1)",
-                    "WARNING:sqlglot:Applying array index offset (1)",
-                    "WARNING:sqlglot:Applying array index offset (1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
+                    "INFO:sqlglot:Applying array index offset (-1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
                 ],
             )
 
@@ -841,7 +879,6 @@ FROM x""",
             "ALTER TABLE table1 RENAME COLUMN c1 TO c2, c2 TO c3",
             "ALTER TABLE table1 RENAME COLUMN c1 c2",
             "ALTER TYPE electronic_mail RENAME TO email",
-            "ALTER VIEW foo ALTER COLUMN bla SET DEFAULT 'NOT SET'",
             "ALTER schema doo",
             "ANALYZE a.y",
             "CALL catalog.system.iceberg_procedure_name(named_arg_1 => 'arg_1', named_arg_2 => 'arg_2')",
@@ -849,7 +886,6 @@ FROM x""",
             "CREATE OR REPLACE STAGE",
             "EXECUTE statement",
             "EXPLAIN SELECT * FROM x",
-            "GRANT INSERT ON foo TO bla",
             "LOAD foo",
             "OPTIMIZE TABLE y",
             "PREPARE statement",

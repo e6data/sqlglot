@@ -1,6 +1,6 @@
 from sqlglot import exp, parse, parse_one
 from tests.dialects.test_dialect import Validator
-from sqlglot.errors import ParseError
+from sqlglot.errors import ParseError, UnsupportedError
 from sqlglot.optimizer.annotate_types import annotate_types
 
 
@@ -8,6 +8,11 @@ class TestTSQL(Validator):
     dialect = "tsql"
 
     def test_tsql(self):
+        self.validate_identity(
+            "with x as (select 1) select * from x union select * from x order by 1 limit 0",
+            "WITH x AS (SELECT 1 AS [1]) SELECT TOP 0 * FROM (SELECT * FROM x UNION SELECT * FROM x) AS _l_0 ORDER BY 1",
+        )
+
         # https://learn.microsoft.com/en-us/previous-versions/sql/sql-server-2008-r2/ms187879(v=sql.105)?redirectedfrom=MSDN
         # tsql allows .. which means use the default schema
         self.validate_identity("SELECT * FROM a..b")
@@ -32,6 +37,9 @@ class TestTSQL(Validator):
         self.validate_identity("CAST(x AS int) OR y", "CAST(x AS INTEGER) <> 0 OR y <> 0")
         self.validate_identity("TRUNCATE TABLE t1 WITH (PARTITIONS(1, 2 TO 5, 10 TO 20, 84))")
         self.validate_identity(
+            "SELECT TOP 10 s.RECORDID, n.c.value('(/*:FORM_ROOT/*:SOME_TAG)[1]', 'float') AS SOME_TAG_VALUE FROM source_table.dbo.source_data AS s(nolock) CROSS APPLY FormContent.nodes('/*:FORM_ROOT') AS N(C)"
+        )
+        self.validate_identity(
             "CREATE CLUSTERED INDEX [IX_OfficeTagDetail_TagDetailID] ON [dbo].[OfficeTagDetail]([TagDetailID] ASC)"
         )
         self.validate_identity(
@@ -43,11 +51,25 @@ class TestTSQL(Validator):
         self.validate_identity(
             "COPY INTO test_1 FROM 'path' WITH (FORMAT_NAME = test, FILE_TYPE = 'CSV', CREDENTIAL = (IDENTITY='Shared Access Signature', SECRET='token'), FIELDTERMINATOR = ';', ROWTERMINATOR = '0X0A', ENCODING = 'UTF8', DATEFORMAT = 'ymd', MAXERRORS = 10, ERRORFILE = 'errorsfolder', IDENTITY_INSERT = 'ON')"
         )
+        self.validate_identity(
+            'SELECT 1 AS "[x]"',
+            "SELECT 1 AS [[x]]]",
+        )
         self.assertEqual(
             annotate_types(self.validate_identity("SELECT 1 WHERE EXISTS(SELECT 1)")).sql("tsql"),
             "SELECT 1 WHERE EXISTS(SELECT 1)",
         )
 
+        self.validate_all(
+            "WITH A AS (SELECT 2 AS value), C AS (SELECT * FROM A) SELECT * INTO TEMP_NESTED_WITH FROM (SELECT * FROM C) AS temp",
+            read={
+                "snowflake": "CREATE TABLE TEMP_NESTED_WITH AS WITH C AS (WITH A AS (SELECT 2 AS value) SELECT * FROM A) SELECT * FROM C",
+                "tsql": "WITH A AS (SELECT 2 AS value), C AS (SELECT * FROM A) SELECT * INTO TEMP_NESTED_WITH FROM (SELECT * FROM C) AS temp",
+            },
+            write={
+                "snowflake": "CREATE TABLE TEMP_NESTED_WITH AS WITH A AS (SELECT 2 AS value), C AS (SELECT * FROM A) SELECT * FROM (SELECT * FROM C) AS temp",
+            },
+        )
         self.validate_all(
             "SELECT IIF(cond <> 0, 'True', 'False')",
             read={
@@ -389,7 +411,30 @@ class TestTSQL(Validator):
             },
         )
         self.validate_identity("HASHBYTES('MD2', 'x')")
+        self.validate_identity("LOG(n)")
         self.validate_identity("LOG(n, b)")
+
+        self.validate_all(
+            "STDEV(x)",
+            read={
+                "": "STDDEV(x)",
+            },
+            write={
+                "": "STDDEV(x)",
+                "tsql": "STDEV(x)",
+            },
+        )
+
+        # Check that TRUE and FALSE dont get expanded to (1=1) or (1=0) when used in a VALUES expression
+        self.validate_identity(
+            "SELECT val FROM (VALUES ((TRUE), (FALSE), (NULL))) AS t(val)",
+            write_sql="SELECT val FROM (VALUES ((1), (0), (NULL))) AS t(val)",
+        )
+        self.validate_identity("'a' + 'b'")
+        self.validate_identity(
+            "'a' || 'b'",
+            "'a' + 'b'",
+        )
 
     def test_option(self):
         possible_options = [
@@ -771,7 +816,7 @@ class TestTSQL(Validator):
             self.validate_identity(f"CREATE VIEW a.b WITH {view_attr} AS SELECT * FROM x")
 
         self.validate_identity("ALTER TABLE dbo.DocExe DROP CONSTRAINT FK_Column_B").assert_is(
-            exp.AlterTable
+            exp.Alter
         ).args["actions"][0].assert_is(exp.Drop)
 
         for clustered_keyword in ("CLUSTERED", "NONCLUSTERED"):
@@ -786,6 +831,7 @@ class TestTSQL(Validator):
                 f"UNIQUE {clustered_keyword} ([internal_id] ASC))",
             )
 
+        self.validate_identity("CREATE VIEW t AS WITH cte AS (SELECT 1 AS c) SELECT c FROM cte")
         self.validate_identity(
             "ALTER TABLE tbl SET SYSTEM_VERSIONING=ON(HISTORY_TABLE=db.tbl, DATA_CONSISTENCY_CHECK=OFF, HISTORY_RETENTION_PERIOD=5 DAYS)"
         )
@@ -800,6 +846,20 @@ class TestTSQL(Validator):
         self.validate_identity("ALTER TABLE tbl SET DATA_DELETION=ON")
         self.validate_identity("ALTER TABLE tbl SET DATA_DELETION=OFF")
 
+        self.validate_identity("ALTER VIEW v AS SELECT a, b, c, d FROM foo")
+        self.validate_identity("ALTER VIEW v AS SELECT * FROM foo WHERE c > 100")
+        self.validate_identity(
+            "ALTER VIEW v WITH SCHEMABINDING AS SELECT * FROM foo WHERE c > 100",
+            check_command_warning=True,
+        )
+        self.validate_identity(
+            "ALTER VIEW v WITH ENCRYPTION AS SELECT * FROM foo WHERE c > 100",
+            check_command_warning=True,
+        )
+        self.validate_identity(
+            "ALTER VIEW v WITH VIEW_METADATA AS SELECT * FROM foo WHERE c > 100",
+            check_command_warning=True,
+        )
         self.validate_identity(
             "CREATE PROCEDURE foo AS BEGIN DELETE FROM bla WHERE foo < CURRENT_TIMESTAMP - 7 END",
             "CREATE PROCEDURE foo AS BEGIN DELETE FROM bla WHERE foo < GETDATE() - 7 END",
@@ -862,6 +922,12 @@ class TestTSQL(Validator):
             },
         )
         self.validate_all(
+            "IF NOT EXISTS (SELECT * FROM information_schema.tables WHERE table_name = 'baz' AND table_schema = 'bar' AND table_catalog = 'foo') EXEC('WITH cte1 AS (SELECT 1 AS col_a), cte2 AS (SELECT 1 AS col_b) SELECT * INTO foo.bar.baz FROM (SELECT col_a FROM cte1 UNION ALL SELECT col_b FROM cte2) AS temp')",
+            read={
+                "": "CREATE TABLE IF NOT EXISTS foo.bar.baz AS WITH cte1 AS (SELECT 1 AS col_a), cte2 AS (SELECT 1 AS col_b) SELECT col_a FROM cte1 UNION ALL SELECT col_b FROM cte2"
+            },
+        )
+        self.validate_all(
             "CREATE OR ALTER VIEW a.b AS SELECT 1",
             read={
                 "": "CREATE OR REPLACE VIEW a.b AS SELECT 1",
@@ -886,6 +952,14 @@ class TestTSQL(Validator):
                 "spark": "CREATE TEMPORARY TABLE mytemp (a INT, b CHAR(2), c TIMESTAMP, d FLOAT) USING PARQUET",
                 "tsql": "CREATE TABLE #mytemp (a INTEGER, b CHAR(2), c TIME(4), d FLOAT(24))",
             },
+        )
+
+        for colstore in ("NONCLUSTERED COLUMNSTORE", "CLUSTERED COLUMNSTORE"):
+            self.validate_identity(f"CREATE {colstore} INDEX index_name ON foo.bar")
+
+        self.validate_identity(
+            "CREATE COLUMNSTORE INDEX index_name ON foo.bar",
+            "CREATE NONCLUSTERED COLUMNSTORE INDEX index_name ON foo.bar",
         )
 
     def test_insert_cte(self):
@@ -934,6 +1008,17 @@ class TestTSQL(Validator):
         )
         self.validate_identity("CREATE PROC foo AS SELECT BAR() AS baz")
         self.validate_identity("CREATE PROCEDURE foo AS SELECT BAR() AS baz")
+
+        self.validate_identity("CREATE PROCEDURE foo WITH ENCRYPTION AS SELECT 1")
+        self.validate_identity("CREATE PROCEDURE foo WITH RECOMPILE AS SELECT 1")
+        self.validate_identity("CREATE PROCEDURE foo WITH SCHEMABINDING AS SELECT 1")
+        self.validate_identity("CREATE PROCEDURE foo WITH NATIVE_COMPILATION AS SELECT 1")
+        self.validate_identity("CREATE PROCEDURE foo WITH EXECUTE AS OWNER AS SELECT 1")
+        self.validate_identity("CREATE PROCEDURE foo WITH EXECUTE AS 'username' AS SELECT 1")
+        self.validate_identity(
+            "CREATE PROCEDURE foo WITH EXECUTE AS OWNER, SCHEMABINDING, NATIVE_COMPILATION AS SELECT 1"
+        )
+
         self.validate_identity("CREATE FUNCTION foo(@bar INTEGER) RETURNS TABLE AS RETURN SELECT 1")
         self.validate_identity("CREATE FUNCTION dbo.ISOweek(@DATE DATETIME2) RETURNS INTEGER")
 
@@ -992,6 +1077,7 @@ WHERE
             CREATE procedure [TRANSF].[SP_Merge_Sales_Real]
                 @Loadid INTEGER
                ,@NumberOfRows INTEGER
+            WITH EXECUTE AS OWNER, SCHEMABINDING, NATIVE_COMPILATION
             AS
             BEGIN
                 SET XACT_ABORT ON;
@@ -1007,7 +1093,7 @@ WHERE
         """
 
         expected_sqls = [
-            "CREATE PROCEDURE [TRANSF].[SP_Merge_Sales_Real] @Loadid INTEGER, @NumberOfRows INTEGER AS BEGIN SET XACT_ABORT ON",
+            "CREATE PROCEDURE [TRANSF].[SP_Merge_Sales_Real] @Loadid INTEGER, @NumberOfRows INTEGER WITH EXECUTE AS OWNER, SCHEMABINDING, NATIVE_COMPILATION AS BEGIN SET XACT_ABORT ON",
             "DECLARE @DWH_DateCreated AS DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104)",
             "DECLARE @DWH_DateModified AS DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104)",
             "DECLARE @DWH_IdUserCreated AS INTEGER = SUSER_ID(CURRENT_USER())",
@@ -1116,6 +1202,11 @@ WHERE
         self.validate_all("ISNULL(x, y)", write={"spark": "COALESCE(x, y)"})
 
     def test_json(self):
+        self.validate_identity(
+            """JSON_QUERY(REPLACE(REPLACE(x , '''', '"'), '""', '"'))""",
+            """ISNULL(JSON_QUERY(REPLACE(REPLACE(x, '''', '"'), '""', '"'), '$'), JSON_VALUE(REPLACE(REPLACE(x, '''', '"'), '""', '"'), '$'))""",
+        )
+
         self.validate_all(
             "JSON_QUERY(r.JSON, '$.Attr_INT')",
             write={
@@ -1478,6 +1569,15 @@ WHERE
             },
         )
 
+        # Check superfluous casts arent added. ref: https://github.com/TobikoData/sqlmesh/issues/2672
+        self.validate_all(
+            "SELECT DATEDIFF(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
+            write={
+                "tsql": "SELECT DATEDIFF(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
+                "clickhouse": "SELECT DATE_DIFF(DAY, CAST(CAST(a AS Nullable(DateTime)) AS DateTime64(6)), CAST(CAST(b AS Nullable(DateTime)) AS DateTime64(6))) AS x FROM foo",
+            },
+        )
+
     def test_lateral_subquery(self):
         self.validate_all(
             "SELECT x.a, x.b, t.v, t.y FROM x CROSS APPLY (SELECT v, y FROM t) t(v, y)",
@@ -1519,8 +1619,8 @@ WHERE
         self.validate_all(
             "SELECT t.x, y.z FROM x OUTER APPLY a.b.tvfTest(t.x)y(z)",
             write={
-                "spark": "SELECT t.x, y.z FROM x LEFT JOIN LATERAL a.b.TVFTEST(t.x) AS y(z)",
-                "tsql": "SELECT t.x, y.z FROM x OUTER APPLY a.b.TVFTEST(t.x) AS y(z)",
+                "spark": "SELECT t.x, y.z FROM x LEFT JOIN LATERAL a.b.tvfTest(t.x) AS y(z)",
+                "tsql": "SELECT t.x, y.z FROM x OUTER APPLY a.b.tvfTest(t.x) AS y(z)",
             },
         )
 
@@ -1615,7 +1715,7 @@ WHERE
             },
             write={
                 "bigquery": "LAST_DAY(CAST(CURRENT_TIMESTAMP() AS DATE))",
-                "clickhouse": "LAST_DAY(CAST(CURRENT_TIMESTAMP() AS DATE))",
+                "clickhouse": "LAST_DAY(CAST(CURRENT_TIMESTAMP() AS Nullable(DATE)))",
                 "duckdb": "LAST_DAY(CAST(CURRENT_TIMESTAMP AS DATE))",
                 "mysql": "LAST_DAY(DATE(CURRENT_TIMESTAMP()))",
                 "postgres": "CAST(DATE_TRUNC('MONTH', CAST(CURRENT_TIMESTAMP AS DATE)) + INTERVAL '1 MONTH' - INTERVAL '1 DAY' AS DATE)",
@@ -1630,11 +1730,11 @@ WHERE
             "EOMONTH(GETDATE(), -1)",
             write={
                 "bigquery": "LAST_DAY(DATE_ADD(CAST(CURRENT_TIMESTAMP() AS DATE), INTERVAL -1 MONTH))",
-                "clickhouse": "LAST_DAY(DATE_ADD(MONTH, -1, CAST(CURRENT_TIMESTAMP() AS DATE)))",
+                "clickhouse": "LAST_DAY(DATE_ADD(MONTH, -1, CAST(CURRENT_TIMESTAMP() AS Nullable(DATE))))",
                 "duckdb": "LAST_DAY(CAST(CURRENT_TIMESTAMP AS DATE) + INTERVAL (-1) MONTH)",
                 "mysql": "LAST_DAY(DATE_ADD(CURRENT_TIMESTAMP(), INTERVAL -1 MONTH))",
                 "postgres": "CAST(DATE_TRUNC('MONTH', CAST(CURRENT_TIMESTAMP AS DATE) + INTERVAL '-1 MONTH') + INTERVAL '1 MONTH' - INTERVAL '1 DAY' AS DATE)",
-                "presto": "LAST_DAY_OF_MONTH(DATE_ADD('MONTH', CAST(-1 AS BIGINT), CAST(CAST(CURRENT_TIMESTAMP AS TIMESTAMP) AS DATE)))",
+                "presto": "LAST_DAY_OF_MONTH(DATE_ADD('MONTH', -1, CAST(CAST(CURRENT_TIMESTAMP AS TIMESTAMP) AS DATE)))",
                 "redshift": "LAST_DAY(DATEADD(MONTH, -1, CAST(GETDATE() AS DATE)))",
                 "snowflake": "LAST_DAY(DATEADD(MONTH, -1, TO_DATE(CURRENT_TIMESTAMP())))",
                 "spark": "LAST_DAY(ADD_MONTHS(TO_DATE(CURRENT_TIMESTAMP()), -1))",
@@ -1898,3 +1998,74 @@ FROM OPENJSON(@json) WITH (
                 base_sql = expr.sql()
                 self.assertEqual(base_sql, f"SCOPE_RESOLUTION({lhs + ', ' if lhs else ''}{rhs})")
                 self.assertEqual(parse_one(base_sql).sql("tsql"), f"{lhs}::{rhs}")
+
+    def test_count(self):
+        count = annotate_types(self.validate_identity("SELECT COUNT(1) FROM x"))
+        self.assertEqual(count.expressions[0].type.this, exp.DataType.Type.INT)
+
+        count_big = annotate_types(self.validate_identity("SELECT COUNT_BIG(1) FROM x"))
+        self.assertEqual(count_big.expressions[0].type.this, exp.DataType.Type.BIGINT)
+
+        self.validate_all(
+            "SELECT COUNT_BIG(1) FROM x",
+            read={
+                "duckdb": "SELECT COUNT(1) FROM x",
+                "spark": "SELECT COUNT(1) FROM x",
+            },
+            write={
+                "duckdb": "SELECT COUNT(1) FROM x",
+                "spark": "SELECT COUNT(1) FROM x",
+                "tsql": "SELECT COUNT_BIG(1) FROM x",
+            },
+        )
+        self.validate_all(
+            "SELECT COUNT(1) FROM x",
+            write={
+                "duckdb": "SELECT COUNT(1) FROM x",
+                "spark": "SELECT COUNT(1) FROM x",
+                "tsql": "SELECT COUNT(1) FROM x",
+            },
+        )
+
+    def test_grant(self):
+        self.validate_identity("GRANT EXECUTE ON TestProc TO User2")
+        self.validate_identity("GRANT EXECUTE ON TestProc TO TesterRole WITH GRANT OPTION")
+        self.validate_identity(
+            "GRANT EXECUTE ON TestProc TO User2 AS TesterRole", check_command_warning=True
+        )
+
+    def test_parsename(self):
+        for i in range(4):
+            with self.subTest("Testing PARSENAME <-> SPLIT_PART"):
+                self.validate_all(
+                    f"SELECT PARSENAME('1.2.3', {i})",
+                    read={
+                        "spark": f"SELECT SPLIT_PART('1.2.3', '.', {4 - i})",
+                        "databricks": f"SELECT SPLIT_PART('1.2.3', '.', {4 - i})",
+                    },
+                    write={
+                        "spark": f"SELECT SPLIT_PART('1.2.3', '.', {4 - i})",
+                        "databricks": f"SELECT SPLIT_PART('1.2.3', '.', {4 - i})",
+                        "tsql": f"SELECT PARSENAME('1.2.3', {i})",
+                    },
+                )
+
+        # Test non-dot delimiter
+        self.validate_all(
+            "SELECT SPLIT_PART('1,2,3', ',', 1)",
+            write={
+                "spark": "SELECT SPLIT_PART('1,2,3', ',', 1)",
+                "databricks": "SELECT SPLIT_PART('1,2,3', ',', 1)",
+                "tsql": UnsupportedError,
+            },
+        )
+
+        # Test column-type parameters
+        self.validate_all(
+            "WITH t AS (SELECT 'a.b.c' AS value, 1 AS idx) SELECT SPLIT_PART(value, '.', idx) FROM t",
+            write={
+                "spark": "WITH t AS (SELECT 'a.b.c' AS value, 1 AS idx) SELECT SPLIT_PART(value, '.', idx) FROM t",
+                "databricks": "WITH t AS (SELECT 'a.b.c' AS value, 1 AS idx) SELECT SPLIT_PART(value, '.', idx) FROM t",
+                "tsql": UnsupportedError,
+            },
+        )

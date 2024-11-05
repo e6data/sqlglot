@@ -60,6 +60,7 @@ class TokenType(AutoName):
     PIPE_SLASH = auto()
     DPIPE_SLASH = auto()
     CARET = auto()
+    CARET_AT = auto()
     TILDA = auto()
     ARROW = auto()
     DARROW = auto()
@@ -123,6 +124,10 @@ class TokenType(AutoName):
     FLOAT = auto()
     DOUBLE = auto()
     DECIMAL = auto()
+    DECIMAL32 = auto()
+    DECIMAL64 = auto()
+    DECIMAL128 = auto()
+    DECIMAL256 = auto()
     UDECIMAL = auto()
     BIGDECIMAL = auto()
     CHAR = auto()
@@ -171,6 +176,12 @@ class TokenType(AutoName):
     GEOGRAPHY = auto()
     NULLABLE = auto()
     GEOMETRY = auto()
+    POINT = auto()
+    RING = auto()
+    LINESTRING = auto()
+    MULTILINESTRING = auto()
+    POLYGON = auto()
+    MULTIPOLYGON = auto()
     HLLSKETCH = auto()
     HSTORE = auto()
     SUPER = auto()
@@ -218,6 +229,7 @@ class TokenType(AutoName):
     AUTO_INCREMENT = auto()
     BEGIN = auto()
     BETWEEN = auto()
+    BULK_COLLECT_INTO = auto()
     CACHE = auto()
     CASE = auto()
     CHARACTER_SET = auto()
@@ -267,6 +279,7 @@ class TokenType(AutoName):
     FUNCTION = auto()
     GLOB = auto()
     GLOBAL = auto()
+    GRANT = auto()
     GROUP_BY = auto()
     GROUPING_SETS = auto()
     HAVING = auto()
@@ -340,6 +353,7 @@ class TokenType(AutoName):
     RANGE = auto()
     RECURSIVE = auto()
     REFRESH = auto()
+    RENAME = auto()
     REPLACE = auto()
     RETURNING = auto()
     REFERENCES = auto()
@@ -364,6 +378,7 @@ class TokenType(AutoName):
     STORAGE_INTEGRATION = auto()
     STRAIGHT_JOIN = auto()
     STRUCT = auto()
+    SUMMARIZE = auto()
     TABLE_SAMPLE = auto()
     TAG = auto()
     TEMPORARY = auto()
@@ -528,6 +543,7 @@ class _Tokenizer(type):
                 },
                 heredoc_tag_is_identifier=klass.HEREDOC_TAG_IS_IDENTIFIER,
                 string_escapes_allowed_in_raw_strings=klass.STRING_ESCAPES_ALLOWED_IN_RAW_STRINGS,
+                nested_comments=klass.NESTED_COMMENTS,
             )
             token_types = RsTokenTypeSettings(
                 bit_string=_TOKEN_TYPE_TO_INDEX[TokenType.BIT_STRING],
@@ -593,10 +609,14 @@ class Tokenizer(metaclass=_Tokenizer):
     HEREDOC_STRINGS: t.List[str | t.Tuple[str, str]] = []
     UNICODE_STRINGS: t.List[str | t.Tuple[str, str]] = []
     IDENTIFIERS: t.List[str | t.Tuple[str, str]] = ['"']
-    IDENTIFIER_ESCAPES = ['"']
     QUOTES: t.List[t.Tuple[str, str] | str] = ["'"]
     STRING_ESCAPES = ["'"]
     VAR_SINGLE_TOKENS: t.Set[str] = set()
+
+    # The strings in this list can always be used as escapes, regardless of the surrounding
+    # identifier delimiters. By default, the closing delimiter is assumed to also act as an
+    # identifier escape, e.g. if we use double-quotes, then they also act as escapes: "x"""
+    IDENTIFIER_ESCAPES: t.List[str] = []
 
     # Whether the heredoc tags follow the same lexical rules as unquoted identifiers
     HEREDOC_TAG_IS_IDENTIFIER = False
@@ -606,6 +626,8 @@ class Tokenizer(metaclass=_Tokenizer):
 
     # Whether string escape characters function as such when placed within raw strings
     STRING_ESCAPES_ALLOWED_IN_RAW_STRINGS = True
+
+    NESTED_COMMENTS = True
 
     # Autofilled
     _COMMENTS: t.Dict[str, str] = {}
@@ -640,6 +662,10 @@ class Tokenizer(metaclass=_Tokenizer):
         "<->": TokenType.LR_ARROW,
         "&&": TokenType.DAMP,
         "??": TokenType.DQMARK,
+        "~~~": TokenType.GLOB,
+        "~~": TokenType.LIKE,
+        "~~*": TokenType.ILIKE,
+        "~*": TokenType.IRLIKE,
         "ALL": TokenType.ALL,
         "ALWAYS": TokenType.ALWAYS,
         "AND": TokenType.AND,
@@ -752,6 +778,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "RANGE": TokenType.RANGE,
         "RECURSIVE": TokenType.RECURSIVE,
         "REGEXP": TokenType.RLIKE,
+        "RENAME": TokenType.RENAME,
         "REPLACE": TokenType.REPLACE,
         "RETURNING": TokenType.RETURNING,
         "REFERENCES": TokenType.REFERENCES,
@@ -808,6 +835,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "SMALLINT": TokenType.SMALLINT,
         "INT128": TokenType.INT128,
         "HUGEINT": TokenType.INT128,
+        "UHUGEINT": TokenType.UINT128,
         "INT2": TokenType.SMALLINT,
         "INTEGER": TokenType.INT,
         "INT": TokenType.INT,
@@ -820,6 +848,10 @@ class Tokenizer(metaclass=_Tokenizer):
         "UINT": TokenType.UINT,
         "DEC": TokenType.DECIMAL,
         "DECIMAL": TokenType.DECIMAL,
+        "DECIMAL32": TokenType.DECIMAL32,
+        "DECIMAL64": TokenType.DECIMAL64,
+        "DECIMAL128": TokenType.DECIMAL128,
+        "DECIMAL256": TokenType.DECIMAL256,
         "BIGDECIMAL": TokenType.BIGDECIMAL,
         "BIGNUMERIC": TokenType.BIGDECIMAL,
         "LIST": TokenType.LIST,
@@ -891,7 +923,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "CALL": TokenType.COMMAND,
         "COMMENT": TokenType.COMMENT,
         "EXPLAIN": TokenType.COMMAND,
-        "GRANT": TokenType.COMMAND,
+        "GRANT": TokenType.GRANT,
         "OPTIMIZE": TokenType.COMMAND,
         "PREPARE": TokenType.COMMAND,
         "VACUUM": TokenType.COMMAND,
@@ -912,6 +944,7 @@ class Tokenizer(metaclass=_Tokenizer):
         TokenType.EXECUTE,
         TokenType.FETCH,
         TokenType.SHOW,
+        TokenType.RENAME,
     }
 
     COMMAND_PREFIX_TOKENS = {TokenType.SEMICOLON, TokenType.BEGIN}
@@ -1180,7 +1213,11 @@ class Tokenizer(metaclass=_Tokenizer):
                 self._advance(alnum=True)
 
                 # Nested comments are allowed by some dialects, e.g. databricks, duckdb, postgres
-                if not self._end and self._chars(comment_end_size) == comment_start:
+                if (
+                    self.NESTED_COMMENTS
+                    and not self._end
+                    and self._chars(comment_end_size) == comment_start
+                ):
                     self._advance(comment_start_size)
                     comment_count += 1
 
@@ -1330,7 +1367,9 @@ class Tokenizer(metaclass=_Tokenizer):
 
     def _scan_identifier(self, identifier_end: str) -> None:
         self._advance()
-        text = self._extract_string(identifier_end, escapes=self._IDENTIFIER_ESCAPES)
+        text = self._extract_string(
+            identifier_end, escapes=self._IDENTIFIER_ESCAPES | {identifier_end}
+        )
         self._add(TokenType.IDENTIFIER, text)
 
     def _scan_var(self) -> None:

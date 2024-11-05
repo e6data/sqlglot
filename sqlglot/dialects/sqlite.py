@@ -15,6 +15,7 @@ from sqlglot.dialects.dialect import (
     no_tablesample_sql,
     no_trycast_sql,
     rename_func,
+    str_position_sql,
 )
 from sqlglot.tokens import TokenType
 
@@ -119,6 +120,14 @@ class SQLite(Dialect):
         }
         STRING_ALIASES = True
 
+        def _parse_unique(self) -> exp.UniqueColumnConstraint:
+            # Do not consume more tokens if UNIQUE is used as a standalone constraint, e.g:
+            # CREATE TABLE foo (bar TEXT UNIQUE REFERENCES baz ...)
+            if self._curr.text.upper() in self.CONSTRAINT_PARSERS:
+                return self.expression(exp.UniqueColumnConstraint)
+
+            return super()._parse_unique()
+
     class Generator(generator.Generator):
         JOIN_HINTS = False
         TABLE_HINTS = False
@@ -128,6 +137,8 @@ class SQLite(Dialect):
         SUPPORTS_CREATE_TABLE_LIKE = False
         SUPPORTS_TABLE_ALIAS_COLUMNS = False
         SUPPORTS_TO_NUMBER = False
+        EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
+        SUPPORTS_MEDIAN = False
 
         SUPPORTED_JSON_PATH_PARTS = {
             exp.JSONPathKey,
@@ -185,6 +196,9 @@ class SQLite(Dialect):
                     transforms.eliminate_semi_and_anti_joins,
                 ]
             ),
+            exp.StrPosition: lambda self, e: str_position_sql(
+                self, e, str_position_func_name="INSTR"
+            ),
             exp.TableSample: no_tablesample_sql,
             exp.TimeStrToTime: lambda self, e: self.sql(e, "this"),
             exp.TimeToStr: lambda self, e: self.func("STRFTIME", e.args.get("format"), e.this),
@@ -223,7 +237,7 @@ class SQLite(Dialect):
                     exp.select(exp.alias_("value", column_alias)).from_(expression).subquery()
                 )
             else:
-                sql = super().generateseries_sql(expression)
+                sql = self.function_fallback_sql(expression)
 
             return sql
 
@@ -250,7 +264,7 @@ class SQLite(Dialect):
             elif unit == "NANOSECOND":
                 sql = f"{sql} * 8640000000000.0"
             else:
-                self.unsupported("DATEDIFF unsupported for '{unit}'.")
+                self.unsupported(f"DATEDIFF unsupported for '{unit}'.")
 
             return f"CAST({sql} AS INTEGER)"
 

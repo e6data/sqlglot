@@ -27,11 +27,11 @@ def parse_and_optimize(func, sql, read_dialect, **kwargs):
     return func(parse_one(sql, read=read_dialect), **kwargs)
 
 
-def qualify_columns(expression, **kwargs):
+def qualify_columns(expression, validate_qualify_columns=True, **kwargs):
     expression = optimizer.qualify.qualify(
         expression,
         infer_schema=True,
-        validate_qualify_columns=False,
+        validate_qualify_columns=validate_qualify_columns,
         identify=False,
         **kwargs,
     )
@@ -52,6 +52,18 @@ def normalize(expression, **kwargs):
 
 def simplify(expression, **kwargs):
     return optimizer.simplify.simplify(expression, constant_propagation=True, **kwargs)
+
+
+def annotate_functions(expression, **kwargs):
+    from sqlglot.dialects import Dialect
+
+    dialect = kwargs.get("dialect")
+    schema = kwargs.get("schema")
+
+    annotators = Dialect.get_or_raise(dialect).ANNOTATORS
+    annotated = annotate_types(expression, annotators=annotators, schema=schema)
+
+    return annotated.expressions[0]
 
 
 class TestOptimizer(unittest.TestCase):
@@ -135,10 +147,16 @@ class TestOptimizer(unittest.TestCase):
                     continue
                 dialect = meta.get("dialect")
                 leave_tables_isolated = meta.get("leave_tables_isolated")
+                validate_qualify_columns = meta.get("validate_qualify_columns")
 
                 func_kwargs = {**kwargs}
                 if leave_tables_isolated is not None:
                     func_kwargs["leave_tables_isolated"] = string_to_bool(leave_tables_isolated)
+
+                if validate_qualify_columns is not None:
+                    func_kwargs["validate_qualify_columns"] = string_to_bool(
+                        validate_qualify_columns
+                    )
 
                 if set_dialect and dialect:
                     func_kwargs["dialect"] = dialect
@@ -360,6 +378,69 @@ class TestOptimizer(unittest.TestCase):
             "SELECT _q_0.id AS id, _q_0.dt AS dt, _q_0.v AS v FROM (SELECT t1.id AS id, t1.dt AS dt, sum(coalesce(t2.v, 0)) AS v FROM t1 AS t1 LEFT JOIN lkp AS lkp ON t1.id = lkp.id LEFT JOIN t2 AS t2 ON lkp.other_id = t2.other_id AND t1.dt = t2.dt AND COALESCE(t1.common, lkp.common) = t2.common WHERE t1.id > 10 GROUP BY t1.id, t1.dt) AS _q_0",
         )
 
+        # Detection of correlation where columns are referenced in derived tables nested within subqueries
+        self.assertEqual(
+            optimizer.qualify.qualify(
+                parse_one(
+                    "SELECT a.g FROM a WHERE a.e < (SELECT MAX(u) FROM (SELECT SUM(c.b) AS u FROM c WHERE  c.d = f GROUP BY c.e) w)"
+                ),
+                schema={
+                    "a": {"g": "INT", "e": "INT", "f": "INT"},
+                    "c": {"d": "INT", "e": "INT", "b": "INT"},
+                },
+                quote_identifiers=False,
+            ).sql(),
+            "SELECT a.g AS g FROM a AS a WHERE a.e < (SELECT MAX(w.u) AS _col_0 FROM (SELECT SUM(c.b) AS u FROM c AS c WHERE c.d = a.f GROUP BY c.e) AS w)",
+        )
+
+        # Detection of correlation where columns are referenced in derived tables nested within lateral joins
+        self.assertEqual(
+            optimizer.qualify.qualify(
+                parse_one(
+                    "SELECT u.user_id, l.log_date FROM users AS u CROSS JOIN LATERAL (SELECT l1.log_date FROM (SELECT l.log_date FROM logs AS l WHERE l.user_id = u.user_id AND l.log_date <= 100 ORDER BY l.log_date LIMIT 1) AS l1) AS l",
+                    dialect="postgres",
+                ),
+                schema={
+                    "users": {"user_id": "text", "log_date": "date"},
+                    "logs": {"user_id": "text", "log_date": "date"},
+                },
+                quote_identifiers=False,
+            ).sql("postgres"),
+            "SELECT u.user_id AS user_id, l.log_date AS log_date FROM users AS u CROSS JOIN LATERAL (SELECT l1.log_date AS log_date FROM (SELECT l.log_date AS log_date FROM logs AS l WHERE l.user_id = u.user_id AND l.log_date <= 100 ORDER BY l.log_date LIMIT 1) AS l1) AS l",
+        )
+
+        self.assertEqual(
+            optimizer.qualify.qualify(
+                parse_one(
+                    "SELECT A.b_id FROM A JOIN B ON A.b_id=B.b_id JOIN C USING(c_id)",
+                    dialect="postgres",
+                ),
+                schema={
+                    "A": {"b_id": "int"},
+                    "B": {"b_id": "int", "c_id": "int"},
+                    "C": {"c_id": "int"},
+                },
+                quote_identifiers=False,
+            ).sql("postgres"),
+            "SELECT a.b_id AS b_id FROM a AS a JOIN b AS b ON a.b_id = b.b_id JOIN c AS c ON b.c_id = c.c_id",
+        )
+        self.assertEqual(
+            optimizer.qualify.qualify(
+                parse_one(
+                    "SELECT A.b_id FROM A JOIN B ON A.b_id=B.b_id JOIN C ON B.b_id = C.b_id JOIN D USING(d_id)",
+                    dialect="postgres",
+                ),
+                schema={
+                    "A": {"b_id": "int"},
+                    "B": {"b_id": "int", "d_id": "int"},
+                    "C": {"b_id": "int"},
+                    "D": {"d_id": "int"},
+                },
+                quote_identifiers=False,
+            ).sql("postgres"),
+            "SELECT a.b_id AS b_id FROM a AS a JOIN b AS b ON a.b_id = b.b_id JOIN c AS c ON b.b_id = c.b_id JOIN d AS d ON b.d_id = d.d_id",
+        )
+
         self.check_file(
             "qualify_columns",
             qualify_columns,
@@ -521,6 +602,16 @@ SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expr
             "WITH data AS (SELECT 1 AS id, 2 AS my_id, 'a' AS name, 'b' AS full_name) SELECT data.id AS my_id, CONCAT(data.id, data.name) AS full_name FROM data WHERE data.id = 1 GROUP BY data.id, CONCAT(data.id, data.name) HAVING data.id = 1",
         )
 
+        # Edge case: BigQuery shouldn't expand aliases in complex expressions
+        sql = "WITH data AS (SELECT 1 AS id) SELECT FUNC(id) AS id FROM data GROUP BY FUNC(id)"
+        self.assertEqual(
+            optimizer.qualify_columns.qualify_columns(
+                parse_one(sql, dialect="bigquery"),
+                schema=MappingSchema(schema=unused_schema, dialect="bigquery"),
+            ).sql(),
+            "WITH data AS (SELECT 1 AS id) SELECT FUNC(data.id) AS id FROM data GROUP BY FUNC(data.id)",
+        )
+
     def test_optimize_joins(self):
         self.check_file(
             "optimize_joins",
@@ -591,7 +682,7 @@ SELECT
   "_q_0"."n_comment" AS "n_comment"
 FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') AS "_q_0"
 """.strip(),
-            optimizer.optimize(expression).sql(pretty=True),
+            optimizer.optimize(expression, infer_csv_schemas=True).sql(pretty=True),
         )
 
     def test_scope(self):
@@ -698,6 +789,18 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
                 self.assertEqual(scopes[2].expression.sql(), f"SELECT a FROM foo CROSS JOIN {udtf}")
                 self.assertEqual(set(scopes[2].sources), {"", "foo"})
 
+        # Check DML statement scopes
+        sql = (
+            "UPDATE customers SET total_spent = (SELECT 1 FROM t1) WHERE EXISTS (SELECT 1 FROM t2)"
+        )
+        self.assertEqual(len(traverse_scope(parse_one(sql))), 3)
+
+        sql = "UPDATE tbl1 SET col = 1 WHERE EXISTS (SELECT 1 FROM tbl2 WHERE tbl1.id = tbl2.id)"
+        self.assertEqual(len(traverse_scope(parse_one(sql))), 1)
+
+        sql = "UPDATE tbl1 SET col = 0"
+        self.assertEqual(len(traverse_scope(parse_one(sql))), 0)
+
     @patch("sqlglot.optimizer.scope.logger")
     def test_scope_warning(self, logger):
         self.assertEqual(len(traverse_scope(parse_one("WITH q AS (@y) SELECT * FROM q"))), 1)
@@ -717,6 +820,28 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
 
             with self.subTest(title):
                 self.assertEqual(result.type.sql(), exp.DataType.build(expected).sql())
+
+    def test_annotate_funcs(self):
+        test_schema = {
+            "tbl": {"bin_col": "BINARY", "str_col": "STRING", "bignum_col": "BIGNUMERIC"}
+        }
+
+        for i, (meta, sql, expected) in enumerate(
+            load_sql_fixture_pairs("optimizer/annotate_functions.sql"), start=1
+        ):
+            title = meta.get("title") or f"{i}, {sql}"
+            dialect = meta.get("dialect") or ""
+            sql = f"SELECT {sql} FROM tbl"
+
+            for dialect in dialect.split(", "):
+                result = parse_and_optimize(
+                    annotate_functions, sql, dialect, schema=test_schema, dialect=dialect
+                )
+
+                with self.subTest(title):
+                    self.assertEqual(
+                        result.type.sql(dialect), exp.DataType.build(expected).sql(dialect)
+                    )
 
     def test_cast_type_annotation(self):
         expression = annotate_types(parse_one("CAST('2020-01-01' AS TIMESTAMPTZ(9))"))
@@ -1028,31 +1153,14 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
             concat_expr.right.expressions[0].type.this, exp.DataType.Type.VARCHAR
         )  # x.cola (arg)
 
+        # Ensures we don't raise if there are unqualified columns
         annotate_types(parse_one("select x from y lateral view explode(y) as x")).expressions[0]
 
-    def test_null_annotation(self):
-        expression = annotate_types(parse_one("SELECT NULL + 2 AS col")).expressions[0].this
-        self.assertEqual(expression.left.type.this, exp.DataType.Type.NULL)
-        self.assertEqual(expression.right.type.this, exp.DataType.Type.INT)
-
-        # NULL <op> UNKNOWN should yield NULL
-        sql = "SELECT NULL + SOME_ANONYMOUS_FUNC() AS result"
-
-        concat_expr_alias = annotate_types(parse_one(sql)).expressions[0]
-        self.assertEqual(concat_expr_alias.type.this, exp.DataType.Type.NULL)
-
-        concat_expr = concat_expr_alias.this
-        self.assertEqual(concat_expr.type.this, exp.DataType.Type.NULL)
-        self.assertEqual(concat_expr.left.type.this, exp.DataType.Type.NULL)
-        self.assertEqual(concat_expr.right.type.this, exp.DataType.Type.UNKNOWN)
-
-    def test_nullable_annotation(self):
-        nullable = exp.DataType.build("NULLABLE", expressions=exp.DataType.build("BOOLEAN"))
-        expression = annotate_types(parse_one("NULL AND FALSE"))
-
-        self.assertEqual(expression.type, nullable)
-        self.assertEqual(expression.left.type.this, exp.DataType.Type.NULL)
-        self.assertEqual(expression.right.type.this, exp.DataType.Type.BOOLEAN)
+        # NULL <op> UNKNOWN should yield UNKNOWN
+        self.assertEqual(
+            annotate_types(parse_one("SELECT NULL + ANONYMOUS_FUNC()")).expressions[0].type.this,
+            exp.DataType.Type.UNKNOWN,
+        )
 
     def test_predicate_annotation(self):
         expression = annotate_types(parse_one("x BETWEEN a AND b"))
@@ -1181,6 +1289,19 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
             exp.DataType.build("date"),
         )
 
+        self.assertEqual(
+            annotate_types(
+                optimizer.qualify.qualify(
+                    parse_one(
+                        "SELECT x FROM UNNEST(GENERATE_TIMESTAMP_ARRAY('2016-10-05 00:00:00', '2016-10-06 02:00:00', interval 1 day)) AS x"
+                    )
+                )
+            )
+            .selects[0]
+            .type,
+            exp.DataType.build("timestamp"),
+        )
+
     def test_map_annotation(self):
         # ToMap annotation
         expression = annotate_types(parse_one("SELECT MAP {'x': 1}", read="duckdb"))
@@ -1195,6 +1316,67 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
         # VarMap annotation
         expression = annotate_types(parse_one("SELECT MAP('a', 'b')", read="spark"))
         self.assertEqual(expression.selects[0].type, exp.DataType.build("MAP(VARCHAR, VARCHAR)"))
+
+    def test_union_annotation(self):
+        for left, right, expected_type in (
+            ("SELECT 1::INT AS c", "SELECT 2::BIGINT AS c", "BIGINT"),
+            ("SELECT 1 AS c", "SELECT NULL AS c", "INT"),
+            ("SELECT FOO() AS c", "SELECT 1 AS c", "UNKNOWN"),
+            ("SELECT FOO() AS c", "SELECT BAR() AS c", "UNKNOWN"),
+        ):
+            with self.subTest(f"left: {left}, right: {right}, expected: {expected_type}"):
+                lr = annotate_types(parse_one(f"SELECT t.c FROM ({left} UNION ALL {right}) t(c)"))
+                rl = annotate_types(parse_one(f"SELECT t.c FROM ({right} UNION ALL {left}) t(c)"))
+                assert lr.selects[0].type == rl.selects[0].type == exp.DataType.build(expected_type)
+
+        union_by_name = annotate_types(
+            parse_one(
+                "SELECT t.a, t.d FROM (SELECT 1 a, 3 d, UNION ALL BY NAME SELECT 7.0 d, 8::BIGINT a) AS t(a, d)"
+            )
+        )
+        self.assertEqual(union_by_name.selects[0].type.this, exp.DataType.Type.BIGINT)
+        self.assertEqual(union_by_name.selects[1].type.this, exp.DataType.Type.DOUBLE)
+
+        # Test chained UNIONs
+        sql = """
+            WITH t AS
+            (
+                SELECT NULL AS col
+                UNION
+                SELECT NULL AS col
+                UNION
+                SELECT 'a' AS col
+                UNION
+                SELECT NULL AS col
+                UNION
+                SELECT NULL AS col
+            )
+            SELECT col FROM t;
+        """
+        self.assertEqual(optimizer.optimize(sql).selects[0].type.this, exp.DataType.Type.VARCHAR)
+
+        # Test UNIONs with nested subqueries
+        sql = """
+            WITH t AS
+            (
+                SELECT NULL AS col
+                UNION
+                (SELECT NULL AS col UNION ALL SELECT 'a' AS col)
+            )
+            SELECT col FROM t;
+        """
+        self.assertEqual(optimizer.optimize(sql).selects[0].type.this, exp.DataType.Type.VARCHAR)
+
+        sql = """
+            WITH t AS
+            (
+                (SELECT NULL AS col UNION ALL SELECT 'a' AS col)
+                UNION
+                SELECT NULL AS col
+            )
+            SELECT col FROM t;
+        """
+        self.assertEqual(optimizer.optimize(sql).selects[0].type.this, exp.DataType.Type.VARCHAR)
 
     def test_recursive_cte(self):
         query = parse_one(

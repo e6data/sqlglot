@@ -1,3 +1,4 @@
+from sqlglot import exp
 from tests.dialects.test_dialect import Validator
 
 
@@ -30,6 +31,14 @@ class TestTeradata(Validator):
                 "teradata": "DATABASE tduser",
             },
         )
+
+        self.validate_identity("SELECT 0x1d", "SELECT X'1d'")
+        self.validate_identity("SELECT X'1D'", "SELECT X'1D'")
+        self.validate_identity("SELECT x'1d'", "SELECT X'1d'")
+
+        self.validate_identity(
+            "RENAME TABLE emp TO employee", check_command_warning=True
+        ).assert_is(exp.Command)
 
     def test_translate(self):
         self.validate_all(
@@ -149,6 +158,15 @@ class TestTeradata(Validator):
                 "trino": "CREATE TABLE a",
                 "tsql": "CREATE TABLE a",
             },
+        )
+        self.validate_identity(
+            "CREATE TABLE db.foo (id INT NOT NULL, valid_date DATE FORMAT 'YYYY-MM-DD', measurement INT COMPRESS)"
+        )
+        self.validate_identity(
+            "CREATE TABLE db.foo (id INT NOT NULL, valid_date DATE FORMAT 'YYYY-MM-DD', measurement INT COMPRESS (1, 2, 3))"
+        )
+        self.validate_identity(
+            "CREATE TABLE db.foo (id INT NOT NULL, valid_date DATE FORMAT 'YYYY-MM-DD' COMPRESS (CAST('9999-09-09' AS DATE)), measurement INT)"
         )
 
     def test_insert(self):

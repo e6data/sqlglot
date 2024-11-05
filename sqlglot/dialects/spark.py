@@ -113,7 +113,10 @@ class Spark(Spark2):
             "TIMESTAMP_LTZ": _build_as_cast("TIMESTAMP_LTZ"),
             "TIMESTAMP_NTZ": _build_as_cast("TIMESTAMP_NTZ"),
             "TRY_ELEMENT_AT": lambda args: exp.Bracket(
-                this=seq_get(args, 0), expressions=ensure_list(seq_get(args, 1)), safe=True
+                this=seq_get(args, 0),
+                expressions=ensure_list(seq_get(args, 1)),
+                offset=1,
+                safe=True,
             ),
         }
 
@@ -132,6 +135,8 @@ class Spark(Spark2):
     class Generator(Spark2.Generator):
         SUPPORTS_TO_NUMBER = True
         PAD_FILL_PATTERN_IS_REQUIRED = False
+        SUPPORTS_CONVERT_TIMEZONE = True
+        SUPPORTS_MEDIAN = True
 
         TYPE_MAPPING = {
             **Spark2.Generator.TYPE_MAPPING,
@@ -171,7 +176,7 @@ class Spark(Spark2):
 
         def bracket_sql(self, expression: exp.Bracket) -> str:
             if expression.args.get("safe"):
-                key = seq_get(self.bracket_offset_expressions(expression), 0)
+                key = seq_get(self.bracket_offset_expressions(expression, index_offset=1), 0)
                 return self.func("TRY_ELEMENT_AT", expression.this, key)
 
             return super().bracket_sql(expression)

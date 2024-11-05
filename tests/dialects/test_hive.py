@@ -1,5 +1,7 @@
 from tests.dialects.test_dialect import Validator
 
+from sqlglot import exp
+
 
 class TestHive(Validator):
     dialect = "hive"
@@ -171,12 +173,23 @@ class TestHive(Validator):
         self.validate_identity(
             """CREATE EXTERNAL TABLE `my_table` (`a7` ARRAY<DATE>) ROW FORMAT SERDE 'a' STORED AS INPUTFORMAT 'b' OUTPUTFORMAT 'c' LOCATION 'd' TBLPROPERTIES ('e'='f')"""
         )
+        self.validate_identity("ALTER VIEW v1 AS SELECT x, UPPER(s) AS s FROM t2")
+        self.validate_identity("ALTER VIEW v1 (c1, c2) AS SELECT x, UPPER(s) AS s FROM t2")
+        self.validate_identity(
+            "ALTER VIEW v7 (c1 COMMENT 'Comment for c1', c2) AS SELECT t1.c1, t1.c2 FROM t1"
+        )
+        self.validate_identity("ALTER VIEW db1.v1 RENAME TO db2.v2")
+        self.validate_identity("ALTER VIEW v1 SET TBLPROPERTIES ('tblp1'='1', 'tblp2'='2')")
+        self.validate_identity(
+            "ALTER VIEW v1 UNSET TBLPROPERTIES ('tblp1', 'tblp2')", check_command_warning=True
+        )
 
     def test_lateral_view(self):
         self.validate_all(
             "SELECT a, b FROM x LATERAL VIEW EXPLODE(y) t AS a LATERAL VIEW EXPLODE(z) u AS b",
             write={
                 "presto": "SELECT a, b FROM x CROSS JOIN UNNEST(y) AS t(a) CROSS JOIN UNNEST(z) AS u(b)",
+                "duckdb": "SELECT a, b FROM x CROSS JOIN UNNEST(y) AS t(a) CROSS JOIN UNNEST(z) AS u(b)",
                 "hive": "SELECT a, b FROM x LATERAL VIEW EXPLODE(y) t AS a LATERAL VIEW EXPLODE(z) u AS b",
                 "spark": "SELECT a, b FROM x LATERAL VIEW EXPLODE(y) t AS a LATERAL VIEW EXPLODE(z) u AS b",
             },
@@ -185,6 +198,7 @@ class TestHive(Validator):
             "SELECT a FROM x LATERAL VIEW EXPLODE(y) t AS a",
             write={
                 "presto": "SELECT a FROM x CROSS JOIN UNNEST(y) AS t(a)",
+                "duckdb": "SELECT a FROM x CROSS JOIN UNNEST(y) AS t(a)",
                 "hive": "SELECT a FROM x LATERAL VIEW EXPLODE(y) t AS a",
                 "spark": "SELECT a FROM x LATERAL VIEW EXPLODE(y) t AS a",
             },
@@ -201,6 +215,7 @@ class TestHive(Validator):
             "SELECT a FROM x LATERAL VIEW EXPLODE(ARRAY(y)) t AS a",
             write={
                 "presto": "SELECT a FROM x CROSS JOIN UNNEST(ARRAY[y]) AS t(a)",
+                "duckdb": "SELECT a FROM x CROSS JOIN UNNEST([y]) AS t(a)",
                 "hive": "SELECT a FROM x LATERAL VIEW EXPLODE(ARRAY(y)) t AS a",
                 "spark": "SELECT a FROM x LATERAL VIEW EXPLODE(ARRAY(y)) t AS a",
             },
@@ -372,7 +387,7 @@ class TestHive(Validator):
             "UNIX_TIMESTAMP(x)",
             write={
                 "duckdb": "EPOCH(STRPTIME(x, '%Y-%m-%d %H:%M:%S'))",
-                "presto": "TO_UNIXTIME(COALESCE(TRY(DATE_PARSE(CAST(x AS VARCHAR), '%Y-%m-%d %T')), PARSE_DATETIME(CAST(x AS VARCHAR), 'yyyy-MM-dd HH:mm:ss')))",
+                "presto": "TO_UNIXTIME(COALESCE(TRY(DATE_PARSE(CAST(x AS VARCHAR), '%Y-%m-%d %T')), PARSE_DATETIME(DATE_FORMAT(x, '%Y-%m-%d %T'), 'yyyy-MM-dd HH:mm:ss')))",
                 "hive": "UNIX_TIMESTAMP(x)",
                 "spark": "UNIX_TIMESTAMP(x)",
                 "": "STR_TO_UNIX(x, '%Y-%m-%d %H:%M:%S')",
@@ -402,6 +417,7 @@ class TestHive(Validator):
         )
 
     def test_hive(self):
+        self.validate_identity("SELECT * FROM t WHERE col IN ('stream')")
         self.validate_identity("SET hiveconf:some_var = 5", check_command_warning=True)
         self.validate_identity("(VALUES (1 AS a, 2 AS b, 3))")
         self.validate_identity("SELECT * FROM my_table TIMESTAMP AS OF DATE_ADD(CURRENT_DATE, -1)")
@@ -705,8 +721,8 @@ class TestHive(Validator):
                 "presto": "ARRAY_AGG(x)",
             },
             write={
-                "duckdb": "ARRAY_AGG(x)",
-                "presto": "ARRAY_AGG(x)",
+                "duckdb": "ARRAY_AGG(x) FILTER(WHERE x IS NOT NULL)",
+                "presto": "ARRAY_AGG(x) FILTER(WHERE x IS NOT NULL)",
                 "hive": "COLLECT_LIST(x)",
                 "spark": "COLLECT_LIST(x)",
             },
@@ -752,6 +768,41 @@ class TestHive(Validator):
             },
             write={
                 "presto": "SELECT DATE_TRUNC('MONTH', TRY_CAST(ds AS TIMESTAMP)) AS mm FROM tbl WHERE ds BETWEEN '2023-10-01' AND '2024-02-29'",
+            },
+        )
+        self.validate_all(
+            "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+            read={
+                "hive": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark2": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "databricks": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+            },
+            write={
+                "hive": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark2": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "databricks": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "presto": "REGEXP_EXTRACT('abc', '(a)(b)(c)', 1)",
+                "trino": "REGEXP_EXTRACT('abc', '(a)(b)(c)', 1)",
+                "duckdb": "REGEXP_EXTRACT('abc', '(a)(b)(c)', 1)",
+            },
+        )
+
+        self.validate_identity("EXISTS(col, x -> x % 2 = 0)").assert_is(exp.Exists)
+
+        self.validate_all(
+            "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
+            read={
+                "hive": "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
+                "spark2": "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
+                "spark": "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
+                "databricks": "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
+            },
+            write={
+                "spark2": "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
+                "spark": "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
+                "databricks": "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
             },
         )
 

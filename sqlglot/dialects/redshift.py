@@ -17,6 +17,7 @@ from sqlglot.dialects.dialect import (
 from sqlglot.dialects.postgres import Postgres
 from sqlglot.helper import seq_get
 from sqlglot.tokens import TokenType
+from sqlglot.parser import build_convert_timezone
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -45,13 +46,11 @@ class Redshift(Postgres):
     INDEX_OFFSET = 0
     COPY_PARAMS_ARE_CSV = False
     HEX_LOWERCASE = True
+    HAS_DISTINCT_ARRAY_CONSTRUCTORS = True
 
-    TIME_FORMAT = "'YYYY-MM-DD HH:MI:SS'"
-    TIME_MAPPING = {
-        **Postgres.TIME_MAPPING,
-        "MON": "%b",
-        "HH": "%H",
-    }
+    # ref: https://docs.aws.amazon.com/redshift/latest/dg/r_FORMAT_strings.html
+    TIME_FORMAT = "'YYYY-MM-DD HH24:MI:SS'"
+    TIME_MAPPING = {**Postgres.TIME_MAPPING, "MON": "%b", "HH24": "%H", "HH": "%I"}
 
     class Parser(Postgres.Parser):
         FUNCTIONS = {
@@ -62,6 +61,7 @@ class Redshift(Postgres):
                 unit=exp.var("month"),
                 return_type=exp.DataType.build("TIMESTAMP"),
             ),
+            "CONVERT_TIMEZONE": lambda args: build_convert_timezone(args, "UTC"),
             "DATEADD": _build_date_delta(exp.TsOrDsAdd),
             "DATE_ADD": _build_date_delta(exp.TsOrDsAdd),
             "DATEDIFF": _build_date_delta(exp.TsOrDsDiff),
@@ -77,7 +77,7 @@ class Redshift(Postgres):
         NO_PAREN_FUNCTION_PARSERS = {
             **Postgres.Parser.NO_PAREN_FUNCTION_PARSERS,
             "APPROXIMATE": lambda self: self._parse_approximate_count(),
-            "SYSDATE": lambda self: self.expression(exp.CurrentTimestamp, transaction=True),
+            "SYSDATE": lambda self: self.expression(exp.CurrentTimestamp, sysdate=True),
         }
 
         SUPPORTS_IMPLICIT_UNNEST = True
@@ -134,6 +134,7 @@ class Redshift(Postgres):
             "TOP": TokenType.TOP,
             "UNLOAD": TokenType.COMMAND,
             "VARBYTE": TokenType.VARBINARY,
+            "BINARY VARYING": TokenType.VARBINARY,
         }
         KEYWORDS.pop("VALUES")
 
@@ -153,6 +154,10 @@ class Redshift(Postgres):
         COPY_PARAMS_ARE_WRAPPED = False
         HEX_FUNC = "TO_HEX"
         PARSE_JSON_NAME = "JSON_PARSE"
+        ARRAY_CONCAT_IS_VAR_LEN = False
+        SUPPORTS_CONVERT_TIMEZONE = True
+        EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
+        SUPPORTS_MEDIAN = True
 
         # Redshift doesn't have `WITH` as part of their with_properties so we remove it
         WITH_PROPERTIES_PREFIX = " "
@@ -169,17 +174,19 @@ class Redshift(Postgres):
 
         TRANSFORMS = {
             **Postgres.Generator.TRANSFORMS,
+            exp.ArrayConcat: lambda self, e: self.arrayconcat_sql(e, name="ARRAY_CONCAT"),
             exp.Concat: concat_to_dpipe_sql,
             exp.ConcatWs: concat_ws_to_dpipe_sql,
             exp.ApproxDistinct: lambda self,
             e: f"APPROXIMATE COUNT(DISTINCT {self.sql(e, 'this')})",
             exp.CurrentTimestamp: lambda self, e: (
-                "SYSDATE" if e.args.get("transaction") else "GETDATE()"
+                "SYSDATE" if e.args.get("sysdate") else "GETDATE()"
             ),
             exp.DateAdd: date_delta_sql("DATEADD"),
             exp.DateDiff: date_delta_sql("DATEDIFF"),
             exp.DistKeyProperty: lambda self, e: self.func("DISTKEY", e.this),
             exp.DistStyleProperty: lambda self, e: self.naked_property(e),
+            exp.Explode: lambda self, e: self.explode_sql(e),
             exp.FromBase: rename_func("STRTOL"),
             exp.GeneratedAsIdentityColumnConstraint: generatedasidentitycolumnconstraint_sql,
             exp.JSONExtract: json_extract_segments("JSON_EXTRACT_PATH_TEXT"),
@@ -191,6 +198,7 @@ class Redshift(Postgres):
                     transforms.eliminate_distinct_on,
                     transforms.eliminate_semi_and_anti_joins,
                     transforms.unqualify_unnest,
+                    transforms.unnest_generate_date_array_using_recursive_cte,
                 ]
             ),
             exp.SortKeyProperty: lambda self,
@@ -383,11 +391,16 @@ class Redshift(Postgres):
             args = expression.expressions
             num_args = len(args)
 
-            if num_args > 1:
+            if num_args != 1:
                 self.unsupported(f"Unsupported number of arguments in UNNEST: {num_args}")
                 return ""
 
+            if isinstance(expression.find_ancestor(exp.From, exp.Join, exp.Select), exp.Select):
+                self.unsupported("Unsupported UNNEST when not used in FROM/JOIN clauses")
+                return ""
+
             arg = self.sql(seq_get(args, 0))
+
             alias = self.expressions(expression.args.get("alias"), key="columns", flat=True)
             return f"{arg} AS {alias}" if alias else arg
 
@@ -423,3 +436,13 @@ class Redshift(Postgres):
             file_format = f" FILE FORMAT {file_format}" if file_format else ""
 
             return f"SET{exprs}{location}{file_format}"
+
+        def array_sql(self, expression: exp.Array) -> str:
+            if expression.args.get("bracket_notation"):
+                return super().array_sql(expression)
+
+            return rename_func("ARRAY")(self, expression)
+
+        def explode_sql(self, expression: exp.Explode) -> str:
+            self.unsupported("Unsupported EXPLODE() function")
+            return ""
