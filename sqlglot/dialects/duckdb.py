@@ -25,7 +25,6 @@ from sqlglot.dialects.dialect import (
     no_time_sql,
     no_timestamp_sql,
     pivot_column_names,
-    regexp_extract_sql,
     rename_func,
     str_position_sql,
     str_to_time_sql,
@@ -37,6 +36,7 @@ from sqlglot.dialects.dialect import (
     build_regexp_extract,
     explode_to_unnest_sql,
 )
+from sqlglot.generator import unsupported_args
 from sqlglot.helper import seq_get
 from sqlglot.tokens import TokenType
 from sqlglot.parser import binary_range_parser
@@ -104,7 +104,7 @@ def _timediff_sql(self: DuckDB.Generator, expression: exp.TimeDiff) -> str:
     return self.func("DATE_DIFF", unit_to_str(expression), expr, this)
 
 
-@generator.unsupported_args(("expression", "DuckDB's ARRAY_SORT does not support a comparator."))
+@unsupported_args(("expression", "DuckDB's ARRAY_SORT does not support a comparator."))
 def _array_sort_sql(self: DuckDB.Generator, expression: exp.ArraySort) -> str:
     return self.func("ARRAY_SORT", expression.this)
 
@@ -552,7 +552,6 @@ class DuckDB(Dialect):
             # DuckDB doesn't allow qualified columns inside of PIVOT expressions.
             # See: https://github.com/duckdb/duckdb/blob/671faf92411182f81dce42ac43de8bfb05d9909e/src/planner/binder/tableref/bind_pivot.cpp#L61-L62
             exp.Pivot: transforms.preprocess([transforms.unqualify_columns]),
-            exp.RegexpExtract: regexp_extract_sql,
             exp.RegexpReplace: lambda self, e: self.func(
                 "REGEXP_REPLACE",
                 e.this,
@@ -954,3 +953,19 @@ class DuckDB(Dialect):
                 this = f"LIST_TRANSFORM({this}, x -> COALESCE(x, {null_text}))"
 
             return self.func("ARRAY_TO_STRING", this, expression.expression)
+
+        @unsupported_args("position", "occurrence")
+        def regexpextract_sql(self, expression: exp.RegexpExtract) -> str:
+            group = expression.args.get("group")
+
+            # Do not render group if it's the default value for this dialect
+            if group and group.name == str(self.dialect.REGEXP_EXTRACT_DEFAULT_GROUP):
+                group = None
+
+            return self.func(
+                "REGEXP_EXTRACT",
+                expression.this,
+                expression.expression,
+                group,
+                expression.args.get("parameters"),
+            )

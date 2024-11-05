@@ -24,7 +24,9 @@ from sqlglot.dialects.dialect import (
     map_date_part,
     no_safe_divide_sql,
     no_timestamp_sql,
+    timestampdiff_sql,
 )
+from sqlglot.generator import unsupported_args
 from sqlglot.helper import flatten, is_float, is_int, seq_get
 from sqlglot.tokens import TokenType
 
@@ -784,6 +786,7 @@ class Snowflake(Dialect):
             exp.Create: transforms.preprocess([_flatten_structured_types_unless_iceberg]),
             exp.DateAdd: date_delta_sql("DATEADD"),
             exp.DateDiff: date_delta_sql("DATEDIFF"),
+            exp.DatetimeDiff: timestampdiff_sql,
             exp.DateStrToDate: datestrtodate_sql,
             exp.DayOfMonth: rename_func("DAYOFMONTH"),
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
@@ -798,7 +801,6 @@ class Snowflake(Dialect):
             ),
             exp.GroupConcat: rename_func("LISTAGG"),
             exp.If: if_sql(name="IFF", false_value="NULL"),
-            exp.JSONExtract: lambda self, e: self.func("GET_PATH", e.this, e.expression),
             exp.JSONExtractScalar: lambda self, e: self.func(
                 "JSON_EXTRACT_PATH_TEXT", e.this, e.expression
             ),
@@ -1066,7 +1068,7 @@ class Snowflake(Dialect):
 
             return self.func("OBJECT_CONSTRUCT", *flatten(zip(keys, values)))
 
-        @generator.unsupported_args("weight", "accuracy")
+        @unsupported_args("weight", "accuracy")
         def approxquantile_sql(self, expression: exp.ApproxQuantile) -> str:
             return self.func("APPROX_PERCENTILE", expression.this, expression.args.get("quantile"))
 
@@ -1095,4 +1097,14 @@ class Snowflake(Dialect):
                     expression=expression.expression * -1,
                     unit=expression.unit,
                 )
+            )
+
+        def jsonextract_sql(self, expression: exp.JSONExtract):
+            this = expression.this
+
+            # JSON strings are valid coming from other dialects such as BQ
+            return self.func(
+                "GET_PATH",
+                exp.ParseJSON(this=this) if this.is_string else this,
+                expression.expression,
             )

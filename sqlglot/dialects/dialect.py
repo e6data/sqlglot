@@ -1698,6 +1698,7 @@ def build_regexp_extract(args: t.List, dialect: Dialect) -> exp.RegexpExtract:
         this=seq_get(args, 0),
         expression=seq_get(args, 1),
         group=seq_get(args, 2) or exp.Literal.number(dialect.REGEXP_EXTRACT_DEFAULT_GROUP),
+        parameters=seq_get(args, 3),
     )
 
 
@@ -1714,3 +1715,7 @@ def explode_to_unnest_sql(self: Generator, expression: exp.Lateral) -> str:
             )
         )
     return self.lateral_sql(expression)
+
+
+def timestampdiff_sql(self: Generator, expression: exp.DatetimeDiff | exp.TimestampDiff) -> str:
+    return self.func("TIMESTAMPDIFF", expression.unit, expression.expression, expression.this)

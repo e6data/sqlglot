@@ -644,6 +644,7 @@ LANGUAGE js AS
                 write={
                     "bigquery": "SELECT DATETIME_DIFF('2023-01-01T00:00:00', '2023-01-01T05:00:00', MILLISECOND)",
                     "databricks": "SELECT TIMESTAMPDIFF(MILLISECOND, '2023-01-01T05:00:00', '2023-01-01T00:00:00')",
+                    "snowflake": "SELECT TIMESTAMPDIFF(MILLISECOND, '2023-01-01T05:00:00', '2023-01-01T00:00:00')",
                 },
             ),
         )
@@ -1137,7 +1138,8 @@ LANGUAGE js AS
             write={
                 "bigquery": "CURRENT_TIME()",
                 "duckdb": "CURRENT_TIME",
-                "presto": "CURRENT_TIME()",
+                "presto": "CURRENT_TIME",
+                "trino": "CURRENT_TIME",
                 "hive": "CURRENT_TIME()",
                 "spark": "CURRENT_TIME()",
             },
@@ -1559,6 +1561,14 @@ WHERE
                 "spark": "IF((y) <> 0, (x) / (y), NULL)",
                 "databricks": "IF((y) <> 0, (x) / (y), NULL)",
                 "snowflake": "IFF((y) <> 0, (x) / (y), NULL)",
+            },
+        )
+        self.validate_all(
+            """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
+            write={
+                "bigquery": """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
+                "duckdb": """SELECT '{"class": {"students": []}}' -> '$.class'""",
+                "snowflake": """SELECT GET_PATH(PARSE_JSON('{"class": {"students": []}}'), 'class')""",
             },
         )
 
