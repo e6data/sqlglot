@@ -445,7 +445,7 @@ class Expression(metaclass=_Expression):
             The generator object.
         """
         for expression in self.walk(bfs=bfs):
-            if isinstance(expression, expression_types):
+            if isinstance(expression, *expression_types):
                 yield expression
 
     def find_ancestor(self, *expression_types: t.Type[E]) -> t.Optional[E]:
@@ -459,7 +459,7 @@ class Expression(metaclass=_Expression):
             The parent node.
         """
         ancestor = self.parent
-        while ancestor and not isinstance(ancestor, expression_types):
+        while ancestor and not isinstance(ancestor, *expression_types):
             ancestor = ancestor.parent
         return ancestor  # type: ignore
 
@@ -6395,19 +6395,9 @@ class Split(Func):
     arg_types = {"this": True, "expression": True, "limit": False}
 
 
-<<<<<<< HEAD
 # https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.split_part.html
 class SplitPart(Func):
     arg_types = {"this": True, "delimiter": True, "part_index": True}
-=======
-# This is for the function split_part : Splits this around occurrences of expression and returns the partNum part.
-class SplitPart(Func):
-    arg_types = {"this": True, "expression": True, "partNum": False}
->>>>>>> 375c9c54 (Created splitPart class in expressions.py and mapped its equivalent function "SPLIT_PART" in snowflake.py, presto.py, databricks.py, E6.py)
-
-
-# Start may be omitted in the case of postgres
-# https://www.postgresql.org/docs/9.1/functions-string.html @ Table 9-6
 class Substring(Func):
     _sql_names = ["SUBSTRING", "SUBSTR"]
     arg_types = {"this": True, "start": False, "length": False}
