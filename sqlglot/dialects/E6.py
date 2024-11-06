@@ -647,6 +647,7 @@ class E6(Dialect):
             "TRUNC": date_trunc_to_time,
             "UNNEST": _parse_unnest_sql,
             "WEEK": exp.Week.from_arg_list,
+            "WEEKOFYEAR": exp.WeekOfYear.from_arg_list,
             "YEAR": exp.Year.from_arg_list,
 
         }
@@ -1138,7 +1139,8 @@ class E6(Dialect):
                 e.this,
             ),
             exp.UnixToTime: _from_unixtime_withunit_sql,
-            exp.UnixToStr: _from_unixtime_withunit_sql
+            exp.UnixToStr: _from_unixtime_withunit_sql,
+            exp.WeekOfYear: rename_func("WEEKOFYEAR")
         }
 
         RESERVED_KEYWORDS = {
