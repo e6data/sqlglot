@@ -446,7 +446,7 @@ class Expression(metaclass=_Expression):
             The generator object.
         """
         for expression in self.walk(bfs=bfs):
-            if isinstance(expression, *expression_types):
+            if isinstance(expression, expression_types):
                 yield expression
 
     def find_ancestor(self, *expression_types: t.Type[E]) -> t.Optional[E]:
