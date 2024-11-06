@@ -563,6 +563,7 @@ class E6(Dialect):
             ),
             "DATE_TRUNC": date_trunc_to_time,
             "DATETIME": _build_datetime_for_DT,
+            "DAYOFWEEKISO": exp.DayOfWeekIso.from_arg_list,
             "DAYS": exp.Day.from_arg_list,
             "ELEMENT_AT": lambda args: exp.Bracket(
                 this=seq_get(args, 0), expressions=[seq_get(args, 1)], offset=1, safe=True
@@ -1065,6 +1066,7 @@ class E6(Dialect):
             exp.Datetime: lambda self, e: self.func(
                 "DATETIME", e.this, e.expression
             ),
+            exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: unnest_sql,
             exp.Extract: extract_sql,
