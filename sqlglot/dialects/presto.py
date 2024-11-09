@@ -258,8 +258,11 @@ class Presto(Dialect):
             "BITWISE_NOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BITWISE_OR": binary_from_function(exp.BitwiseOr),
             "BITWISE_XOR": binary_from_function(exp.BitwiseXor),
+            "BITWISE_RIGHT_SHIFT": binary_from_function(exp.BitwiseRightShift),
+            "BITWISE_LEFT_SHIFT": binary_from_function(exp.BitwiseLeftShift),
             "CARDINALITY": exp.ArraySize.from_arg_list,
             "CONTAINS": exp.ArrayContains.from_arg_list,
+            "CONCAT": exp.ArrayConcat.from_arg_list,
             "DATE_ADD": lambda args: exp.DateAdd(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
@@ -303,6 +306,7 @@ class Presto(Dialect):
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
             "WEEK_OF_YEAR": exp.WeekOfYear.from_arg_list,
+            "WITH_TIMEZONE": lambda args: exp.AtTimeZone(this=seq_get(args, 0), zone=seq_get(args, 1)),
             "MD5": exp.MD5Digest.from_arg_list,
             "SHA256": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(256)),
             "SHA512": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(512)),
