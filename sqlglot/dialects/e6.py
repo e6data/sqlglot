@@ -563,6 +563,7 @@ class E6(Dialect):
             ),
             "DATE_TRUNC": date_trunc_to_time,
             "DATETIME": _build_datetime_for_DT,
+            "DAYNAME": exp.DayOfWeek.from_arg_list,
             "DAYOFWEEKISO": exp.DayOfWeekIso.from_arg_list,
             "DAYS": exp.Day.from_arg_list,
             "ELEMENT_AT": lambda args: exp.Bracket(
@@ -645,8 +646,11 @@ class E6(Dialect):
             "TO_UNIX_TIMESTAMP": _build_to_unix_timestamp,
             "TO_VARCHAR": build_formatted_time(exp.TimeToStr, "E6"),
             "TRUNC": date_trunc_to_time,
+            "TRIM": lambda self: self._parse_trim(),
             "UNNEST": _parse_unnest_sql,
             "WEEK": exp.Week.from_arg_list,
+            "WEEKISO": exp.Week.from_arg_list,
+            "WEEKOFYEAR": exp.WeekOfYear.from_arg_list,
             "YEAR": exp.Year.from_arg_list,
 
         }
@@ -795,6 +799,18 @@ class E6(Dialect):
 
             # Return the simple ORDER BY clause without any fallback null ordering logic
             return f"{this}{sort_order}{nulls_sort_change}"
+
+        def regexp_replace_sql(self, expression: exp.RegexpReplace) -> str:
+            # wrote this cuz both regexp_replace(a,b) and regexp_replace(a,b,c) are possible, and
+            # if we are just returning with expression.args["replacement"] it throws error if it is not there
+            # just like case1 above. Should be added to regexp_replace_sql method in dialect.py
+            if not 'replacement' in expression.args.keys():
+                return self.func(
+                    "REGEXP_REPLACE", expression.this, expression.expression
+                )
+            return self.func(
+                "REGEXP_REPLACE", expression.this, expression.expression, expression.args["replacement"]
+            )
 
         def format_time(self, expression, **kwargs):
             format_expr = expression.args.get("format")
@@ -1056,6 +1072,7 @@ class E6(Dialect):
                 _to_int(e.expression),
                 e.this,
             ),
+            # follows signature DATE_DIFF([ <unit>,] <date_expr1>, <date_expr2>) of E6. => date_expr1 - date_expr2, so interchanging the second and third arg
             exp.DateDiff: lambda self, e: self.func(
                 "DATE_DIFF",
                 unit_to_str(e),
@@ -1066,6 +1083,7 @@ class E6(Dialect):
             exp.Datetime: lambda self, e: self.func(
                 "DATETIME", e.this, e.expression
             ),
+            exp.Day: rename_func("DAYS"),
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: unnest_sql,
@@ -1093,6 +1111,7 @@ class E6(Dialect):
             exp.Pow: rename_func("POWER"),
             exp.RegexpExtract: rename_func("REGEXP_EXTRACT"),
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
+            # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
             exp.RegexpReplace: regexp_replace_sql,
             exp.RegexpSplit: rename_func("SPLIT"),
             # exp.Select: select_sql,
@@ -1125,6 +1144,7 @@ class E6(Dialect):
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
             exp.Trim: lambda self, e: self.func("TRIM", e.this, ' '),
+            exp.TryCast: lambda self, e: self.func("TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"),
             exp.TsOrDsAdd: lambda self, e: self.func(
                 "DATE_ADD",
                 unit_to_str(e),
@@ -1138,7 +1158,8 @@ class E6(Dialect):
                 e.this,
             ),
             exp.UnixToTime: _from_unixtime_withunit_sql,
-            exp.UnixToStr: _from_unixtime_withunit_sql
+            exp.UnixToStr: _from_unixtime_withunit_sql,
+            exp.WeekOfYear: rename_func("WEEKOFYEAR")
         }
 
         RESERVED_KEYWORDS = {
