@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Response
 from typing import Optional
 import uvicorn
 import re
@@ -43,7 +43,7 @@ async def convert_query(
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return Response(status_code=200)
 
 
 if __name__ == "__main__":
