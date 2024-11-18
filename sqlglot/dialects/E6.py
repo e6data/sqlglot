@@ -1044,6 +1044,7 @@ class E6(Dialect):
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ApproxQuantile: rename_func("APPROX_PERCENTILE"),
             exp.ArgMax: rename_func("MAX_BY"),
+            exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: array_sql,
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
@@ -1084,6 +1085,7 @@ class E6(Dialect):
                 "DATETIME", e.this, e.expression
             ),
             exp.Day: rename_func("DAYS"),
+            exp.DayOfMonth: rename_func("DAYS"),
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: unnest_sql,
@@ -1143,7 +1145,8 @@ class E6(Dialect):
             ),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
-            exp.Trim: lambda self, e: self.func("TRIM", e.this, ' '),
+            # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
+            exp.Trim: lambda self, e: self.func("TRIM", e.this),
             exp.TryCast: lambda self, e: self.func("TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"),
             exp.TsOrDsAdd: lambda self, e: self.func(
                 "DATE_ADD",
