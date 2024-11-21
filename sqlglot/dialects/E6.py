@@ -534,6 +534,7 @@ class E6(Dialect):
             "ARRAY_CONTAINS": exp.ArrayContains.from_arg_list,
             "ARRAY_JOIN": exp.ArrayToString.from_arg_list,
             "ARRAY_TO_STRING": exp.ArrayToString.from_arg_list,
+            "ARRAY_SLICE": exp.ArraySlice.from_arg_list,
             "ARRAY_POSITION": lambda args: exp.ArrayPosition(
                 this=seq_get(args, 1), expression=seq_get(args, 0)
             ),
@@ -1052,6 +1053,7 @@ class E6(Dialect):
             exp.ArrayFilter: filter_array_sql,
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArraySize: rename_func("size"),
+            exp.ArraySlice: rename_func("ARRAY_SLICE"),
             exp.ArrayPosition: lambda self, e: self.func(
                 "ARRAY_POSITION", e.expression, e.this
             ),
