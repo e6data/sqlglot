@@ -171,28 +171,24 @@ def build_datediff(expression_class: t.Type[E]) -> t.Callable[[t.List], E]:
 def _from_unixtime_withunit_sql(self: E6.Generator, expression: exp.UnixToTime | exp.UnixToStr) -> str:
     seconds_str = f"'seconds'"
     milliseconds_str = f"'milliseconds'"
-    if isinstance(expression, exp.UnixToTime):
-        timestamp = self.sql(expression, "this")
-        # scale = expression.args.get("scale")
-        # # this by default value for seconds is been kept for now
-        # if scale is None:
-        #     scale = 'seconds'
-        scale = expression.args.get("scale", exp.Literal.string('seconds'))  # Default to 'seconds' if scale is None
+    timestamp = self.sql(expression, "this")
+    scale = expression.args.get("scale")  # Default to 'seconds' if scale is None
 
-        # Extract scale string, ensure it is lowercase and strip any extraneous quotes
-        scale_str = self.sql(scale).lower().strip('"').strip("'")
-        if scale_str == 'seconds':
-            return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, seconds_str)
-        elif scale_str == 'milliseconds':
-            return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, milliseconds_str)
-        else:
-            raise ValueError(
-                f"Unsupported unit for FROM_UNIXTIME_WITHUNIT: {scale_str} and we only support 'seconds' and 'milliseconds'")
-    else:
-        timestamp = self.sql(expression, "this")
+    # Extract scale string, ensure it is lowercase and strip any extraneous quotes
+    scale_str = self.sql(scale).lower().strip('"').strip("'")
+    if scale_str == 'seconds':
+        return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, seconds_str)
+    elif scale_str == 'milliseconds':
+        return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, milliseconds_str)
+    # If no scale is mentioned in the original query - case: if arg1/1000 -> scale=seconds elif arg1 -> scale=milliseconds
+    elif scale is None:
         if isinstance(expression.this, exp.Div) and (expression.this.right.this == '1000'):
             return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, seconds_str)
-        return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, milliseconds_str)
+        else:
+            return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, milliseconds_str)
+    else:
+        raise ValueError(
+            f"Unsupported unit for FROM_UNIXTIME_WITHUNIT: {scale_str} and we only support 'seconds' and 'milliseconds'")
 
 
 def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
@@ -544,6 +540,7 @@ class E6(Dialect):
             "BITWISE_NOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BITWISE_OR": binary_from_function(exp.BitwiseOr),
             "BITWISE_XOR": binary_from_function(exp.BitwiseXor),
+            "BITWISE_AND": binary_from_function(exp.BitwiseAnd),
             "CAST": _parse_cast,
             "CHARACTER_LENGTH": exp.Length.from_arg_list,
             "CHARINDEX": locate_to_strposition,
@@ -637,7 +634,10 @@ class E6(Dialect):
             "TO_CHAR": lambda args: exp.TimeToStr(
                 this=seq_get(args, 0), format=E6().format_time(expression=seq_get(args, 1))
             ),
-            "TO_DATE": build_formatted_time(exp.StrToDate, "E6"),
+            "TO_DATE": lambda args: exp.TimeToStr(
+                this=seq_get(args, 0), format=E6().format_time(expression=seq_get(args, 1))
+            ),
+            "TO_HEX": exp.Hex.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_UTF8": lambda args: exp.Encode(
@@ -1044,6 +1044,7 @@ class E6(Dialect):
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ApproxQuantile: rename_func("APPROX_PERCENTILE"),
             exp.ArgMax: rename_func("MAX_BY"),
+            exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: array_sql,
             exp.ArrayAgg: rename_func("COLLECT_LIST"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
@@ -1059,6 +1060,7 @@ class E6(Dialect):
             ),
             exp.BitwiseLeftShift: lambda self, e: self.func("SHIFTLEFT", e.this, e.expression),
             exp.BitwiseNot: lambda self, e: self.func("BITWISE_NOT", e.this),
+            exp.BitwiseAnd: lambda self, e: self.func("BITWISE_AND", e.this, e.expression),
             exp.BitwiseOr: lambda self, e: self.func("BITWISE_OR", e.this, e.expression),
             exp.BitwiseRightShift: lambda self, e: self.func("SHIFTRIGHT", e.this, e.expression),
             exp.BitwiseXor: lambda self, e: self.func("BITWISE_XOR", e.this, e.expression),
@@ -1084,6 +1086,7 @@ class E6(Dialect):
                 "DATETIME", e.this, e.expression
             ),
             exp.Day: rename_func("DAYS"),
+            exp.DayOfMonth: rename_func("DAYS"),
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: unnest_sql,
@@ -1094,6 +1097,7 @@ class E6(Dialect):
             ),
             exp.GenerateSeries: generateseries_sql,
             exp.GroupConcat: string_agg_sql,
+            exp.Hex: rename_func("TO_HEX"),
             exp.Interval: interval_sql,
             exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
             exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
@@ -1143,7 +1147,8 @@ class E6(Dialect):
             ),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
-            exp.Trim: lambda self, e: self.func("TRIM", e.this, ' '),
+            # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
+            exp.Trim: lambda self, e: self.func("TRIM", e.this),
             exp.TryCast: lambda self, e: self.func("TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"),
             exp.TsOrDsAdd: lambda self, e: self.func(
                 "DATE_ADD",
