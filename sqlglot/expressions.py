@@ -6402,13 +6402,6 @@ class RegexpExtractAll(Func):
         "group": False,
     }
 
-
-# https://trino.io/docs/current/functions/regexp.html#regexp_extract_all
-class RegexpExtractAll(Func):
-    _sql_names = ["REGEXP_EXTRACT_ALL"]
-    arg_types = {"this": True, "expression": True, "group": False}
-
-
 class RegexpReplace(Func):
     arg_types = {
         "this": True,
