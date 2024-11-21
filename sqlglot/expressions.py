@@ -5303,6 +5303,10 @@ class ArrayPosition(Func):
     arg_types = {"this": True, "expression": True}
 
 
+class ArraySlice(Func):
+    arg_types = {"this": True, "fromIndex": True, "to": True}
+
+
 class ArrayConcat(Func):
     _sql_names = ["ARRAY_CONCAT", "ARRAY_CAT"]
     arg_types = {"this": True, "expressions": False}
@@ -5542,6 +5546,16 @@ class CurrentUser(Func):
     arg_types = {"this": False}
 
 
+class Cos(Func):
+    _sql_names = ["COS"]
+    arg_types = {"this": True}
+
+
+class Cosh(Func):
+    _sql_names = ["COSH"]
+    arg_types = {"this": True}
+
+
 class DateAdd(Func, IntervalOp):
     arg_types = {"this": True, "expression": True, "unit": False}
 
@@ -5736,6 +5750,11 @@ class Decode(Func):
     arg_types = {"this": True, "charset": True, "replace": False}
 
 
+class Degrees(Func):
+    _sql_names = ["DEGREES"]
+    arg_types = {"this": True}
+
+
 class DiToDate(Func):
     pass
 
@@ -5844,6 +5863,10 @@ class OverflowTruncateBehavior(Expression):
 
 class GroupConcat(AggFunc):
     arg_types = {"this": True, "separator": False, "on_overflow": False}
+
+
+class Hour(Func):
+    arg_types = {"this": True}
 
 
 class Hex(Func):
@@ -6245,6 +6268,10 @@ class Month(Func):
     pass
 
 
+class Minute(Func):
+    arg_types = {"this": True}
+
+
 class AddMonths(Func):
     arg_types = {"this": True, "expression": True}
 
@@ -6259,6 +6286,11 @@ class Normalize(Func):
 
 class Overlay(Func):
     arg_types = {"this": True, "expression": True, "from": True, "for": False}
+
+
+class Pi(Func):
+    _sql_names = ["PI"]
+    arg_types = {"this": False}
 
 
 # https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-predict#mlpredict_function
@@ -6290,6 +6322,11 @@ class Quarter(Func):
     pass
 
 
+class Radians(Func):
+    _sql_names = ["RADIANS"]
+    arg_types = {"this": True}
+
+
 # https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Functions-Expressions-and-Predicates/Arithmetic-Trigonometric-Hyperbolic-Operators/Functions/RANDOM/RANDOM-Function-Syntax
 # teradata lower and upper bounds
 class Rand(Func):
@@ -6315,6 +6352,11 @@ class Reduce(Func):
     arg_types = {"this": True, "initial": True, "merge": True, "finish": False}
 
 
+class RegexpCount(Func):
+    _sql_names= ["REGEXP_COUNT"]
+    arg_types = {"this": True, "expression": True}
+
+
 class RegexpExtract(Func):
     arg_types = {
         "this": True,
@@ -6335,6 +6377,12 @@ class RegexpExtractAll(Func):
         "parameters": False,
         "group": False,
     }
+
+
+# https://trino.io/docs/current/functions/regexp.html#regexp_extract_all
+class RegexpExtractAll(Func):
+    _sql_names = ["REGEXP_EXTRACT_ALL"]
+    arg_types = {"this": True, "expression": True, "group": False}
 
 
 class RegexpReplace(Func):
@@ -6380,6 +6428,10 @@ class SafeDivide(Func):
     arg_types = {"this": True, "expression": True}
 
 
+class Second(Func):
+    arg_types = {"this": True}
+
+
 class SHA(Func):
     _sql_names = ["SHA", "SHA1"]
 
@@ -6393,8 +6445,23 @@ class Sign(Func):
     _sql_names = ["SIGN", "SIGNUM"]
 
 
+class Sin(Func):
+    _sql_names = ["SIN"]
+    arg_types = {"this": True}
+
+
+class Sinh(Func):
+    _sql_names = ["SINH"]
+    arg_types = {"this": True}
+
+
 class SortArray(Func):
     arg_types = {"this": True, "asc": False}
+
+
+class Soundex(Func):
+    _sql_names = ["SOUNDEX"]
+    arg_types = {"this": True}
 
 
 class Split(Func):
@@ -6494,6 +6561,16 @@ class StddevPop(AggFunc):
 
 class StddevSamp(AggFunc):
     pass
+
+
+class Tan(Func):
+    _sql_names = ["TAN"]
+    arg_types = {"this": True}
+
+
+class Tanh(Func):
+    _sql_names = ["TANH"]
+    arg_types = {"this": True}
 
 
 # https://cloud.google.com/bigquery/docs/reference/standard-sql/time_functions#time
