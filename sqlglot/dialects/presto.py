@@ -295,6 +295,11 @@ class Presto(Dialect):
             "ROW": exp.Struct.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
+            "SLICE": lambda args: exp.ArraySlice(
+                this=seq_get(args, 0),
+                fromIndex=seq_get(args, 1),
+                to=seq_get(args, 2) + seq_get(args, 1)
+            ),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
             "STRPOS": lambda args: exp.StrPosition(
@@ -368,6 +373,7 @@ class Presto(Dialect):
             exp.ArrayAny: rename_func("ANY_MATCH"),
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayContains: rename_func("CONTAINS"),
+            exp.ArraySlice: lambda self, e: self.func("SLICE", e.this, e.fromIndex, e.to-e.fromIndex),
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArrayUniqueAgg: rename_func("SET_AGG"),
             exp.AtTimeZone: rename_func("AT_TIMEZONE"),
