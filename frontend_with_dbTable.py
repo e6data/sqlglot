@@ -3,38 +3,33 @@ import pandas as pd
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import base64
-import sqlglot
-import sqlparse
 from sqlglot import exp, parse_one
 
 
-def convert_query(query, from_sql, to_sql):
-    converted_query = None
-    if query:
-        converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=True)[0]
-    return converted_query
-
-
-def extract_db_and_Table_names(query, from_sql):
+def extract_db_and_Table_names(sql_query, from_sql_dialect):
     tables_list = []
-    if query:
-        for table in parse_one(query, from_sql).find_all(exp.Table):
+    tree = parse_one(sql_query, from_sql_dialect)
+    if sql_query:
+        for table in tree.find_all(exp.Table):
             if table.db:
                 tables_list.append(f"{table.db}.{table.name}")
             else:
-                tables_list.append(f"{table.name}")
+                tables_list.append(table.name)
+        tables_list = list(set(tables_list))
+        for alias in tree.find_all(exp.TableAlias):
+            if isinstance(alias.parent, exp.CTE) and alias.name in tables_list:
+                tables_list.remove(alias.name)
     return tables_list
 
 
-def process_row(alias, query, from_sql, to_sql):
-    converted_query = convert_query(query, from_sql, to_sql)
+def process_row(alias, query, from_sql):
     list_of_tables = extract_db_and_Table_names(query, from_sql)
-    return alias, query, converted_query, list_of_tables
+    return alias, query, list_of_tables
 
 
 # Setting up Streamlit page
 st.set_page_config(page_title="Query Converter", layout="centered", initial_sidebar_state="auto")
-st.title("Query Converter with sqlGlot")
+st.title("Table Extractor")
 
 # Mode selection
 mode = st.selectbox("Select Mode", ["Single Query", "CSV Mode"])
@@ -47,27 +42,21 @@ if mode == "Single Query":
     # Dropdown for selecting From SQL and To SQL
     from_sql = st.selectbox("From SQL",
                             ["snowflake", "databricks", "athena", "presto", "postgres", "bigquery", "E6", "trino"])
-    to_sql = st.selectbox("To SQL",
-                          ["snowflake", "databricks", "athena", "presto", "postgres", "bigquery", "E6", "trino"])
 
-    if from_sql and to_sql:
+    if from_sql:
         with st.form("from_sql_query"):
             from_sql_query = st.text_area("From SQL Query")
             submit_button = st.form_submit_button("Submit")
             if submit_button:
-                from_sql_query = sqlparse.format(from_sql_query, reindent=True)
-                converted_query = convert_query(from_sql_query, from_sql, to_sql)
-                converted_query = sqlparse.format(converted_query, reindent=True)
-                converted_query = f"```sql \n{converted_query}\n```"
                 list_of_tables = extract_db_and_Table_names(from_sql_query, from_sql)
                 list_of_tables = f"```list of tables present in the query: \n{list_of_tables}\n```"
                 # Append to session state for history tracking
                 st.session_state.messages.append({
                     "role": "User",
-                    "content": f"From SQL: {from_sql}, To SQL: {to_sql}, Original Query: {from_sql_query}"
+                    "content": f"From SQL: {from_sql}, Original Query: {from_sql_query}"
                 })
                 st.session_state.messages.append({
-                    "role": "Assistant", "content": f"Response: \n{converted_query}\n\n\n{list_of_tables}\n"
+                    "role": "Assistant", "content": f"Response: \n{list_of_tables}\n"
                 })
         # # Display chat history
         # for message in st.session_state.messages:
@@ -85,9 +74,6 @@ elif mode == "CSV Mode":
     from_sql = st.selectbox("From SQL",
                             ["snowflake", "databricks", "athena", "presto", "postgres", "bigquery", "E6", "trino"],
                             key="csv_from_sql")
-    to_sql = st.selectbox("To SQL",
-                          ["snowflake", "databricks", "athena", "presto", "postgres", "bigquery", "E6", "trino"],
-                          key="csv_to_sql")
 
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
@@ -110,20 +96,20 @@ elif mode == "CSV Mode":
                     for j, (alias, query) in enumerate(zip(batch_aliases, batch_queries)):
                         if j > 0:
                             time.sleep(1)  # delay to avoid server throttling
-                        future = executor.submit(process_row, alias, query, from_sql, to_sql)
+                        future = executor.submit(process_row, alias, query, from_sql)
                         futures.append(future)
                         future_to_request[future] = (alias, query)
 
                 for future in as_completed(futures):
                     alias, original_query = future_to_request[future]
                     try:
-                        alias, original_query, converted_query, list_of_tables = future.result()
-                        results.append((alias, original_query, converted_query, list_of_tables))
+                        alias, original_query, list_of_tables = future.result()
+                        results.append((alias, original_query, list_of_tables))
                     except Exception as e:
                         results.append((alias, original_query, str(e),))
 
             result_df = pd.DataFrame(results,
-                                     columns=["UNQ_ALIAS", "Original_Query", "Converted_Queries", "list_of_tables"])
+                                     columns=["UNQ_ALIAS", "Original_Query", "list_of_tables"])
             response_csv = result_df.to_csv(index=False)
             b64 = base64.b64encode(response_csv.encode()).decode()
             href = f'<a href="data:file/csv;base64,{b64}" download="processed_results.csv">Download Processed Results CSV</a>'
