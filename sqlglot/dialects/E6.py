@@ -19,7 +19,8 @@ from sqlglot.dialects.dialect import (
     regexp_replace_sql,
     approx_count_distinct_sql,
     timestrtotime_sql,
-    datestrtodate_sql
+    datestrtodate_sql,
+    trim_sql
 )
 from sqlglot.expressions import ArrayFilter, RegexpExtract
 from sqlglot.helper import flatten, is_float, is_int, seq_get, is_type, apply_index_offset
@@ -1150,7 +1151,7 @@ class E6(Dialect):
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
             # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
-            exp.Trim: lambda self, e: self.func("TRIM", e.this),
+            exp.Trim: trim_sql,
             exp.TryCast: lambda self, e: self.func("TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"),
             exp.TsOrDsAdd: lambda self, e: self.func(
                 "DATE_ADD",
