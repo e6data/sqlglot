@@ -285,7 +285,7 @@ def _build_regexp_extract(args: t.List) -> RegexpExtract:
 
 def format_time_for_parsefunctions(expression):
     format_str = expression.this if isinstance(expression, exp.Literal) else expression
-    for key, value in E6().TIME_MAPPING_for_parse_functions.items():
+    for key, value in E6().TIME_MAPPING_FOR_PARSE_FUNCTIONS.items():
         format_str = format_str.replace(key, value)
     return format_str
 
@@ -296,34 +296,44 @@ def add_single_quotes(expression) -> str:
 
 
 class E6(Dialect):
+    """
+    The E6 Dialect for SQLGlot, customized for specific SQL syntax and behavior.
+    This class defines strategies, mappings, and tokenization rules unique to the E6 dialect.
+    """
+
+    # Strategy to normalize keywords: Here, keywords will be converted to lowercase.
     NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
+
+    # Define the offset for array indexing, starting from 1 instead of the default 0.
     INDEX_OFFSET = 1
 
+    # Mapping for time formatting tokens, converting dialect-specific formats to Python-compatible ones.
     TIME_MAPPING = {
-        "y": "%Y",
-        "Y": "%Y",
-        "YYYY": "%Y",
-        "yyyy": "%Y",
-        "YY": "%y",
-        "yy": "%y",
-        "MMMM": "%B",
-        "MMM": "%b",
-        "MM": "%m",
-        "M": "%-m",
-        "dd": "%d",
-        "d": "%-d",
-        "HH": "%H",
-        "H": "%-H",
-        "hh": "%I",
-        "h": "%-I",
-        "mm": "%M",
-        "m": "%-M",
-        "ss": "%S",
-        "s": "%-S",
-        "E": "%a"
+        "y": "%Y",  # Year as a four-digit number
+        "Y": "%Y",  # Same as above
+        "YYYY": "%Y",  # Four-digit year
+        "yyyy": "%Y",  # Same as above
+        "YY": "%y",  # Two-digit year
+        "yy": "%y",  # Same as above
+        "MMMM": "%B",  # Full month name
+        "MMM": "%b",  # Abbreviated month name
+        "MM": "%m",  # Two-digit month
+        "M": "%-m",  # Single-digit month
+        "dd": "%d",  # Two-digit day
+        "d": "%-d",  # Single-digit day
+        "HH": "%H",  # Two-digit hour (24-hour clock)
+        "H": "%-H",  # Single-digit hour (24-hour clock)
+        "hh": "%I",  # Two-digit hour (12-hour clock)
+        "h": "%-I",  # Single-digit hour (12-hour clock)
+        "mm": "%M",  # Two-digit minute
+        "m": "%-M",  # Single-digit minute
+        "ss": "%S",  # Two-digit second
+        "s": "%-S",  # Single-digit second
+        "E": "%a"  # Abbreviated weekday name
     }
 
-    TIME_MAPPING_for_parse_functions = {
+    # Time mapping specific to parsing functions. This maps time format tokens from E6 to standard Python time formats.
+    TIME_MAPPING_FOR_PARSE_FUNCTIONS = {
         "%Y": "%Y",
         "%y": "%y",
         "%m": "%m",
@@ -348,6 +358,7 @@ class E6(Dialect):
         "%%": "%%",
     }
 
+    # Mapping units to SQL-compatible representations.
     UNIT_PART_MAPPING = {
         "'milliseconds'": "MILLISECOND",
         "'millisecond'": "MILLISECOND",
@@ -488,14 +499,24 @@ class E6(Dialect):
         return expression
 
     class Tokenizer(tokens.Tokenizer):
+
+        # Define the escape character for strings.
         STRING_ESCAPES = ["\\"]
-        # identifiers ' worked fine for strings in functions
+
+        # Define delimiters for identifiers.
         IDENTIFIERS = ['"']
+
+        # Define delimiters for string literals.
         QUOTES = ["'"]
+
+        # Comment syntax supported in the E6 dialect.
         COMMENTS = ["--", "//", ("/*", "*/")]
 
+        # TODO:: Why other dialects have this long list of keywords but we are only relying on the
+        #        these reserved keywords
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
+            # Add E6-specific keywords here, e.g., "MY_KEYWORD": TokenType.KEYWORD
         }
 
     class Parser(parser.Parser):
@@ -522,7 +543,7 @@ class E6(Dialect):
 
             root_node = lambda_expr.args.get('this')
 
-            def does_root_node_contain_AGG_expr(root_node) -> bool:
+            def does_root_node_contain_agg_expr(root_node) -> bool:
                 # check if root is of Agg
                 if isinstance(root_node, exp.AggFunc):
                     return True
@@ -533,16 +554,15 @@ class E6(Dialect):
 
                 child_nodes: dict = root_node.args
                 for key, value in child_nodes.items():
-                    contains_agg: bool = does_root_node_contain_AGG_expr(value)
+                    contains_agg: bool = does_root_node_contain_agg_expr(value)
                     if contains_agg:
                         return True
                 return False
 
-            if does_root_node_contain_AGG_expr(root_node):
-                # parser.Parser.raise_error(parser.Parser,message=
-                #                           f"Lambda expressions in filter functions are not supported in 'IN' clause or on aggregate functions")
+            if does_root_node_contain_agg_expr(root_node):
                 raise ValueError(
-                    "Lambda expressions in filter functions are not supported in 'IN' clause or on aggregate functions")
+                    "Lambda expressions in filter functions are not supported in 'IN' clause or on aggregate functions"
+                )
 
             return exp.ArrayFilter(this=array_expr, expression=lambda_expr)
 
