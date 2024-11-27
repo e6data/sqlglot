@@ -29,32 +29,63 @@ if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
 
-def _build_datetime(
-        name: str, kind: exp.DataType.Type, safe: bool = False
-) -> t.Callable[[t.List], exp.Func]:
+def _build_datetime(name: str, kind: exp.DataType.Type, safe: bool = False) -> t.Callable[[t.List], exp.Func]:
+    """
+    This function creates a builder that handles various scenarios for converting or parsing DATETIME values in
+    SQL expressions. It’s particularly useful for SQL dialect conversions or transpiling SQL queries from
+    one dialect to another.
+
+    :param name: The name of the SQL function (e.g., TO_TIME or TO_DATE).
+    :param kind: The type of the target data (e.g., TIMESTAMP, DATE), represented by exp.DataType.Type.
+    :param safe: A boolean flag indicating whether to use a “safe” mode for the resulting expression.
+
+    :return: A callable function that takes a list of arguments (args) and returns an SQL expression (exp.Func)
+
+    """
+
     def _builder(args: t.List) -> exp.Func:
+        """
+        This is the main logic that processes the arguments and constructs the SQL expression.
+
+        :param args: A list of arguments passed to the SQL function.
+        :return: An SQL expression (exp.Func) based on the arguments and the target data type.
+        """
+        # Retrieve the first argument from the list, if available.
         value = seq_get(args, 0)
+
+        # Determine if the argument is an integer literal.
         int_value = value is not None and is_int(value.name)
 
+        # Handle cases where the argument is a literal value.
         if isinstance(value, exp.Literal):
-            # Converts calls like `TO_TIME('01:02:03')` into casts
+            # If there's only one string argument and it's not an integer,
+            # cast it to the target data type (e.g., CAST('01:02:03' AS TIMESTAMP)).
             if len(args) == 1 and value.is_string and not int_value:
                 return exp.cast(value, kind)
 
-            # cases so we can transpile them, since they're relatively common
+            # Handle cases where the target type is TIMESTAMP.
             if kind == exp.DataType.Type.TIMESTAMP:
+                # If the value is an integer, interpret it as a Unix timestamp.
                 if int_value:
                     return exp.UnixToTime(this=value, scale=seq_get(args, 1))
+
+                # If the value is not a float, format it into a standard datetime expression.
                 if not is_float(value.this):
                     return build_formatted_time(exp.StrToTime, "snowflake")(args)
 
+        # Handle cases where the target type is DATE and the value is not an integer.
         if kind == exp.DataType.Type.DATE and not int_value:
+            # Format the expression using a helper function to create a TsOrDsToDate expression.
             formatted_exp = build_formatted_time(exp.TsOrDsToDate, "e6")(args)
+
+            # Set the "safe" flag on the resulting expression if specified.
             formatted_exp.set("safe", safe)
             return formatted_exp
 
+        # Default case: Return a generic SQL function with the given name and arguments.
         return exp.Anonymous(this=name, expressions=args)
 
+    # Return the builder function, which can be called with arguments to construct SQL expressions.
     return _builder
 
 
