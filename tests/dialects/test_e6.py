@@ -290,3 +290,10 @@ class TestE6(Validator):
                 "presto": "STRPOS('ABC', 'A')"
             },
         )
+
+    def test_parse_filter_array(self):
+        """
+        Test for testing the parse_filter_array function
+        """
+        # TODO:: Implementation needed
+        pass
