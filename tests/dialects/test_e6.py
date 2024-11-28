@@ -369,7 +369,3 @@ class TestE6(Validator):
                 "snowflake": "SELECT c_birth_country as country, listagg(c_first_name, ' | ')"
             }
         )
-
-
-
-
