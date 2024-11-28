@@ -746,6 +746,11 @@ class E6(Dialect):
         }
 
     class Generator(generator.Generator):
+        """
+        The Generator class is responsible for converting an abstract syntax tree (AST) back into a SQL string
+        that adheres to a specific dialect’s syntax. When creating a custom dialect, you can override the Generator
+        class to define how various expressions and data types should be formatted in your dialect.
+        """
         EXTRACT_ALLOWS_QUOTES = False
         NVL2_SUPPORTED = True
         LAST_DAY_SUPPORTS_DATE_PART = False
@@ -836,72 +841,67 @@ class E6(Dialect):
         #
         #     return super().select_sql(expression)
 
+        # TODO:: Adithya, why there was need to override this method.
         def ordered_sql(self, expression: exp.Ordered) -> str:
             """
-            Custom override for the `ordered_sql` method in the E6 dialect.
+            Generate the SQL string for an ORDER BY clause in the E6 dialect.
 
-            Original Purpose:
-            -----------------
-            In the base `sqlglot` generator, the `ordered_sql` method is responsible for generating the SQL
-            for `ORDER BY` clauses, including handling NULL ordering (`NULLS FIRST` or `NULLS LAST`) and sorting
-            directions (`ASC`, `DESC`). If null ordering is not supported in a dialect, the base method adds a
-            fallback "CASE WHEN" logic to simulate the desired behavior.
-
-            However, this fallback logic introduces a `CASE WHEN` clause to handle NULLs, which is often
-            unnecessary and can clutter the final query.
-
-            Purpose of This Override:
-            -------------------------
-            In the E6 dialect, we do not want this "CASE WHEN" fallback logic or explicit null ordering
-            like `NULLS FIRST` or `NULLS LAST`. The goal is to keep the `ORDER BY` clause simple and
-            direct without any additional handling for NULL values. Thus, we are overriding the `ordered_sql`
-            method to remove the null ordering logic and simplify the output.
+            This method simplifies the ORDER BY clause by omitting any handling for NULL ordering,
+            as the E6 dialect does not support explicit NULLS FIRST or NULLS LAST directives.
 
             Args:
-                expression: The `Ordered` expression that contains the column, order direction, and null ordering.
+                expression (exp.Ordered): The expression containing the column or expression to order by,
+                                          along with sorting direction and null ordering preferences.
 
             Returns:
-                str: The SQL string for the `ORDER BY` clause in the E6 dialect.
+                str: The SQL string representing the ORDER BY clause.
             """
+            # Determine the sorting direction based on the 'desc' argument
+            sort_order = {
+                True: " DESC",
+                False: " ASC",
+                None: ""
+            }.get(expression.args.get("desc"))
 
-            # Get the sorting direction (ASC/DESC) based on the 'desc' argument in the expression
-            desc = expression.args.get("desc")
-            if desc:
-                sort_order = " DESC"
-            elif desc is None:
-                sort_order = " "
-            else:
-                sort_order = " ASC"
+            # Generate the SQL for the main expression to be ordered
+            main_expression = self.sql(expression, "this")  # TODO:: What is the significant of `this` parameter here
 
-            # Check if the expression has an explicit NULL ordering (NULLS FIRST/LAST)
-            nulls_first = expression.args.get("nulls_first")
+            # Initialize null ordering as an empty string
             nulls_sort_change = ""
 
-            # Only add NULLS FIRST/LAST if explicitly supported by the dialect
-            # Here, NULL_ORDERING_SUPPORTED is False, so we omit null handling altogether
+            # Apply NULLS FIRST/LAST only if supported by the dialect
             if self.NULL_ORDERING_SUPPORTED:
-                if nulls_first:
-                    nulls_sort_change = " NULLS FIRST"
-                else:
-                    nulls_sort_change = " NULLS LAST"
+                nulls_first = expression.args.get("nulls_first")
+                nulls_sort_change = " NULLS FIRST" if nulls_first else " NULLS LAST"
 
-            # Generate the SQL for the expression (usually the column or expression being ordered)
-            this = self.sql(expression, "this")
-
-            # Return the simple ORDER BY clause without any fallback null ordering logic
-            return f"{this}{sort_order}{nulls_sort_change}"
+            # Construct and return the final ORDER BY clause
+            return f"{main_expression}{sort_order}{nulls_sort_change}"
 
         def regexp_replace_sql(self, expression: exp.RegexpReplace) -> str:
-            # wrote this cuz both regexp_replace(a,b) and regexp_replace(a,b,c) are possible, and
-            # if we are just returning with expression.args["replacement"] it throws error if it is not there
-            # just like case1 above. Should be added to regexp_replace_sql method in dialect.py
-            if not 'replacement' in expression.args.keys():
-                return self.func(
-                    "REGEXP_REPLACE", expression.this, expression.expression
-                )
-            return self.func(
-                "REGEXP_REPLACE", expression.this, expression.expression, expression.args["replacement"]
-            )
+            """
+            Generate the SQL for the REGEXP_REPLACE function in the E6 dialect.
+
+            The REGEXP_REPLACE function can be called with either two or three arguments:
+            1. REGEXP_REPLACE(source, pattern)
+            2. REGEXP_REPLACE(source, pattern, replacement)
+
+            This method ensures that the generated SQL is correct regardless of the number of arguments provided.
+
+            Args:
+                expression (exp.RegexpReplace): The expression representing the REGEXP_REPLACE function.
+
+            Returns:
+                str: The SQL string for the REGEXP_REPLACE function.
+            """
+            # Retrieve the 'replacement' argument if it exists
+            replacement = expression.args.get("replacement")
+
+            if replacement is None:
+                # If 'replacement' is not provided, generate SQL with two arguments
+                return self.func("REGEXP_REPLACE", expression.this, expression.expression)
+            else:
+                # If 'replacement' is provided, generate SQL with three arguments
+                return self.func("REGEXP_REPLACE", expression.this, expression.expression, replacement)
 
         def format_time(self, expression, **kwargs):
             format_expr = expression.args.get("format")
@@ -1128,6 +1128,7 @@ class E6(Dialect):
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
 
+        # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.Anonymous: anonymous_sql,
@@ -1396,6 +1397,7 @@ class E6(Dialect):
             exp.DataType.Type.DECIMAL: "DECIMAL"
         }
 
+        # Map generic data types to your dialect's specific data type names
         TYPE_MAPPING = {
             **UNSIGNED_TYPE_MAPPING,
             **CAST_SUPPORTED_TYPE_MAPPING,
