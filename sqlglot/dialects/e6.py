@@ -582,8 +582,6 @@ class E6(Dialect):
 
             """
 
-            print(f"self {self.expression}")
-
             def contains_aggregate(node: exp.Expression) -> bool:
                 """
                 Recursively checks if the given node or any of its children
@@ -614,18 +612,9 @@ class E6(Dialect):
             # Return an ArrayFilter expression with the parsed array and lambda expressions.
             return exp.ArrayFilter(this=array_expr, expression=lambda_expr)
 
-        def _parse_unnest_sql(self) -> exp.Expression:
-            array_expr = seq_get(self, 0)
-            # if (isinstance(array_expr, exp.Cast) and not exp.DataType.is_type(array_expr.to.this,
-            #                                                                   exp.DataType.Type.ARRAY)) or (
-            #         not isinstance(array_expr, exp.Array)):
-            #     raise ValueError(f"UNNEST function only supports array type")
-
-            return exp.Explode(this=array_expr)
-
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
-            "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list,
+            "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list, # TODO:: Need to understand this funcitons
             "APPROX_QUANTILES": exp.ApproxQuantile.from_arg_list,
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
             "ARBITRARY": exp.AnyValue.from_arg_list,
@@ -748,7 +737,7 @@ class E6(Dialect):
             "TO_VARCHAR": build_formatted_time(exp.TimeToStr, "E6"),
             "TRUNC": date_trunc_to_time,
             "TRIM": lambda self: self._parse_trim(),
-            "UNNEST": _parse_unnest_sql,
+            "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),  # TODO:: I have removed the _parse_unnest_sql, was it really required
             "WEEK": exp.Week.from_arg_list,
             "WEEKISO": exp.Week.from_arg_list,
             "WEEKOFYEAR": exp.WeekOfYear.from_arg_list,
@@ -764,6 +753,7 @@ class E6(Dialect):
         NULL_ORDERING_SUPPORTED = None
         SUPPORTS_TABLE_ALIAS_COLUMNS = False
 
+        # TODO:: If the below functions is not required then it's better to remove it.
         # def select_sql(self, expression: exp.Select) -> str:
         #     def collect_aliases_and_projections(expressions):
         #         aliases = {}
