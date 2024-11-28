@@ -1434,7 +1434,6 @@ class E6(Dialect):
         that adheres to a specific dialect’s syntax. When creating a custom dialect, you can override the Generator
         class to define how various expressions and data types should be formatted in your dialect.
         """
-
         EXTRACT_ALLOWS_QUOTES = False
         NVL2_SUPPORTED = True
         LAST_DAY_SUPPORTS_DATE_PART = False
