@@ -520,12 +520,19 @@ class E6(Dialect):
         }
 
     class Parser(parser.Parser):
+        # Define the set of data types that are supported for casting operations in the E6 dialect.
+
         SUPPORTED_CAST_TYPES = {
             "CHAR", "VARCHAR", "INT", "BIGINT", "BOOLEAN",
             "DATE", "FLOAT", "DOUBLE", "TIMESTAMP", "DECIMAL"
         }
 
         def _parse_cast(self, strict: bool, safe: t.Optional[bool] = None) -> exp.Expression:
+            """
+            Overrides the base class's _parse_cast method to include validation
+            against the SUPPORTED_CAST_TYPES set. If the target type is not supported,
+            it raises an error.
+            """
             cast_expression = super()._parse_cast(strict, safe)
 
             if isinstance(cast_expression, (exp.Cast, exp.TryCast)):
@@ -536,34 +543,75 @@ class E6(Dialect):
 
             return cast_expression
 
-        # this is the temporary implementation assuming we don't support agg functions in any part of lambda function
-        def _parse_filter_array(self) -> ValueError | ArrayFilter:
-            array_expr = seq_get(self, 0)
-            lambda_expr = seq_get(self, 1)
+        def _parse_filter_array(self) -> exp.ArrayFilter:
+            """
+            Parses the FILTER_ARRAY function, ensuring that the lambda expression
+            does not contain aggregate functions, as they are not supported in this context.
 
-            root_node = lambda_expr.args.get('this')
+            TODO:: Need to discuss with Adithya, how we have tested this function & why we have passed `self` in the
+                    `seq_get` functions. It look incorrect to me
 
-            def does_root_node_contain_agg_expr(root_node) -> bool:
-                # check if root is of Agg
-                if isinstance(root_node, exp.AggFunc):
+            What This Function Does
+
+                1.	Purpose:
+                    •	Parses a FILTER_ARRAY SQL function.
+                    •	Ensures that the lambda expression used in the FILTER_ARRAY does not contain aggregate functions, as these are not supported.
+                2.	Key Logic:
+                    •	Extracts the array and lambda expressions from the arguments.
+                    •	Recursively checks if the lambda expression or its children contain any aggregate functions.
+                    •	Raises an error if aggregates are found; otherwise, it constructs and returns an ArrayFilter expression.
+                3.	Why Check for Aggregates?
+                    •	Certain SQL dialects or use cases may not allow aggregate functions (e.g., SUM, MAX) inside lambda functions used in filter contexts. This ensures compliance with these rules.
+
+            Example Usage
+
+            Input SQL:
+
+            FILTER_ARRAY(my_array, x -> x > 5)
+
+            Process:
+                1.	Extract Components:
+                    •	my_array is the array expression.
+                    •	x -> x > 5 is the lambda expression.
+                2.	Check for Aggregates:
+                    •	The lambda expression (x > 5) is inspected to ensure it doesn’t include aggregate functions like SUM(x) or MAX(x).
+                3.	Return Value:
+                    •	If no aggregates are found, the function returns an ArrayFilter object equivalent to:
+
+            exp.ArrayFilter(this=my_array, expression=lambda_expr)
+
+            """
+
+            print(f"self {self.expression}")
+
+            def contains_aggregate(node: exp.Expression) -> bool:
+                """
+                Recursively checks if the given node or any of its children
+                contain an aggregate function.
+                """
+                if isinstance(node, exp.AggFunc):
                     return True
-                # traverse through all the children and check for the same
 
-                if not isinstance(root_node, exp.Expression):  # check if root_node is leaf node
+                if not isinstance(node, exp.Expression):
                     return False
 
-                child_nodes: dict = root_node.args
-                for key, value in child_nodes.items():
-                    contains_agg: bool = does_root_node_contain_agg_expr(value)
-                    if contains_agg:
-                        return True
-                return False
+                # Recursively check all child nodes.
+                return any(contains_aggregate(child) for child in node.args.values())
 
-            if does_root_node_contain_agg_expr(root_node):
+            # Retrieve the array expression and the lambda expression from the arguments.
+            array_expr = seq_get(self, 0)   # TODO:: Need to test this
+            lambda_expr = seq_get(self, 1)  # TODO:: Need to test this
+
+            # Get the root node of the lambda expression.
+            root_node = lambda_expr.args.get("this")
+
+            # If the lambda expression contains an aggregate function, raise a ValueError.
+            if contains_aggregate(root_node):
                 raise ValueError(
                     "Lambda expressions in filter functions are not supported in 'IN' clause or on aggregate functions"
                 )
 
+            # Return an ArrayFilter expression with the parsed array and lambda expressions.
             return exp.ArrayFilter(this=array_expr, expression=lambda_expr)
 
         def _parse_unnest_sql(self) -> exp.Expression:
