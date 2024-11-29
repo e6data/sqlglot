@@ -375,127 +375,163 @@ class E6(Dialect):
         "'quarter'": "QUARTER"
     }
 
-    def format_time(self, expression, **kwargs):
+    def format_time(self, expression: t.Union[exp.Literal, exp.Expression], **kwargs) -> t.Optional[str]:
+        """
+        Converts a time format string from one dialect's representation to another using the TIME_MAPPING.
+
+        Args:
+            expression (Union[exp.Literal, exp.Expression]): The expression containing the time format string.
+                - If it's a Literal, the format string is directly accessible via `expression.this`.
+                - If it's another Expression, the format string is accessed through the 'format' argument.
+
+        Returns:
+            Optional[str]: The converted time format string, or None if the format string is not found.
+        """
+        # Determine the format string based on the type of expression
+        # TODO:: Need to understand what is this Literal and what is expression
         if isinstance(expression, exp.Literal):
+            # For Literal expressions, retrieve the format string directly
             format_str = expression.this
         else:
+            # For other expressions, retrieve the 'format' argument
             format_expr = expression.args.get("format")
+            # Attempt to get the name attribute; if not present, use the expression itself
             format_str = getattr(format_expr, "name", format_expr)
+
+        # If no format string is found, return None
         if format_str is None:
             return None
-        format_string = format_str
-        for key, value in E6().TIME_MAPPING.items():
-            format_string = format_string.replace(value, key)
-        return format_string
 
-    def quote_identifier(self, expression: E, identify: bool = False) -> E:
-        keywords_to_quote = {"ABS", "ABSENT", "ABSOLUTE", "ACTION", "ADA", "ADD", "ADMIN", "AFTER", "ALL", "ALLOCATE",
-                             "ALLOW", "ALTER", "ALWAYS", "AND", "ANY", "APPLY", "ARE", "ARRAY", "ARRAY_AGG",
-                             "ARRAY_CONCAT_AGG", "ARRAY_MAX_CARDINALITY", "AS", "ASC", "ASENSITIVE", "ASSERTION",
-                             "ASSIGNMENT", "ASYMMETRIC", "AT", "ATOMIC", "ATTRIBUTE", "ATTRIBUTES", "AUTHORIZATION",
-                             "AVG", "BEFORE", "BEGIN", "BEGIN_FRAME", "BEGIN_PARTITION", "BERNOULLI", "BETWEEN",
-                             "BIGINT", "BINARY", "BIT", "BLOB", "BOOLEAN", "BOTH", "BREADTH", "BY", "C", "CALL",
-                             "CALLED", "CARDINALITY", "CASCADE", "CASCADED", "CASE", "CAST", "CATALOG", "CATALOG_NAME",
-                             "CEIL", "CEILING", "CENTURY", "CHAIN", "CHAR", "CHAR_LENGTH", "CHARACTER",
-                             "CHARACTER_LENGTH", "CHARACTER_SET_CATALOG", "CHARACTER_SET_NAME", "CHARACTER_SET_SCHEMA",
-                             "CHARACTERISTICS", "CHARACTERS", "CHECK", "CLASSIFIER", "CLASS_ORIGIN", "CLOB", "CLOSE",
-                             "COALESCE", "COBOL", "COLLATE", "COLLATION", "COLLATION_CATALOG", "COLLATION_NAME",
-                             "COLLATION_SCHEMA", "COLLECT", "COLUMN", "COLUMN_NAME", "COMMAND_FUNCTION",
-                             "COMMAND_FUNCTION_CODE", "COMMIT", "COMMITTED", "CONDITION", "CONDITIONAL",
-                             "CONDITION_NUMBER", "CONNECT", "CONNECTION", "CONNECTION_NAME", "CONSTRAINT",
-                             "CONSTRAINT_CATALOG", "CONSTRAINT_NAME", "CONSTRAINT_SCHEMA", "CONSTRAINTS", "CONSTRUCTOR",
-                             "CONTAINS", "CONTINUE", "CONVERT", "CORR", "CORRESPONDING", "COUNT", "COVAR_POP",
-                             "COVAR_SAMP", "CREATE", "CROSS", "CUBE", "CUME_DIST", "CURRENT", "CURRENT_CATALOG",
-                             "CURRENT_DATE", "CURRENT_DEFAULT_TRANSFORM_GROUP", "CURRENT_PATH", "CURRENT_ROLE",
-                             "CURRENT_ROW", "CURRENT_SCHEMA", "CURRENT_TIME", "CURRENT_TIMESTAMP",
-                             "CURRENT_TRANSFORM_GROUP_FOR_TYPE", "CURRENT_USER", "CURSOR", "CURSOR_NAME", "CYCLE",
-                             "DATA", "DATABASE", "DATE", "DATETIME_INTERVAL_CODE", "DATETIME_INTERVAL_PRECISION", "DAY",
-                             "DAYS", "DEALLOCATE", "DEC", "DECADE", "DECIMAL", "DECLARE", "DEFAULT_", "DEFAULTS",
-                             "DEFERRABLE", "DEFERRED", "DEFINE", "DEFINED", "DEFINER", "DEGREE", "DELETE", "DENSE_RANK",
-                             "DEPTH", "DEREF", "DERIVED", "DESC", "DESCRIBE", "DESCRIPTION", "DESCRIPTOR",
-                             "DETERMINISTIC", "DIAGNOSTICS", "DISALLOW", "DISCONNECT", "DISPATCH", "DISTINCT", "DOMAIN",
-                             "DOT_FORMAT", "DOUBLE", "DOW", "DOY", "DROP", "DYNAMIC", "DYNAMIC_FUNCTION",
-                             "DYNAMIC_FUNCTION_CODE", "EACH", "ELEMENT", "ELSE", "EMPTY", "ENCODING", "END", "END_EXEC",
-                             "END_FRAME", "END_PARTITION", "EPOCH", "EQUALS", "ERROR", "ESCAPE", "EVERY", "EXCEPT",
-                             "EXCEPTION", "EXCLUDE", "EXCLUDING", "EXEC", "EXECUTE", "EXISTS", "EXP", "EXPLAIN",
-                             "EXTEND", "EXTERNAL", "EXTRACT", "FALSE", "FETCH", "FILTER", "FINAL", "FIRST",
-                             "FIRST_VALUE", "FLOAT", "FLOOR", "FOLLOWING", "FOR", "FORMAT", "FOREIGN", "FORTRAN",
-                             "FOUND", "FRAC_SECOND", "FRAME_ROW", "FREE", "FROM", "FULL", "FUNCTION", "FUSION", "G",
-                             "GENERAL", "GENERATED", "GEOMETRY", "GET", "GLOBAL", "GO", "GOTO", "GRANT", "GRANTED",
-                             "GROUP", "GROUP_CONCAT", "GROUPING", "GROUPS", "HAVING", "HIERARCHY", "HOLD", "HOP",
-                             "HOUR", "HOURS", "IDENTITY", "IGNORE", "ILIKE", "IMMEDIATE", "IMMEDIATELY",
-                             "IMPLEMENTATION", "IMPORT", "IN", "INCLUDE", "INCLUDING", "INCREMENT", "INDICATOR",
-                             "INITIAL", "INITIALLY", "INNER", "INOUT", "INPUT", "INSENSITIVE", "INSERT", "INSTANCE",
-                             "INSTANTIABLE", "INT", "INTEGER", "INTERSECT", "INTERSECTION", "INTERVAL", "INTO",
-                             "INVOKER", "IS", "ISODOW", "ISOYEAR", "ISOLATION", "JAVA", "JOIN", "JSON", "JSON_ARRAY",
-                             "JSON_ARRAYAGG", "JSON_EXISTS", "JSON_OBJECT", "JSON_OBJECTAGG", "JSON_QUERY",
-                             "JSON_VALUE", "K", "KEY", "KEY_MEMBER", "KEY_TYPE", "LABEL", "LAG", "LANGUAGE", "LARGE",
-                             "LAST", "LAST_VALUE", "LATERAL", "LEAD", "LEADING", "LEFT", "LENGTH", "LEVEL", "LIBRARY",
-                             "LIKE", "LIKE_REGEX", "LIMIT", "TOP", "LN", "LOCAL", "LOCALTIME", "LOCALTIMESTAMP",
-                             "LOCATOR", "LOWER", "M", "MAP", "MATCH", "MATCHED", "MATCHES", "MATCH_NUMBER",
-                             "MATCH_RECOGNIZE", "MAX", "MAXVALUE", "MEASURES", "MEMBER", "MERGE", "MESSAGE_LENGTH",
-                             "MESSAGE_OCTET_LENGTH", "MESSAGE_TEXT", "METHOD", "MICROSECOND", "MILLISECOND",
-                             "MILLISECONDS", "MILLENNIUM", "MIN", "MINUTE", "MINUTES", "MINVALUE", "MOD", "MODIFIES",
-                             "MODULE", "MONTH", "MONTHS", "MORE_", "MULTISET", "MUMPS", "NAME", "NAMES", "NANOSECOND",
-                             "NATIONAL", "NATURAL", "NCHAR", "NCLOB", "NESTING", "NEW", "NEXT", "NO", "NONE",
-                             "NORMALIZE", "NORMALIZED", "NOT", "NTH_VALUE", "NTILE", "NULL", "NULLABLE", "NULLIF",
-                             "NULLS", "NUMBER", "NUMERIC", "OBJECT", "OCCURRENCES_REGEX", "OCTET_LENGTH", "OCTETS",
-                             "OF", "OFFSET", "OLD", "OMIT", "ON", "ONE", "ONLY", "OPEN", "OPTION", "OPTIONS", "OR",
-                             "ORDER", "ORDERING", "ORDINALITY", "OTHERS", "OUT", "OUTER", "OUTPUT", "OVER", "OVERLAPS",
-                             "OVERLAY", "OVERRIDING", "PAD", "PARAMETER", "PARAMETER_MODE", "PARAMETER_NAME",
-                             "PARAMETER_ORDINAL_POSITION", "PARAMETER_SPECIFIC_CATALOG", "PARAMETER_SPECIFIC_NAME",
-                             "PARAMETER_SPECIFIC_SCHEMA", "PARTIAL", "PARTITION", "PASCAL", "PASSING", "PASSTHROUGH",
-                             "PAST", "PATH", "PATTERN", "PER", "PERCENT", "PERCENTILE_CONT", "PERCENTILE_DISC",
-                             "PERCENT_RANK", "PERIOD", "PERMUTE", "PIVOT", "PLACING", "PLAN", "PLI", "PORTION",
-                             "POSITION", "POSITION_REGEX", "POWER", "PRECEDES", "PRECEDING", "PRECISION", "PREPARE",
-                             "PRESERVE", "PREV", "PRIMARY", "PRIOR", "PRIVILEGES", "PROCEDURE", "PUBLIC", "QUARTER",
-                             "RANGE", "RANK", "READ", "READS", "REAL", "RECURSIVE", "REF", "REFERENCES", "REFERENCING",
-                             "REGR_AVGX", "REGR_AVGY", "REGR_COUNT", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE",
-                             "REGR_SXX", "REGR_SXY", "REGR_SYY", "RELATIVE", "RELEASE", "REPEATABLE", "REPLACE",
-                             "RESET", "RESPECT", "RESTART", "RESTRICT", "RESULT", "RETURN", "RETURNED_CARDINALITY",
-                             "RETURNED_LENGTH", "RETURNED_OCTET_LENGTH", "RETURNED_SQLSTATE", "RETURNING", "RETURNS",
-                             "REVOKE", "RIGHT", "RLIKE", "ROLE", "ROLLBACK", "ROLLUP", "ROUTINE", "ROUTINE_CATALOG",
-                             "ROUTINE_NAME", "ROUTINE_SCHEMA", "ROW", "ROW_COUNT", "ROW_NUMBER", "ROWS", "RUNNING",
-                             "SAVEPOINT", "SCALAR", "SCALE", "SCHEMA", "SCHEMA_NAME", "SCOPE", "SCOPE_CATALOGS",
-                             "SCOPE_NAME", "SCOPE_SCHEMA", "SCROLL", "SEARCH", "SECOND", "SECONDS", "SECTION",
-                             "SECURITY", "SEEK", "SELECT", "SELF", "SENSITIVE", "SEPARATOR", "SEQUENCE", "SERIALIZABLE",
-                             "SERVER", "SERVER_NAME", "SESSION", "SESSION_USER", "SET", "SETS", "SET_MINUS", "SHOW",
-                             "SIMILAR", "SIMPLE", "SIZE", "SKIP_", "SMALLINT", "SOME", "SOURCE", "SPACE", "SPECIFIC",
-                             "SPECIFIC_NAME", "SPECIFICTYPE", "SQL", "SQLEXCEPTION", "SQLSTATE", "SQLWARNING",
-                             "SQL_BIGINT", "SQL_BINARY", "SQL_BIT", "SQL_BLOB", "SQL_BOOLEAN", "SQL_CHAR", "SQL_CLOB",
-                             "SQL_DATE", "SQL_DECIMAL", "SQL_DOUBLE", "SQL_FLOAT", "SQL_INTEGER", "SQL_INTERVAL_DAY",
-                             "SQL_INTERVAL_DAY_TO_HOUR", "SQL_INTERVAL_DAY_TO_MINUTE", "SQL_INTERVAL_DAY_TO_SECOND",
-                             "SQL_INTERVAL_HOUR", "SQL_INTERVAL_HOUR_TO_MINUTE", "SQL_INTERVAL_HOUR_TO_SECOND",
-                             "SQL_INTERVAL_MINUTE", "SQL_INTERVAL_MINUTE_TO_SECOND", "SQL_INTERVAL_MONTH",
-                             "SQL_INTERVAL_SECOND", "SQL_INTERVAL_YEAR", "SQL_INTERVAL_YEAR_TO_MONTH",
-                             "SQL_LONGVARBINARY", "SQL_LONGVARCHAR", "SQL_LONGVARNCHAR", "SQL_NCHAR", "SQL_NCLOB",
-                             "SQL_NUMERIC", "SQL_NVARCHAR", "SQL_REAL", "SQL_SMALLINT", "SQL_TIME", "SQL_TIMESTAMP",
-                             "SQL_TINYINT", "SQL_TSI_DAY", "SQL_TSI_FRAC_SECOND", "SQL_TSI_HOUR", "SQL_TSI_MICROSECOND",
-                             "SQL_TSI_MINUTE", "SQL_TSI_MONTH", "SQL_TSI_QUARTER", "SQL_TSI_SECOND", "SQL_TSI_WEEK",
-                             "SQL_TSI_YEAR", "SQL_VARBINARY", "SQL_VARCHAR", "SQRT", "START", "STATE", "STATEMENT",
-                             "STATIC", "STDDEV_POP", "STDDEV_SAMP", "STREAM", "STRING_AGG", "STRUCTURE", "STYLE",
-                             "SUBCLASS_ORIGIN", "SUBMULTISET", "SUBSET", "SUBSTITUTE", "SUBSTRING", "SUBSTRING_REGEX",
-                             "SUCCEEDS", "SUM", "SYMMETRIC", "SYSTEM", "SYSTEM_TIME", "SYSTEM_USER", "TABLE",
-                             "TABLE_NAME", "TABLESAMPLE", "TEMPORARY", "THEN", "TIES", "TIME", "TIMESTAMP",
-                             "TIMESTAMP_TZ", "TIMESTAMPADD", "TIMESTAMPDIFF", "TIMEZONE_HOUR", "TIMEZONE_MINUTE",
-                             "TINYINT", "TO", "TOP_LEVEL_COUNT", "TRAILING", "TRANSACTION", "TRANSACTIONS_ACTIVE",
-                             "TRANSACTIONS_COMMITTED", "TRANSACTIONS_ROLLED_BACK", "TRANSFORM", "TRANSFORMS",
-                             "TRANSLATE", "TRANSLATE_REGEX", "TRANSLATION", "TREAT", "TRIGGER", "TRIGGER_CATALOG",
-                             "TRIGGER_NAME", "TRIGGER_SCHEMA", "TRIM", "TRIM_ARRAY", "TRUE", "TRUNCATE", "TRY_CAST",
-                             "TUMBLE", "TYPE", "UESCAPE", "UNBOUNDED", "UNCOMMITTED", "UNCONDITIONAL", "UNDER", "UNION",
-                             "UNIQUE", "UNKNOWN", "UNPIVOT", "UNNAMED", "UNNEST", "UPDATE", "UPPER", "UPSERT", "USAGE",
-                             "USER", "USER_DEFINED_TYPE_CATALOG", "USER_DEFINED_TYPE_CODE", "USER_DEFINED_TYPE_NAME",
-                             "USER_DEFINED_TYPE_SCHEMA", "USING", "UTF8", "UTF16", "UTF32", "VALUE", "VALUES",
-                             "VALUE_OF", "VAR_POP", "VAR_SAMP", "VARBINARY", "VARCHAR", "VARYING", "VERSION",
-                             "VERSIONING", "VIEW", "WEEK", "WHEN", "WHENEVER", "WHERE", "WIDTH_BUCKET", "WINDOW",
-                             "WITH", "WITHIN", "WITHOUT", "WORK", "WRAPPER", "WRITE", "XML", "YEAR", "YEARS", "ZONE"}
+        # Initialize the format string to be transformed
+        transformed_format = format_str
 
-        if (
-                isinstance(expression, exp.Identifier)
-                and expression.name.upper() in keywords_to_quote
-        ):
+        # Iterate over the TIME_MAPPING to replace source formats with target formats
+        for source_format, target_format in self.TIME_MAPPING.items():
+            transformed_format = transformed_format.replace(target_format, source_format)
+
+        return transformed_format
+
+    def quote_identifier(self, expression: exp.Expression, identify: bool = False) -> exp.Expression:
+        """
+        Ensures SQL identifiers are quoted if they conflict with reserved keywords or require explicit quoting.
+
+        Args:
+            expression (exp.Expression): The SQL expression to check and possibly quote.
+            identify (bool): A flag to force quoting identifiers (default is False).
+
+        Returns:
+            exp.Expression: The modified expression with identifiers quoted if necessary.
+        """
+
+        keywords_to_quote = {
+            "ABS", "ABSENT", "ABSOLUTE", "ACTION", "ADA", "ADD", "ADMIN", "AFTER", "ALL", "ALLOCATE",
+            "ALLOW", "ALTER", "ALWAYS", "AND", "ANY", "APPLY", "ARE", "ARRAY", "ARRAY_AGG",
+            "ARRAY_CONCAT_AGG", "ARRAY_MAX_CARDINALITY", "AS", "ASC", "ASENSITIVE", "ASSERTION",
+            "ASSIGNMENT", "ASYMMETRIC", "AT", "ATOMIC", "ATTRIBUTE", "ATTRIBUTES", "AUTHORIZATION",
+            "AVG", "BEFORE", "BEGIN", "BEGIN_FRAME", "BEGIN_PARTITION", "BERNOULLI", "BETWEEN",
+            "BIGINT", "BINARY", "BIT", "BLOB", "BOOLEAN", "BOTH", "BREADTH", "BY", "C", "CALL",
+            "CALLED", "CARDINALITY", "CASCADE", "CASCADED", "CASE", "CAST", "CATALOG", "CATALOG_NAME",
+            "CEIL", "CEILING", "CENTURY", "CHAIN", "CHAR", "CHAR_LENGTH", "CHARACTER",
+            "CHARACTER_LENGTH", "CHARACTER_SET_CATALOG", "CHARACTER_SET_NAME", "CHARACTER_SET_SCHEMA",
+            "CHARACTERISTICS", "CHARACTERS", "CHECK", "CLASSIFIER", "CLASS_ORIGIN", "CLOB", "CLOSE",
+            "COALESCE", "COBOL", "COLLATE", "COLLATION", "COLLATION_CATALOG", "COLLATION_NAME",
+            "COLLATION_SCHEMA", "COLLECT", "COLUMN", "COLUMN_NAME", "COMMAND_FUNCTION",
+            "COMMAND_FUNCTION_CODE", "COMMIT", "COMMITTED", "CONDITION", "CONDITIONAL",
+            "CONDITION_NUMBER", "CONNECT", "CONNECTION", "CONNECTION_NAME", "CONSTRAINT",
+            "CONSTRAINT_CATALOG", "CONSTRAINT_NAME", "CONSTRAINT_SCHEMA", "CONSTRAINTS", "CONSTRUCTOR",
+            "CONTAINS", "CONTINUE", "CONVERT", "CORR", "CORRESPONDING", "COUNT", "COVAR_POP",
+            "COVAR_SAMP", "CREATE", "CROSS", "CUBE", "CUME_DIST", "CURRENT", "CURRENT_CATALOG",
+            "CURRENT_DATE", "CURRENT_DEFAULT_TRANSFORM_GROUP", "CURRENT_PATH", "CURRENT_ROLE",
+            "CURRENT_ROW", "CURRENT_SCHEMA", "CURRENT_TIME", "CURRENT_TIMESTAMP",
+            "CURRENT_TRANSFORM_GROUP_FOR_TYPE", "CURRENT_USER", "CURSOR", "CURSOR_NAME", "CYCLE",
+            "DATA", "DATABASE", "DATE", "DATETIME_INTERVAL_CODE", "DATETIME_INTERVAL_PRECISION", "DAY",
+            "DAYS", "DEALLOCATE", "DEC", "DECADE", "DECIMAL", "DECLARE", "DEFAULT_", "DEFAULTS",
+            "DEFERRABLE", "DEFERRED", "DEFINE", "DEFINED", "DEFINER", "DEGREE", "DELETE", "DENSE_RANK",
+            "DEPTH", "DEREF", "DERIVED", "DESC", "DESCRIBE", "DESCRIPTION", "DESCRIPTOR",
+            "DETERMINISTIC", "DIAGNOSTICS", "DISALLOW", "DISCONNECT", "DISPATCH", "DISTINCT", "DOMAIN",
+            "DOT_FORMAT", "DOUBLE", "DOW", "DOY", "DROP", "DYNAMIC", "DYNAMIC_FUNCTION",
+            "DYNAMIC_FUNCTION_CODE", "EACH", "ELEMENT", "ELSE", "EMPTY", "ENCODING", "END", "END_EXEC",
+            "END_FRAME", "END_PARTITION", "EPOCH", "EQUALS", "ERROR", "ESCAPE", "EVERY", "EXCEPT",
+            "EXCEPTION", "EXCLUDE", "EXCLUDING", "EXEC", "EXECUTE", "EXISTS", "EXP", "EXPLAIN",
+            "EXTEND", "EXTERNAL", "EXTRACT", "FALSE", "FETCH", "FILTER", "FINAL", "FIRST",
+            "FIRST_VALUE", "FLOAT", "FLOOR", "FOLLOWING", "FOR", "FORMAT", "FOREIGN", "FORTRAN",
+            "FOUND", "FRAC_SECOND", "FRAME_ROW", "FREE", "FROM", "FULL", "FUNCTION", "FUSION", "G",
+            "GENERAL", "GENERATED", "GEOMETRY", "GET", "GLOBAL", "GO", "GOTO", "GRANT", "GRANTED",
+            "GROUP", "GROUP_CONCAT", "GROUPING", "GROUPS", "HAVING", "HIERARCHY", "HOLD", "HOP",
+            "HOUR", "HOURS", "IDENTITY", "IGNORE", "ILIKE", "IMMEDIATE", "IMMEDIATELY",
+            "IMPLEMENTATION", "IMPORT", "IN", "INCLUDE", "INCLUDING", "INCREMENT", "INDICATOR",
+            "INITIAL", "INITIALLY", "INNER", "INOUT", "INPUT", "INSENSITIVE", "INSERT", "INSTANCE",
+            "INSTANTIABLE", "INT", "INTEGER", "INTERSECT", "INTERSECTION", "INTERVAL", "INTO",
+            "INVOKER", "IS", "ISODOW", "ISOYEAR", "ISOLATION", "JAVA", "JOIN", "JSON", "JSON_ARRAY",
+            "JSON_ARRAYAGG", "JSON_EXISTS", "JSON_OBJECT", "JSON_OBJECTAGG", "JSON_QUERY",
+            "JSON_VALUE", "K", "KEY", "KEY_MEMBER", "KEY_TYPE", "LABEL", "LAG", "LANGUAGE", "LARGE",
+            "LAST", "LAST_VALUE", "LATERAL", "LEAD", "LEADING", "LEFT", "LENGTH", "LEVEL", "LIBRARY",
+            "LIKE", "LIKE_REGEX", "LIMIT", "TOP", "LN", "LOCAL", "LOCALTIME", "LOCALTIMESTAMP",
+            "LOCATOR", "LOWER", "M", "MAP", "MATCH", "MATCHED", "MATCHES", "MATCH_NUMBER",
+            "MATCH_RECOGNIZE", "MAX", "MAXVALUE", "MEASURES", "MEMBER", "MERGE", "MESSAGE_LENGTH",
+            "MESSAGE_OCTET_LENGTH", "MESSAGE_TEXT", "METHOD", "MICROSECOND", "MILLISECOND",
+            "MILLISECONDS", "MILLENNIUM", "MIN", "MINUTE", "MINUTES", "MINVALUE", "MOD", "MODIFIES",
+            "MODULE", "MONTH", "MONTHS", "MORE_", "MULTISET", "MUMPS", "NAME", "NAMES", "NANOSECOND",
+            "NATIONAL", "NATURAL", "NCHAR", "NCLOB", "NESTING", "NEW", "NEXT", "NO", "NONE",
+            "NORMALIZE", "NORMALIZED", "NOT", "NTH_VALUE", "NTILE", "NULL", "NULLABLE", "NULLIF",
+            "NULLS", "NUMBER", "NUMERIC", "OBJECT", "OCCURRENCES_REGEX", "OCTET_LENGTH", "OCTETS",
+            "OF", "OFFSET", "OLD", "OMIT", "ON", "ONE", "ONLY", "OPEN", "OPTION", "OPTIONS", "OR",
+            "ORDER", "ORDERING", "ORDINALITY", "OTHERS", "OUT", "OUTER", "OUTPUT", "OVER", "OVERLAPS",
+            "OVERLAY", "OVERRIDING", "PAD", "PARAMETER", "PARAMETER_MODE", "PARAMETER_NAME",
+            "PARAMETER_ORDINAL_POSITION", "PARAMETER_SPECIFIC_CATALOG", "PARAMETER_SPECIFIC_NAME",
+            "PARAMETER_SPECIFIC_SCHEMA", "PARTIAL", "PARTITION", "PASCAL", "PASSING", "PASSTHROUGH",
+            "PAST", "PATH", "PATTERN", "PER", "PERCENT", "PERCENTILE_CONT", "PERCENTILE_DISC",
+            "PERCENT_RANK", "PERIOD", "PERMUTE", "PIVOT", "PLACING", "PLAN", "PLI", "PORTION",
+            "POSITION", "POSITION_REGEX", "POWER", "PRECEDES", "PRECEDING", "PRECISION", "PREPARE",
+            "PRESERVE", "PREV", "PRIMARY", "PRIOR", "PRIVILEGES", "PROCEDURE", "PUBLIC", "QUARTER",
+            "RANGE", "RANK", "READ", "READS", "REAL", "RECURSIVE", "REF", "REFERENCES", "REFERENCING",
+            "REGR_AVGX", "REGR_AVGY", "REGR_COUNT", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE",
+            "REGR_SXX", "REGR_SXY", "REGR_SYY", "RELATIVE", "RELEASE", "REPEATABLE", "REPLACE",
+            "RESET", "RESPECT", "RESTART", "RESTRICT", "RESULT", "RETURN", "RETURNED_CARDINALITY",
+            "RETURNED_LENGTH", "RETURNED_OCTET_LENGTH", "RETURNED_SQLSTATE", "RETURNING", "RETURNS",
+            "REVOKE", "RIGHT", "RLIKE", "ROLE", "ROLLBACK", "ROLLUP", "ROUTINE", "ROUTINE_CATALOG",
+            "ROUTINE_NAME", "ROUTINE_SCHEMA", "ROW", "ROW_COUNT", "ROW_NUMBER", "ROWS", "RUNNING",
+            "SAVEPOINT", "SCALAR", "SCALE", "SCHEMA", "SCHEMA_NAME", "SCOPE", "SCOPE_CATALOGS",
+            "SCOPE_NAME", "SCOPE_SCHEMA", "SCROLL", "SEARCH", "SECOND", "SECONDS", "SECTION",
+            "SECURITY", "SEEK", "SELECT", "SELF", "SENSITIVE", "SEPARATOR", "SEQUENCE", "SERIALIZABLE",
+            "SERVER", "SERVER_NAME", "SESSION", "SESSION_USER", "SET", "SETS", "SET_MINUS", "SHOW",
+            "SIMILAR", "SIMPLE", "SIZE", "SKIP_", "SMALLINT", "SOME", "SOURCE", "SPACE", "SPECIFIC",
+            "SPECIFIC_NAME", "SPECIFICTYPE", "SQL", "SQLEXCEPTION", "SQLSTATE", "SQLWARNING",
+            "SQL_BIGINT", "SQL_BINARY", "SQL_BIT", "SQL_BLOB", "SQL_BOOLEAN", "SQL_CHAR", "SQL_CLOB",
+            "SQL_DATE", "SQL_DECIMAL", "SQL_DOUBLE", "SQL_FLOAT", "SQL_INTEGER", "SQL_INTERVAL_DAY",
+            "SQL_INTERVAL_DAY_TO_HOUR", "SQL_INTERVAL_DAY_TO_MINUTE", "SQL_INTERVAL_DAY_TO_SECOND",
+            "SQL_INTERVAL_HOUR", "SQL_INTERVAL_HOUR_TO_MINUTE", "SQL_INTERVAL_HOUR_TO_SECOND",
+            "SQL_INTERVAL_MINUTE", "SQL_INTERVAL_MINUTE_TO_SECOND", "SQL_INTERVAL_MONTH",
+            "SQL_INTERVAL_SECOND", "SQL_INTERVAL_YEAR", "SQL_INTERVAL_YEAR_TO_MONTH",
+            "SQL_LONGVARBINARY", "SQL_LONGVARCHAR", "SQL_LONGVARNCHAR", "SQL_NCHAR", "SQL_NCLOB",
+            "SQL_NUMERIC", "SQL_NVARCHAR", "SQL_REAL", "SQL_SMALLINT", "SQL_TIME", "SQL_TIMESTAMP",
+            "SQL_TINYINT", "SQL_TSI_DAY", "SQL_TSI_FRAC_SECOND", "SQL_TSI_HOUR", "SQL_TSI_MICROSECOND",
+            "SQL_TSI_MINUTE", "SQL_TSI_MONTH", "SQL_TSI_QUARTER", "SQL_TSI_SECOND", "SQL_TSI_WEEK",
+            "SQL_TSI_YEAR", "SQL_VARBINARY", "SQL_VARCHAR", "SQRT", "START", "STATE", "STATEMENT",
+            "STATIC", "STDDEV_POP", "STDDEV_SAMP", "STREAM", "STRING_AGG", "STRUCTURE", "STYLE",
+            "SUBCLASS_ORIGIN", "SUBMULTISET", "SUBSET", "SUBSTITUTE", "SUBSTRING", "SUBSTRING_REGEX",
+            "SUCCEEDS", "SUM", "SYMMETRIC", "SYSTEM", "SYSTEM_TIME", "SYSTEM_USER", "TABLE",
+            "TABLE_NAME", "TABLESAMPLE", "TEMPORARY", "THEN", "TIES", "TIME", "TIMESTAMP",
+            "TIMESTAMP_TZ", "TIMESTAMPADD", "TIMESTAMPDIFF", "TIMEZONE_HOUR", "TIMEZONE_MINUTE",
+            "TINYINT", "TO", "TOP_LEVEL_COUNT", "TRAILING", "TRANSACTION", "TRANSACTIONS_ACTIVE",
+            "TRANSACTIONS_COMMITTED", "TRANSACTIONS_ROLLED_BACK", "TRANSFORM", "TRANSFORMS",
+            "TRANSLATE", "TRANSLATE_REGEX", "TRANSLATION", "TREAT", "TRIGGER", "TRIGGER_CATALOG",
+            "TRIGGER_NAME", "TRIGGER_SCHEMA", "TRIM", "TRIM_ARRAY", "TRUE", "TRUNCATE", "TRY_CAST",
+            "TUMBLE", "TYPE", "UESCAPE", "UNBOUNDED", "UNCOMMITTED", "UNCONDITIONAL", "UNDER", "UNION",
+            "UNIQUE", "UNKNOWN", "UNPIVOT", "UNNAMED", "UNNEST", "UPDATE", "UPPER", "UPSERT", "USAGE",
+            "USER", "USER_DEFINED_TYPE_CATALOG", "USER_DEFINED_TYPE_CODE", "USER_DEFINED_TYPE_NAME",
+            "USER_DEFINED_TYPE_SCHEMA", "USING", "UTF8", "UTF16", "UTF32", "VALUE", "VALUES",
+            "VALUE_OF", "VAR_POP", "VAR_SAMP", "VARBINARY", "VARCHAR", "VARYING", "VERSION",
+            "VERSIONING", "VIEW", "WEEK", "WHEN", "WHENEVER", "WHERE", "WIDTH_BUCKET", "WINDOW",
+            "WITH", "WITHIN", "WITHOUT", "WORK", "WRAPPER", "WRITE", "XML", "YEAR", "YEARS", "ZONE"
+        }
+
+        # Check if the expression is an identifier and matches a reserved keyword.
+        if isinstance(expression, exp.Identifier) and expression.name.upper() in keywords_to_quote:
+            # Mark the identifier as quoted.
             expression.set("quoted", True)
-            return expression
+
+        # Return the potentially modified expression.
         return expression
 
     class Tokenizer(tokens.Tokenizer):
@@ -597,7 +633,7 @@ class E6(Dialect):
                 return any(contains_aggregate(child) for child in node.args.values())
 
             # Retrieve the array expression and the lambda expression from the arguments.
-            array_expr = seq_get(self, 0)   # TODO:: Need to test this
+            array_expr = seq_get(self, 0)  # TODO:: Need to test this
             lambda_expr = seq_get(self, 1)  # TODO:: Need to test this
 
             # Get the root node of the lambda expression.
@@ -614,7 +650,7 @@ class E6(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
-            "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list, # TODO:: Need to understand this funcitons
+            "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list,  # TODO:: Need to understand this funcitons
             "APPROX_QUANTILES": exp.ApproxQuantile.from_arg_list,
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
             "ARBITRARY": exp.AnyValue.from_arg_list,
@@ -737,7 +773,8 @@ class E6(Dialect):
             "TO_VARCHAR": build_formatted_time(exp.TimeToStr, "E6"),
             "TRUNC": date_trunc_to_time,
             "TRIM": lambda self: self._parse_trim(),
-            "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),  # TODO:: I have removed the _parse_unnest_sql, was it really required
+            "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),
+            # TODO:: I have removed the _parse_unnest_sql, was it really required
             "WEEK": exp.Week.from_arg_list,
             "WEEKISO": exp.Week.from_arg_list,
             "WEEKOFYEAR": exp.WeekOfYear.from_arg_list,
@@ -757,6 +794,28 @@ class E6(Dialect):
         INTERVAL_ALLOWS_PLURAL_FORM = False
         NULL_ORDERING_SUPPORTED = None
         SUPPORTS_TABLE_ALIAS_COLUMNS = False
+
+        CAST_SUPPORTED_TYPE_MAPPING = {
+            exp.DataType.Type.NCHAR: "CHAR",
+            exp.DataType.Type.VARCHAR: "VARCHAR",
+            exp.DataType.Type.INT: "INT",
+            exp.DataType.Type.TINYINT: "INT",
+            exp.DataType.Type.SMALLINT: "INT",
+            exp.DataType.Type.MEDIUMINT: "INT",
+            exp.DataType.Type.BIGINT: "BIGINT",
+            exp.DataType.Type.BOOLEAN: "BOOLEAN",
+            exp.DataType.Type.DATE: "DATE",
+            exp.DataType.Type.DATE32: "DATE",
+            exp.DataType.Type.FLOAT: "FLOAT",
+            exp.DataType.Type.DOUBLE: "DOUBLE",
+            exp.DataType.Type.TIMESTAMP: "TIMESTAMP",
+            exp.DataType.Type.TIMESTAMPTZ: "TIMESTAMP",
+            exp.DataType.Type.TIMESTAMPNTZ: "TIMESTAMP",
+            exp.DataType.Type.TEXT: "VARCHAR",
+            exp.DataType.Type.TINYTEXT: "VARCHAR",
+            exp.DataType.Type.MEDIUMTEXT: "VARCHAR",
+            exp.DataType.Type.DECIMAL: "DECIMAL"
+        }
 
         # TODO:: If the below functions is not required then it's better to remove it.
         # def select_sql(self, expression: exp.Select) -> str:
@@ -904,21 +963,61 @@ class E6(Dialect):
                 return self.func("REGEXP_REPLACE", expression.this, expression.expression, replacement)
 
         def format_time(self, expression, **kwargs):
-            format_expr = expression.args.get("format")
-            format_str = getattr(format_expr, "name", format_expr)
+            """
+            Transforms a time format string from one convention to another using the TIME_MAPPING dictionary.
+
+            Args:
+                expression (exp.Expression): The expression containing the time format string.
+
+            Returns:
+                str: The transformed time format string, or None if no format string is found.
+            """
+            # Check if the expression is a literal value
+            # TODO:: Is this `if` condition extra, do we really reuire it
+            if isinstance(expression, exp.Literal):
+                # Directly use the literal value as the format string
+                format_str = expression.this
+            else:
+                # Attempt to retrieve the 'format' argument from the expression
+                format_expr = expression.args.get("format")
+                # Use the 'name' attribute of the format expression if it exists; otherwise, use the expression itself
+                format_str = getattr(format_expr, "name", format_expr)
+
+            # If no format string is found, return None
             if format_str is None:
                 return None
+
+            # Initialize the format string to be transformed
             format_string = format_str
+
+            # Iterate over the TIME_MAPPING dictionary to replace each value with its corresponding key
             for key, value in E6().TIME_MAPPING.items():
                 format_string = format_string.replace(value, key)
+
+            # Return the transformed format string
             return format_string
 
         def cast_sql(self, expression: exp.Cast, safe_prefix: t.Optional[str] = None) -> str:
-            # Get the target type of the cast expression
+            """
+            Generates the SQL string for a CAST operation in the E6 dialect.
+
+            The method uses a custom type mapping (`CAST_SUPPORTED_TYPE_MAPPING`) to ensure that
+            the target type in the CAST operation aligns with the E6 dialect.
+
+            Args:
+                expression (exp.Cast): The CAST expression containing the value and target type.
+                safe_prefix (Optional[str]): An optional prefix for safe casting (not used here).
+
+            Returns:
+                str: The SQL string for the CAST operation.
+            """
+            # Extract the target type from the CAST expression
             target_type = expression.to.this
-            # Find the corresponding type in E6 from the mapping
+
+            # Map the target type to the corresponding E6 type
             e6_type = self.CAST_SUPPORTED_TYPE_MAPPING.get(target_type, target_type)
-            # Generate the SQL for casting with the mapped type
+
+            # Generate the SQL string for the CAST operation
             return f"CAST({self.sql(expression.this)} AS {e6_type})"
 
         def interval_sql(self: E6.Generator, expression: exp.Interval) -> str:
@@ -1018,17 +1117,17 @@ class E6(Dialect):
 
         def bracket_sql(self, expression: exp.Bracket) -> str:
             return self.func(
-                    "ELEMENT_AT",
-                    expression.this,
-                    seq_get(
-                        apply_index_offset(
-                            expression.this,
-                            expression.expressions,
-                            1 - expression.args.get("offset", 0),
-                        ),
-                        0,
+                "ELEMENT_AT",
+                expression.this,
+                seq_get(
+                    apply_index_offset(
+                        expression.this,
+                        expression.expressions,
+                        1 - expression.args.get("offset", 0),
                     ),
-                )
+                    0,
+                ),
+            )
 
         def generateseries_sql(self, expression: exp.GenerateSeries) -> str:
             start = expression.args["start"]
@@ -1373,28 +1472,6 @@ class E6(Dialect):
             exp.DataType.Type.USMALLINT: "INT",
             exp.DataType.Type.UTINYINT: "INT",
             exp.DataType.Type.UDECIMAL: "DECIMAL",
-        }
-
-        CAST_SUPPORTED_TYPE_MAPPING = {
-            exp.DataType.Type.NCHAR: "CHAR",
-            exp.DataType.Type.VARCHAR: "VARCHAR",
-            exp.DataType.Type.INT: "INT",
-            exp.DataType.Type.TINYINT: "INT",
-            exp.DataType.Type.SMALLINT: "INT",
-            exp.DataType.Type.MEDIUMINT: "INT",
-            exp.DataType.Type.BIGINT: "BIGINT",
-            exp.DataType.Type.BOOLEAN: "BOOLEAN",
-            exp.DataType.Type.DATE: "DATE",
-            exp.DataType.Type.DATE32: "DATE",
-            exp.DataType.Type.FLOAT: "FLOAT",
-            exp.DataType.Type.DOUBLE: "DOUBLE",
-            exp.DataType.Type.TIMESTAMP: "TIMESTAMP",
-            exp.DataType.Type.TIMESTAMPTZ: "TIMESTAMP",
-            exp.DataType.Type.TIMESTAMPNTZ: "TIMESTAMP",
-            exp.DataType.Type.TEXT: "VARCHAR",
-            exp.DataType.Type.TINYTEXT: "VARCHAR",
-            exp.DataType.Type.MEDIUMTEXT: "VARCHAR",
-            exp.DataType.Type.DECIMAL: "DECIMAL"
         }
 
         # Map generic data types to your dialect's specific data type names
