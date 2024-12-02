@@ -310,7 +310,6 @@ class TestE6(Validator):
         )
 
         # Test FILTER_ARRAY with NULL values
-        # TODO:: This was failing with x is NOT NULL
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> NOT x IS NULL)",
             read={
