@@ -329,6 +329,9 @@ class E6(Dialect):
         """
         # Determine the format string based on the type of expression
         # TODO:: Need to understand what is this Literal and what is expression
+        #  # Yes we require this. Cuz for some cases what happens is the format arg will be a literal node and can be accessed using expression.this.
+        #  # But this is not the case for all. For some functions what happens is the format part comes as `format` arg but not as `this`, this is due to declarations of those functions in other dialects
+        #  # So as to acknowledge both cases we need this if.
         if isinstance(expression, exp.Literal):
             # For Literal expressions, retrieve the format string directly
             format_str = expression.this
@@ -500,6 +503,7 @@ class E6(Dialect):
         # TODO:: Why other dialects have this long list of keywords but we are only relying on the
         #        these reserved keywords
         #       What is the meaning of this?
+        # Need to deep dive in this. These are keywords list supported by a dialect and their mapping to specific kinds of keywords.
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             # Add E6-specific keywords here, e.g., "MY_KEYWORD": TokenType.KEYWORD
@@ -536,6 +540,8 @@ class E6(Dialect):
 
             TODO:: Need to discuss with Adithya, how we have tested this function & why we have passed `self` in the
                     `seq_get` functions. It look incorrect to me
+                I saw this type of pattern in methods of parser class. self is happening to be a list of args that are being sent.
+                 In order to get 1 arg, 2nd arg i am using `seq_get`. I donot know exactly why self is being list of two arguments. Need to deep dive on that.
 
             What This Function Does
 
@@ -660,7 +666,9 @@ class E6(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
-            "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list,  # TODO:: Need to understand this funcitons
+            "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list,
+            # TODO:: Need to understand this funcitons
+            # Have to refer the documentation
             "APPROX_QUANTILES": exp.ApproxQuantile.from_arg_list,
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
             "ARBITRARY": exp.AnyValue.from_arg_list,
@@ -785,6 +793,7 @@ class E6(Dialect):
             "TRIM": lambda self: self._parse_trim(),
             "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),
             # TODO:: I have removed the _parse_unnest_sql, was it really required
+            # It was added due to some requirements before but those were asked to remove afterwards so it should not matter now
             "WEEK": exp.Week.from_arg_list,
             "WEEKISO": exp.Week.from_arg_list,
             "WEEKOFYEAR": exp.WeekOfYear.from_arg_list,
@@ -828,6 +837,9 @@ class E6(Dialect):
         }
 
         # TODO:: If the below functions is not required then it's better to remove it.
+        # This function is created to manipulate the select statement for specific use case. Tried different ways but could not achieve exact requirement as it was starting.
+        # Many priorities were there so this went into backlog.
+
         # def select_sql(self, expression: exp.Select) -> str:
         #     def collect_aliases_and_projections(expressions):
         #         aliases = {}
@@ -911,6 +923,9 @@ class E6(Dialect):
         #     return super().select_sql(expression)
 
         # TODO:: Adithya, why there was need to override this method.
+        # So what was happening was this method will get called internally while .transpile is called. They have written this method with respect to other dialects.
+        # But whenever we pass a normal query, by default parts like `NULLS LAST` etc were getting by defaults in order by clause which will differs the sequence of results displayed in original dialect and ours.
+        # In order to tackle that, I overridden that so as to maintain structure of sqlglot with out altering original methods
         def ordered_sql(self, expression: exp.Ordered) -> str:
             """
             Generate the SQL string for an ORDER BY clause in the E6 dialect.
@@ -933,7 +948,9 @@ class E6(Dialect):
             }.get(expression.args.get("desc"))
 
             # Generate the SQL for the main expression to be ordered
-            main_expression = self.sql(expression, "this")  # TODO:: What is the significant of `this` parameter here
+            main_expression = self.sql(expression, "this")
+            # TODO:: What is the significant of `this` parameter here
+            # `this` is the whole sql part from select node that order by is part of
 
             # Initialize null ordering as an empty string
             nulls_sort_change = ""
@@ -984,6 +1001,9 @@ class E6(Dialect):
             """
             # Check if the expression is a literal value
             # TODO:: Is this `if` condition extra, do we really reuire it
+            # Yes we require this. Cuz for some cases what happens is the format arg will be a literal node and can be accessed using expression.this.
+            # But this is not the case for all. For some functions what happens is the format part comes as `format` arg but not as `this`, this is due to declarations of those functions in other dialects
+            # So as to acknowledge both cases we need this if.
             if isinstance(expression, exp.Literal):
                 # Directly use the literal value as the format string
                 format_str = expression.this
@@ -1054,6 +1074,9 @@ class E6(Dialect):
             'INTERVAL 5 DAY'
             """
             # TODO:: Ask Adithya, how he has guessed about this `.this` & `.unit`
+            # While you debug anything, you can see the tree like structures there and see what are our candidates to fetch and do manipulations
+            # You can use evaluate exression also there to verfy what we want
+
             # Check if both 'this' (value) and 'unit' are present in the expression
             if expression.this and expression.unit:
                 # Extract the name attributes of 'this' and 'unit'
