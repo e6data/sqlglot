@@ -475,6 +475,15 @@ class E6(Dialect):
         return expression
 
     class Tokenizer(tokens.Tokenizer):
+        """
+        The Tokenizer class is responsible for breaking down SQL statements into tokens.
+        We have overridden the Tokenizer class to define how your dialect handles various elements like
+
+            - quotes
+            - identifiers
+            - keywords
+            - Other lexical elements
+        """
 
         # Define the escape character for strings.
         STRING_ESCAPES = ["\\"]
@@ -490,6 +499,7 @@ class E6(Dialect):
 
         # TODO:: Why other dialects have this long list of keywords but we are only relying on the
         #        these reserved keywords
+        #       What is the meaning of this?
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             # Add E6-specific keywords here, e.g., "MY_KEYWORD": TokenType.KEYWORD
@@ -588,6 +598,7 @@ class E6(Dialect):
             # Return an ArrayFilter expression with the parsed array and lambda expressions.
             return exp.ArrayFilter(this=array_expr, expression=lambda_expr)
 
+        @staticmethod
         def _build_datetime(name: str, kind: exp.DataType.Type, safe: bool = False) -> t.Callable[[t.List], exp.Func]:
             """
             This function creates a builder that handles various scenarios for converting or parsing DATETIME values in
@@ -1019,13 +1030,40 @@ class E6(Dialect):
             # Generate the SQL string for the CAST operation
             return f"CAST({self.sql(expression.this)} AS {e6_type})"
 
-        def interval_sql(self: E6.Generator, expression: exp.Interval) -> str:
+        def interval_sql(self, expression: exp.Interval) -> str:
+            """
+            Generate an SQL INTERVAL expression from the given Interval object.
+
+            This function constructs a string representing an SQL INTERVAL based on
+            the provided `expression`. If both `expression.this` (the value) and
+            `expression.unit` (the unit of time) are present, it returns a string
+            formatted as 'INTERVAL {value} {unit}'. If either is missing, it returns
+            an empty string.
+
+            Parameters:
+            expression (exp.Interval): An object containing the interval value and unit.
+
+            Returns:
+            str: A string representing the SQL INTERVAL or an empty string if the
+                 necessary components are missing.
+
+            Example:
+            >>> expr = exp.Interval(this=exp.Literal(5), unit=exp.Literal('DAY'))
+            >>> generator = Generator()
+            >>> generator.interval_sql(expr)
+            'INTERVAL 5 DAY'
+            """
+            # TODO:: Ask Adithya, how he has guessed about this `.this` & `.unit`
+            # Check if both 'this' (value) and 'unit' are present in the expression
             if expression.this and expression.unit:
+                # Extract the name attributes of 'this' and 'unit'
                 value = expression.this.name
                 unit = expression.unit.name
+                # Format the INTERVAL string
                 interval_str = f"INTERVAL {value} {unit}"
                 return interval_str
             else:
+                # Return an empty string if either 'this' or 'unit' is missing
                 return ""
 
         # Need to look at the problem here regarding double casts appearing
