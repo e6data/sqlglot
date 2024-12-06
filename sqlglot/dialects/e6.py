@@ -1410,8 +1410,8 @@ class E6(Dialect):
                 this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
             ),
             "TO_HEX": exp.Hex.from_arg_list,
-            "TO_TIMESTAMP": lambda self: self._build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
-            "TO_TIMESTAMP_NTZ": lambda self: self._build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
+            "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
+            "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_UTF8": lambda args: exp.Encode(
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
