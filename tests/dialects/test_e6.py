@@ -122,6 +122,7 @@ class TestE6(Validator):
             }
         )
 
+        # This functions tests the `_parse_filter_array` functions that we have written.
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[5, -6, NULL, 7], x -> x > 0)",
             read={
@@ -289,4 +290,45 @@ class TestE6(Validator):
                 "snowflake": "POSITION('A', 'ABC')",
                 "presto": "STRPOS('ABC', 'A')"
             },
+        )
+
+    def test_parse_filter_array(self):
+        # Test FILTER_ARRAY with positive numbers
+        self.validate_all(
+            "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
+            read={
+                "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)"
+            }
+        )
+
+        # Test FILTER_ARRAY with negative numbers
+        self.validate_all(
+            "SELECT FILTER_ARRAY(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
+            read={
+                "trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)"
+            }
+        )
+
+        # Test FILTER_ARRAY with NULL values
+        self.validate_all(
+            "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> NOT x IS NULL)",
+            read={
+                "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)"
+            }
+        )
+
+        # Test FILTER_ARRAY with complex condition
+        self.validate_all(
+            "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4, 5], x -> MOD(x, 2) = 0)",
+            read={
+                "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)"
+            }
+        )
+
+        # Test FILTER_ARRAY with nested arrays
+        self.validate_all(
+            "SELECT FILTER_ARRAY(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> SIZE(x) = 2)",
+            read={
+                "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)"
+            }
         )
