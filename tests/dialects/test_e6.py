@@ -303,9 +303,9 @@ class TestE6(Validator):
 
         # Test FILTER_ARRAY with negative numbers
         self.validate_all(
-            "SELECT FILTER_ARRAY(ARRAY[-5, -4, -3, -2, -1], x -> x < -3)",
+            "SELECT FILTER_ARRAY(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
             read={
-                "trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x < -3)"
+                "trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)"
             }
         )
 

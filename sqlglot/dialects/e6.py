@@ -604,8 +604,7 @@ class E6(Dialect):
             # Return an ArrayFilter expression with the parsed array and lambda expressions.
             return exp.ArrayFilter(this=array_expr, expression=lambda_expr)
 
-        @staticmethod
-        def _build_datetime(name: str, kind: exp.DataType.Type, safe: bool = False) -> t.Callable[[t.List], exp.Func]:
+        def _build_datetime(self, name: str, kind: exp.DataType.Type, safe: bool = False) -> t.Callable[[t.List], exp.Func]:
             """
             This function creates a builder that handles various scenarios for converting or parsing DATETIME values in
             SQL expressions. It’s particularly useful for SQL dialect conversions or transpiling SQL queries from
