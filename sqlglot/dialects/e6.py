@@ -1280,8 +1280,8 @@ class E6(Dialect):
                     distinct_expr_clone.set("expressions", [expr_1.expressions[0]])
                     expr_1 = distinct_expr_clone
 
-            # Generate SQL using STRING_AGG/LISTAGG, with separator or default '-'
-            return self.func("STRING_AGG", expr_1, separator or exp.Literal.string('-'))
+            # Generate SQL using STRING_AGG/LISTAGG, with separator or default ''
+            return self.func("LISTAGG", expr_1, separator or exp.Literal.string(''))
 
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
