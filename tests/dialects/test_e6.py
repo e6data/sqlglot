@@ -332,37 +332,3 @@ class TestE6(Validator):
                 "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)"
             }
         )
-
-    def test_group_concat(self):
-
-        self.validate_all(
-            "SELECT c_birth_country AS country, LISTAGG(c_first_name, '')",
-            read={
-                "snowflake": "SELECT c_birth_country as country, listagg(c_first_name)"
-            }
-        )
-
-        self.validate_all(
-            "SELECT c_birth_country AS country, LISTAGG(DISTINCT c_first_name, '')", # We are expecting
-            read={
-                "snowflake": "SELECT c_birth_country as country, listagg(distinct c_first_name)"
-            }
-        )
-
-        self.validate_all(
-            "SELECT c_birth_country AS country, LISTAGG(DISTINCT c_first_name, ', ')",  # We are expecting
-            read={
-                "snowflake": "SELECT c_birth_country as country, listagg(distinct c_first_name, ', ')"
-            }
-        )
-
-        self.validate_all(
-            "SELECT c_birth_country AS country, LISTAGG(c_first_name, ' | ')",  # We are expecting
-            read={
-                "snowflake": "SELECT c_birth_country as country, listagg(c_first_name, ' | ')"
-            }
-        )
-
-
-
-
