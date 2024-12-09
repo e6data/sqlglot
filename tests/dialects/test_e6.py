@@ -239,6 +239,13 @@ class TestE6(Validator):
                   }
         )
 
+        self.validate_all(
+            "SELECT CONTAINS_SUBSTR('This is sql', 'sql')",
+            read={
+                "snowflake": "SELECT CONTAINS('This is sql','sql')"
+            }
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
