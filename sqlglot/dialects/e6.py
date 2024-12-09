@@ -1261,7 +1261,6 @@ class E6(Dialect):
         The Parser interprets the tokens produced by the Tokenizer to build the corresponding AST.
         In this context, the AST would be structured as follows:
         """
-
         # Define the set of data types that are supported for casting operations in the E6 dialect.
 
         SUPPORTED_CAST_TYPES = {
