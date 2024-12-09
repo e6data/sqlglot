@@ -540,6 +540,23 @@ class E6(Dialect):
     class Tokenizer(tokens.Tokenizer):
         """
         The Tokenizer class is responsible for breaking down SQL statements into tokens.
+        It processes the input SQL string character by character, grouping sequences into tokens that represent
+        distinct syntactical elements. This tokenization is the first step in parsing, enabling the parser to
+        understand and analyze the structure of the SQL statement.
+
+        For instance, given the SQL statement:
+        SELECT c1, c2, MIN(c3) FROM table1 GROUP BY c1, c2
+
+        The Tokenizer would produce a sequence of tokens, each categorized appropriately
+        (e.g.,
+            SELECT as a keyword,
+            c1 as an identifier,
+            , as a delimiter,
+            MIN as a function,
+        etc.
+        ). This breakdown facilitates the subsequent parsing stages, where the syntactical structure and
+        semantics of the SQL statement are analyzed.
+
         We have overridden the Tokenizer class to define how your dialect handles various elements like
 
             - quotes
@@ -570,6 +587,21 @@ class E6(Dialect):
         }
 
     class Parser(parser.Parser):
+        """
+        The Parser class interprets the sequence of tokens to build an abstract syntax tree (AST).
+        Override the Parser class to handle any syntax peculiarities of your dialect:
+
+
+        The Parser class in SQLGlot processes a sequence of tokens generated from a SQL statement to construct
+        an Abstract Syntax Tree (AST). This tree-like structure represents the hierarchical syntactic
+        organization of the SQL query, enabling systematic analysis and manipulation.
+
+        Given the SQL query:
+        SELECT c1, c2, MIN(c3) FROM table1 GROUP BY c1, c2
+
+        The Parser interprets the tokens produced by the Tokenizer to build the corresponding AST.
+        In this context, the AST would be structured as follows:
+        """
         # Define the set of data types that are supported for casting operations in the E6 dialect.
 
         SUPPORTED_CAST_TYPES = {
@@ -1280,8 +1312,8 @@ class E6(Dialect):
                     distinct_expr_clone.set("expressions", [expr_1.expressions[0]])
                     expr_1 = distinct_expr_clone
 
-            # Generate SQL using STRING_AGG/LISTAGG, with separator or default '-'
-            return self.func("STRING_AGG", expr_1, separator or exp.Literal.string('-'))
+            # Generate SQL using STRING_AGG/LISTAGG, with separator or default ''
+            return self.func("LISTAGG", expr_1, separator or exp.Literal.string(''))
 
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
