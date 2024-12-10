@@ -28,7 +28,7 @@ from sqlglot.dialects.dialect import (
     no_make_interval_sql,
 )
 from sqlglot.generator import unsupported_args
-from sqlglot.helper import flatten, is_float, is_int, seq_get, apply_index_offset
+from sqlglot.helper import flatten, is_float, is_int, seq_get
 from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
@@ -378,6 +378,8 @@ class Snowflake(Dialect):
             "BIT_XOR": binary_from_function(exp.BitwiseXor),
             "BITOR": binary_from_function(exp.BitwiseOr),
             "BIT_OR": binary_from_function(exp.BitwiseOr),
+            "BITNOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
+            "BIT_NOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BOOLXOR": binary_from_function(exp.Xor),
             "DATE": _build_datetime("DATE", exp.DataType.Type.DATE),
             "DATE_TRUNC": _date_trunc_to_time,
@@ -852,6 +854,7 @@ class Snowflake(Dialect):
             ),
             exp.BitwiseXor: rename_func("BITXOR"),
             exp.BitwiseOr: rename_func("BITOR"),
+            exp.BitwiseNot: lambda self, e: self.func("BITNOT", e.this),
             exp.Create: transforms.preprocess([_flatten_structured_types_unless_iceberg]),
             exp.DateAdd: date_delta_sql("DATEADD"),
             exp.DateDiff: date_delta_sql("DATEDIFF"),
