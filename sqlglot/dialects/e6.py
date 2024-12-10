@@ -722,6 +722,7 @@ class E6(Dialect):
             "CHARINDEX": locate_to_strposition,
             "CHAR_LENGTH": exp.Length.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
+            "CONTAINS_SUBSTR": exp.Contains.from_arg_list,
             "CONVERT_TIMEZONE": _build_convert_timezone,
             "CURRENT_DATE": exp.CurrentDate.from_arg_list,
             "CURRENT_TIMESTAMP": exp.CurrentTimestamp.from_arg_list,
@@ -1260,7 +1261,6 @@ class E6(Dialect):
             # Map the function names that need to be rewritten with same order of arguments
             function_mapping_normal = {
                 "REGEXP_INSTR": "INSTR",
-                "CONTAINS": "CONTAINS_SUBSTR"
             }
             # Extract the function name from the expression
             function_name = self.sql(expression, "this")
@@ -1349,6 +1349,7 @@ class E6(Dialect):
             exp.BitwiseRightShift: lambda self, e: self.func("SHIFTRIGHT", e.this, e.expression),
             exp.BitwiseXor: lambda self, e: self.func("BITWISE_XOR", e.this, e.expression),
             exp.Bracket: bracket_sql,
+            exp.Contains: rename_func("CONTAINS_SUBSTR"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.Date: lambda self, e: self.func("DATE", e.this),
