@@ -1155,7 +1155,7 @@ class E6(Dialect):
             lambda_expr = f"{alias} -> {self.sql(cond)}"
             return f"FILTER_ARRAY({self.sql(expression.this)}, {lambda_expr})"
 
-        def unnest_sql(self, expression: exp.Explode) -> str:
+        def explode_sql(self, expression: exp.Explode) -> str:
             # Extract array expressions
             array_expr = expression.args.get("expressions")
             if expression.this:
@@ -1373,7 +1373,7 @@ class E6(Dialect):
             exp.DayOfMonth: rename_func("DAYS"),
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
-            exp.Explode: unnest_sql,
+            exp.Explode: explode_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
             exp.FromTimeZone: lambda self, e: self.func(
