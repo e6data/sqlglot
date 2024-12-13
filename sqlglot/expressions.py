@@ -6377,7 +6377,7 @@ class Reduce(Func):
 
 
 class RegexpCount(Func):
-    _sql_names= ["REGEXP_COUNT"]
+    _sql_names = ["REGEXP_COUNT"]
     arg_types = {"this": True, "expression": True}
 
 
@@ -6401,6 +6401,7 @@ class RegexpExtractAll(Func):
         "parameters": False,
         "group": False,
     }
+
 
 class RegexpReplace(Func):
     arg_types = {
