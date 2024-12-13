@@ -216,11 +216,7 @@ def _build_arraySlice(args: list) -> exp.ArraySlice:
         raise ValueError("SLICE function requires a valid 'to' argument.")
 
     # Construct the ArraySlice expression
-    return exp.ArraySlice(
-        this=this,
-        fromIndex=from_index,
-        to=to_index + from_index
-    )
+    return exp.ArraySlice(this=this, fromIndex=from_index, to=to_index + from_index)
 
 
 class Presto(Dialect):

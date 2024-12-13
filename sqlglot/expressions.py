@@ -6353,7 +6353,7 @@ class Reduce(Func):
 
 
 class RegexpCount(Func):
-    _sql_names= ["REGEXP_COUNT"]
+    _sql_names = ["REGEXP_COUNT"]
     arg_types = {"this": True, "expression": True}
 
 
@@ -6377,6 +6377,7 @@ class RegexpExtractAll(Func):
         "parameters": False,
         "group": False,
     }
+
 
 class RegexpReplace(Func):
     arg_types = {
@@ -6464,6 +6465,8 @@ class Split(Func):
 # https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.split_part.html
 class SplitPart(Func):
     arg_types = {"this": True, "delimiter": True, "part_index": True}
+
+
 class Substring(Func):
     _sql_names = ["SUBSTRING", "SUBSTR"]
     arg_types = {"this": True, "start": False, "length": False}
