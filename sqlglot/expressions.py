@@ -461,7 +461,7 @@ class Expression(metaclass=_Expression):
             The parent node.
         """
         ancestor = self.parent
-        while ancestor and not isinstance(ancestor, *expression_types):
+        while ancestor and not isinstance(ancestor, expression_types):
             ancestor = ancestor.parent
         return ancestor  # type: ignore
 
