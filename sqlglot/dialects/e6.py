@@ -1944,6 +1944,9 @@ class E6(Dialect):
             exp.BitwiseRightShift: lambda self, e: self.func("SHIFTRIGHT", e.this, e.expression),
             exp.BitwiseXor: lambda self, e: self.func("BITWISE_XOR", e.this, e.expression),
             exp.Bracket: bracket_sql,
+            # We mapped this believing that for most of the cases,
+            # CONCAT function in other dialects would mostly use for ARRAY concatenation
+            exp.Concat: rename_func("ARRAY_CONCAT"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.Date: lambda self, e: self.func("DATE", e.this),
