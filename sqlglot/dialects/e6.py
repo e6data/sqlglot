@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typing as t
 
-
 from sqlglot import exp, generator, parser, tokens
 from sqlglot.dialects.dialect import (
     Dialect,
@@ -20,7 +19,6 @@ from sqlglot.dialects.dialect import (
     datestrtodate_sql,
     trim_sql,
 )
-from sqlglot.expressions import RegexpExtract
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
 
 if t.TYPE_CHECKING:
@@ -258,7 +256,7 @@ def _build_datetime_for_DT(args: t.List) -> exp.AtTimeZone:
     return exp.AtTimeZone(this=seq_get(args, 0), zone=seq_get(args, 1))
 
 
-def _build_regexp_extract(args: t.List) -> RegexpExtract:
+def _build_regexp_extract(args: t.List) -> exp.RegexpExtract:
     expr = seq_get(args, 0)
     pattern = seq_get(args, 1)
 
@@ -268,6 +266,88 @@ def _build_regexp_extract(args: t.List) -> RegexpExtract:
     #     raise ValueError("regexp_extract only supports integer and string datatypes")
 
     return exp.RegexpExtract(this=expr, expression=pattern)
+
+
+def _parse_filter_array(args: t.List) -> exp.ArrayFilter:
+    """
+    Parses the FILTER_ARRAY function, ensuring that the lambda expression
+    does not contain aggregate functions, as they are not supported in this context.
+
+    TODO:: Need to discuss with Adithya, how we have tested this function & why we have passed `self` in the
+            `seq_get` functions. It look incorrect to me
+        I saw this type of pattern in methods of parser class. self is happening to be a list of args that are being sent.
+         In order to get 1 arg, 2nd arg i am using `seq_get`. I donot know exactly why self is being list of two arguments. Need to deep dive on that.
+
+    What This Function Does
+
+        1.	Purpose:
+            •	Parses a FILTER_ARRAY SQL function.
+            •	Ensures that the lambda expression used in the FILTER_ARRAY does not contain aggregate functions, as these are not supported.
+        2.	Key Logic:
+            •	Extracts the array and lambda expressions from the arguments.
+            •	Recursively checks if the lambda expression or its children contain any aggregate functions.
+            •	Raises an error if aggregates are found; otherwise, it constructs and returns an ArrayFilter expression.
+        3.	Why Check for Aggregates?
+            •	Certain SQL dialects or use cases may not allow aggregate functions (e.g., SUM, MAX) inside lambda functions used in filter contexts. This ensures compliance with these rules.
+
+    Example Usage
+
+    Input SQL:
+
+    FILTER_ARRAY(my_array, x -> x > 5)
+
+    Process:
+        1.	Extract Components:
+            •	my_array is the array expression.
+            •	x -> x > 5 is the lambda expression.
+        2.	Check for Aggregates:
+            •	The lambda expression (x > 5) is inspected to ensure it doesn’t include aggregate functions like SUM(x) or MAX(x).
+        3.	Return Value:
+            •	If no aggregates are found, the function returns an ArrayFilter object equivalent to:
+
+    exp.ArrayFilter(this=my_array, expression=lambda_expr)
+
+    """
+
+    def contains_aggregate(node: exp.Expression) -> bool:
+        """
+        Recursively checks if the given node or any of its children
+        contain an aggregate function.
+        """
+        if isinstance(node, exp.AggFunc):
+            return True
+
+        if not isinstance(node, exp.Expression):
+            return False
+
+        # Recursively check all child nodes.
+        return any(contains_aggregate(child) for child in node.args.values())
+
+    # Retrieve the array expression and the lambda expression from the arguments.
+    array_expr = seq_get(args, 0)  # TODO:: Need to test this
+    lambda_expr = seq_get(args, 1)  # TODO:: Need to test this
+
+    if lambda_expr is None:
+        raise ValueError("Lambda expression must be provided")
+
+    # Get the root node of the lambda expression.
+    root_node = lambda_expr.args.get("this")
+
+    # If the lambda expression contains an aggregate function, raise a ValueError.
+    if contains_aggregate(root_node):
+        raise ValueError(
+            "Lambda expressions in filter functions are not supported in 'IN' clause or on aggregate functions"
+        )
+
+    # Return an ArrayFilter expression with the parsed array and lambda expressions.
+    return exp.ArrayFilter(this=array_expr, expression=lambda_expr)
+
+
+def _build_regexp_count(args: t.List) -> exp.Anonymous | exp.RegexpCount:
+    if len(args) == 2:
+        return exp.RegexpCount(this=seq_get(args, 0), expression=seq_get(args, 1))
+    else:
+        return exp.Anonymous(this="REGEXP_COUNT", expressions=args)
 
 
 def format_time_for_parsefunctions(expression):
@@ -1212,80 +1292,6 @@ class E6(Dialect):
 
             return cast_expression
 
-        def _parse_filter_array(self, args: t.List) -> exp.ArrayFilter:
-            """
-            Parses the FILTER_ARRAY function, ensuring that the lambda expression
-            does not contain aggregate functions, as they are not supported in this context.
-
-            TODO:: Need to discuss with Adithya, how we have tested this function & why we have passed `self` in the
-                    `seq_get` functions. It look incorrect to me
-                I saw this type of pattern in methods of parser class. self is happening to be a list of args that are being sent.
-                 In order to get 1 arg, 2nd arg i am using `seq_get`. I donot know exactly why self is being list of two arguments. Need to deep dive on that.
-
-            What This Function Does
-
-                1.	Purpose:
-                    •	Parses a FILTER_ARRAY SQL function.
-                    •	Ensures that the lambda expression used in the FILTER_ARRAY does not contain aggregate functions, as these are not supported.
-                2.	Key Logic:
-                    •	Extracts the array and lambda expressions from the arguments.
-                    •	Recursively checks if the lambda expression or its children contain any aggregate functions.
-                    •	Raises an error if aggregates are found; otherwise, it constructs and returns an ArrayFilter expression.
-                3.	Why Check for Aggregates?
-                    •	Certain SQL dialects or use cases may not allow aggregate functions (e.g., SUM, MAX) inside lambda functions used in filter contexts. This ensures compliance with these rules.
-
-            Example Usage
-
-            Input SQL:
-
-            FILTER_ARRAY(my_array, x -> x > 5)
-
-            Process:
-                1.	Extract Components:
-                    •	my_array is the array expression.
-                    •	x -> x > 5 is the lambda expression.
-                2.	Check for Aggregates:
-                    •	The lambda expression (x > 5) is inspected to ensure it doesn’t include aggregate functions like SUM(x) or MAX(x).
-                3.	Return Value:
-                    •	If no aggregates are found, the function returns an ArrayFilter object equivalent to:
-
-            exp.ArrayFilter(this=my_array, expression=lambda_expr)
-
-            """
-
-            def contains_aggregate(node: exp.Expression) -> bool:
-                """
-                Recursively checks if the given node or any of its children
-                contain an aggregate function.
-                """
-                if isinstance(node, exp.AggFunc):
-                    return True
-
-                if not isinstance(node, exp.Expression):
-                    return False
-
-                # Recursively check all child nodes.
-                return any(contains_aggregate(child) for child in node.args.values())
-
-            # Retrieve the array expression and the lambda expression from the arguments.
-            array_expr = seq_get(args, 0)  # TODO:: Need to test this
-            lambda_expr = seq_get(args, 1)  # TODO:: Need to test this
-
-            if lambda_expr is None:
-                raise ValueError("Lambda expression must be provided")
-
-            # Get the root node of the lambda expression.
-            root_node = lambda_expr.args.get("this")
-
-            # If the lambda expression contains an aggregate function, raise a ValueError.
-            if contains_aggregate(root_node):
-                raise ValueError(
-                    "Lambda expressions in filter functions are not supported in 'IN' clause or on aggregate functions"
-                )
-
-            # Return an ArrayFilter expression with the parsed array and lambda expressions.
-            return exp.ArrayFilter(this=array_expr, expression=lambda_expr)
-
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list,
@@ -1364,6 +1370,7 @@ class E6(Dialect):
             "PARSE_TIMESTAMP": _build_formatted_time_with_or_without_zone(exp.StrToTime, "E6"),
             "POWER": exp.Pow.from_arg_list,
             "REGEXP_CONTAINS": exp.RegexpLike.from_arg_list,
+            "REGEXP_COUNT": _build_regexp_count,
             "REGEXP_EXTRACT": _build_regexp_extract,
             "REGEXP_LIKE": exp.RegexpLike.from_arg_list,
             "REGEXP_REPLACE": lambda args: exp.RegexpReplace(
@@ -1618,7 +1625,7 @@ class E6(Dialect):
                 str: The transformed time format string, or None if no format string is found.
             """
             # Check if the expression is a literal value
-            # TODO:: Is this `if` condition extra, do we really reuire it
+            # TODO:: Is this `if` condition extra, do we really require it
             # Yes we require this. Cuz for some cases what happens is the format arg will be a literal node and can be accessed using expression.this.
             # But this is not the case for all. For some functions what happens is the format part comes as `format` arg but not as `this`, this is due to declarations of those functions in other dialects
             # So as to acknowledge both cases we need this if.
