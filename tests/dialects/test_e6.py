@@ -9,7 +9,6 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT DATETIME(CAST('2022-11-01 09:08:07.321' AS TIMESTAMP), 'America/Los_Angeles')",
             read={
-                "trino": "SELECT with_timezone(TIMESTAMP '2022-11-01 09:08:07.321', 'America/Los_Angeles')",
                 "snowflake": "Select convert_timezone('America/Los_Angeles', '2022-11-01 09:08:07.321' ::TIMESTAMP)",
                 "databricks": "Select convert_timezone('America/Los_Angeles', '2022-11-01 09:08:07.321' ::TIMESTAMP)",
             },

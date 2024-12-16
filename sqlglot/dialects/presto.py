@@ -292,7 +292,6 @@ class Presto(Dialect):
             "BITWISE_LEFT_SHIFT": binary_from_function(exp.BitwiseLeftShift),
             "CARDINALITY": exp.ArraySize.from_arg_list,
             "CONTAINS": exp.ArrayContains.from_arg_list,
-            "CONCAT": exp.ArrayConcat.from_arg_list,
             "DATE_ADD": lambda args: exp.DateAdd(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
