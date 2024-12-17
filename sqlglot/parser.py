@@ -332,7 +332,9 @@ class Parser(metaclass=_Parser):
         TokenType.TIMESTAMPLTZ,
         TokenType.TIMESTAMPNTZ,
         TokenType.DATETIME,
+        TokenType.DATETIME2,
         TokenType.DATETIME64,
+        TokenType.SMALLDATETIME,
         TokenType.DATE,
         TokenType.DATE32,
         TokenType.INT4RANGE,
@@ -586,6 +588,7 @@ class Parser(metaclass=_Parser):
         TokenType.INSERT,
         TokenType.LIKE,
         TokenType.MERGE,
+        TokenType.NEXT,
         TokenType.OFFSET,
         TokenType.PRIMARY_KEY,
         TokenType.RANGE,
@@ -774,7 +777,8 @@ class Parser(metaclass=_Parser):
         exp.Sort: lambda self: self._parse_sort(exp.Sort, TokenType.SORT_BY),
         exp.Table: lambda self: self._parse_table_parts(),
         exp.TableAlias: lambda self: self._parse_table_alias(),
-        exp.When: lambda self: seq_get(self._parse_when_matched(), 0),
+        exp.Tuple: lambda self: self._parse_value(),
+        exp.Whens: lambda self: self._parse_when_matched(),
         exp.Where: lambda self: self._parse_where(),
         exp.Window: lambda self: self._parse_named_window(),
         exp.With: lambda self: self._parse_with(),
@@ -1107,7 +1111,6 @@ class Parser(metaclass=_Parser):
             exp.ConnectByRoot, this=self._parse_column()
         ),
         "IF": lambda self: self._parse_if(),
-        "NEXT": lambda self: self._parse_next_value_for(),
     }
 
     INVALID_FUNC_NAME_TOKENS = {
@@ -1140,6 +1143,11 @@ class Parser(metaclass=_Parser):
         "TRIM": lambda self: self._parse_trim(),
         "TRY_CAST": lambda self: self._parse_cast(False, safe=True),
         "TRY_CONVERT": lambda self: self._parse_convert(False, safe=True),
+        "XMLELEMENT": lambda self: self.expression(
+            exp.XMLElement,
+            this=self._match_text_seq("NAME") and self._parse_id_var(),
+            expressions=self._match(TokenType.COMMA) and self._parse_csv(self._parse_expression),
+        ),
     }
 
     QUERY_MODIFIER_PARSERS = {
@@ -2946,8 +2954,13 @@ class Parser(metaclass=_Parser):
         )
 
     def _parse_value(self) -> t.Optional[exp.Tuple]:
+        def _parse_value_expression() -> t.Optional[exp.Expression]:
+            if self.dialect.SUPPORTS_VALUES_DEFAULT and self._match(TokenType.DEFAULT):
+                return exp.var(self._prev.text.upper())
+            return self._parse_expression()
+
         if self._match(TokenType.L_PAREN):
-            expressions = self._parse_csv(self._parse_expression)
+            expressions = self._parse_csv(_parse_value_expression)
             self._match_r_paren()
             return self.expression(exp.Tuple, expressions=expressions)
 
@@ -4607,14 +4620,14 @@ class Parser(metaclass=_Parser):
             this = exp.Literal.string(this.to_py())
         elif this and this.is_string:
             parts = exp.INTERVAL_STRING_RE.findall(this.name)
-            if len(parts) == 1:
-                if unit:
-                    # Unconsume the eagerly-parsed unit, since the real unit was part of the string
-                    self._retreat(self._index - 1)
+            if parts and unit:
+                # Unconsume the eagerly-parsed unit, since the real unit was part of the string
+                unit = None
+                self._retreat(self._index - 1)
 
+            if len(parts) == 1:
                 this = exp.Literal.string(parts[0][0])
                 unit = self.expression(exp.Var, this=parts[0][1].upper())
-
         if self.INTERVAL_SPANS and self._match_text_seq("TO"):
             unit = self.expression(
                 exp.IntervalSpan, this=unit, expression=self._parse_var(any_token=True, upper=True)
@@ -5343,21 +5356,24 @@ class Parser(metaclass=_Parser):
                 functions = self.FUNCTIONS
 
             function = functions.get(upper)
+            known_function = function and not anonymous
 
-            alias = upper in self.FUNCTIONS_WITH_ALIASED_ARGS
+            alias = not known_function or upper in self.FUNCTIONS_WITH_ALIASED_ARGS
             args = self._parse_csv(lambda: self._parse_lambda(alias=alias))
 
-            if alias:
+            if alias and known_function:
                 args = self._kv_to_prop_eq(args)
 
-            if function and not anonymous:
-                if "dialect" in function.__code__.co_varnames:
-                    func = function(args, dialect=self.dialect)
+            if known_function:
+                func_builder = t.cast(t.Callable, function)
+
+                if "dialect" in func_builder.__code__.co_varnames:
+                    func = func_builder(args, dialect=self.dialect)
                 else:
-                    func = function(args)
+                    func = func_builder(args)
 
                 func = self.validate_expression(func, args)
-                if not self.dialect.NORMALIZE_FUNCTIONS:
+                if self.dialect.PRESERVE_ORIGINAL_NAMES:
                     func.meta["name"] = this
 
                 this = func
@@ -6722,7 +6738,9 @@ class Parser(metaclass=_Parser):
 
     def _parse_select_or_expression(self, alias: bool = False) -> t.Optional[exp.Expression]:
         return self._parse_select() or self._parse_set_operations(
-            self._parse_expression() if alias else self._parse_assignment()
+            self._parse_alias(self._parse_assignment(), explicit=True)
+            if alias
+            else self._parse_assignment()
         )
 
     def _parse_ddl_select(self) -> t.Optional[exp.Expression]:
@@ -7002,11 +7020,11 @@ class Parser(metaclass=_Parser):
             this=target,
             using=using,
             on=on,
-            expressions=self._parse_when_matched(),
+            whens=self._parse_when_matched(),
             returning=self._parse_returning(),
         )
 
-    def _parse_when_matched(self) -> t.List[exp.When]:
+    def _parse_when_matched(self) -> exp.Whens:
         whens = []
 
         while self._match(TokenType.WHEN):
@@ -7055,7 +7073,7 @@ class Parser(metaclass=_Parser):
                     then=then,
                 )
             )
-        return whens
+        return self.expression(exp.Whens, expressions=whens)
 
     def _parse_show(self) -> t.Optional[exp.Expression]:
         parser = self._find_parser(self.SHOW_PARSERS, self.SHOW_TRIE)
@@ -7160,7 +7178,6 @@ class Parser(metaclass=_Parser):
             while True:
                 key = self._parse_id_var()
                 value = self._parse_primary()
-
                 if not key and value is None:
                     break
                 settings.append(self.expression(exp.DictSubProperty, this=key, value=value))

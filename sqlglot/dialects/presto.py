@@ -189,6 +189,36 @@ def _date_delta_sql(
     return _delta_sql
 
 
+def _build_arraySlice(args: list) -> exp.ArraySlice:
+    """
+    Parses arguments for the SLICE function and constructs an ArraySlice expression.
+
+    Args:
+        args (list): List of arguments passed to the SLICE function.
+
+    Returns:
+        exp.ArraySlice: The constructed ArraySlice expression.
+
+    Raises:
+        ValueError: If required arguments are missing.
+    """
+    this = seq_get(args, 0)
+    from_index = seq_get(args, 1)
+    to_index = seq_get(args, 2)
+
+    if this is None:
+        raise ValueError("SLICE function requires a valid array to slice ('this').")
+
+    if from_index is None:
+        raise ValueError("SLICE function requires a valid 'fromIndex' argument.")
+
+    if to_index is None:
+        raise ValueError("SLICE function requires a valid 'to' argument.")
+
+    # Construct the ArraySlice expression
+    return exp.ArraySlice(this=this, fromIndex=from_index, to=to_index + from_index)
+
+
 class Presto(Dialect):
     INDEX_OFFSET = 1
     NULL_ORDERING = "nulls_are_last"
@@ -198,6 +228,7 @@ class Presto(Dialect):
     TYPED_DIVISION = True
     TABLESAMPLE_SIZE_IS_PERCENT = True
     LOG_BASE_FIRST: t.Optional[bool] = None
+    SUPPORTS_VALUES_DEFAULT = False
 
     TIME_MAPPING = MySQL.TIME_MAPPING
 
@@ -261,7 +292,6 @@ class Presto(Dialect):
             "BITWISE_LEFT_SHIFT": binary_from_function(exp.BitwiseLeftShift),
             "CARDINALITY": exp.ArraySize.from_arg_list,
             "CONTAINS": exp.ArrayContains.from_arg_list,
-            "CONCAT": exp.ArrayConcat.from_arg_list,
             "DATE_ADD": lambda args: exp.DateAdd(
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
@@ -294,11 +324,7 @@ class Presto(Dialect):
             "ROW": exp.Struct.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
-            "SLICE": lambda args: exp.ArraySlice(
-                this=seq_get(args, 0),
-                fromIndex=seq_get(args, 1),
-                to=seq_get(args, 2) + seq_get(args, 1)
-            ),
+            "SLICE": _build_arraySlice,
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
             "STRPOS": lambda args: exp.StrPosition(
@@ -310,7 +336,6 @@ class Presto(Dialect):
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
             "WEEK_OF_YEAR": exp.WeekOfYear.from_arg_list,
-            "WITH_TIMEZONE": lambda args: exp.AtTimeZone(this=seq_get(args, 0), zone=seq_get(args, 1)),
             "MD5": exp.MD5Digest.from_arg_list,
             "SHA256": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(256)),
             "SHA512": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(512)),
@@ -372,7 +397,9 @@ class Presto(Dialect):
             exp.ArrayAny: rename_func("ANY_MATCH"),
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayContains: rename_func("CONTAINS"),
-            exp.ArraySlice: lambda self, e: self.func("SLICE", e.this, e.fromIndex, e.to-e.fromIndex),
+            exp.ArraySlice: lambda self, e: self.func(
+                "SLICE", e.this, e.fromIndex, e.to - e.fromIndex
+            ),
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArrayUniqueAgg: rename_func("SET_AGG"),
             exp.AtTimeZone: rename_func("AT_TIMEZONE"),
@@ -389,6 +416,7 @@ class Presto(Dialect):
             exp.Cast: transforms.preprocess([transforms.epoch_cast_to_ts]),
             exp.CurrentTime: lambda *_: "CURRENT_TIME",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
+            exp.CurrentUser: lambda *_: "CURRENT_USER",
             exp.DateAdd: _date_delta_sql("DATE_ADD"),
             exp.DateDiff: lambda self, e: self.func(
                 "DATE_DIFF", unit_to_str(e), e.expression, e.this

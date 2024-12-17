@@ -165,6 +165,7 @@ class ClickHouse(Dialect):
     SAFE_DIVISION = True
     LOG_BASE_FIRST: t.Optional[bool] = None
     FORCE_EARLY_ALIAS_REF_EXPANSION = True
+    PRESERVE_ORIGINAL_NAMES = True
 
     # https://github.com/ClickHouse/ClickHouse/issues/33935#issue-1112165779
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_SENSITIVE
@@ -883,6 +884,8 @@ class ClickHouse(Dialect):
             exp.DataType.Type.BIGINT: "Int64",
             exp.DataType.Type.DATE32: "Date32",
             exp.DataType.Type.DATETIME: "DateTime",
+            exp.DataType.Type.DATETIME2: "DateTime",
+            exp.DataType.Type.SMALLDATETIME: "DateTime",
             exp.DataType.Type.DATETIME64: "DateTime64",
             exp.DataType.Type.DECIMAL: "Decimal",
             exp.DataType.Type.DECIMAL32: "Decimal32",

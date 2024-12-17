@@ -354,7 +354,7 @@ class TestPresto(Validator):
             },
         )
         self.validate_all(
-            "((DAY_OF_WEEK(CAST(TRY_CAST('2012-08-08 01:00:00' AS TIMESTAMP) AS DATE)) % 7) + 1)",
+            "((DAY_OF_WEEK(CAST(CAST(TRY_CAST('2012-08-08 01:00:00' AS TIMESTAMP WITH TIME ZONE) AS TIMESTAMP) AS DATE)) % 7) + 1)",
             read={
                 "spark": "DAYOFWEEK(CAST('2012-08-08 01:00:00' AS TIMESTAMP))",
             },
@@ -406,7 +406,7 @@ class TestPresto(Validator):
             },
         )
         self.validate_all(
-            "SELECT AT_TIMEZONE(CAST('2012-10-31 00:00' AS TIMESTAMP), 'America/Sao_Paulo')",
+            "SELECT AT_TIMEZONE(CAST(CAST('2012-10-31 00:00' AS TIMESTAMP WITH TIME ZONE) AS TIMESTAMP), 'America/Sao_Paulo')",
             read={
                 "spark": "SELECT FROM_UTC_TIMESTAMP(TIMESTAMP '2012-10-31 00:00', 'America/Sao_Paulo')",
             },
@@ -1071,6 +1071,18 @@ class TestPresto(Validator):
                 "databricks": "REGEXP_EXTRACT('abc', '(a)(b)(c)', 0)",
             },
         )
+        self.validate_all(
+            "CURRENT_USER",
+            read={
+                "presto": "CURRENT_USER",
+                "trino": "CURRENT_USER",
+                "snowflake": "CURRENT_USER()",  # Although the ANSI standard is CURRENT_USER
+            },
+            write={
+                "trino": "CURRENT_USER",
+                "snowflake": "CURRENT_USER()",
+            },
+        )
 
     def test_encode_decode(self):
         self.validate_identity("FROM_UTF8(x, y)")
@@ -1191,7 +1203,8 @@ MATCH_RECOGNIZE (
   DEFINE
     B AS totalprice < PREV(totalprice),
     C AS totalprice > PREV(totalprice) AND totalprice <= A.totalprice,
-    D AS totalprice > PREV(totalprice)
+    D AS totalprice > PREV(totalprice),
+    E AS MAX(foo) >= NEXT(bar)
 )""",
             pretty=True,
         )

@@ -21,27 +21,6 @@ class TestSnowflake(Validator):
         expr.selects[0].assert_is(exp.AggFunc)
         self.assertEqual(expr.sql(dialect="snowflake"), "SELECT APPROX_TOP_K(C4, 3, 5) FROM t")
 
-        self.assertEqual(
-            exp.select(exp.Explode(this=exp.column("x")).as_("y", quoted=True)).sql(
-                "snowflake", pretty=True
-            ),
-            """SELECT
-  IFF(_u.pos = _u_2.pos_2, _u_2."y", NULL) AS "y"
-FROM TABLE(FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (
-  GREATEST(ARRAY_SIZE(x)) - 1
-) + 1))) AS _u(seq, key, path, index, pos, this)
-CROSS JOIN TABLE(FLATTEN(INPUT => x)) AS _u_2(seq, key, path, pos_2, "y", this)
-WHERE
-  _u.pos = _u_2.pos_2
-  OR (
-    _u.pos > (
-      ARRAY_SIZE(x) - 1
-    ) AND _u_2.pos_2 = (
-      ARRAY_SIZE(x) - 1
-    )
-  )""",
-        )
-
         self.validate_identity("exclude := [foo]")
         self.validate_identity("SELECT CAST([1, 2, 3] AS VECTOR(FLOAT, 3))")
         self.validate_identity("SELECT CONNECT_BY_ROOT test AS test_column_alias")
@@ -124,6 +103,7 @@ WHERE
         self.validate_identity(
             "SELECT * FROM DATA AS DATA_L ASOF JOIN DATA AS DATA_R MATCH_CONDITION (DATA_L.VAL > DATA_R.VAL) ON DATA_L.ID = DATA_R.ID"
         )
+        self.validate_identity("TO_TIMESTAMP(col, fmt)")
         self.validate_identity(
             "CAST(x AS GEOGRAPHY)",
             "TO_GEOGRAPHY(x)",
@@ -671,6 +651,15 @@ WHERE
             },
         )
         self.validate_all(
+            "SELECT TO_TIMESTAMP(col, 'DD-MM-YYYY HH12:MI:SS') FROM t",
+            write={
+                "bigquery": "SELECT PARSE_TIMESTAMP('%d-%m-%Y %I:%M:%S', col) FROM t",
+                "duckdb": "SELECT STRPTIME(col, '%d-%m-%Y %I:%M:%S') FROM t",
+                "snowflake": "SELECT TO_TIMESTAMP(col, 'DD-mm-yyyy hh12:mi:ss') FROM t",
+                "spark": "SELECT TO_TIMESTAMP(col, 'dd-MM-yyyy hh:mm:ss') FROM t",
+            },
+        )
+        self.validate_all(
             "SELECT TO_TIMESTAMP(1659981729)",
             write={
                 "bigquery": "SELECT TIMESTAMP_SECONDS(1659981729)",
@@ -966,6 +955,15 @@ WHERE
                 "snowflake": "EDITDISTANCE(col1, col2, 3)",
             },
         )
+        self.validate_identity("SELECT BITOR(a, b)")
+        self.validate_identity("SELECT BIT_OR(a, b)", "SELECT BITOR(a, b)")
+        self.validate_identity("SELECT BITOR(a, b, 'LEFT')")
+        self.validate_identity("SELECT BITXOR(a, b, 'LEFT')")
+        self.validate_identity("SELECT BIT_XOR(a, b)", "SELECT BITXOR(a, b)")
+        self.validate_identity("SELECT BIT_XOR(a, b, 'LEFT')", "SELECT BITXOR(a, b, 'LEFT')")
+        self.validate_identity("SELECT BITSHIFTLEFT(a, 1)")
+        self.validate_identity("SELECT BIT_SHIFTLEFT(a, 1)", "SELECT BITSHIFTLEFT(a, 1)")
+        self.validate_identity("SELECT BIT_SHIFTRIGHT(a, 1)", "SELECT BITSHIFTRIGHT(a, 1)")
 
     def test_null_treatment(self):
         self.validate_all(
@@ -1441,6 +1439,9 @@ WHERE
             """CREATE OR REPLACE FUNCTION ibis_udfs.public.object_values("obj" OBJECT) RETURNS ARRAY LANGUAGE JAVASCRIPT STRICT AS ' return Object.values(obj) '"""
         )
         self.validate_identity(
+            "CREATE OR REPLACE TABLE TEST (SOME_REF DECIMAL(38, 0) NOT NULL FOREIGN KEY REFERENCES SOME_OTHER_TABLE (ID))"
+        )
+        self.validate_identity(
             "CREATE OR REPLACE FUNCTION my_udf(location OBJECT(city VARCHAR, zipcode DECIMAL(38, 0), val ARRAY(BOOLEAN))) RETURNS VARCHAR AS $$ SELECT 'foo' $$",
             "CREATE OR REPLACE FUNCTION my_udf(location OBJECT(city VARCHAR, zipcode DECIMAL(38, 0), val ARRAY(BOOLEAN))) RETURNS VARCHAR AS ' SELECT \\'foo\\' '",
         )
@@ -1479,11 +1480,18 @@ WHERE
                 "snowflake": "CREATE OR REPLACE TRANSIENT TABLE a (id INT)",
             },
         )
-
         self.validate_all(
             "CREATE TABLE a (b INT)",
             read={"teradata": "CREATE MULTISET TABLE a (b INT)"},
             write={"snowflake": "CREATE TABLE a (b INT)"},
+        )
+
+        self.validate_identity("CREATE TABLE a TAG (key1='value_1', key2='value_2')")
+        self.validate_all(
+            "CREATE TABLE a TAG (key1='value_1')",
+            read={
+                "snowflake": "CREATE TABLE a WITH TAG (key1='value_1')",
+            },
         )
 
         for action in ("SET", "DROP"):
@@ -1574,6 +1582,27 @@ WHERE
         )
 
     def test_flatten(self):
+        self.assertEqual(
+            exp.select(exp.Explode(this=exp.column("x")).as_("y", quoted=True)).sql(
+                "snowflake", pretty=True
+            ),
+            """SELECT
+  IFF(_u.pos = _u_2.pos_2, _u_2."y", NULL) AS "y"
+FROM TABLE(FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (
+  GREATEST(ARRAY_SIZE(x)) - 1
+) + 1))) AS _u(seq, key, path, index, pos, this)
+CROSS JOIN TABLE(FLATTEN(INPUT => x)) AS _u_2(seq, key, path, pos_2, "y", this)
+WHERE
+  _u.pos = _u_2.pos_2
+  OR (
+    _u.pos > (
+      ARRAY_SIZE(x) - 1
+    ) AND _u_2.pos_2 = (
+      ARRAY_SIZE(x) - 1
+    )
+  )""",
+        )
+
         self.validate_all(
             """
             select
@@ -1595,6 +1624,75 @@ WHERE
   dag_report.dag_id,
   CAST(f.value AS VARCHAR) AS operator
 FROM cs.telescope.dag_report, TABLE(FLATTEN(input => SPLIT(operators, ','))) AS f"""
+            },
+            pretty=True,
+        )
+        self.validate_all(
+            """
+            SELECT
+              uc.user_id,
+              uc.start_ts AS ts,
+              CASE
+                WHEN uc.start_ts::DATE >= '2023-01-01' AND uc.country_code IN ('US') AND uc.user_id NOT IN (
+                  SELECT DISTINCT
+                    _id
+                  FROM
+                    users,
+                    LATERAL FLATTEN(INPUT => PARSE_JSON(flags)) datasource
+                  WHERE datasource.value:name = 'something'
+                )
+                  THEN 'Sample1'
+                  ELSE 'Sample2'
+              END AS entity
+            FROM user_countries AS uc
+            LEFT JOIN (
+              SELECT user_id, MAX(IFF(service_entity IS NULL,1,0)) AS le_null
+              FROM accepted_user_agreements
+              GROUP BY 1
+            ) AS aua
+              ON uc.user_id = aua.user_id
+            """,
+            write={
+                "snowflake": """SELECT
+  uc.user_id,
+  uc.start_ts AS ts,
+  CASE
+    WHEN CAST(uc.start_ts AS DATE) >= '2023-01-01'
+    AND uc.country_code IN ('US')
+    AND uc.user_id <> ALL (
+      SELECT DISTINCT
+        _id
+      FROM users, LATERAL IFF(_u.pos = _u_2.pos_2, _u_2.entity, NULL) AS datasource(SEQ, KEY, PATH, INDEX, VALUE, THIS)
+      WHERE
+        GET_PATH(datasource.value, 'name') = 'something'
+    )
+    THEN 'Sample1'
+    ELSE 'Sample2'
+  END AS entity
+FROM user_countries AS uc
+LEFT JOIN (
+  SELECT
+    user_id,
+    MAX(IFF(service_entity IS NULL, 1, 0)) AS le_null
+  FROM accepted_user_agreements
+  GROUP BY
+    1
+) AS aua
+  ON uc.user_id = aua.user_id
+CROSS JOIN TABLE(FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (
+  GREATEST(ARRAY_SIZE(INPUT => PARSE_JSON(flags))) - 1
+) + 1))) AS _u(seq, key, path, index, pos, this)
+CROSS JOIN TABLE(FLATTEN(INPUT => PARSE_JSON(flags))) AS _u_2(seq, key, path, pos_2, entity, this)
+WHERE
+  _u.pos = _u_2.pos_2
+  OR (
+    _u.pos > (
+      ARRAY_SIZE(INPUT => PARSE_JSON(flags)) - 1
+    )
+    AND _u_2.pos_2 = (
+      ARRAY_SIZE(INPUT => PARSE_JSON(flags)) - 1
+    )
+  )""",
             },
             pretty=True,
         )
@@ -2270,29 +2368,3 @@ SINGLE = TRUE""",
         self.validate_identity("SELECT BITOR(a, b) FROM table")
 
         self.validate_identity("SELECT BIT_OR(a, b) FROM table", "SELECT BITOR(a, b) FROM table")
-
-    def test_bitnot_function(self):
-        self.validate_identity("SELECT BITNOT(a) FROM table")
-
-        # Test BITNOT negative number
-        self.validate_identity("SELECT BITNOT(-1) FROM table")
-
-        # Test BITNOT zero
-        self.validate_identity("SELECT BITNOT(0) FROM table")
-
-        # Test BITNOT large number
-        self.validate_identity("SELECT BITNOT(123456789) FROM table")
-
-        # Test null
-        self.validate_identity("SELECT BITNOT(NULL) FROM table")
-
-        # Test double
-        self.validate_identity("SELECT BITNOT(12.34) FROM table")
-
-        # Test string
-        self.validate_identity("SELECT BITNOT('abc') FROM table")
-
-    def test_bit_not_function(self):
-        self.validate_identity("SELECT BIT_NOT(a) FROM table", "SELECT BITNOT(a) FROM table")
-
-        self.validate_identity("SELECT BIT_NOT(-1) FROM table", "SELECT BITNOT(-1) FROM table")

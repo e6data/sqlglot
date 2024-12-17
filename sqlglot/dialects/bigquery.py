@@ -40,6 +40,11 @@ if t.TYPE_CHECKING:
 logger = logging.getLogger("sqlglot")
 
 
+JSON_EXTRACT_TYPE = t.Union[exp.JSONExtract, exp.JSONExtractScalar, exp.JSONExtractArray]
+
+DQUOTES_ESCAPING_JSON_FUNCTIONS = ("JSON_QUERY", "JSON_VALUE", "JSON_QUERY_ARRAY")
+
+
 def _derived_table_values_to_unnest(self: BigQuery.Generator, expression: exp.Values) -> str:
     if not expression.find_ancestor(exp.From, exp.Join):
         return self.values_sql(expression)
@@ -314,7 +319,7 @@ def _build_format_time(expr_type: t.Type[exp.Expression]) -> t.Callable[[t.List]
 
 def _build_contains_substring(args: t.List) -> exp.Contains | exp.Anonymous:
     if len(args) == 3:
-        return exp.Anonymous(this="CONTAINS_SUBSTRING", expressions=args)
+        return exp.Anonymous(this="CONTAINS_SUBSTR", expressions=args)
 
     # Lowercase the operands in case of transpilation, as exp.Contains
     # is case-sensitive on other dialects
@@ -322,6 +327,23 @@ def _build_contains_substring(args: t.List) -> exp.Contains | exp.Anonymous:
     expr = exp.Lower(this=seq_get(args, 1))
 
     return exp.Contains(this=this, expression=expr)
+
+
+def _json_extract_sql(self: BigQuery.Generator, expression: JSON_EXTRACT_TYPE) -> str:
+    name = (expression._meta and expression.meta.get("name")) or expression.sql_name()
+    upper = name.upper()
+
+    dquote_escaping = upper in DQUOTES_ESCAPING_JSON_FUNCTIONS
+
+    if dquote_escaping:
+        self._quote_json_path_key_using_brackets = False
+
+    sql = rename_func(upper)(self, expression)
+
+    if dquote_escaping:
+        self._quote_json_path_key_using_brackets = True
+
+    return sql
 
 
 class BigQuery(Dialect):
@@ -333,6 +355,7 @@ class BigQuery(Dialect):
     HEX_LOWERCASE = True
     FORCE_EARLY_ALIAS_REF_EXPANSION = True
     EXPAND_ALIAS_REFS_EARLY_ONLY_IN_GROUP_BY = True
+    PRESERVE_ORIGINAL_NAMES = True
 
     # https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#case_sensitivity
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
@@ -469,7 +492,7 @@ class BigQuery(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
-            "CONTAINS_SUBSTRING": _build_contains_substring,
+            "CONTAINS_SUBSTR": _build_contains_substring,
             "DATE": _build_date,
             "DATE_ADD": build_date_delta_with_interval(exp.DateAdd),
             "DATE_SUB": build_date_delta_with_interval(exp.DateSub),
@@ -566,6 +589,8 @@ class BigQuery(Dialect):
 
         NULL_TOKENS = {TokenType.NULL, TokenType.UNKNOWN}
 
+        DASHED_TABLE_PART_FOLLOW_TOKENS = {TokenType.DOT, TokenType.L_PAREN, TokenType.R_PAREN}
+
         STATEMENT_PARSERS = {
             **parser.Parser.STATEMENT_PARSERS,
             TokenType.ELSE: lambda self: self._parse_as_command(self._prev),
@@ -592,11 +617,13 @@ class BigQuery(Dialect):
             if isinstance(this, exp.Identifier):
                 table_name = this.name
                 while self._match(TokenType.DASH, advance=False) and self._next:
-                    text = ""
-                    while self._is_connected() and self._curr.token_type != TokenType.DOT:
+                    start = self._curr
+                    while self._is_connected() and not self._match_set(
+                        self.DASHED_TABLE_PART_FOLLOW_TOKENS, advance=False
+                    ):
                         self._advance()
-                        text += self._prev.text
-                    table_name += text
+
+                    table_name += self._find_sql(start, self._prev)
 
                 this = exp.Identifier(this=table_name, quoted=this.args.get("quoted"))
             elif isinstance(this, exp.Literal):
@@ -868,6 +895,9 @@ class BigQuery(Dialect):
             exp.ILike: no_ilike_sql,
             exp.IntDiv: rename_func("DIV"),
             exp.Int64: rename_func("INT64"),
+            exp.JSONExtract: _json_extract_sql,
+            exp.JSONExtractArray: _json_extract_sql,
+            exp.JSONExtractScalar: _json_extract_sql,
             exp.JSONFormat: rename_func("TO_JSON_STRING"),
             exp.Levenshtein: _levenshtein_sql,
             exp.Max: max_or_greatest,
@@ -1193,4 +1223,4 @@ class BigQuery(Dialect):
                 this = this.this
                 expr = expr.this
 
-            return self.func("CONTAINS_SUBSTRING", this, expr)
+            return self.func("CONTAINS_SUBSTR", this, expr)
