@@ -208,7 +208,6 @@ class TestE6(Validator):
             },
         )
 
-
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
