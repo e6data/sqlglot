@@ -18,7 +18,7 @@ def replace_struct_in_query(query):
     """
 
     # Define the regex pattern to match Struct(Struct(anything))
-    pattern = re.compile(r"Struct\s*\(\s*Struct\s*\(\s*([^\(\)]+)\s*\)\s*\)", re.IGNORECASE)
+    pattern = re.compile(r'Struct\s*\(\s*Struct\s*\(\s*([^\(\)]+)\s*\)\s*\)', re.IGNORECASE)
 
     # Function to perform the replacement
     def replace_match(match):

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import typing as t
 
+import sqlglot
+
 from sqlglot import exp, generator, parser, tokens
 from sqlglot.dialects.dialect import (
     Dialect,
@@ -14,10 +16,11 @@ from sqlglot.dialects.dialect import (
     locate_to_strposition,
     rename_func,
     unit_to_str,
+    regexp_replace_sql,
     approx_count_distinct_sql,
     timestrtotime_sql,
     datestrtodate_sql,
-    trim_sql,
+    trim_sql
 )
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
 
@@ -108,7 +111,7 @@ def _build_timestamp(args: t.List[exp.Expression]) -> exp.Expression:
 
 
 def _build_with_arg_as_text(
-    klass: t.Type[exp.Expression],
+        klass: t.Type[exp.Expression],
 ) -> t.Callable[[t.List[exp.Expression]], exp.Expression]:
     def _parse(args: t.List[exp.Expression]) -> exp.Expression:
         this = seq_get(args, 0)
@@ -138,7 +141,7 @@ def _build_from_unixtime_withunit(args: t.List[exp.Expression]) -> exp.Func:
 
 
 def _build_formatted_time_with_or_without_zone(
-    exp_class: t.Type[E], default: t.Optional[bool | str] = None
+        exp_class: t.Type[E], default: t.Optional[bool | str] = None
 ) -> t.Callable[[t.List], E]:
     """Helper used for time expressions with optional time zone.
 
@@ -396,7 +399,7 @@ class E6(Dialect):
         "m": "%-M",  # Single-digit minute
         "ss": "%S",  # Two-digit second
         "s": "%-S",  # Single-digit second
-        "E": "%a",  # Abbreviated weekday name
+        "E": "%a"  # Abbreviated weekday name
     }
 
     # Time mapping specific to parsing functions. This maps time format tokens from E6 to standard Python time formats.
@@ -439,11 +442,11 @@ class E6(Dialect):
         "'month'": "MONTH",
         "'year'": "YEAR",
         "'week'": "WEEK",
-        "'quarter'": "QUARTER",
+        "'quarter'": "QUARTER"
     }
 
     def convert_format_time(
-        self, expression: t.Optional[exp.Literal | exp.Expression]
+            self, expression: t.Optional[exp.Literal | exp.Expression]
     ) -> t.Optional[str]:
         """
         Converts a time format string from one dialect's representation to another using the TIME_MAPPING.
@@ -1460,7 +1463,7 @@ class E6(Dialect):
             exp.DataType.Type.TEXT: "VARCHAR",
             exp.DataType.Type.TINYTEXT: "VARCHAR",
             exp.DataType.Type.MEDIUMTEXT: "VARCHAR",
-            exp.DataType.Type.DECIMAL: "DECIMAL",
+            exp.DataType.Type.DECIMAL: "DECIMAL"
         }
 
         # TODO:: If the below functions is not required then it's better to remove it.
@@ -2172,5 +2175,5 @@ class E6(Dialect):
             **CAST_SUPPORTED_TYPE_MAPPING,
             exp.DataType.Type.JSON: "JSON",
             exp.DataType.Type.STRUCT: "STRUCT",
-            exp.DataType.Type.ARRAY: "ARRAY",
+            exp.DataType.Type.ARRAY: "ARRAY"
         }

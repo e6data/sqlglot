@@ -83,7 +83,6 @@ class Dialects(str, Enum):
     TSQL = "tsql"
     E6 = "E6"
 
-
 class NormalizationStrategy(str, AutoName):
     """Specifies the strategy according to which identifiers should be normalized."""
 
