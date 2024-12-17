@@ -297,6 +297,7 @@ class DuckDB(Dialect):
         return super().to_json_path(path)
 
     class Tokenizer(tokens.Tokenizer):
+        BYTE_STRINGS = [("e'", "'"), ("E'", "'")]
         HEREDOC_STRINGS = ["$"]
 
         HEREDOC_TAG_IS_IDENTIFIER = True
@@ -1021,3 +1022,12 @@ class DuckDB(Dialect):
             return self.func(
                 "REGEXP_EXTRACT", expression.this, expression.expression, group, params
             )
+
+        @unsupported_args("culture")
+        def numbertostr_sql(self, expression: exp.NumberToStr) -> str:
+            fmt = expression.args.get("format")
+            if fmt and fmt.is_int:
+                return self.func("FORMAT", f"'{{:,.{fmt.name}f}}'", expression.this)
+
+            self.unsupported("Only integer formats are supported by NumberToStr")
+            return self.function_fallback_sql(expression)

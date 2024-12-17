@@ -200,24 +200,7 @@ LANGUAGE js AS
         self.validate_identity("CAST(x AS NVARCHAR)", "CAST(x AS STRING)")
         self.validate_identity("CAST(x AS TIMESTAMPTZ)", "CAST(x AS TIMESTAMP)")
         self.validate_identity("CAST(x AS RECORD)", "CAST(x AS STRUCT)")
-        self.validate_all(
-            "EDIT_DISTANCE(col1, col2, max_distance => 3)",
-            write={
-                "bigquery": "EDIT_DISTANCE(col1, col2, max_distance => 3)",
-                "clickhouse": UnsupportedError,
-                "databricks": UnsupportedError,
-                "drill": UnsupportedError,
-                "duckdb": UnsupportedError,
-                "hive": UnsupportedError,
-                "postgres": "LEVENSHTEIN_LESS_EQUAL(col1, col2, 3)",
-                "presto": UnsupportedError,
-                "snowflake": "EDITDISTANCE(col1, col2, 3)",
-                "spark": UnsupportedError,
-                "spark2": UnsupportedError,
-                "sqlite": UnsupportedError,
-            },
-        )
-
+        self.validate_identity("SELECT * FROM x WHERE x.y >= (SELECT MAX(a) FROM b-c) - 20")
         self.validate_identity(
             "MERGE INTO dataset.NewArrivals USING (SELECT * FROM UNNEST([('microwave', 10, 'warehouse #1'), ('dryer', 30, 'warehouse #1'), ('oven', 20, 'warehouse #2')])) ON FALSE WHEN NOT MATCHED THEN INSERT ROW WHEN NOT MATCHED BY SOURCE THEN DELETE"
         )
@@ -332,6 +315,31 @@ LANGUAGE js AS
             "SELECT CAST(1 AS INT64)",
         )
 
+        self.validate_all(
+            "SELECT DATE_SUB(DATE '2008-12-25', INTERVAL 5 DAY)",
+            write={
+                "bigquery": "SELECT DATE_SUB(CAST('2008-12-25' AS DATE), INTERVAL '5' DAY)",
+                "duckdb": "SELECT CAST('2008-12-25' AS DATE) - INTERVAL '5' DAY",
+                "snowflake": "SELECT DATEADD(DAY, '5' * -1, CAST('2008-12-25' AS DATE))",
+            },
+        )
+        self.validate_all(
+            "EDIT_DISTANCE(col1, col2, max_distance => 3)",
+            write={
+                "bigquery": "EDIT_DISTANCE(col1, col2, max_distance => 3)",
+                "clickhouse": UnsupportedError,
+                "databricks": UnsupportedError,
+                "drill": UnsupportedError,
+                "duckdb": UnsupportedError,
+                "hive": UnsupportedError,
+                "postgres": "LEVENSHTEIN_LESS_EQUAL(col1, col2, 3)",
+                "presto": UnsupportedError,
+                "snowflake": "EDITDISTANCE(col1, col2, 3)",
+                "spark": UnsupportedError,
+                "spark2": UnsupportedError,
+                "sqlite": UnsupportedError,
+            },
+        )
         self.validate_all(
             "EDIT_DISTANCE(a, b)",
             write={
@@ -1575,14 +1583,6 @@ WHERE
             },
         )
         self.validate_all(
-            """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
-            write={
-                "bigquery": """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
-                "duckdb": """SELECT '{"class": {"students": []}}' -> '$.class'""",
-                "snowflake": """SELECT GET_PATH(PARSE_JSON('{"class": {"students": []}}'), 'class')""",
-            },
-        )
-        self.validate_all(
             """SELECT JSON_VALUE_ARRAY('{"arr": [1, "a"]}', '$.arr')""",
             write={
                 "bigquery": """SELECT JSON_VALUE_ARRAY('{"arr": [1, "a"]}', '$.arr')""",
@@ -1616,11 +1616,11 @@ WHERE
         )
 
         self.validate_identity(
-            "CONTAINS_SUBSTRING(a, b, json_scope => 'JSON_KEYS_AND_VALUES')"
+            "CONTAINS_SUBSTR(a, b, json_scope => 'JSON_KEYS_AND_VALUES')"
         ).assert_is(exp.Anonymous)
 
         self.validate_all(
-            """CONTAINS_SUBSTRING(a, b)""",
+            """CONTAINS_SUBSTR(a, b)""",
             read={
                 "": "CONTAINS(a, b)",
                 "spark": "CONTAINS(a, b)",
@@ -1636,7 +1636,7 @@ WHERE
                 "snowflake": "CONTAINS(LOWER(a), LOWER(b))",
                 "duckdb": "CONTAINS(LOWER(a), LOWER(b))",
                 "oracle": "CONTAINS(LOWER(a), LOWER(b))",
-                "bigquery": "CONTAINS_SUBSTRING(a, b)",
+                "bigquery": "CONTAINS_SUBSTR(a, b)",
             },
         )
 
@@ -2139,7 +2139,26 @@ OPTIONS (
                 },
             )
 
-    def test_json_extract_scalar(self):
+            self.validate_all(
+                f"SELECT SUM(f1) OVER (ORDER BY f2 {sort_order}) FROM t",
+                read={
+                    "": f"SELECT SUM(f1) OVER (ORDER BY f2 {sort_order} {null_order}) FROM t",
+                },
+                write={
+                    "bigquery": f"SELECT SUM(f1) OVER (ORDER BY f2 {sort_order}) FROM t",
+                },
+            )
+
+    def test_json_extract(self):
+        self.validate_all(
+            """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
+            write={
+                "bigquery": """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
+                "duckdb": """SELECT '{"class": {"students": []}}' -> '$.class'""",
+                "snowflake": """SELECT GET_PATH(PARSE_JSON('{"class": {"students": []}}'), 'class')""",
+            },
+        )
+
         for func in ("JSON_EXTRACT_SCALAR", "JSON_VALUE"):
             with self.subTest(f"Testing BigQuery's {func}"):
                 self.validate_all(
@@ -2150,25 +2169,47 @@ OPTIONS (
                     },
                 )
 
-            self.validate_all(
-                f"""SELECT {func}('{{"name": "Jakob", "age": "6"}}', '$.age')""",
-                write={
-                    "bigquery": f"""SELECT {func}('{{"name": "Jakob", "age": "6"}}', '$.age')""",
-                    "duckdb": """SELECT '{"name": "Jakob", "age": "6"}' ->> '$.age'""",
-                    "snowflake": """SELECT JSON_EXTRACT_PATH_TEXT('{"name": "Jakob", "age": "6"}', 'age')""",
-                },
+                sql = f"""SELECT {func}('{{"name": "Jakob", "age": "6"}}', '$.age')"""
+                self.validate_all(
+                    sql,
+                    write={
+                        "bigquery": sql,
+                        "duckdb": """SELECT '{"name": "Jakob", "age": "6"}' ->> '$.age'""",
+                        "snowflake": """SELECT JSON_EXTRACT_PATH_TEXT('{"name": "Jakob", "age": "6"}', 'age')""",
+                    },
+                )
+
+                self.assertEqual(
+                    self.parse_one(sql).sql("bigquery", normalize_functions="upper"), sql
+                )
+
+        # Test double quote escaping
+        for func in ("JSON_VALUE", "JSON_QUERY", "JSON_QUERY_ARRAY"):
+            self.validate_identity(
+                f"{func}(doc, '$. a b c .d')", f"""{func}(doc, '$." a b c ".d')"""
+            )
+
+        # Test single quote & bracket escaping
+        for func in ("JSON_EXTRACT", "JSON_EXTRACT_SCALAR", "JSON_EXTRACT_ARRAY"):
+            self.validate_identity(
+                f"{func}(doc, '$. a b c .d')", f"""{func}(doc, '$[\\' a b c \\'].d')"""
             )
 
     def test_json_extract_array(self):
         for func in ("JSON_QUERY_ARRAY", "JSON_EXTRACT_ARRAY"):
             with self.subTest(f"Testing BigQuery's {func}"):
+                sql = f"""SELECT {func}('{{"fruits": [1, "oranges"]}}', '$.fruits')"""
                 self.validate_all(
-                    f"""SELECT {func}('{{"fruits": [1, "oranges"]}}', '$.fruits')""",
+                    sql,
                     write={
-                        "bigquery": f"""SELECT {func}('{{"fruits": [1, "oranges"]}}', '$.fruits')""",
+                        "bigquery": sql,
                         "duckdb": """SELECT CAST('{"fruits": [1, "oranges"]}' -> '$.fruits' AS JSON[])""",
                         "snowflake": """SELECT TRANSFORM(GET_PATH(PARSE_JSON('{"fruits": [1, "oranges"]}'), 'fruits'), x -> PARSE_JSON(TO_JSON(x)))""",
                     },
+                )
+
+                self.assertEqual(
+                    self.parse_one(sql).sql("bigquery", normalize_functions="upper"), sql
                 )
 
     def test_unix_seconds(self):

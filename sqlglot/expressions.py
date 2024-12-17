@@ -31,6 +31,7 @@ from sqlglot.helper import (
     ensure_list,
     seq_get,
     subclasses,
+    to_bool,
 )
 from sqlglot.tokens import Token, TokenError
 
@@ -295,7 +296,7 @@ class Expression(metaclass=_Expression):
 
         return root
 
-    def copy(self):
+    def copy(self) -> Self:
         """
         Returns a deep copy of the expression.
         """
@@ -312,7 +313,7 @@ class Expression(metaclass=_Expression):
                     for kv in "".join(meta).split(","):
                         k, *v = kv.split("=")
                         value = v[0].strip() if v else True
-                        self.meta[k.strip()] = value
+                        self.meta[k.strip()] = to_bool(value)
 
                 if not prepend:
                     self.comments.append(comment)
@@ -459,7 +460,7 @@ class Expression(metaclass=_Expression):
             The parent node.
         """
         ancestor = self.parent
-        while ancestor and not isinstance(ancestor, *expression_types):
+        while ancestor and not isinstance(ancestor, expression_types):
             ancestor = ancestor.parent
         return ancestor  # type: ignore
 
@@ -1908,11 +1909,6 @@ class OnUpdateColumnConstraint(ColumnConstraintKind):
     pass
 
 
-# https://docs.snowflake.com/en/sql-reference/sql/create-table
-class TagColumnConstraint(ColumnConstraintKind):
-    arg_types = {"expressions": True}
-
-
 # https://docs.snowflake.com/en/sql-reference/sql/create-external-table#optional-parameters
 class TransformColumnConstraint(ColumnConstraintKind):
     pass
@@ -2117,7 +2113,7 @@ class Directory(Expression):
 
 class ForeignKey(Expression):
     arg_types = {
-        "expressions": True,
+        "expressions": False,
         "reference": False,
         "delete": False,
         "update": False,
@@ -2980,6 +2976,11 @@ class TemporaryProperty(Property):
 
 class SecureProperty(Property):
     arg_types = {}
+
+
+# https://docs.snowflake.com/en/sql-reference/sql/create-table
+class Tags(ColumnConstraintKind, Property):
+    arg_types = {"expressions": True}
 
 
 class TransformModelProperty(Property):
@@ -4346,6 +4347,7 @@ class DataType(Expression):
         DATEMULTIRANGE = auto()
         DATERANGE = auto()
         DATETIME = auto()
+        DATETIME2 = auto()
         DATETIME64 = auto()
         DECIMAL = auto()
         DECIMAL32 = auto()
@@ -4405,6 +4407,7 @@ class DataType(Expression):
         ROWVERSION = auto()
         SERIAL = auto()
         SET = auto()
+        SMALLDATETIME = auto()
         SMALLINT = auto()
         SMALLMONEY = auto()
         SMALLSERIAL = auto()
@@ -4528,7 +4531,9 @@ class DataType(Expression):
         Type.DATE,
         Type.DATE32,
         Type.DATETIME,
+        Type.DATETIME2,
         Type.DATETIME64,
+        Type.SMALLDATETIME,
         Type.TIME,
         Type.TIMESTAMP,
         Type.TIMESTAMPNTZ,
@@ -6095,6 +6100,7 @@ class JSONExtract(Binary, Func):
 
 class JSONExtractArray(Func):
     arg_types = {"this": True, "expression": False}
+    _sql_names = ["JSON_EXTRACT_ARRAY"]
 
 
 class JSONExtractScalar(Binary, Func):
@@ -6347,8 +6353,8 @@ class Reduce(Func):
 
 
 class RegexpCount(Func):
-    _sql_names= ["REGEXP_COUNT"]
-    arg_types = {"this": True, "expression": True}
+    _sql_names = ["REGEXP_COUNT"]
+    arg_types = {"this": True, "expression": True, "position": False, "parameters": False}
 
 
 class RegexpExtract(Func):
@@ -6371,6 +6377,7 @@ class RegexpExtractAll(Func):
         "parameters": False,
         "group": False,
     }
+
 
 class RegexpReplace(Func):
     arg_types = {
@@ -6458,6 +6465,8 @@ class Split(Func):
 # https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.split_part.html
 class SplitPart(Func):
     arg_types = {"this": True, "delimiter": True, "part_index": True}
+
+
 class Substring(Func):
     _sql_names = ["SUBSTRING", "SUBSTR"]
     arg_types = {"this": True, "start": False, "length": False}
@@ -6729,6 +6738,11 @@ class Week(Func):
     arg_types = {"this": True, "mode": False}
 
 
+class XMLElement(Func):
+    _sql_names = ["XMLELEMENT"]
+    arg_types = {"this": True, "expressions": False}
+
+
 class XMLTable(Func):
     arg_types = {"this": True, "passing": False, "columns": False, "by_ref": False}
 
@@ -6746,14 +6760,20 @@ class Merge(DML):
         "this": True,
         "using": True,
         "on": True,
-        "expressions": True,
+        "whens": True,
         "with": False,
         "returning": False,
     }
 
 
-class When(Func):
+class When(Expression):
     arg_types = {"matched": True, "source": False, "condition": False, "then": True}
+
+
+class Whens(Expression):
+    """Wraps around one or more WHEN [NOT] MATCHED [...] clauses."""
+
+    arg_types = {"expressions": True}
 
 
 # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljnextvaluefor.html
@@ -7413,14 +7433,17 @@ def merge(
     Returns:
         Merge: The syntax tree for the MERGE statement.
     """
+    expressions = []
+    for when_expr in when_exprs:
+        expressions.extend(
+            maybe_parse(when_expr, dialect=dialect, copy=copy, into=Whens, **opts).expressions
+        )
+
     merge = Merge(
         this=maybe_parse(into, dialect=dialect, copy=copy, **opts),
         using=maybe_parse(using, dialect=dialect, copy=copy, **opts),
         on=maybe_parse(on, dialect=dialect, copy=copy, **opts),
-        expressions=[
-            maybe_parse(when_expr, dialect=dialect, copy=copy, into=When, **opts)
-            for when_expr in when_exprs
-        ],
+        whens=Whens(expressions=expressions),
     )
     if returning:
         merge = merge.returning(returning, dialect=dialect, copy=False, **opts)
@@ -7936,6 +7959,7 @@ def cast(
         types_are_equivalent = type_mapping.get(
             existing_cast_type, existing_cast_type.value
         ) == type_mapping.get(new_cast_type, new_cast_type.value)
+
         if expr.is_type(data_type) or types_are_equivalent:
             return expr
 
@@ -8299,7 +8323,7 @@ def replace_tables(
     mapping = {normalize_table_name(k, dialect=dialect): v for k, v in mapping.items()}
 
     def _replace_tables(node: Expression) -> Expression:
-        if isinstance(node, Table):
+        if isinstance(node, Table) and node.meta.get("replace") is not False:
             original = normalize_table_name(node, dialect=dialect)
             new_name = mapping.get(original)
 

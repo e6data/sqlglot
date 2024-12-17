@@ -516,16 +516,6 @@ class TestTSQL(Validator):
         self.validate_identity("CAST(x AS BIT)")
 
         self.validate_all(
-            "CAST(x AS DATETIME2)",
-            read={
-                "": "CAST(x AS DATETIME)",
-            },
-            write={
-                "mysql": "CAST(x AS DATETIME)",
-                "tsql": "CAST(x AS DATETIME2)",
-            },
-        )
-        self.validate_all(
             "CAST(x AS DATETIME2(6))",
             write={
                 "hive": "CAST(x AS TIMESTAMP)",
@@ -541,6 +531,19 @@ class TestTSQL(Validator):
                 "hive": "CAST(x AS BINARY)",
             },
         )
+
+        for temporal_type in ("SMALLDATETIME", "DATETIME", "DATETIME2"):
+            self.validate_all(
+                f"CAST(x AS {temporal_type})",
+                read={
+                    "": f"CAST(x AS {temporal_type})",
+                },
+                write={
+                    "mysql": "CAST(x AS DATETIME)",
+                    "duckdb": "CAST(x AS TIMESTAMP)",
+                    "tsql": f"CAST(x AS {temporal_type})",
+                },
+            )
 
     def test_types_ints(self):
         self.validate_all(
@@ -747,14 +750,6 @@ class TestTSQL(Validator):
             write={
                 "spark": "CAST(x AS TIMESTAMP)",
                 "tsql": "CAST(x AS DATETIMEOFFSET)",
-            },
-        )
-
-        self.validate_all(
-            "CAST(x as SMALLDATETIME)",
-            write={
-                "spark": "CAST(x AS TIMESTAMP)",
-                "tsql": "CAST(x AS DATETIME2)",
             },
         )
 
@@ -1094,7 +1089,7 @@ WHERE
 
         expected_sqls = [
             "CREATE PROCEDURE [TRANSF].[SP_Merge_Sales_Real] @Loadid INTEGER, @NumberOfRows INTEGER WITH EXECUTE AS OWNER, SCHEMABINDING, NATIVE_COMPILATION AS BEGIN SET XACT_ABORT ON",
-            "DECLARE @DWH_DateCreated AS DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104)",
+            "DECLARE @DWH_DateCreated AS DATETIME = CONVERT(DATETIME, GETDATE(), 104)",
             "DECLARE @DWH_DateModified AS DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104)",
             "DECLARE @DWH_IdUserCreated AS INTEGER = SUSER_ID(CURRENT_USER())",
             "DECLARE @DWH_IdUserModified AS INTEGER = SUSER_ID(CURRENT_USER())",
@@ -1308,6 +1303,12 @@ WHERE
             },
         )
 
+        for fmt in ("WEEK", "WW", "WK"):
+            self.validate_identity(
+                f"SELECT DATEPART({fmt}, '2024-11-21')",
+                "SELECT DATEPART(WK, CAST('2024-11-21' AS DATETIME2))",
+            )
+
     def test_convert(self):
         self.validate_all(
             "CONVERT(NVARCHAR(200), x)",
@@ -1432,7 +1433,7 @@ WHERE
             "CONVERT(DATETIME, x, 121)",
             write={
                 "spark": "TO_TIMESTAMP(x, 'yyyy-MM-dd HH:mm:ss.SSSSSS')",
-                "tsql": "CONVERT(DATETIME2, x, 121)",
+                "tsql": "CONVERT(DATETIME, x, 121)",
             },
         )
         self.validate_all(
@@ -1893,7 +1894,7 @@ WHERE
   *
 FROM OPENJSON(@json) WITH (
     Number VARCHAR(200) '$.Order.Number',
-    Date DATETIME2 '$.Order.Date',
+    Date DATETIME '$.Order.Date',
     Customer VARCHAR(200) '$.AccountNumber',
     Quantity INTEGER '$.Item.Quantity',
     [Order] NVARCHAR(MAX) AS JSON
@@ -2067,5 +2068,20 @@ FROM OPENJSON(@json) WITH (
                 "spark": "WITH t AS (SELECT 'a.b.c' AS value, 1 AS idx) SELECT SPLIT_PART(value, '.', idx) FROM t",
                 "databricks": "WITH t AS (SELECT 'a.b.c' AS value, 1 AS idx) SELECT SPLIT_PART(value, '.', idx) FROM t",
                 "tsql": UnsupportedError,
+            },
+        )
+
+    def test_next_value_for(self):
+        self.validate_identity(
+            "SELECT NEXT VALUE FOR db.schema.sequence_name OVER (ORDER BY foo), col"
+        )
+        self.validate_all(
+            "SELECT NEXT VALUE FOR db.schema.sequence_name",
+            read={
+                "oracle": "SELECT NEXT VALUE FOR db.schema.sequence_name",
+                "tsql": "SELECT NEXT VALUE FOR db.schema.sequence_name",
+            },
+            write={
+                "oracle": "SELECT NEXT VALUE FOR db.schema.sequence_name",
             },
         )

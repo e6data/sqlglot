@@ -1,7 +1,7 @@
 import unittest
 import sys
 
-from sqlglot import expressions as exp
+from sqlglot import UnsupportedError, expressions as exp
 from sqlglot.dialects.mysql import MySQL
 from tests.dialects.test_dialect import Validator
 
@@ -118,6 +118,13 @@ class TestMySQL(Validator):
             "CREATE TABLE `foo` (a VARCHAR(10), INDEX idx_a (a DESC))",
         )
 
+        self.validate_all(
+            "insert into t(i) values (default)",
+            write={
+                "duckdb": "INSERT INTO t (i) VALUES (DEFAULT)",
+                "mysql": "INSERT INTO t (i) VALUES (DEFAULT)",
+            },
+        )
         self.validate_all(
             "CREATE TABLE t (id INT UNSIGNED)",
             write={
@@ -708,6 +715,16 @@ class TestMySQL(Validator):
         )
 
     def test_mysql(self):
+        for func in ("CHAR_LENGTH", "CHARACTER_LENGTH"):
+            with self.subTest(f"Testing MySQL's {func}"):
+                self.validate_all(
+                    f"SELECT {func}('foo')",
+                    write={
+                        "duckdb": "SELECT LENGTH('foo')",
+                        "mysql": "SELECT CHAR_LENGTH('foo')",
+                    },
+                )
+
         self.validate_all(
             "SELECT CONCAT('11', '22')",
             read={
@@ -1256,22 +1273,27 @@ COMMENT='客户账户表'"""
         )
 
     def test_timestamp_trunc(self):
-        for dialect in ("postgres", "snowflake", "duckdb", "spark", "databricks"):
+        hive_dialects = ("spark", "databricks")
+        for dialect in ("postgres", "snowflake", "duckdb", *hive_dialects):
             for unit in (
-                "MILLISECOND",
                 "SECOND",
                 "DAY",
                 "MONTH",
                 "YEAR",
             ):
                 with self.subTest(f"MySQL -> {dialect} Timestamp Trunc with unit {unit}: "):
+                    cast = (
+                        "TIMESTAMP('2001-02-16 20:38:40')"
+                        if dialect in hive_dialects
+                        else "CAST('2001-02-16 20:38:40' AS DATETIME)"
+                    )
                     self.validate_all(
-                        f"DATE_ADD('0000-01-01 00:00:00', INTERVAL (TIMESTAMPDIFF({unit}, '0000-01-01 00:00:00', CAST('2001-02-16 20:38:40' AS DATETIME))) {unit})",
+                        f"DATE_ADD('0000-01-01 00:00:00', INTERVAL (TIMESTAMPDIFF({unit}, '0000-01-01 00:00:00', {cast})) {unit})",
                         read={
                             dialect: f"DATE_TRUNC({unit}, TIMESTAMP '2001-02-16 20:38:40')",
                         },
                         write={
-                            "mysql": f"DATE_ADD('0000-01-01 00:00:00', INTERVAL (TIMESTAMPDIFF({unit}, '0000-01-01 00:00:00', CAST('2001-02-16 20:38:40' AS DATETIME))) {unit})",
+                            "mysql": f"DATE_ADD('0000-01-01 00:00:00', INTERVAL (TIMESTAMPDIFF({unit}, '0000-01-01 00:00:00', {cast})) {unit})",
                         },
                     )
 
@@ -1322,3 +1344,33 @@ COMMENT='客户账户表'"""
 
         for format in ("JSON", "TRADITIONAL", "TREE"):
             self.validate_identity(f"DESCRIBE FORMAT={format} UPDATE test SET test_col = 'abc'")
+
+    def test_number_format(self):
+        self.validate_all(
+            "SELECT FORMAT(12332.123456, 4)",
+            write={
+                "duckdb": "SELECT FORMAT('{:,.4f}', 12332.123456)",
+                "mysql": "SELECT FORMAT(12332.123456, 4)",
+            },
+        )
+        self.validate_all(
+            "SELECT FORMAT(12332.1, 4)",
+            write={
+                "duckdb": "SELECT FORMAT('{:,.4f}', 12332.1)",
+                "mysql": "SELECT FORMAT(12332.1, 4)",
+            },
+        )
+        self.validate_all(
+            "SELECT FORMAT(12332.2, 0)",
+            write={
+                "duckdb": "SELECT FORMAT('{:,.0f}', 12332.2)",
+                "mysql": "SELECT FORMAT(12332.2, 0)",
+            },
+        )
+        self.validate_all(
+            "SELECT FORMAT(12332.2, 2, 'de_DE')",
+            write={
+                "duckdb": UnsupportedError,
+                "mysql": "SELECT FORMAT(12332.2, 2, 'de_DE')",
+            },
+        )
