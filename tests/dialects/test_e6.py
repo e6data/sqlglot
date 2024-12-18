@@ -21,7 +21,13 @@ class TestE6(Validator):
                 "duckdb": "x << 1",
                 "hive": "x << 1",
                 "spark": "SHIFTLEFT(x, 1)",
+                "snowflake": "BITSHIFTLEFT(x, 1)"
             },
+            write={
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+                "spark": "SHIFTLEFT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)"
+            }
         )
 
         self.validate_all(
@@ -31,12 +37,22 @@ class TestE6(Validator):
                 "duckdb": "x >> 1",
                 "hive": "x >> 1",
                 "spark": "SHIFTRIGHT(x, 1)",
+                "snowflake": "BITSHIFTRIGHT(x, 1)"
             },
+            write={
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+                "spark": "SHIFTRIGHT(x, 1)",
+                "databricks": "SHIFTRIGHT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)"
+            }
         )
 
         self.validate_all(
             "SELECT ARRAY_CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
-            read={"trino": "SELECT CONCAT(ARRAY[1,2], ARRAY[3,4])"},
+            read={
+                "trino": "SELECT CONCAT(ARRAY[1,2], ARRAY[3,4])",
+                "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))"
+            },
         )
 
         self.validate_all(
@@ -93,12 +109,36 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT SIZE(ARRAY[1, 2, 3])", read={"trino": "SELECT cardinality(ARRAY[1, 2, 3])"}
+            "SELECT SIZE(ARRAY[1, 2, 3])",
+            read={
+                "trino": "SELECT CARDINALITY(ARRAY[1, 2, 3])",
+                "snowflake": "SELECT ARRAY_SIZE(ARRAY_CONSTRUCT(1, 2, 3))",
+                "databricks": "SELECT ARRAY_SIZE(ARRAY[1, 2, 3])"
+            },
+
+            write={
+                "trino": "SELECT CARDINALITY(ARRAY[1, 2, 3])",
+                "snowflake": "SELECT ARRAY_SIZE([1, 2, 3])"
+            }
         )
 
         self.validate_all(
-            "SELECT ARRAY_CONTAINS(ARRAY[1, 2, 3], 2)",
-            read={"trino": "SELECT contains(ARRAY[1, 2, 3], 2)"},
+            "ARRAY_CONTAINS(x, 1)",
+            read={
+                "duckdb": "LIST_HAS(x, 1)",
+                "snowflake": "ARRAY_CONTAINS(1, x)",
+                "trino": "CONTAINS(x, 1)",
+                "presto": "CONTAINS(x, 1)",
+                "hive": "ARRAY_CONTAINS(x, 1)",
+                "spark": "ARRAY_CONTAINS(x, 1)",
+            },
+            write={
+                "duckdb": "ARRAY_CONTAINS(x, 1)",
+                "presto": "CONTAINS(x, 1)",
+                "hive": "ARRAY_CONTAINS(x, 1)",
+                "spark": "ARRAY_CONTAINS(x, 1)",
+                "snowflake": "ARRAY_CONTAINS(1, x)",
+            },
         )
 
         # This functions tests the `_parse_filter_array` functions that we have written.
@@ -218,6 +258,26 @@ class TestE6(Validator):
             }
         )
 
+        self.validate_all(
+            "SELECT ELEMENT_AT(X, 4)",
+            read={
+                "snowflake": "SELECT get(X, 3)",
+                "trino": "SELECT ELEMENT_AT(X, 4)",
+                "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "duckdb": "SELECT X[4]"
+            },
+            write={
+                "snowflake": "SELECT X[3]",
+                "trino": "SELECT ELEMENT_AT(X, 4)",
+                "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "duckdb": "SELECT X[4]"
+            }
+        )
+
+
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
@@ -272,35 +332,58 @@ class TestE6(Validator):
         )
 
     def test_parse_filter_array(self):
+        self.validate_all(
+            "FILTER_ARRAY(the_array, x -> x > 0)",
+            write={
+                "presto": "FILTER(the_array, x -> x > 0)",
+                "hive": "FILTER(the_array, x -> x > 0)",
+                "spark": "FILTER(the_array, x -> x > 0)",
+                "snowflake": "FILTER(the_array, x -> x > 0)"
+            },
+        )
+
         # Test FILTER_ARRAY with positive numbers
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
-            read={"trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)"},
+            read={
+                "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x > 3)"
+            },
         )
 
         # Test FILTER_ARRAY with negative numbers
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
-            read={"trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)"},
+            read={
+                "trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(-5, -4, -3, -2, -1), x -> x <= -3)"
+            },
         )
 
         # Test FILTER_ARRAY with NULL values
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> NOT x IS NULL)",
-            read={"trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)"},
+            read={
+                "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(NULL, 1, NULL, 2), x -> x IS NOT NULL)"
+            },
         )
 
         # Test FILTER_ARRAY with complex condition
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4, 5], x -> MOD(x, 2) = 0)",
-            read={"trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)"},
+            read={
+                "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x % 2 = 0)",
+            },
         )
 
         # Test FILTER_ARRAY with nested arrays
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> SIZE(x) = 2)",
             read={
-                "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)"
+                "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4)), x -> ARRAY_SIZE(x) = 2)"
             },
         )
 
