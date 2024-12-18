@@ -1320,6 +1320,7 @@ class E6(Dialect):
             "CHAR_LENGTH": exp.Length.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "CONVERT_TIMEZONE": _build_convert_timezone,
+            "CONTAINS_SUBSTR": exp.Contains.from_arg_list,
             "CURRENT_DATE": exp.CurrentDate.from_arg_list,
             "CURRENT_TIMESTAMP": exp.CurrentTimestamp.from_arg_list,
             "DATE": _build_date,
@@ -1861,7 +1862,7 @@ class E6(Dialect):
 
         def anonymous_sql(self, expression: exp.Anonymous) -> str:
             # Map the function names that need to be rewritten with same order of arguments
-            function_mapping_normal = {"REGEXP_INSTR": "INSTR", "CONTAINS": "CONTAINS_SUBSTR"}
+            function_mapping_normal = {"REGEXP_INSTR": "INSTR"}
             # Extract the function name from the expression
             function_name = self.sql(expression, "this")
 
@@ -1948,6 +1949,7 @@ class E6(Dialect):
             # We mapped this believing that for most of the cases,
             # CONCAT function in other dialects would mostly use for ARRAY concatenation
             exp.Concat: rename_func("ARRAY_CONCAT"),
+            exp.Contains: rename_func("CONTAINS_SUBSTR"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.Date: lambda self, e: self.func("DATE", e.this),

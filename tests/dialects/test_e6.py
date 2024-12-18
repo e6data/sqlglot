@@ -208,6 +208,16 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT CONTAINS_SUBSTR('X', 'Y')",
+            read={
+                "snowflake": "SELECT CONTAINS('X','Y')"
+            },
+            write={
+                "snowflake": "SELECT CONTAINS('X', 'Y')"
+            }
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
