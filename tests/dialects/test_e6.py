@@ -1,3 +1,4 @@
+from sqlglot import parse_one
 from tests.dialects.test_dialect import Validator
 
 
@@ -316,3 +317,68 @@ class TestE6(Validator):
             "SELECT c_birth_country AS country, LISTAGG(c_first_name, ' | ')",  # We are expecting
             read={"snowflake": "SELECT c_birth_country as country, listagg(c_first_name, ' | ')"},
         )
+
+    def test_named_struct(self):
+
+        expr = parse_one("NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
+        print(repr(expr))
+
+        print(expr.sql())
+
+        self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
+
+        self.validate_all(
+            "NAMED_STRUCT('key_1', 'one', 'key_2', NULL)",
+            read={
+                "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
+                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+            },
+            write={
+                "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
+            },
+        )
+
+    # def test_json_extract(self):
+    #
+    #     self.validate_identity("""SELECT JSON_EXTRACT('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits') AS string_array""")
+    #
+    #     self.validate_all(
+    #         """SELECT JSON_EXTRACT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm.barn.color')""",
+    #         write={
+    #             "bigquery": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm.barn.color')""",
+    #             "databricks": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}':farm""",
+    #             "duckdb": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
+    #             "postgres": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
+    #             "presto": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+    #             "redshift": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
+    #             "spark": """SELECT GET_JSON_OBJECT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+    #             "sqlite": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
+    #         },
+    #     )
+    #
+    #     self.validate_all(
+    #         """SELECT JSON_VALUE('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits') AS string_array""",
+    #         write={
+    #             "E6": """SELECT JSON_EXTRACT('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits') AS string_array"""
+    #         }
+    #     )
+    #
+    #     self.validate_all(
+    #         """SELECT JSON_VALUE('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
+    #         write={
+    #             "bigquery": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+    #             "databricks": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}':farm""",
+    #             "duckdb": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
+    #             "postgres": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
+    #             "presto": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+    #             "redshift": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
+    #             "spark": """SELECT GET_JSON_OBJECT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+    #             "sqlite": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
+    #         },
+    #     )
+
+
+
+

@@ -18,7 +18,7 @@ from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
     timestrtotime_sql,
     datestrtodate_sql,
-    trim_sql,
+    trim_sql, var_map_sql,
 )
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
 
@@ -1349,7 +1349,8 @@ class E6(Dialect):
             ),
             "FROM_UNIXTIME_WITHUNIT": _build_from_unixtime_withunit,
             "GREATEST": exp.Max.from_arg_list,
-            "json_extract": exp.JSONExtract.from_arg_list,
+            "JSON_EXTRACT": parser.build_extract_json_with_path(exp.JSONExtractScalar),
+            "JSON_VALUE": parser.build_extract_json_with_path(exp.JSONExtractScalar),
             "LAST_DAY": lambda args: exp.LastDay(this=seq_get(args, 0)),
             "LAST_VALUE": exp.LastValue,
             "LAG": lambda args: exp.Lag(this=seq_get(args, 0), offset=seq_get(args, 1)),
@@ -1428,6 +1429,12 @@ class E6(Dialect):
             "YEAR": exp.Year.from_arg_list,
         }
 
+        FUNCTION_PARSERS = {
+            **parser.Parser.FUNCTION_PARSERS,
+            "NAMED_STRUCT": lambda self: self._parse_json_object(),
+
+        }
+
     class Generator(generator.Generator):
         """
         The Generator class is responsible for converting an abstract syntax tree (AST) back into a SQL string
@@ -1436,6 +1443,7 @@ class E6(Dialect):
         """
 
         EXTRACT_ALLOWS_QUOTES = False
+        JSON_KEY_VALUE_PAIR_SEP = ","
         NVL2_SUPPORTED = True
         LAST_DAY_SUPPORTS_DATE_PART = False
         INTERVAL_ALLOWS_PLURAL_FORM = False
@@ -1982,12 +1990,14 @@ class E6(Dialect):
             exp.Interval: interval_sql,
             exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
             exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
+            exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),
             exp.Lag: lambda self, e: self.func("LAG", e.this, e.args.get("offset")),
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
             exp.Lead: lambda self, e: self.func("LEAD", e.this, e.args.get("offset")),
             exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
+            exp.Map: lambda self, e: var_map_sql(self, e, "NAMED_STRUCT"),
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
             exp.Min: min_or_least,
