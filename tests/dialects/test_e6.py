@@ -22,13 +22,13 @@ class TestE6(Validator):
                 "duckdb": "x << 1",
                 "hive": "x << 1",
                 "spark": "SHIFTLEFT(x, 1)",
-                "snowflake": "BITSHIFTLEFT(x, 1)"
+                "snowflake": "BITSHIFTLEFT(x, 1)",
             },
             write={
                 "snowflake": "BITSHIFTLEFT(x, 1)",
                 "spark": "SHIFTLEFT(x, 1)",
-                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)"
-            }
+                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)",
+            },
         )
 
         self.validate_all(
@@ -38,21 +38,21 @@ class TestE6(Validator):
                 "duckdb": "x >> 1",
                 "hive": "x >> 1",
                 "spark": "SHIFTRIGHT(x, 1)",
-                "snowflake": "BITSHIFTRIGHT(x, 1)"
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
             },
             write={
                 "snowflake": "BITSHIFTRIGHT(x, 1)",
                 "spark": "SHIFTRIGHT(x, 1)",
                 "databricks": "SHIFTRIGHT(x, 1)",
-                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)"
-            }
+                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
+            },
         )
 
         self.validate_all(
             "SELECT ARRAY_CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
             read={
                 "trino": "SELECT CONCAT(ARRAY[1,2], ARRAY[3,4])",
-                "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))"
+                "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))",
             },
         )
 
@@ -114,13 +114,12 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT CARDINALITY(ARRAY[1, 2, 3])",
                 "snowflake": "SELECT ARRAY_SIZE(ARRAY_CONSTRUCT(1, 2, 3))",
-                "databricks": "SELECT ARRAY_SIZE(ARRAY[1, 2, 3])"
+                "databricks": "SELECT ARRAY_SIZE(ARRAY[1, 2, 3])",
             },
-
             write={
                 "trino": "SELECT CARDINALITY(ARRAY[1, 2, 3])",
-                "snowflake": "SELECT ARRAY_SIZE([1, 2, 3])"
-            }
+                "snowflake": "SELECT ARRAY_SIZE([1, 2, 3])",
+            },
         )
 
         self.validate_all(
@@ -251,12 +250,8 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT CONTAINS_SUBSTR('X', 'Y')",
-            read={
-                "snowflake": "SELECT CONTAINS('X','Y')"
-            },
-            write={
-                "snowflake": "SELECT CONTAINS('X', 'Y')"
-            }
+            read={"snowflake": "SELECT CONTAINS('X','Y')"},
+            write={"snowflake": "SELECT CONTAINS('X', 'Y')"},
         )
 
         self.validate_all(
@@ -266,18 +261,16 @@ class TestE6(Validator):
                 "trino": "SELECT ELEMENT_AT(X, 4)",
                 "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
                 "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
-                "duckdb": "SELECT X[4]"
+                "duckdb": "SELECT X[4]",
             },
             write={
                 "snowflake": "SELECT X[3]",
                 "trino": "SELECT ELEMENT_AT(X, 4)",
                 "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
                 "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
-                "duckdb": "SELECT X[4]"
-            }
+                "duckdb": "SELECT X[4]",
+            },
         )
-
-
 
     def test_regex(self):
         self.validate_all(
@@ -339,7 +332,7 @@ class TestE6(Validator):
                 "presto": "FILTER(the_array, x -> x > 0)",
                 "hive": "FILTER(the_array, x -> x > 0)",
                 "spark": "FILTER(the_array, x -> x > 0)",
-                "snowflake": "FILTER(the_array, x -> x > 0)"
+                "snowflake": "FILTER(the_array, x -> x > 0)",
             },
         )
 
@@ -348,7 +341,7 @@ class TestE6(Validator):
             "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
             read={
                 "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
-                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x > 3)"
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x > 3)",
             },
         )
 
@@ -357,7 +350,7 @@ class TestE6(Validator):
             "SELECT FILTER_ARRAY(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
             read={
                 "trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
-                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(-5, -4, -3, -2, -1), x -> x <= -3)"
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(-5, -4, -3, -2, -1), x -> x <= -3)",
             },
         )
 
@@ -366,7 +359,7 @@ class TestE6(Validator):
             "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> NOT x IS NULL)",
             read={
                 "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
-                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(NULL, 1, NULL, 2), x -> x IS NOT NULL)"
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(NULL, 1, NULL, 2), x -> x IS NOT NULL)",
             },
         )
 
@@ -384,7 +377,7 @@ class TestE6(Validator):
             "SELECT FILTER_ARRAY(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> SIZE(x) = 2)",
             read={
                 "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)",
-                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4)), x -> ARRAY_SIZE(x) = 2)"
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4)), x -> ARRAY_SIZE(x) = 2)",
             },
         )
 
