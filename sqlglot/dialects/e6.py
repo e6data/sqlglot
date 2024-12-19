@@ -18,7 +18,8 @@ from sqlglot.dialects.dialect import (
     approx_count_distinct_sql,
     timestrtotime_sql,
     datestrtodate_sql,
-    trim_sql, var_map_sql,
+    trim_sql,
+    var_map_sql,
 )
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
 
@@ -1432,7 +1433,6 @@ class E6(Dialect):
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
             "NAMED_STRUCT": lambda self: self._parse_json_object(),
-
         }
 
     class Generator(generator.Generator):

@@ -319,7 +319,6 @@ class TestE6(Validator):
         )
 
     def test_named_struct(self):
-
         expr = parse_one("NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
         print(repr(expr))
 
@@ -378,7 +377,3 @@ class TestE6(Validator):
     #             "sqlite": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
     #         },
     #     )
-
-
-
-
