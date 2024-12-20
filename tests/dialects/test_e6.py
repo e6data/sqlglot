@@ -405,10 +405,6 @@ class TestE6(Validator):
         )
 
     def test_named_struct(self):
-        expr = parse_one("NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
-        print(repr(expr))
-
-        print(expr.sql())
 
         self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
 
