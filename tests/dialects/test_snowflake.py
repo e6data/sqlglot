@@ -2368,3 +2368,16 @@ SINGLE = TRUE""",
         self.validate_identity("SELECT BITOR(a, b) FROM table")
 
         self.validate_identity("SELECT BIT_OR(a, b) FROM table", "SELECT BITOR(a, b) FROM table")
+
+    def test_bitnot_function(self):
+        self.validate_identity("SELECT BITNOT(a) FROM table")
+
+    def test_bit_not_function(self):
+
+        self.validate_identity("SELECT BIT_NOT(a) FROM table", "SELECT BITNOT(a) FROM table")
+
+    def test_bitand_function(self):
+        self.validate_identity("SELECT BITAND(a, b) FROM table")
+
+    def test_bit_and_function(self):
+        self.validate_identity("SELECT BIT_AND(a, b) FROM table", "SELECT BITAND(a, b) FROM table")
