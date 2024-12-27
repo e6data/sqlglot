@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from sqlglot import exp, parser
-from sqlglot.dialects.dialect import merge_without_target_sql, trim_sql, timestrtotime_sql
+from sqlglot.dialects.dialect import (
+    merge_without_target_sql,
+    trim_sql,
+    timestrtotime_sql,
+)
 from sqlglot.dialects.presto import Presto
 from sqlglot.tokens import TokenType
 
@@ -39,7 +43,9 @@ class Trino(Presto):
                 exp.JSONExtract,
                 this=self._parse_bitwise(),
                 expression=self._match(TokenType.COMMA) and self._parse_bitwise(),
-                option=self._parse_var_from_options(self.JSON_QUERY_OPTIONS, raise_unmatched=False),
+                option=self._parse_var_from_options(
+                    self.JSON_QUERY_OPTIONS, raise_unmatched=False
+                ),
                 json_query=True,
             )
 
@@ -49,7 +55,9 @@ class Trino(Presto):
             exp.ArraySum: lambda self,
             e: f"REDUCE({self.sql(e, 'this')}, 0, (acc, x) -> acc + x, acc -> acc)",
             exp.Merge: merge_without_target_sql,
-            exp.TimeStrToTime: lambda self, e: timestrtotime_sql(self, e, include_precision=True),
+            exp.TimeStrToTime: lambda self, e: timestrtotime_sql(
+                self, e, include_precision=True
+            ),
             exp.Trim: trim_sql,
             exp.JSONExtract: lambda self, e: self.jsonextract_sql(e),
         }

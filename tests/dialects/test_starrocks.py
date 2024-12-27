@@ -24,7 +24,9 @@ class TestStarrocks(Validator):
 
         for properties in ddl_sqls:
             with self.subTest(f"Testing create scheme: {properties}"):
-                self.validate_identity(f"CREATE TABLE foo (col1 BIGINT, col2 BIGINT) {properties}")
+                self.validate_identity(
+                    f"CREATE TABLE foo (col1 BIGINT, col2 BIGINT) {properties}"
+                )
                 self.validate_identity(
                     f"CREATE TABLE foo (col1 BIGINT, col2 BIGINT) ENGINE=OLAP {properties}"
                 )
@@ -45,7 +47,8 @@ class TestStarrocks(Validator):
             """SELECT CAST(PARSE_JSON(fieldvalue) -> '00000000-0000-0000-0000-00000000' AS VARCHAR) AS `code` FROM (SELECT '{"00000000-0000-0000-0000-00000000":"code01"}') AS t(fieldvalue)"""
         )
         self.validate_identity(
-            "SELECT text FROM example_table", write_sql="SELECT `text` FROM example_table"
+            "SELECT text FROM example_table",
+            write_sql="SELECT `text` FROM example_table",
         )
 
     def test_time(self):

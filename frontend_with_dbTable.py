@@ -28,7 +28,9 @@ def process_row(alias, query, from_sql):
 
 
 # Setting up Streamlit page
-st.set_page_config(page_title="Query Converter", layout="centered", initial_sidebar_state="auto")
+st.set_page_config(
+    page_title="Query Converter", layout="centered", initial_sidebar_state="auto"
+)
 st.title("Table Extractor")
 
 # Mode selection
@@ -42,7 +44,16 @@ if mode == "Single Query":
     # Dropdown for selecting From SQL and To SQL
     from_sql = st.selectbox(
         "From SQL",
-        ["snowflake", "databricks", "athena", "presto", "postgres", "bigquery", "E6", "trino"],
+        [
+            "snowflake",
+            "databricks",
+            "athena",
+            "presto",
+            "postgres",
+            "bigquery",
+            "E6",
+            "trino",
+        ],
     )
 
     if from_sql:
@@ -51,7 +62,9 @@ if mode == "Single Query":
             submit_button = st.form_submit_button("Submit")
             if submit_button:
                 list_of_tables = extract_db_and_Table_names(from_sql_query, from_sql)
-                list_of_tables = f"```list of tables present in the query: \n{list_of_tables}\n```"
+                list_of_tables = (
+                    f"```list of tables present in the query: \n{list_of_tables}\n```"
+                )
                 # Append to session state for history tracking
                 st.session_state.messages.append(
                     {
@@ -72,12 +85,23 @@ if mode == "Single Query":
                 st.write(latest_message["content"])
 
 elif mode == "CSV Mode":
-    st.info("Note: The CSV file must contain columns named 'QUERY_TEXT' and 'UNQ_ALIAS'.")
+    st.info(
+        "Note: The CSV file must contain columns named 'QUERY_TEXT' and 'UNQ_ALIAS'."
+    )
     uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
 
     from_sql = st.selectbox(
         "From SQL",
-        ["snowflake", "databricks", "athena", "presto", "postgres", "bigquery", "E6", "trino"],
+        [
+            "snowflake",
+            "databricks",
+            "athena",
+            "presto",
+            "postgres",
+            "bigquery",
+            "E6",
+            "trino",
+        ],
         key="csv_from_sql",
     )
 
@@ -99,7 +123,9 @@ elif mode == "CSV Mode":
                     batch_queries = queries[i : i + batch_size]
                     batch_aliases = aliases[i : i + batch_size]
 
-                    for j, (alias, query) in enumerate(zip(batch_aliases, batch_queries)):
+                    for j, (alias, query) in enumerate(
+                        zip(batch_aliases, batch_queries)
+                    ):
                         if j > 0:
                             time.sleep(1)  # delay to avoid server throttling
                         future = executor.submit(process_row, alias, query, from_sql)
@@ -129,4 +155,6 @@ elif mode == "CSV Mode":
             st.markdown(href, unsafe_allow_html=True)
 
             total_time = time.time() - start_time
-            st.write(f"Total time taken for this whole CSV to generate is {total_time:.2f}s")
+            st.write(
+                f"Total time taken for this whole CSV to generate is {total_time:.2f}s"
+            )
