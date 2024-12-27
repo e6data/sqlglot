@@ -6491,8 +6491,6 @@ class SplitPart(Func):
     arg_types = {"this": True, "delimiter": True, "part_index": True}
 
 
-# Start may be omitted in the case of postgres
-# https://www.postgresql.org/docs/9.1/functions-string.html @ Table 9-6
 class Substring(Func):
     _sql_names = ["SUBSTRING", "SUBSTR"]
     arg_types = {"this": True, "start": False, "length": False}
