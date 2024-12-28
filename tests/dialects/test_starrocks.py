@@ -24,9 +24,7 @@ class TestStarrocks(Validator):
 
         for properties in ddl_sqls:
             with self.subTest(f"Testing create scheme: {properties}"):
-                self.validate_identity(
-                    f"CREATE TABLE foo (col1 BIGINT, col2 BIGINT) {properties}"
-                )
+                self.validate_identity(f"CREATE TABLE foo (col1 BIGINT, col2 BIGINT) {properties}")
                 self.validate_identity(
                     f"CREATE TABLE foo (col1 BIGINT, col2 BIGINT) ENGINE=OLAP {properties}"
                 )

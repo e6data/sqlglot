@@ -72,9 +72,7 @@ class Validator(unittest.TestCase):
             with self.subTest(f"{sql} -> {write_dialect}"):
                 if write_sql is UnsupportedError:
                     with self.assertRaises(UnsupportedError):
-                        expression.sql(
-                            write_dialect, unsupported_level=ErrorLevel.RAISE
-                        )
+                        expression.sql(write_dialect, unsupported_level=ErrorLevel.RAISE)
                 else:
                     self.assertEqual(
                         expression.sql(
@@ -111,9 +109,7 @@ class TestDialect(Validator):
         lowercase_mysql = Dialect.get_or_raise("mysql,normalization_strategy=lowercase")
         self.assertEqual(lowercase_mysql.normalization_strategy, "LOWERCASE")
 
-        lowercase_mysql = Dialect.get_or_raise(
-            "mysql, normalization_strategy = lowercase"
-        )
+        lowercase_mysql = Dialect.get_or_raise("mysql, normalization_strategy = lowercase")
         self.assertEqual(lowercase_mysql.normalization_strategy.value, "LOWERCASE")
 
         with self.assertRaises(AttributeError) as cm:
@@ -124,9 +120,7 @@ class TestDialect(Validator):
         with self.assertRaises(ValueError) as cm:
             Dialect.get_or_raise("myqsl")
 
-        self.assertEqual(
-            str(cm.exception), "Unknown dialect 'myqsl'. Did you mean mysql?"
-        )
+        self.assertEqual(str(cm.exception), "Unknown dialect 'myqsl'. Did you mean mysql?")
 
         with self.assertRaises(ValueError) as cm:
             Dialect.get_or_raise("asdfjasodiufjsd")
@@ -139,9 +133,7 @@ class TestDialect(Validator):
         self.assertEqual(oracle_with_settings.normalization_strategy.value, "LOWERCASE")
         self.assertEqual(oracle_with_settings.settings, {"version": "19.5"})
 
-        bool_settings = Dialect.get_or_raise(
-            "oracle, s1=TruE, s2=1, s3=FaLse, s4=0, s5=nonbool"
-        )
+        bool_settings = Dialect.get_or_raise("oracle, s1=TruE, s2=1, s3=FaLse, s4=0, s5=nonbool")
         self.assertEqual(
             bool_settings.settings,
             {"s1": True, "s2": True, "s3": False, "s4": False, "s5": "nonbool"},
@@ -1248,15 +1240,11 @@ class TestDialect(Validator):
         )
 
         order_by_all_sql = "SELECT * FROM t ORDER BY ALL"
-        self.validate_identity(order_by_all_sql).find(exp.Ordered).this.assert_is(
-            exp.Column
-        )
+        self.validate_identity(order_by_all_sql).find(exp.Ordered).this.assert_is(exp.Column)
 
         for dialect in ("duckdb", "spark", "databricks"):
             with self.subTest(f"Testing ORDER BY ALL in {dialect}"):
-                parse_one(order_by_all_sql, read=dialect).find(
-                    exp.Ordered
-                ).this.assert_is(exp.Var)
+                parse_one(order_by_all_sql, read=dialect).find(exp.Ordered).this.assert_is(exp.Var)
 
     def test_json(self):
         self.validate_all(
@@ -1431,13 +1419,9 @@ class TestDialect(Validator):
         )
 
         for dialect in ("duckdb", "starrocks"):
-            with self.subTest(
-                f"Generating json extraction with digit-prefixed key ({dialect})"
-            ):
+            with self.subTest(f"Generating json extraction with digit-prefixed key ({dialect})"):
                 self.assertEqual(
-                    parse_one("""select '{"0": "v"}' -> '0'""", read=dialect).sql(
-                        dialect=dialect
-                    ),
+                    parse_one("""select '{"0": "v"}' -> '0'""", read=dialect).sql(dialect=dialect),
                     """SELECT '{"0": "v"}' -> '0'""",
                 )
 
@@ -1652,9 +1636,7 @@ class TestDialect(Validator):
         )
 
     def test_operators(self):
-        self.validate_identity(
-            "some.column LIKE 'foo' || another.column || 'bar' || LOWER(x)"
-        )
+        self.validate_identity("some.column LIKE 'foo' || another.column || 'bar' || LOWER(x)")
         self.validate_identity("some.column LIKE 'foo' + another.column + 'bar'")
 
         self.validate_all("LIKE(x, 'z')", write={"": "'z' LIKE x"})
@@ -1968,9 +1950,7 @@ class TestDialect(Validator):
         )
 
     def test_typeddiv(self):
-        typed_div = exp.Div(
-            this=exp.column("a"), expression=exp.column("b"), typed=True
-        )
+        typed_div = exp.Div(this=exp.column("a"), expression=exp.column("b"), typed=True)
         div = exp.Div(this=exp.column("a"), expression=exp.column("b"))
         typed_div_dialect = "presto"
         div_dialect = "hive"
@@ -1995,9 +1975,7 @@ class TestDialect(Validator):
             (div, (INT, FLOAT), typed_div_dialect, "a / b"),
             (div, (INT, FLOAT), div_dialect, "a / b"),
         ]:
-            with self.subTest(
-                f"{expression.__class__.__name__} {types} {dialect} -> {expected}"
-            ):
+            with self.subTest(f"{expression.__class__.__name__} {types} {dialect} -> {expected}"):
                 expression = expression.copy()
                 expression.left.type = types[0]
                 expression.right.type = types[1]
@@ -2015,9 +1993,7 @@ class TestDialect(Validator):
             (div, safe_div_dialect, "a / b"),
             (div, div_dialect, "a / b"),
         ]:
-            with self.subTest(
-                f"{expression.__class__.__name__} {dialect} -> {expected}"
-            ):
+            with self.subTest(f"{expression.__class__.__name__} {dialect} -> {expected}"):
                 self.assertEqual(expected, expression.sql(dialect=dialect))
 
         self.assertEqual(
@@ -2652,12 +2628,8 @@ FROM subquery2""",
         with_large_nulls = "postgres"
 
         sql = "SELECT * FROM t ORDER BY c"
-        sql_nulls_last = (
-            "SELECT * FROM t ORDER BY CASE WHEN c IS NULL THEN 1 ELSE 0 END, c"
-        )
-        sql_nulls_first = (
-            "SELECT * FROM t ORDER BY CASE WHEN c IS NULL THEN 1 ELSE 0 END DESC, c"
-        )
+        sql_nulls_last = "SELECT * FROM t ORDER BY CASE WHEN c IS NULL THEN 1 ELSE 0 END, c"
+        sql_nulls_first = "SELECT * FROM t ORDER BY CASE WHEN c IS NULL THEN 1 ELSE 0 END DESC, c"
 
         for read_dialect, desc, nulls_first, expected_sql in (
             (with_last_nulls, False, None, sql_nulls_last),
@@ -2690,9 +2662,7 @@ FROM subquery2""",
                 )
 
                 expected_sql = f"{expected_sql}{sort_order}"
-                expression = parse_one(
-                    f"{sql}{sort_order}{null_order}", read=read_dialect
-                )
+                expression = parse_one(f"{sql}{sort_order}{null_order}", read=read_dialect)
 
                 self.assertEqual(expression.sql(dialect="mysql"), expected_sql)
                 self.assertEqual(expression.sql(dialect="tsql"), expected_sql)
@@ -2777,9 +2747,7 @@ FROM subquery2""",
         self.validate_identity(
             "CREATE SEQUENCE seq START WITH 1 NO MINVALUE NO MAXVALUE CYCLE NO CACHE"
         )
-        self.validate_identity(
-            "CREATE OR REPLACE TEMPORARY SEQUENCE seq INCREMENT BY 1 NO CYCLE"
-        )
+        self.validate_identity("CREATE OR REPLACE TEMPORARY SEQUENCE seq INCREMENT BY 1 NO CYCLE")
         self.validate_identity(
             "CREATE OR REPLACE SEQUENCE IF NOT EXISTS seq COMMENT='test comment' ORDER"
         )
@@ -2940,9 +2908,7 @@ FROM subquery2""",
                     },
                 )
 
-        self.assertIsInstance(
-            parse_one("NORMALIZE('str', NFD)").args.get("form"), exp.Var
-        )
+        self.assertIsInstance(parse_one("NORMALIZE('str', NFD)").args.get("form"), exp.Var)
 
     def test_coalesce(self):
         """
@@ -3047,9 +3013,7 @@ FROM subquery2""",
 
     def test_escaped_identifier_delimiter(self):
         for dialect in ("databricks", "hive", "mysql", "spark2", "spark"):
-            with self.subTest(
-                f"Testing escaped backtick in identifier name for {dialect}"
-            ):
+            with self.subTest(f"Testing escaped backtick in identifier name for {dialect}"):
                 self.validate_all(
                     'SELECT 1 AS "x`"',
                     read={
@@ -3071,9 +3035,7 @@ FROM subquery2""",
             "snowflake",
             "sqlite",
         ):
-            with self.subTest(
-                f"Testing escaped double-quote in identifier name for {dialect}"
-            ):
+            with self.subTest(f"Testing escaped double-quote in identifier name for {dialect}"):
                 self.validate_all(
                     'SELECT 1 AS "x"""',
                     read={
@@ -3085,9 +3047,7 @@ FROM subquery2""",
                 )
 
         for dialect in ("clickhouse", "sqlite"):
-            with self.subTest(
-                f"Testing escaped backtick in identifier name for {dialect}"
-            ):
+            with self.subTest(f"Testing escaped backtick in identifier name for {dialect}"):
                 self.validate_all(
                     'SELECT 1 AS "x`"',
                     read={

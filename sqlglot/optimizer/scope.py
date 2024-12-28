@@ -144,9 +144,7 @@ class Scope:
                     self._stars.append(node)
                 else:
                     self._raw_columns.append(node)
-            elif isinstance(node, exp.Table) and not isinstance(
-                node.parent, exp.JoinHint
-            ):
+            elif isinstance(node, exp.Table) and not isinstance(node.parent, exp.JoinHint):
                 self._tables.append(node)
             elif isinstance(node, exp.JoinHint):
                 self._join_hints.append(node)
@@ -298,10 +296,7 @@ class Scope:
                     not ancestor
                     or column.table
                     or isinstance(ancestor, exp.Select)
-                    or (
-                        isinstance(ancestor, exp.Table)
-                        and not isinstance(ancestor.this, exp.Func)
-                    )
+                    or (isinstance(ancestor, exp.Table) and not isinstance(ancestor.this, exp.Func))
                     or (
                         isinstance(ancestor, exp.Order)
                         and (
@@ -309,10 +304,7 @@ class Scope:
                             or column.name not in named_selects
                         )
                     )
-                    or (
-                        isinstance(ancestor, exp.Star)
-                        and not column.arg_key == "except"
-                    )
+                    or (isinstance(ancestor, exp.Star) and not column.arg_key == "except")
                 ):
                     self._columns.append(column)
 
@@ -352,9 +344,7 @@ class Scope:
                 self._references.append(
                     (
                         expression.alias,
-                        expression
-                        if expression.args.get("pivots")
-                        else expression.unnest(),
+                        expression if expression.args.get("pivots") else expression.unnest(),
                     )
                 )
 
@@ -406,9 +396,7 @@ class Scope:
     def pivots(self):
         if not self._pivots:
             self._pivots = [
-                pivot
-                for _, node in self.references
-                for pivot in node.args.get("pivots") or []
+                pivot for _, node in self.references for pivot in node.args.get("pivots") or []
             ]
 
         return self._pivots
@@ -581,9 +569,7 @@ def _traverse_scope(scope):
     elif isinstance(expression, exp.DDL):
         if isinstance(expression.expression, exp.Query):
             yield from _traverse_ctes(scope)
-            yield from _traverse_scope(
-                Scope(expression.expression, cte_sources=scope.cte_sources)
-            )
+            yield from _traverse_scope(Scope(expression.expression, cte_sources=scope.cte_sources))
         return
     elif isinstance(expression, exp.DML):
         yield from _traverse_ctes(scope)
@@ -593,9 +579,7 @@ def _traverse_scope(scope):
                 yield from _traverse_scope(Scope(query, cte_sources=scope.cte_sources))
         return
     else:
-        logger.warning(
-            "Cannot traverse scope %s with type '%s'", expression, type(expression)
-        )
+        logger.warning("Cannot traverse scope %s with type '%s'", expression, type(expression))
         return
 
     yield scope
@@ -728,9 +712,7 @@ def _traverse_tables(scope):
 
             # Make sure to not include the joins twice
             if expression is not scope.expression:
-                expressions.extend(
-                    join.this for join in expression.args.get("joins") or []
-                )
+                expressions.extend(join.this for join in expression.args.get("joins") or [])
 
             continue
 
@@ -778,9 +760,7 @@ def _traverse_tables(scope):
 def _traverse_subqueries(scope):
     for subquery in scope.subqueries:
         top = None
-        for child_scope in _traverse_scope(
-            scope.branch(subquery, scope_type=ScopeType.SUBQUERY)
-        ):
+        for child_scope in _traverse_scope(scope.branch(subquery, scope_type=ScopeType.SUBQUERY)):
             yield child_scope
             top = child_scope
         scope.subquery_scopes.append(top)

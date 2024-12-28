@@ -187,9 +187,9 @@ class SQLite(Dialect):
             exp.ILike: no_ilike_sql,
             exp.JSONExtract: _json_extract_sql,
             exp.JSONExtractScalar: arrow_json_extract_sql,
-            exp.Levenshtein: unsupported_args(
-                "ins_cost", "del_cost", "sub_cost", "max_dist"
-            )(rename_func("EDITDIST3")),
+            exp.Levenshtein: unsupported_args("ins_cost", "del_cost", "sub_cost", "max_dist")(
+                rename_func("EDITDIST3")
+            ),
             exp.LogicalOr: rename_func("MAX"),
             exp.LogicalAnd: rename_func("MIN"),
             exp.Pivot: no_pivot_sql,
@@ -206,9 +206,7 @@ class SQLite(Dialect):
             ),
             exp.TableSample: no_tablesample_sql,
             exp.TimeStrToTime: lambda self, e: self.sql(e, "this"),
-            exp.TimeToStr: lambda self, e: self.func(
-                "STRFTIME", e.args.get("format"), e.this
-            ),
+            exp.TimeToStr: lambda self, e: self.func("STRFTIME", e.args.get("format"), e.this),
             exp.TryCast: no_trycast_sql,
             exp.TsOrDsToTimestamp: lambda self, e: self.sql(e, "this"),
         }
@@ -227,9 +225,7 @@ class SQLite(Dialect):
 
         LIMIT_FETCH = "LIMIT"
 
-        def cast_sql(
-            self, expression: exp.Cast, safe_prefix: t.Optional[str] = None
-        ) -> str:
+        def cast_sql(self, expression: exp.Cast, safe_prefix: t.Optional[str] = None) -> str:
             if expression.is_type("date"):
                 return self.func("DATE", expression.this)
 
@@ -243,9 +239,7 @@ class SQLite(Dialect):
                 column_alias = alias.columns[0]
                 alias.set("columns", None)
                 sql = self.sql(
-                    exp.select(exp.alias_("value", column_alias))
-                    .from_(expression)
-                    .subquery()
+                    exp.select(exp.alias_("value", column_alias)).from_(expression).subquery()
                 )
             else:
                 sql = self.function_fallback_sql(expression)

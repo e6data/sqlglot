@@ -57,14 +57,10 @@ def annotate_types(
 
     schema = ensure_schema(schema)
 
-    return TypeAnnotator(schema, annotators, coerces_to, dialect=dialect).annotate(
-        expression
-    )
+    return TypeAnnotator(schema, annotators, coerces_to, dialect=dialect).annotate(expression)
 
 
-def _coerce_date_literal(
-    l: exp.Expression, unit: t.Optional[exp.Expression]
-) -> exp.DataType.Type:
+def _coerce_date_literal(l: exp.Expression, unit: t.Optional[exp.Expression]) -> exp.DataType.Type:
     date_text = l.name
     is_iso_date_ = is_iso_date(date_text)
 
@@ -78,9 +74,7 @@ def _coerce_date_literal(
     return exp.DataType.Type.UNKNOWN
 
 
-def _coerce_date(
-    l: exp.Expression, unit: t.Optional[exp.Expression]
-) -> exp.DataType.Type:
+def _coerce_date(l: exp.Expression, unit: t.Optional[exp.Expression]) -> exp.DataType.Type:
     if not is_date_unit(unit):
         return exp.DataType.Type.DATETIME
     return l.type.this if l.type else exp.DataType.Type.UNKNOWN
@@ -183,8 +177,9 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
         ),
         **swap_all(
             {
-                (exp.DataType.Type.DATE, exp.DataType.Type.INTERVAL): lambda l,
-                r: _coerce_date(l, r.args.get("unit")),
+                (exp.DataType.Type.DATE, exp.DataType.Type.INTERVAL): lambda l, r: _coerce_date(
+                    l, r.args.get("unit")
+                ),
             }
         ),
     }
@@ -193,9 +188,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
         self,
         schema: Schema,
         annotators: t.Optional[AnnotatorsType] = None,
-        coerces_to: t.Optional[
-            t.Dict[exp.DataType.Type, t.Set[exp.DataType.Type]]
-        ] = None,
+        coerces_to: t.Optional[t.Dict[exp.DataType.Type, t.Set[exp.DataType.Type]]] = None,
         binary_coercions: t.Optional[BinaryCoercions] = None,
         dialect: t.Optional[DialectType] = None,
     ) -> None:
@@ -223,9 +216,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
     def annotate(self, expression: E) -> E:
         for scope in traverse_scope(expression):
             self.annotate_scope(scope)
-        return self._maybe_annotate(
-            expression
-        )  # This takes care of non-traversable expressions
+        return self._maybe_annotate(expression)  # This takes care of non-traversable expressions
 
     def annotate_scope(self, scope: Scope) -> None:
         selects = {}
@@ -252,19 +243,15 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
                     alias: column.type
                     for alias, column in zip(expression.alias_column_names, values)
                 }
-            elif isinstance(expression, exp.SetOperation) and len(
-                expression.left.selects
-            ) == len(expression.right.selects):
-                selects[name] = col_types = self._setop_column_types.setdefault(
-                    id(expression), {}
-                )
+            elif isinstance(expression, exp.SetOperation) and len(expression.left.selects) == len(
+                expression.right.selects
+            ):
+                selects[name] = col_types = self._setop_column_types.setdefault(id(expression), {})
 
                 if not col_types:
                     # Process a chain / sub-tree of set operations
                     for set_op in expression.walk(
-                        prune=lambda n: not isinstance(
-                            n, (exp.SetOperation, exp.Subquery)
-                        )
+                        prune=lambda n: not isinstance(n, (exp.SetOperation, exp.Subquery))
                     ):
                         if not isinstance(set_op, exp.SetOperation):
                             continue
@@ -287,9 +274,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
                                     t.cast(exp.DataType, ls.type),
                                     t.cast(exp.DataType, rs.type),
                                 )
-                                for ls, rs in zip(
-                                    set_op.left.selects, set_op.right.selects
-                                )
+                                for ls, rs in zip(set_op.left.selects, set_op.right.selects)
                             }
 
                         # Coerce intermediate results with the previously registered types, if they exist
@@ -351,9 +336,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
 
         return t.cast(
             exp.DataType.Type,
-            type2_value
-            if type2_value in self.coerces_to.get(type1_value, {})
-            else type1_value,
+            type2_value if type2_value in self.coerces_to.get(type1_value, {}) else type1_value,
         )
 
     def _annotate_binary(self, expression: B) -> B:
@@ -365,9 +348,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
         if isinstance(expression, (exp.Connector, exp.Predicate)):
             self._set_type(expression, exp.DataType.Type.BOOLEAN)
         elif (left_type, right_type) in self.binary_coercions:
-            self._set_type(
-                expression, self.binary_coercions[(left_type, right_type)](left, right)
-            )
+            self._set_type(expression, self.binary_coercions[(left_type, right_type)](left, right))
         else:
             self._set_type(expression, self._maybe_coerce(left_type, right_type))
 
@@ -424,9 +405,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
                 break
 
             if not expr_type.is_type(exp.DataType.Type.UNKNOWN):
-                last_datatype = self._maybe_coerce(
-                    last_datatype or expr_type, expr_type
-                )
+                last_datatype = self._maybe_coerce(last_datatype or expr_type, expr_type)
 
         self._set_type(expression, last_datatype or exp.DataType.Type.UNKNOWN)
 
@@ -542,9 +521,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
 
         # Case: key = value or key := value
         if expression.expression:
-            return exp.ColumnDef(
-                this=expression.this.copy(), kind=expression.expression.type
-            )
+            return exp.ColumnDef(this=expression.this.copy(), kind=expression.expression.type)
 
         return expression.type
 
@@ -554,9 +531,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
             expression,
             exp.DataType(
                 this=exp.DataType.Type.STRUCT,
-                expressions=[
-                    self._annotate_struct_value(expr) for expr in expression.expressions
-                ],
+                expressions=[self._annotate_struct_value(expr) for expr in expression.expressions],
                 nested=True,
             ),
         )
@@ -577,14 +552,9 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
         map_type = exp.DataType(this=exp.DataType.Type.MAP)
         if isinstance(keys, exp.Array) and isinstance(values, exp.Array):
             key_type = seq_get(keys.type.expressions, 0) or exp.DataType.Type.UNKNOWN
-            value_type = (
-                seq_get(values.type.expressions, 0) or exp.DataType.Type.UNKNOWN
-            )
+            value_type = seq_get(values.type.expressions, 0) or exp.DataType.Type.UNKNOWN
 
-            if (
-                key_type != exp.DataType.Type.UNKNOWN
-                and value_type != exp.DataType.Type.UNKNOWN
-            ):
+            if key_type != exp.DataType.Type.UNKNOWN and value_type != exp.DataType.Type.UNKNOWN:
                 map_type.set("expressions", [key_type, value_type])
                 map_type.set("nested", True)
 

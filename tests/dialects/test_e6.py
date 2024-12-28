@@ -68,9 +68,7 @@ class TestE6(Validator):
             read={"trino": "SELECT date_parse('2024-11-09', '%d-%m-%y')"},
         )
 
-        self.validate_all(
-            "SELECT DAYS('2024-11-09')", read={"trino": "SELECT DAYS('2024-11-09')"}
-        )
+        self.validate_all("SELECT DAYS('2024-11-09')", read={"trino": "SELECT DAYS('2024-11-09')"})
 
         self.validate_all(
             "SELECT LAST_DAY(CAST('2024-11-09' AS TIMESTAMP))",
@@ -280,9 +278,7 @@ class TestE6(Validator):
         # Test FILTER_ARRAY with NULL values
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> NOT x IS NULL)",
-            read={
-                "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)"
-            },
+            read={"trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)"},
         )
 
         # Test FILTER_ARRAY with complex condition
@@ -302,16 +298,12 @@ class TestE6(Validator):
     def test_group_concat(self):
         self.validate_all(
             "SELECT c_birth_country AS country, LISTAGG(c_first_name, '')",
-            read={
-                "snowflake": "SELECT c_birth_country as country, listagg(c_first_name)"
-            },
+            read={"snowflake": "SELECT c_birth_country as country, listagg(c_first_name)"},
         )
 
         self.validate_all(
             "SELECT c_birth_country AS country, LISTAGG(DISTINCT c_first_name, '')",  # We are expecting
-            read={
-                "snowflake": "SELECT c_birth_country as country, listagg(distinct c_first_name)"
-            },
+            read={"snowflake": "SELECT c_birth_country as country, listagg(distinct c_first_name)"},
         )
 
         self.validate_all(
@@ -323,7 +315,5 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT c_birth_country AS country, LISTAGG(c_first_name, ' | ')",  # We are expecting
-            read={
-                "snowflake": "SELECT c_birth_country as country, listagg(c_first_name, ' | ')"
-            },
+            read={"snowflake": "SELECT c_birth_country as country, listagg(c_first_name, ' | ')"},
         )

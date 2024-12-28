@@ -10,23 +10,15 @@ class TestSpark(Validator):
 
     def test_ddl(self):
         self.validate_identity("INSERT OVERWRITE TABLE db1.tb1 TABLE db2.tb2")
-        self.validate_identity(
-            "CREATE TABLE foo AS WITH t AS (SELECT 1 AS col) SELECT col FROM t"
-        )
+        self.validate_identity("CREATE TABLE foo AS WITH t AS (SELECT 1 AS col) SELECT col FROM t")
         self.validate_identity("CREATE TEMPORARY VIEW test AS SELECT 1")
         self.validate_identity("CREATE TABLE foo (col VARCHAR(50))")
-        self.validate_identity(
-            "CREATE TABLE foo (col STRUCT<struct_col_a: VARCHAR((50))>)"
-        )
-        self.validate_identity(
-            "CREATE TABLE foo (col STRING) CLUSTERED BY (col) INTO 10 BUCKETS"
-        )
+        self.validate_identity("CREATE TABLE foo (col STRUCT<struct_col_a: VARCHAR((50))>)")
+        self.validate_identity("CREATE TABLE foo (col STRING) CLUSTERED BY (col) INTO 10 BUCKETS")
         self.validate_identity(
             "CREATE TABLE foo (col STRING) CLUSTERED BY (col) SORTED BY (col) INTO 10 BUCKETS"
         )
-        self.validate_identity(
-            "TRUNCATE TABLE t1 PARTITION(age = 10, name = 'test', address)"
-        )
+        self.validate_identity("TRUNCATE TABLE t1 PARTITION(age = 10, name = 'test', address)")
 
         self.validate_all(
             "CREATE TABLE db.example_table (col_a struct<struct_col_a:int, struct_col_b:string>)",
@@ -137,15 +129,9 @@ TBLPROPERTIES (
                 "spark": "ALTER TABLE StudentInfo DROP COLUMNS (LastName, DOB)",
             },
         )
-        self.validate_identity(
-            "ALTER VIEW StudentInfoView AS SELECT * FROM StudentInfo"
-        )
-        self.validate_identity(
-            "ALTER VIEW StudentInfoView AS SELECT LastName FROM StudentInfo"
-        )
-        self.validate_identity(
-            "ALTER VIEW StudentInfoView RENAME TO StudentInfoViewRenamed"
-        )
+        self.validate_identity("ALTER VIEW StudentInfoView AS SELECT * FROM StudentInfo")
+        self.validate_identity("ALTER VIEW StudentInfoView AS SELECT LastName FROM StudentInfo")
+        self.validate_identity("ALTER VIEW StudentInfoView RENAME TO StudentInfoViewRenamed")
         self.validate_identity(
             "ALTER VIEW StudentInfoView SET TBLPROPERTIES ('key1'='val1', 'key2'='val2')"
         )
@@ -249,17 +235,13 @@ TBLPROPERTIES (
 
     def test_spark(self):
         self.assertEqual(
-            parse_one("REFRESH TABLE t", read="spark")
-            .assert_is(exp.Refresh)
-            .sql(dialect="spark"),
+            parse_one("REFRESH TABLE t", read="spark").assert_is(exp.Refresh).sql(dialect="spark"),
             "REFRESH TABLE t",
         )
 
         self.validate_identity("any_value(col, true)", "ANY_VALUE(col) IGNORE NULLS")
         self.validate_identity("first(col, true)", "FIRST(col) IGNORE NULLS")
-        self.validate_identity(
-            "first_value(col, true)", "FIRST_VALUE(col) IGNORE NULLS"
-        )
+        self.validate_identity("first_value(col, true)", "FIRST_VALUE(col) IGNORE NULLS")
         self.validate_identity("last(col, true)", "LAST(col) IGNORE NULLS")
         self.validate_identity("last_value(col, true)", "LAST_VALUE(col) IGNORE NULLS")
         self.validate_identity("DESCRIBE EXTENDED db.tbl")
@@ -901,9 +883,7 @@ TBLPROPERTIES (
         query = self.parse_one(with_modifiers)
 
         for dialect in Dialects:
-            with self.subTest(
-                f"Transpiling query with CLUSTER/DISTRIBUTE/SORT BY to {dialect}"
-            ):
+            with self.subTest(f"Transpiling query with CLUSTER/DISTRIBUTE/SORT BY to {dialect}"):
                 name = dialect.value
                 if name in ("", "databricks", "hive", "spark", "spark2"):
                     self.assertEqual(query.sql(name), with_modifiers)
@@ -917,9 +897,7 @@ TBLPROPERTIES (
             "TYPE EVOLUTION",
             "EVOLUTION",
         ):
-            with self.subTest(
-                f"Test roundtrip of VIEW schema binding {schema_binding}"
-            ):
+            with self.subTest(f"Test roundtrip of VIEW schema binding {schema_binding}"):
                 self.validate_identity(
                     f"CREATE VIEW emp_v WITH SCHEMA {schema_binding} AS SELECT * FROM emp"
                 )

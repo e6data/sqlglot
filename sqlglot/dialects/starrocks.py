@@ -45,9 +45,7 @@ class StarRocks(MySQL):
 
         PROPERTY_PARSERS = {
             **MySQL.Parser.PROPERTY_PARSERS,
-            "UNIQUE": lambda self: self._parse_composite_key_property(
-                exp.UniqueKeyProperty
-            ),
+            "UNIQUE": lambda self: self._parse_composite_key_property(exp.UniqueKeyProperty),
             "PROPERTIES": lambda self: self._parse_wrapped_properties(),
             "PARTITION BY": lambda self: self._parse_partition_by_opt_range(),
         }
@@ -94,9 +92,7 @@ class StarRocks(MySQL):
             self._match_text_seq("END")
             end = self._parse_wrapped(self._parse_string)
             self._match_text_seq("EVERY")
-            every = self._parse_wrapped(
-                lambda: self._parse_interval() or self._parse_number()
-            )
+            every = self._parse_wrapped(lambda: self._parse_interval() or self._parse_number())
             return self.expression(
                 exp.PartitionByRangePropertyDynamic, start=start, end=end, every=every
             )
@@ -151,16 +147,10 @@ class StarRocks(MySQL):
             exp.JSONExtract: arrow_json_extract_sql,
             exp.Property: property_sql,
             exp.RegexpLike: rename_func("REGEXP"),
-            exp.StrToUnix: lambda self, e: self.func(
-                "UNIX_TIMESTAMP", e.this, self.format_time(e)
-            ),
-            exp.TimestampTrunc: lambda self, e: self.func(
-                "DATE_TRUNC", unit_to_str(e), e.this
-            ),
+            exp.StrToUnix: lambda self, e: self.func("UNIX_TIMESTAMP", e.this, self.format_time(e)),
+            exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.TimeStrToDate: rename_func("TO_DATE"),
-            exp.UnixToStr: lambda self, e: self.func(
-                "FROM_UNIXTIME", e.this, self.format_time(e)
-            ),
+            exp.UnixToStr: lambda self, e: self.func("FROM_UNIXTIME", e.this, self.format_time(e)),
             exp.UnixToTime: rename_func("FROM_UNIXTIME"),
             exp.ArrayFilter: rename_func("ARRAY_FILTER"),
         }

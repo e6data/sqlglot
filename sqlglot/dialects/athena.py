@@ -16,13 +16,9 @@ def _generate_as_hive(expression: exp.Expression) -> bool:
                 return True  # CREATE EXTERNAL TABLE is Hive
 
             if not isinstance(expression.expression, exp.Select):
-                return (
-                    True  # any CREATE TABLE other than CREATE TABLE AS SELECT is Hive
-                )
+                return True  # any CREATE TABLE other than CREATE TABLE AS SELECT is Hive
         else:
-            return (
-                expression.kind != "VIEW"
-            )  # CREATE VIEW is never Hive but CREATE SCHEMA etc is
+            return expression.kind != "VIEW"  # CREATE VIEW is never Hive but CREATE SCHEMA etc is
 
     # https://docs.aws.amazon.com/athena/latest/ug/ddl-reference.html
     elif isinstance(expression, (exp.Alter, exp.Drop, exp.Describe)):
@@ -52,10 +48,7 @@ def _location_property_sql(self: Athena.Generator, e: exp.LocationProperty):
             ),
             None,
         )
-        if (
-            table_type_property
-            and table_type_property.text("value").lower() == "iceberg"
-        ):
+        if table_type_property and table_type_property.text("value").lower() == "iceberg":
             prop_name = "location"
 
     return f"{prop_name}={self.sql(e, 'this')}"
@@ -120,9 +113,7 @@ class Athena(Trino):
             # so it gets generated as `ALTER TABLE .. ADD COLUMNS(...)`
             # instead of `ALTER TABLE ... ADD COLUMN` which is invalid syntax on Athena
             if isinstance(expression, exp.Alter) and expression.kind == "TABLE":
-                if expression.actions and isinstance(
-                    expression.actions[0], exp.ColumnDef
-                ):
+                if expression.actions and isinstance(expression.actions[0], exp.ColumnDef):
                     new_actions = exp.Schema(expressions=expression.actions)
                     expression.set("actions", [new_actions])
 
@@ -141,8 +132,7 @@ class Athena(Trino):
         TRANSFORMS = {
             **Trino.Generator.TRANSFORMS,
             exp.FileFormatProperty: lambda self, e: f"format={self.sql(e, 'this')}",
-            exp.PartitionedByProperty: lambda self,
-            e: f"partitioned_by={self.sql(e, 'this')}",
+            exp.PartitionedByProperty: lambda self, e: f"partitioned_by={self.sql(e, 'this')}",
             exp.LocationProperty: _location_property_sql,
         }
 
