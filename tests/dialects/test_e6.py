@@ -21,6 +21,12 @@ class TestE6(Validator):
                 "duckdb": "x << 1",
                 "hive": "x << 1",
                 "spark": "SHIFTLEFT(x, 1)",
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+            },
+            write={
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+                "spark": "SHIFTLEFT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)",
             },
         )
 
@@ -31,12 +37,22 @@ class TestE6(Validator):
                 "duckdb": "x >> 1",
                 "hive": "x >> 1",
                 "spark": "SHIFTRIGHT(x, 1)",
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+            },
+            write={
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+                "spark": "SHIFTRIGHT(x, 1)",
+                "databricks": "SHIFTRIGHT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
             },
         )
 
         self.validate_all(
             "SELECT ARRAY_CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
-            read={"trino": "SELECT CONCAT(ARRAY[1,2], ARRAY[3,4])"},
+            read={
+                "trino": "SELECT CONCAT(ARRAY[1,2], ARRAY[3,4])",
+                "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))",
+            },
         )
 
         self.validate_all(
@@ -94,12 +110,34 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT SIZE(ARRAY[1, 2, 3])",
-            read={"trino": "SELECT cardinality(ARRAY[1, 2, 3])"},
+            read={
+                "trino": "SELECT CARDINALITY(ARRAY[1, 2, 3])",
+                "snowflake": "SELECT ARRAY_SIZE(ARRAY_CONSTRUCT(1, 2, 3))",
+                "databricks": "SELECT ARRAY_SIZE(ARRAY[1, 2, 3])",
+            },
+            write={
+                "trino": "SELECT CARDINALITY(ARRAY[1, 2, 3])",
+                "snowflake": "SELECT ARRAY_SIZE([1, 2, 3])",
+            },
         )
 
         self.validate_all(
-            "SELECT ARRAY_CONTAINS(ARRAY[1, 2, 3], 2)",
-            read={"trino": "SELECT contains(ARRAY[1, 2, 3], 2)"},
+            "ARRAY_CONTAINS(x, 1)",
+            read={
+                "duckdb": "LIST_HAS(x, 1)",
+                "snowflake": "ARRAY_CONTAINS(1, x)",
+                "trino": "CONTAINS(x, 1)",
+                "presto": "CONTAINS(x, 1)",
+                "hive": "ARRAY_CONTAINS(x, 1)",
+                "spark": "ARRAY_CONTAINS(x, 1)",
+            },
+            write={
+                "duckdb": "ARRAY_CONTAINS(x, 1)",
+                "presto": "CONTAINS(x, 1)",
+                "hive": "ARRAY_CONTAINS(x, 1)",
+                "spark": "ARRAY_CONTAINS(x, 1)",
+                "snowflake": "ARRAY_CONTAINS(1, x)",
+            },
         )
 
         # This functions tests the `_parse_filter_array` functions that we have written.
@@ -209,6 +247,30 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT CONTAINS_SUBSTR('X', 'Y')",
+            read={"snowflake": "SELECT CONTAINS('X','Y')"},
+            write={"snowflake": "SELECT CONTAINS('X', 'Y')"},
+        )
+
+        self.validate_all(
+            "SELECT ELEMENT_AT(X, 4)",
+            read={
+                "snowflake": "SELECT get(X, 3)",
+                "trino": "SELECT ELEMENT_AT(X, 4)",
+                "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "duckdb": "SELECT X[4]",
+            },
+            write={
+                "snowflake": "SELECT X[3]",
+                "trino": "SELECT ELEMENT_AT(X, 4)",
+                "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "duckdb": "SELECT X[4]",
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
@@ -263,35 +325,58 @@ class TestE6(Validator):
         )
 
     def test_parse_filter_array(self):
+        self.validate_all(
+            "FILTER_ARRAY(the_array, x -> x > 0)",
+            write={
+                "presto": "FILTER(the_array, x -> x > 0)",
+                "hive": "FILTER(the_array, x -> x > 0)",
+                "spark": "FILTER(the_array, x -> x > 0)",
+                "snowflake": "FILTER(the_array, x -> x > 0)",
+            },
+        )
+
         # Test FILTER_ARRAY with positive numbers
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
-            read={"trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)"},
+            read={
+                "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x > 3)",
+            },
         )
 
         # Test FILTER_ARRAY with negative numbers
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
-            read={"trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)"},
+            read={
+                "trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(-5, -4, -3, -2, -1), x -> x <= -3)",
+            },
         )
 
         # Test FILTER_ARRAY with NULL values
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> NOT x IS NULL)",
-            read={"trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)"},
+            read={
+                "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(NULL, 1, NULL, 2), x -> x IS NOT NULL)",
+            },
         )
 
         # Test FILTER_ARRAY with complex condition
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4, 5], x -> MOD(x, 2) = 0)",
-            read={"trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)"},
+            read={
+                "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x % 2 = 0)",
+            },
         )
 
         # Test FILTER_ARRAY with nested arrays
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> SIZE(x) = 2)",
             read={
-                "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)"
+                "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)",
+                "snowflake": "SELECT filter(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4)), x -> ARRAY_SIZE(x) = 2)",
             },
         )
 
@@ -316,4 +401,60 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT c_birth_country AS country, LISTAGG(c_first_name, ' | ')",  # We are expecting
             read={"snowflake": "SELECT c_birth_country as country, listagg(c_first_name, ' | ')"},
+        )
+
+    def test_named_struct(self):
+        self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
+
+        self.validate_all(
+            "NAMED_STRUCT('key_1', 'one', 'key_2', NULL)",
+            read={
+                "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
+                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+            },
+            write={
+                "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
+            },
+        )
+
+    def test_json_extract(self):
+        self.validate_identity(
+            """SELECT JSON_EXTRACT('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array"""
+        )
+
+        self.validate_all(
+            """SELECT JSON_EXTRACT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$farm.barn.color')""",
+            write={
+                "bigquery": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm.barn.color')""",
+                "databricks": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}':farm.barn.color""",
+                "duckdb": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm.barn.color'""",
+                "postgres": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm', 'barn', 'color')""",
+                "presto": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm.barn.color')""",
+                "redshift": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm', 'barn', 'color')""",
+                "spark": """SELECT GET_JSON_OBJECT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm.barn.color')""",
+                "sqlite": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm.barn.color'""",
+            },
+        )
+        #
+        self.validate_all(
+            """SELECT JSON_VALUE('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array""",
+            write={
+                "E6": """SELECT JSON_EXTRACT('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array"""
+            },
+        )
+
+        self.validate_all(
+            """SELECT JSON_VALUE('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
+            write={
+                "bigquery": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+                "databricks": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}':farm""",
+                "duckdb": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
+                "postgres": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
+                "presto": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+                "redshift": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
+                "spark": """SELECT GET_JSON_OBJECT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+                "sqlite": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
+            },
         )

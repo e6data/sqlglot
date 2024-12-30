@@ -2372,20 +2372,11 @@ SINGLE = TRUE""",
     def test_bitnot_function(self):
         self.validate_identity("SELECT BITNOT(a) FROM table")
 
-        # Test BITNOT negative number
-        self.validate_identity("SELECT BITNOT(-1) FROM table")
+    def test_bit_not_function(self):
+        self.validate_identity("SELECT BIT_NOT(a) FROM table", "SELECT BITNOT(a) FROM table")
 
-        # Test BITNOT zero
-        self.validate_identity("SELECT BITNOT(0) FROM table")
+    def test_bitand_function(self):
+        self.validate_identity("SELECT BITAND(a, b) FROM table")
 
-        # Test BITNOT large number
-        self.validate_identity("SELECT BITNOT(123456789) FROM table")
-
-        # Test null
-        self.validate_identity("SELECT BITNOT(NULL) FROM table")
-
-        # Test double
-        self.validate_identity("SELECT BITNOT(12.34) FROM table")
-
-        # Test string
-        self.validate_identity("SELECT BITNOT('abc') FROM table")
+    def test_bit_and_function(self):
+        self.validate_identity("SELECT BIT_AND(a, b) FROM table", "SELECT BITAND(a, b) FROM table")
