@@ -20,7 +20,16 @@ class TestClickhouse(Validator):
             target_type = try_cast.to.sql("clickhouse")
             self.assertEqual(try_cast.sql("clickhouse"), f"CAST(x AS {target_type})")
 
-        for nullable_type in ("INT", "UINT", "BIGINT", "FLOAT", "DOUBLE", "TEXT", "DATE", "UUID"):
+        for nullable_type in (
+            "INT",
+            "UINT",
+            "BIGINT",
+            "FLOAT",
+            "DOUBLE",
+            "TEXT",
+            "DATE",
+            "UUID",
+        ):
             try_cast = parse_one(f"TRY_CAST(x AS {nullable_type})")
             target_type = exp.DataType.build(nullable_type, dialect="clickhouse").sql("clickhouse")
             self.assertEqual(try_cast.sql("clickhouse"), f"CAST(x AS Nullable({target_type}))")
@@ -29,6 +38,7 @@ class TestClickhouse(Validator):
         self.assertEqual(expr.sql(dialect="clickhouse"), "COUNT(x)")
         self.assertIsNone(expr._meta)
 
+        self.validate_identity("WITH arrayJoin([(1, [2, 3])]) AS arr SELECT arr")
         self.validate_identity("CAST(1 AS Bool)")
         self.validate_identity("SELECT toString(CHAR(104.1, 101, 108.9, 108.9, 111, 32))")
         self.validate_identity("@macro").assert_is(exp.Parameter).this.assert_is(exp.Var)
@@ -153,6 +163,10 @@ class TestClickhouse(Validator):
         )
         self.validate_identity(
             "CREATE TABLE t (foo String CODEC(LZ4HC(9), ZSTD, DELTA), size String ALIAS formatReadableSize(size_bytes), INDEX idx1 a TYPE bloom_filter(0.001) GRANULARITY 1, INDEX idx2 a TYPE set(100) GRANULARITY 2, INDEX idx3 a TYPE minmax GRANULARITY 3)"
+        )
+        self.validate_identity(
+            "INSERT INTO tab VALUES ({'key1': 1, 'key2': 10}), ({'key1': 2, 'key2': 20}), ({'key1': 3, 'key2': 30})",
+            "INSERT INTO tab VALUES (map('key1', 1, 'key2', 10)), (map('key1', 2, 'key2', 20)), (map('key1', 3, 'key2', 30))",
         )
         self.validate_identity(
             "SELECT (toUInt8('1') + toUInt8('2')) IS NOT NULL",
@@ -511,7 +525,8 @@ class TestClickhouse(Validator):
         self.validate_identity("DELETE FROM tbl ON CLUSTER test_cluster WHERE date = '2019-01-01'")
 
         self.assertIsInstance(
-            parse_one("Tuple(select Int64)", into=exp.DataType, read="clickhouse"), exp.DataType
+            parse_one("Tuple(select Int64)", into=exp.DataType, read="clickhouse"),
+            exp.DataType,
         )
 
         self.validate_identity("INSERT INTO t (col1, col2) VALUES ('abcd', 1234)")
@@ -544,6 +559,9 @@ class TestClickhouse(Validator):
             "SELECT name FROM data WHERE (SELECT DISTINCT name FROM data) IS NOT NULL",
             "SELECT name FROM data WHERE NOT ((SELECT DISTINCT name FROM data) IS NULL)",
         )
+
+        self.validate_identity("SELECT 1_2_3_4_5", "SELECT 12345")
+        self.validate_identity("SELECT 1_b", "SELECT 1_b")
 
     def test_clickhouse_values(self):
         values = exp.select("*").from_(
@@ -664,7 +682,14 @@ class TestClickhouse(Validator):
             )
 
     def test_geom_types(self):
-        data_types = ["Point", "Ring", "LineString", "MultiLineString", "Polygon", "MultiPolygon"]
+        data_types = [
+            "Point",
+            "Ring",
+            "LineString",
+            "MultiLineString",
+            "Polygon",
+            "MultiPolygon",
+        ]
         for data_type in data_types:
             with self.subTest(f"Casting to ClickHouse {data_type}"):
                 self.validate_identity(f"SELECT CAST(val AS {data_type})")
@@ -1109,7 +1134,11 @@ LIFETIME(MIN 0 MAX 0)""",
                 )
 
         # 3-arg functions of type <func>(unit, value, date)
-        for func in (*datetime_funcs, ("DATE_DIFF", "DATEDIFF"), ("TIMESTAMP_SUB", "TIMESTAMPSUB")):
+        for func in (
+            *datetime_funcs,
+            ("DATE_DIFF", "DATEDIFF"),
+            ("TIMESTAMP_SUB", "TIMESTAMPSUB"),
+        ):
             func_name = func[0]
             for func_alias in func:
                 with self.subTest(f"Test 3-arg date-time function {func_alias}"):

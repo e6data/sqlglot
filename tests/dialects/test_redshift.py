@@ -611,7 +611,8 @@ FROM (
         self.assertEqual(ast.sql("redshift"), "SELECT * FROM t AS t CROSS JOIN t.c1")
 
         ast = parse_one(
-            "SELECT * FROM x AS a, a.b AS c, c.d.e AS f, f.g.h.i.j.k AS l", read="redshift"
+            "SELECT * FROM x AS a, a.b AS c, c.d.e AS f, f.g.h.i.j.k AS l",
+            read="redshift",
         )
         joins = ast.args["joins"]
         ast.args["from"].this.assert_is(exp.Table)
@@ -619,7 +620,8 @@ FROM (
         joins[1].this.assert_is(exp.Unnest)
         joins[2].this.assert_is(exp.Unnest).expressions[0].assert_is(exp.Dot)
         self.assertEqual(
-            ast.sql("redshift"), "SELECT * FROM x AS a, a.b AS c, c.d.e AS f, f.g.h.i.j.k AS l"
+            ast.sql("redshift"),
+            "SELECT * FROM x AS a, a.b AS c, c.d.e AS f, f.g.h.i.j.k AS l",
         )
 
     def test_join_markers(self):

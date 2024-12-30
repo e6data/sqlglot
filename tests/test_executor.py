@@ -331,7 +331,10 @@ class TestExecutor(unittest.TestCase):
             ("SELECT 1 / 0 AS a", ["a"], ZeroDivisionError),
             (
                 exp.select(
-                    exp.alias_(exp.Literal.number(1).div(exp.Literal.number(2), typed=True), "a")
+                    exp.alias_(
+                        exp.Literal.number(1).div(exp.Literal.number(2), typed=True),
+                        "a",
+                    )
                 ),
                 ["a"],
                 [
@@ -713,7 +716,10 @@ class TestExecutor(unittest.TestCase):
                 "UNIXTOTIME(1659981729)",
                 datetime.datetime(2022, 8, 8, 18, 2, 9, tzinfo=datetime.timezone.utc),
             ),
-            ("TIMESTRTOTIME('2013-04-05 01:02:03')", datetime.datetime(2013, 4, 5, 1, 2, 3)),
+            (
+                "TIMESTRTOTIME('2013-04-05 01:02:03')",
+                datetime.datetime(2013, 4, 5, 1, 2, 3),
+            ),
             (
                 "UNIXTOTIME(40 * 365 * 86400)",
                 datetime.datetime(2009, 12, 22, 00, 00, 00, tzinfo=datetime.timezone.utc),

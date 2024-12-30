@@ -117,7 +117,10 @@ def temporary_storage_provider(expression: exp.Expression) -> exp.Expression:
 
 
 def _annotate_by_similar_args(
-    self: TypeAnnotator, expression: E, *args: str, target_type: exp.DataType | exp.DataType.Type
+    self: TypeAnnotator,
+    expression: E,
+    *args: str,
+    target_type: exp.DataType | exp.DataType.Type,
 ) -> E:
     """
     Infers the type of the expression according to the following rules:

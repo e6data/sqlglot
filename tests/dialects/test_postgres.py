@@ -167,7 +167,8 @@ class TestPostgres(Validator):
             "SELECT 'The price is $9.95' AS msg",
         )
         self.validate_identity(
-            "COMMENT ON TABLE mytable IS $$doc this$$", "COMMENT ON TABLE mytable IS 'doc this'"
+            "COMMENT ON TABLE mytable IS $$doc this$$",
+            "COMMENT ON TABLE mytable IS 'doc this'",
         )
         self.validate_identity(
             "UPDATE MYTABLE T1 SET T1.COL = 13",
@@ -831,7 +832,8 @@ class TestPostgres(Validator):
 
         # Checks that OID is parsed into a DataType (ObjectIdentifier)
         self.assertIsInstance(
-            self.parse_one("CREATE TABLE p.t (c oid)").find(exp.DataType), exp.ObjectIdentifier
+            self.parse_one("CREATE TABLE p.t (c oid)").find(exp.DataType),
+            exp.ObjectIdentifier,
         )
 
         expr = self.parse_one("CREATE TABLE t (x INTERVAL day)")
@@ -874,6 +876,9 @@ class TestPostgres(Validator):
         self.validate_identity("ALTER TABLE t1 SET ACCESS METHOD method")
         self.validate_identity("ALTER TABLE t1 SET TABLESPACE tablespace")
         self.validate_identity("ALTER TABLE t1 SET (fillfactor = 5, autovacuum_enabled = TRUE)")
+        self.validate_identity(
+            "INSERT INTO newtable AS t(a, b, c) VALUES (1, 2, 3) ON CONFLICT(c) DO UPDATE SET a = t.a + 1 WHERE t.a < 1"
+        )
         self.validate_identity(
             "ALTER TABLE tested_table ADD CONSTRAINT unique_example UNIQUE (column_name) NOT VALID"
         )

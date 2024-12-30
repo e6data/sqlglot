@@ -21,7 +21,12 @@ class Validator(unittest.TestCase):
         return parse_one(sql, read=self.dialect, **kwargs)
 
     def validate_identity(
-        self, sql, write_sql=None, pretty=False, check_command_warning=False, identify=False
+        self,
+        sql,
+        write_sql=None,
+        pretty=False,
+        check_command_warning=False,
+        identify=False,
     ):
         if check_command_warning:
             with self.assertLogs(parser_logger) as cm:
@@ -31,7 +36,8 @@ class Validator(unittest.TestCase):
             expression = self.parse_one(sql)
 
         self.assertEqual(
-            write_sql or sql, expression.sql(dialect=self.dialect, pretty=pretty, identify=identify)
+            write_sql or sql,
+            expression.sql(dialect=self.dialect, pretty=pretty, identify=identify),
         )
         return expression
 
@@ -2428,7 +2434,8 @@ SELECT
         self.validate_identity("COUNT_IF(DISTINCT cond)")
 
         self.validate_all(
-            "SELECT COUNT_IF(cond) FILTER", write={"": "SELECT COUNT_IF(cond) AS FILTER"}
+            "SELECT COUNT_IF(cond) FILTER",
+            write={"": "SELECT COUNT_IF(cond) AS FILTER"},
         )
         self.validate_all(
             "SELECT COUNT_IF(col % 2 = 0) FROM foo",

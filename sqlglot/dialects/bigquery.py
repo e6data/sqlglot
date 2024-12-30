@@ -202,7 +202,8 @@ def _unix_to_time_sql(self: BigQuery.Generator, expression: exp.UnixToTime) -> s
         return self.func("TIMESTAMP_MICROS", timestamp)
 
     unix_seconds = exp.cast(
-        exp.Div(this=timestamp, expression=exp.func("POW", 10, scale)), exp.DataType.Type.BIGINT
+        exp.Div(this=timestamp, expression=exp.func("POW", 10, scale)),
+        exp.DataType.Type.BIGINT,
     )
     return self.func("TIMESTAMP_SECONDS", unix_seconds)
 
@@ -244,7 +245,9 @@ def _build_regexp_extract(
     return _builder
 
 
-def _build_extract_json_with_default_path(expr_type: t.Type[E]) -> t.Callable[[t.List, Dialect], E]:
+def _build_extract_json_with_default_path(
+    expr_type: t.Type[E],
+) -> t.Callable[[t.List, Dialect], E]:
     def _builder(args: t.List, dialect: Dialect) -> E:
         if len(args) == 1:
             # The default value for the JSONPath is '$' i.e all of the data
@@ -310,7 +313,9 @@ def _build_levenshtein(args: t.List) -> exp.Levenshtein:
     )
 
 
-def _build_format_time(expr_type: t.Type[exp.Expression]) -> t.Callable[[t.List], exp.TimeToStr]:
+def _build_format_time(
+    expr_type: t.Type[exp.Expression],
+) -> t.Callable[[t.List], exp.TimeToStr]:
     def _builder(args: t.List) -> exp.TimeToStr:
         return exp.TimeToStr(this=expr_type(this=seq_get(args, 1)), format=seq_get(args, 0))
 
@@ -397,7 +402,15 @@ class BigQuery(Dialect):
         **Dialect.ANNOTATORS,
         **{
             expr_type: lambda self, e: _annotate_math_functions(self, e)
-            for expr_type in (exp.Floor, exp.Ceil, exp.Log, exp.Ln, exp.Sqrt, exp.Exp, exp.Round)
+            for expr_type in (
+                exp.Floor,
+                exp.Ceil,
+                exp.Log,
+                exp.Ln,
+                exp.Sqrt,
+                exp.Exp,
+                exp.Round,
+            )
         },
         **{
             expr_type: lambda self, e: self._annotate_by_args(e, "this")
@@ -589,7 +602,11 @@ class BigQuery(Dialect):
 
         NULL_TOKENS = {TokenType.NULL, TokenType.UNKNOWN}
 
-        DASHED_TABLE_PART_FOLLOW_TOKENS = {TokenType.DOT, TokenType.L_PAREN, TokenType.R_PAREN}
+        DASHED_TABLE_PART_FOLLOW_TOKENS = {
+            TokenType.DOT,
+            TokenType.L_PAREN,
+            TokenType.R_PAREN,
+        }
 
         STATEMENT_PARSERS = {
             **parser.Parser.STATEMENT_PARSERS,
@@ -637,7 +654,10 @@ class BigQuery(Dialect):
             return this
 
         def _parse_table_parts(
-            self, schema: bool = False, is_db_reference: bool = False, wildcard: bool = False
+            self,
+            schema: bool = False,
+            is_db_reference: bool = False,
+            wildcard: bool = False,
         ) -> exp.Table:
             table = super()._parse_table_parts(
                 schema=schema, is_db_reference=is_db_reference, wildcard=True
@@ -1149,7 +1169,10 @@ class BigQuery(Dialect):
 
             time_expr = (
                 this
-                if isinstance(this, (exp.TsOrDsToDatetime, exp.TsOrDsToTimestamp, exp.TsOrDsToDate))
+                if isinstance(
+                    this,
+                    (exp.TsOrDsToDatetime, exp.TsOrDsToTimestamp, exp.TsOrDsToDate),
+                )
                 else expression
             )
             return self.func(func_name, self.format_time(expression), time_expr.this)
@@ -1169,7 +1192,8 @@ class BigQuery(Dialect):
             # Only the TIMESTAMP one should use the below conversion, when AT TIME ZONE is included.
             if not isinstance(parent, exp.Cast) or not parent.to.is_type("text"):
                 return self.func(
-                    "TIMESTAMP", self.func("DATETIME", expression.this, expression.args.get("zone"))
+                    "TIMESTAMP",
+                    self.func("DATETIME", expression.this, expression.args.get("zone")),
                 )
 
             return super().attimezone_sql(expression)

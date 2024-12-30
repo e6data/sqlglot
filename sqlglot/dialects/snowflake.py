@@ -92,7 +92,9 @@ def _build_object_construct(args: t.List) -> t.Union[exp.StarMap, exp.Struct]:
 
 def _build_datediff(args: t.List) -> exp.DateDiff:
     return exp.DateDiff(
-        this=seq_get(args, 2), expression=seq_get(args, 1), unit=map_date_part(seq_get(args, 0))
+        this=seq_get(args, 2),
+        expression=seq_get(args, 1),
+        unit=map_date_part(seq_get(args, 0)),
     )
 
 
@@ -192,7 +194,9 @@ def _unqualify_unpivot_columns(expression: exp.Expression) -> exp.Expression:
     return expression
 
 
-def _flatten_structured_types_unless_iceberg(expression: exp.Expression) -> exp.Expression:
+def _flatten_structured_types_unless_iceberg(
+    expression: exp.Expression,
+) -> exp.Expression:
     assert isinstance(expression, exp.Create)
 
     def _flatten_structured_type(expression: exp.DataType) -> exp.DataType:
@@ -422,11 +426,16 @@ class Snowflake(Dialect):
             "DATEDIFF": _build_datediff,
             "DIV0": _build_if_from_div0,
             "EDITDISTANCE": lambda args: exp.Levenshtein(
-                this=seq_get(args, 0), expression=seq_get(args, 1), max_dist=seq_get(args, 2)
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                max_dist=seq_get(args, 2),
             ),
             "FLATTEN": exp.Explode.from_arg_list,
             "GET": lambda args: exp.Bracket(
-                this=seq_get(args, 0), expressions=[seq_get(args, 1)], offset=0, safe=True
+                this=seq_get(args, 0),
+                expressions=[seq_get(args, 1)],
+                offset=0,
+                safe=True,
             ),
             "GET_PATH": lambda args, dialect: exp.JSONExtract(
                 this=seq_get(args, 0), expression=dialect.to_json_path(seq_get(args, 1))
@@ -473,6 +482,7 @@ class Snowflake(Dialect):
             "TO_TIMESTAMP_LTZ": _build_datetime("TO_TIMESTAMP_LTZ", exp.DataType.Type.TIMESTAMPLTZ),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_TZ": _build_datetime("TO_TIMESTAMP_TZ", exp.DataType.Type.TIMESTAMPTZ),
+            # "TO_CHAR": exp.TimeToStr.from_arg_list,
             "TO_VARCHAR": exp.ToChar.from_arg_list,
             "ZEROIFNULL": _build_if_from_zeroifnull,
         }
@@ -556,7 +566,14 @@ class Snowflake(Dialect):
 
         FLATTEN_COLUMNS = ["SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS"]
 
-        SCHEMA_KINDS = {"OBJECTS", "TABLES", "VIEWS", "SEQUENCES", "UNIQUE KEYS", "IMPORTED KEYS"}
+        SCHEMA_KINDS = {
+            "OBJECTS",
+            "TABLES",
+            "VIEWS",
+            "SEQUENCES",
+            "UNIQUE KEYS",
+            "IMPORTED KEYS",
+        }
 
         NON_TABLE_CREATABLES = {"STORAGE INTEGRATION", "TAG", "WAREHOUSE", "STREAMLIT"}
 
@@ -621,7 +638,9 @@ class Snowflake(Dialect):
 
             return None
 
-        def _parse_with_property(self) -> t.Optional[exp.Expression] | t.List[exp.Expression]:
+        def _parse_with_property(
+            self,
+        ) -> t.Optional[exp.Expression] | t.List[exp.Expression]:
             if self._match(TokenType.TAG):
                 return self._parse_tag()
 
@@ -693,7 +712,10 @@ class Snowflake(Dialect):
             return lateral
 
         def _parse_table_parts(
-            self, schema: bool = False, is_db_reference: bool = False, wildcard: bool = False
+            self,
+            schema: bool = False,
+            is_db_reference: bool = False,
+            wildcard: bool = False,
         ) -> exp.Table:
             # https://docs.snowflake.com/en/user-guide/querying-stage
             if self._match(TokenType.STRING, advance=False):
@@ -925,7 +947,10 @@ class Snowflake(Dialect):
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
             exp.GenerateSeries: lambda self, e: self.func(
-                "ARRAY_GENERATE_RANGE", e.args["start"], e.args["end"] + 1, e.args.get("step")
+                "ARRAY_GENERATE_RANGE",
+                e.args["start"],
+                e.args["end"] + 1,
+                e.args.get("step"),
             ),
             exp.GroupConcat: rename_func("LISTAGG"),
             exp.If: if_sql(name="IFF", false_value="NULL"),
@@ -990,7 +1015,9 @@ class Snowflake(Dialect):
             exp.TsOrDsAdd: date_delta_sql("DATEADD", cast=True),
             exp.TsOrDsDiff: date_delta_sql("DATEDIFF"),
             exp.TsOrDsToDate: lambda self, e: self.func(
-                "TRY_TO_DATE" if e.args.get("safe") else "TO_DATE", e.this, self.format_time(e)
+                "TRY_TO_DATE" if e.args.get("safe") else "TO_DATE",
+                e.this,
+                self.format_time(e),
             ),
             exp.UnixToTime: rename_func("TO_TIMESTAMP"),
             exp.Uuid: rename_func("UUID_STRING"),
@@ -1202,7 +1229,9 @@ class Snowflake(Dialect):
         def strtotime_sql(self, expression: exp.StrToTime):
             safe_prefix = "TRY_" if expression.args.get("safe") else ""
             return self.func(
-                f"{safe_prefix}TO_TIMESTAMP", expression.this, self.format_time(expression)
+                f"{safe_prefix}TO_TIMESTAMP",
+                expression.this,
+                self.format_time(expression),
             )
 
         def timestampsub_sql(self, expression: exp.TimestampSub):

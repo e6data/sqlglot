@@ -292,7 +292,8 @@ class TestTSQL(Validator):
             "DECLARE @TestVariable AS VARCHAR(100) = 'Save Our Planet'",
         )
         self.validate_identity(
-            "SELECT a = 1 UNION ALL SELECT a = b", "SELECT 1 AS a UNION ALL SELECT b AS a"
+            "SELECT a = 1 UNION ALL SELECT a = b",
+            "SELECT 1 AS a UNION ALL SELECT b AS a",
         )
         self.validate_identity(
             "SELECT x FROM @MyTableVar AS m JOIN Employee ON m.EmployeeID = Employee.EmployeeID"
@@ -610,7 +611,8 @@ class TestTSQL(Validator):
         )
 
         self.validate_all(
-            "CAST(x as FLOAT(6))", write={"tsql": "CAST(x AS FLOAT(6))", "hive": "CAST(x AS FLOAT)"}
+            "CAST(x as FLOAT(6))",
+            write={"tsql": "CAST(x AS FLOAT(6))", "hive": "CAST(x AS FLOAT)"},
         )
 
         self.validate_all(
@@ -798,7 +800,8 @@ class TestTSQL(Validator):
         self.validate_all("SELECT TRUE AS a, FALSE AS b", write={"tsql": "SELECT 1 AS a, 0 AS b"})
 
         self.validate_all(
-            "SELECT 1 FROM a WHERE TRUE", write={"tsql": "SELECT 1 FROM a WHERE (1 = 1)"}
+            "SELECT 1 FROM a WHERE TRUE",
+            write={"tsql": "SELECT 1 FROM a WHERE (1 = 1)"},
         )
 
         self.validate_all(
@@ -1169,7 +1172,9 @@ WHERE
 
     def test_len(self):
         self.validate_all(
-            "LEN(x)", read={"": "LENGTH(x)"}, write={"spark": "LENGTH(CAST(x AS STRING))"}
+            "LEN(x)",
+            read={"": "LENGTH(x)"},
+            write={"spark": "LENGTH(CAST(x AS STRING))"},
         )
         self.validate_all(
             "RIGHT(x, 1)",
@@ -1577,6 +1582,11 @@ WHERE
                 "tsql": "SELECT DATEDIFF(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
                 "clickhouse": "SELECT DATE_DIFF(DAY, CAST(CAST(a AS Nullable(DateTime)) AS DateTime64(6)), CAST(CAST(b AS Nullable(DateTime)) AS DateTime64(6))) AS x FROM foo",
             },
+        )
+
+        self.validate_identity(
+            "SELECT DATEADD(DAY, DATEDIFF(DAY, -3, GETDATE()), '08:00:00')",
+            "SELECT DATEADD(DAY, DATEDIFF(DAY, CAST('1899-12-29' AS DATETIME2), CAST(GETDATE() AS DATETIME2)), '08:00:00')",
         )
 
     def test_lateral_subquery(self):
@@ -2032,7 +2042,8 @@ FROM OPENJSON(@json) WITH (
         self.validate_identity("GRANT EXECUTE ON TestProc TO User2")
         self.validate_identity("GRANT EXECUTE ON TestProc TO TesterRole WITH GRANT OPTION")
         self.validate_identity(
-            "GRANT EXECUTE ON TestProc TO User2 AS TesterRole", check_command_warning=True
+            "GRANT EXECUTE ON TestProc TO User2 AS TesterRole",
+            check_command_warning=True,
         )
 
     def test_parsename(self):
@@ -2083,5 +2094,29 @@ FROM OPENJSON(@json) WITH (
             },
             write={
                 "oracle": "SELECT NEXT VALUE FOR db.schema.sequence_name",
+            },
+        )
+
+    # string literals in the DATETRUNC are casted as DATETIME2
+    def test_datetrunc(self):
+        self.validate_all(
+            "SELECT DATETRUNC(month, 'foo')",
+            write={
+                "duckdb": "SELECT DATE_TRUNC('MONTH', CAST('foo' AS TIMESTAMP))",
+                "tsql": "SELECT DATETRUNC(MONTH, CAST('foo' AS DATETIME2))",
+            },
+        )
+        self.validate_all(
+            "SELECT DATETRUNC(month, foo)",
+            write={
+                "duckdb": "SELECT DATE_TRUNC('MONTH', foo)",
+                "tsql": "SELECT DATETRUNC(MONTH, foo)",
+            },
+        )
+        self.validate_all(
+            "SELECT DATETRUNC(year, CAST('foo1' AS date))",
+            write={
+                "duckdb": "SELECT DATE_TRUNC('YEAR', CAST('foo1' AS DATE))",
+                "tsql": "SELECT DATETRUNC(YEAR, CAST('foo1' AS DATE))",
             },
         )

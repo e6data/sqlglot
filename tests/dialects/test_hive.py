@@ -181,7 +181,8 @@ class TestHive(Validator):
         self.validate_identity("ALTER VIEW db1.v1 RENAME TO db2.v2")
         self.validate_identity("ALTER VIEW v1 SET TBLPROPERTIES ('tblp1'='1', 'tblp2'='2')")
         self.validate_identity(
-            "ALTER VIEW v1 UNSET TBLPROPERTIES ('tblp1', 'tblp2')", check_command_warning=True
+            "ALTER VIEW v1 UNSET TBLPROPERTIES ('tblp1', 'tblp2')",
+            check_command_warning=True,
         )
 
     def test_lateral_view(self):
@@ -371,7 +372,8 @@ class TestHive(Validator):
         self.validate_all("DATE_ADD('2020-01-01', -1)", read={"": "DATE_SUB('2020-01-01', 1)"})
         self.validate_all("DATE_ADD(a, b * -1)", read={"": "DATE_SUB(a, b)"})
         self.validate_all(
-            "ADD_MONTHS('2020-01-01', -2)", read={"": "DATE_SUB('2020-01-01', 2, month)"}
+            "ADD_MONTHS('2020-01-01', -2)",
+            read={"": "DATE_SUB('2020-01-01', 2, month)"},
         )
         self.validate_all(
             "DATEDIFF(TO_DATE(y), x)",
@@ -805,6 +807,8 @@ class TestHive(Validator):
                 "databricks": "SELECT EXISTS(ARRAY(2, 3), x -> x % 2 = 0)",
             },
         )
+
+        self.validate_identity("SELECT 1_2")
 
     def test_escapes(self) -> None:
         self.validate_identity("'\n'", "'\\n'")

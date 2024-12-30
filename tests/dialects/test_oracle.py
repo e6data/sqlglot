@@ -613,7 +613,10 @@ WHERE
                 " NULL ON EMPTY",
                 " DEFAULT 1 ON ERROR TRUE ON EMPTY",
             ):
-                for passing in ("", " PASSING 'name1' AS \"var1\", 'name2' AS \"var2\""):
+                for passing in (
+                    "",
+                    " PASSING 'name1' AS \"var1\", 'name2' AS \"var2\"",
+                ):
                     with self.subTest("Testing JSON_EXISTS()"):
                         self.validate_identity(
                             f"SELECT * FROM t WHERE JSON_EXISTS(name{format_json}, '$[1].middle'{passing}{on_cond})"

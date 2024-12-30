@@ -199,5 +199,7 @@ class PRQL(Dialect):
                 return None
 
             return self.expression(
-                exp.From, comments=self._prev_comments, this=self._parse_table(joins=joins)
+                exp.From,
+                comments=self._prev_comments,
+                this=self._parse_table(joins=joins),
             )

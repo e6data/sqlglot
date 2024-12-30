@@ -17,7 +17,8 @@ if t.TYPE_CHECKING:
     from sqlglot.dialects.dialect import DialectType
 
     DateTruncBinaryTransform = t.Callable[
-        [exp.Expression, datetime.date, str, Dialect, exp.DataType], t.Optional[exp.Expression]
+        [exp.Expression, datetime.date, str, Dialect, exp.DataType],
+        t.Optional[exp.Expression],
     ]
 
 logger = logging.getLogger("sqlglot")
@@ -1064,7 +1065,8 @@ def simplify_datetrunc(expression: exp.Expression, dialect: Dialect) -> exp.Expr
             target_type = extract_type(*rs)
 
             return exp.or_(
-                *[_datetrunc_eq_expression(l, drange, target_type) for drange in ranges], copy=False
+                *[_datetrunc_eq_expression(l, drange, target_type) for drange in ranges],
+                copy=False,
             )
 
     return expression
@@ -1192,7 +1194,9 @@ def cast_value(value: t.Any, to: exp.DataType) -> t.Optional[t.Union[datetime.da
     return None
 
 
-def extract_date(cast: exp.Expression) -> t.Optional[t.Union[datetime.date, datetime.date]]:
+def extract_date(
+    cast: exp.Expression,
+) -> t.Optional[t.Union[datetime.date, datetime.date]]:
     if isinstance(cast, exp.Cast):
         to = cast.to
     elif isinstance(cast, exp.TsOrDsToDate) and not cast.args.get("format"):
@@ -1328,13 +1332,17 @@ def _flat_simplify(expression, simplifier, root=True):
     return expression
 
 
-def gen(expression: t.Any) -> str:
+def gen(expression: t.Any, comments: bool = False) -> str:
     """Simple pseudo sql generator for quickly generating sortable and uniq strings.
 
     Sorting and deduping sql is a necessary step for optimization. Calling the actual
     generator is expensive so we have a bare minimum sql generator here.
+
+    Args:
+        expression: the expression to convert into a SQL string.
+        comments: whether to include the expression's comments.
     """
-    return Gen().gen(expression)
+    return Gen().gen(expression, comments=comments)
 
 
 class Gen:
@@ -1342,7 +1350,7 @@ class Gen:
         self.stack = []
         self.sqls = []
 
-    def gen(self, expression: exp.Expression) -> str:
+    def gen(self, expression: exp.Expression, comments: bool = False) -> str:
         self.stack = [expression]
         self.sqls.clear()
 
@@ -1350,6 +1358,9 @@ class Gen:
             node = self.stack.pop()
 
             if isinstance(node, exp.Expression):
+                if comments and node.comments:
+                    self.stack.append(f" /*{','.join(node.comments)}*/")
+
                 exp_handler_name = f"{node.key}_sql"
 
                 if hasattr(self, exp_handler_name):

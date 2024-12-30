@@ -60,7 +60,8 @@ def _transform_create(expression: exp.Expression) -> exp.Expression:
         if primary_key and len(primary_key.expressions) == 1:
             column = defs[primary_key.expressions[0].name]
             column.append(
-                "constraints", exp.ColumnConstraint(kind=exp.PrimaryKeyColumnConstraint())
+                "constraints",
+                exp.ColumnConstraint(kind=exp.PrimaryKeyColumnConstraint()),
             )
             schema.expressions.remove(primary_key)
         else:
@@ -91,7 +92,8 @@ def _generated_to_auto_increment(expression: exp.Expression) -> exp.Expression:
             t.cast(exp.ColumnConstraint, not_null.parent).pop()
 
         expression.append(
-            "constraints", exp.ColumnConstraint(kind=exp.AutoIncrementColumnConstraint())
+            "constraints",
+            exp.ColumnConstraint(kind=exp.AutoIncrementColumnConstraint()),
         )
 
     return expression

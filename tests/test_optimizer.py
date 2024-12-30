@@ -258,6 +258,35 @@ class TestOptimizer(unittest.TestCase):
         self.assertEqual(
             optimizer.qualify.qualify(
                 parse_one(
+                    """
+                    SELECT Teams.Name, count(*)
+                    FROM raw.TeamMemberships as TeamMemberships
+                    join raw.Teams
+                        on Teams.Id = TeamMemberships.TeamId
+                    GROUP BY 1
+                    """,
+                    read="bigquery",
+                ),
+                schema={
+                    "raw": {
+                        "TeamMemberships": {
+                            "Id": "INTEGER",
+                            "UserId": "INTEGER",
+                            "TeamId": "INTEGER",
+                        },
+                        "Teams": {
+                            "Id": "INTEGER",
+                            "Name": "STRING",
+                        },
+                    }
+                },
+                dialect="bigquery",
+            ).sql(dialect="bigquery"),
+            "SELECT `teams`.`name` AS `name`, count(*) AS `_col_1` FROM `raw`.`TeamMemberships` AS `teammemberships` JOIN `raw`.`Teams` AS `teams` ON `teams`.`id` = `teammemberships`.`teamid` GROUP BY `teams`.`name`",
+        )
+        self.assertEqual(
+            optimizer.qualify.qualify(
+                parse_one(
                     "SELECT `my_db.my_table`.`my_column` FROM `my_db.my_table`",
                     read="bigquery",
                 ),
@@ -367,7 +396,12 @@ class TestOptimizer(unittest.TestCase):
                     schema={
                         "t1": {"id": "int64", "dt": "date", "common": "int64"},
                         "lkp": {"id": "int64", "other_id": "int64", "common": "int64"},
-                        "t2": {"other_id": "int64", "dt": "date", "v": "int64", "common": "int64"},
+                        "t2": {
+                            "other_id": "int64",
+                            "dt": "date",
+                            "v": "int64",
+                            "common": "int64",
+                        },
                     },
                     dialect="bigquery",
                 ),
@@ -551,6 +585,10 @@ class TestOptimizer(unittest.TestCase):
 SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expression,SELECT :expressions,2,:distinct,True,:alias, AS cte,CTE :this,SELECT :expressions,WINDOW :this,ROW(),:partition_by,y,:over,OVER,:from,FROM ((SELECT :expressions,1):limit,LIMIT :expression,10),:alias, AS cte2,:expressions,STAR,a + 1,a DIV 1,FILTER("B",LAMBDA :this,x + y,:expressions,x,y),:from,FROM (z AS z:joins,JOIN :this,z,:kind,CROSS) AS f(a),:joins,JOIN :this,a.b.c.d.e.f.g,:side,LEFT,:using,n,:order,ORDER :expressions,ORDERED :this,1,:nulls_first,True
 """.strip(),
         )
+        self.assertEqual(
+            optimizer.simplify.gen(parse_one("select item_id /* description */"), comments=True),
+            "SELECT :expressions,item_id /* description */",
+        )
 
     def test_unnest_subqueries(self):
         self.check_file("unnest_subqueries", optimizer.unnest_subqueries.unnest_subqueries)
@@ -709,7 +747,10 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
         WHERE s.b > (SELECT MAX(x.a) FROM x WHERE x.b = s.b)
         """
         expression = parse_one(sql)
-        for scopes in traverse_scope(expression), list(build_scope(expression).traverse()):
+        for scopes in (
+            traverse_scope(expression),
+            list(build_scope(expression).traverse()),
+        ):
             self.assertEqual(len(scopes), 7)
             self.assertEqual(scopes[0].expression.sql(), "SELECT x.b FROM x")
             self.assertEqual(scopes[1].expression.sql(), "SELECT y.b FROM y")
@@ -746,7 +787,10 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
         # Check that parentheses don't introduce a new scope unless an alias is attached
         sql = "SELECT * FROM (((SELECT * FROM (t1 JOIN t2) AS t3) JOIN (SELECT * FROM t4)))"
         expression = parse_one(sql)
-        for scopes in traverse_scope(expression), list(build_scope(expression).traverse()):
+        for scopes in (
+            traverse_scope(expression),
+            list(build_scope(expression).traverse()),
+        ):
             self.assertEqual(len(scopes), 4)
 
             self.assertEqual(scopes[0].expression.sql(), "t1, t2")
@@ -769,7 +813,10 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
             sql = f"SELECT a FROM foo CROSS JOIN {udtf}"
             expression = parse_one(sql)
 
-            for scopes in traverse_scope(expression), list(build_scope(expression).traverse()):
+            for scopes in (
+                traverse_scope(expression),
+                list(build_scope(expression).traverse()),
+            ):
                 self.assertEqual(len(scopes), 3)
 
                 self.assertEqual(scopes[0].expression.sql(), inner_query)
@@ -815,7 +862,11 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
 
     def test_annotate_funcs(self):
         test_schema = {
-            "tbl": {"bin_col": "BINARY", "str_col": "STRING", "bignum_col": "BIGNUMERIC"}
+            "tbl": {
+                "bin_col": "BINARY",
+                "str_col": "STRING",
+                "bignum_col": "BIGNUMERIC",
+            }
         }
 
         for i, (meta, sql, expected) in enumerate(
@@ -827,12 +878,17 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
 
             for dialect in dialect.split(", "):
                 result = parse_and_optimize(
-                    annotate_functions, sql, dialect, schema=test_schema, dialect=dialect
+                    annotate_functions,
+                    sql,
+                    dialect,
+                    schema=test_schema,
+                    dialect=dialect,
                 )
 
                 with self.subTest(title):
                     self.assertEqual(
-                        result.type.sql(dialect), exp.DataType.build(expected).sql(dialect)
+                        result.type.sql(dialect),
+                        exp.DataType.build(expected).sql(dialect),
                     )
 
     def test_cast_type_annotation(self):

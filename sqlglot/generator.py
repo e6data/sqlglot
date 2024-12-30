@@ -1286,7 +1286,10 @@ class Generator(metaclass=_Generator):
 
         if self.dialect.UNICODE_START:
             escape_substitute = r"\\\1"
-            left_quote, right_quote = self.dialect.UNICODE_START, self.dialect.UNICODE_END
+            left_quote, right_quote = (
+                self.dialect.UNICODE_START,
+                self.dialect.UNICODE_END,
+            )
         else:
             escape_substitute = r"\\u\1"
             left_quote, right_quote = self.dialect.QUOTE_START, self.dialect.QUOTE_END
@@ -1861,7 +1864,8 @@ class Generator(metaclass=_Generator):
             set_keyword = "SET " if self.DUPLICATE_KEY_UPDATE_WITH_SET else ""
             expressions = f" {set_keyword}{expressions}"
 
-        return f"{conflict}{constraint}{conflict_keys}{action}{expressions}"
+        where = self.sql(expression, "where")
+        return f"{conflict}{constraint}{conflict_keys}{action}{expressions}{where}"
 
     def returning_sql(self, expression: exp.Returning) -> str:
         return f"{self.seg('RETURNING')} {self.expressions(expression, flat=True)}"
@@ -1929,7 +1933,8 @@ class Generator(metaclass=_Generator):
         hints = f" {hints}" if hints and self.TABLE_HINTS else ""
         pivots = self.expressions(expression, key="pivots", sep="", flat=True)
         joins = self.indent(
-            self.expressions(expression, key="joins", sep="", flat=True), skip_first=True
+            self.expressions(expression, key="joins", sep="", flat=True),
+            skip_first=True,
         )
         laterals = self.expressions(expression, key="laterals", sep="")
 
@@ -1988,6 +1993,7 @@ class Generator(metaclass=_Generator):
 
     def pivot_sql(self, expression: exp.Pivot) -> str:
         expressions = self.expressions(expression, flat=True)
+        direction = "UNPIVOT" if expression.unpivot else "PIVOT"
 
         if expression.this:
             this = self.sql(expression, "this")
@@ -1995,14 +2001,15 @@ class Generator(metaclass=_Generator):
                 return f"UNPIVOT {this}"
 
             on = f"{self.seg('ON')} {expressions}"
+            into = self.sql(expression, "into")
+            into = f"{self.seg('INTO')} {into}" if into else ""
             using = self.expressions(expression, key="using", flat=True)
             using = f"{self.seg('USING')} {using}" if using else ""
             group = self.sql(expression, "group")
-            return f"PIVOT {this}{on}{using}{group}"
+            return f"{direction} {this}{on}{into}{using}{group}"
 
         alias = self.sql(expression, "alias")
         alias = f" AS {alias}" if alias else ""
-        direction = self.seg("UNPIVOT" if expression.unpivot else "PIVOT")
 
         field = self.sql(expression, "field")
 
@@ -2014,7 +2021,7 @@ class Generator(metaclass=_Generator):
 
         default_on_null = self.sql(expression, "default_on_null")
         default_on_null = f" DEFAULT ON NULL ({default_on_null})" if default_on_null else ""
-        return f"{direction}{nulls}({expressions} FOR {field}{default_on_null}){alias}"
+        return f"{self.seg(direction)}{nulls}({expressions} FOR {field}{default_on_null}){alias}"
 
     def version_sql(self, expression: exp.Version) -> str:
         this = f"FOR {expression.name}"
@@ -2505,7 +2512,10 @@ class Generator(metaclass=_Generator):
         return ""
 
     def offset_limit_modifiers(
-        self, expression: exp.Expression, fetch: bool, limit: t.Optional[exp.Fetch | exp.Limit]
+        self,
+        expression: exp.Expression,
+        fetch: bool,
+        limit: t.Optional[exp.Fetch | exp.Limit],
     ) -> t.List[str]:
         return [
             self.sql(expression, "offset") if fetch else self.sql(limit),
@@ -2822,7 +2832,9 @@ class Generator(metaclass=_Generator):
 
     def concatws_sql(self, expression: exp.ConcatWs) -> str:
         return self.func(
-            "CONCAT_WS", seq_get(expression.expressions, 0), *self.convert_concat_args(expression)
+            "CONCAT_WS",
+            seq_get(expression.expressions, 0),
+            *self.convert_concat_args(expression),
         )
 
     def check_sql(self, expression: exp.Check) -> str:
@@ -2923,7 +2935,9 @@ class Generator(metaclass=_Generator):
         return_type = f" RETURNING {return_type}" if return_type else ""
         strict = " STRICT" if expression.args.get("strict") else ""
         return self.func(
-            "JSON_ARRAY", *expression.expressions, suffix=f"{null_handling}{return_type}{strict})"
+            "JSON_ARRAY",
+            *expression.expressions,
+            suffix=f"{null_handling}{return_type}{strict})",
         )
 
     def jsonarrayagg_sql(self, expression: exp.JSONArrayAgg) -> str:
@@ -2966,7 +2980,9 @@ class Generator(metaclass=_Generator):
         empty_handling = f" {empty_handling}" if empty_handling else ""
         schema = self.sql(expression, "schema")
         return self.func(
-            "JSON_TABLE", this, suffix=f"{path}{error_handling}{empty_handling} {schema})"
+            "JSON_TABLE",
+            this,
+            suffix=f"{path}{error_handling}{empty_handling} {schema})",
         )
 
     def openjsoncolumndef_sql(self, expression: exp.OpenJSONColumnDef) -> str:
@@ -3042,7 +3058,9 @@ class Generator(metaclass=_Generator):
         parent = expression.parent
         is_qualified = isinstance(parent, exp.Dot) and expression is parent.expression
         return self.func(
-            self.sql(expression, "this"), *expression.expressions, normalize=not is_qualified
+            self.sql(expression, "this"),
+            *expression.expressions,
+            normalize=not is_qualified,
         )
 
     def paren_sql(self, expression: exp.Paren) -> str:
@@ -3098,7 +3116,9 @@ class Generator(metaclass=_Generator):
         return self.binary(expression, "+")
 
     def and_sql(
-        self, expression: exp.And, stack: t.Optional[t.List[str | exp.Expression]] = None
+        self,
+        expression: exp.And,
+        stack: t.Optional[t.List[str | exp.Expression]] = None,
     ) -> str:
         return self.connector_sql(expression, "AND", stack)
 
@@ -3108,7 +3128,9 @@ class Generator(metaclass=_Generator):
         return self.connector_sql(expression, "OR", stack)
 
     def xor_sql(
-        self, expression: exp.Xor, stack: t.Optional[t.List[str | exp.Expression]] = None
+        self,
+        expression: exp.Xor,
+        stack: t.Optional[t.List[str | exp.Expression]] = None,
     ) -> str:
         return self.connector_sql(expression, "XOR", stack)
 
@@ -3376,7 +3398,8 @@ class Generator(metaclass=_Generator):
     def dpipe_sql(self, expression: exp.DPipe) -> str:
         if self.dialect.STRICT_STRING_CONCAT and expression.args.get("safe"):
             return self.func(
-                "CONCAT", *(exp.cast(e, exp.DataType.Type.TEXT) for e in expression.flatten())
+                "CONCAT",
+                *(exp.cast(e, exp.DataType.Type.TEXT) for e in expression.flatten()),
             )
         return self.binary(expression, "||")
 
@@ -3565,7 +3588,9 @@ class Generator(metaclass=_Generator):
         )
         if self.pretty and self.too_wide(arg_sqls):
             return self.indent(
-                "\n" + f"{sep.strip()}\n".join(arg_sqls) + "\n", skip_first=True, skip_last=True
+                "\n" + f"{sep.strip()}\n".join(arg_sqls) + "\n",
+                skip_first=True,
+                skip_last=True,
             )
         return sep.join(arg_sqls)
 
@@ -3759,6 +3784,10 @@ class Generator(metaclass=_Generator):
     def duplicatekeyproperty_sql(self, expression: exp.DuplicateKeyProperty) -> str:
         return f"DUPLICATE KEY ({self.expressions(expression, flat=True)})"
 
+    # https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/
+    def uniquekeyproperty_sql(self, expression: exp.UniqueKeyProperty) -> str:
+        return f"UNIQUE KEY ({self.expressions(expression, flat=True)})"
+
     # https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/#distribution_desc
     def distributedbyproperty_sql(self, expression: exp.DistributedByProperty) -> str:
         expressions = self.expressions(expression, flat=True)
@@ -3937,7 +3966,10 @@ class Generator(metaclass=_Generator):
         this = expression.this
         time_format = self.format_time(expression)
 
-        if time_format and time_format not in (self.dialect.TIME_FORMAT, self.dialect.DATE_FORMAT):
+        if time_format and time_format not in (
+            self.dialect.TIME_FORMAT,
+            self.dialect.DATE_FORMAT,
+        ):
             return self.sql(
                 exp.cast(
                     exp.StrToTime(this=this, format=expression.args["format"]),
@@ -4529,7 +4561,8 @@ class Generator(metaclass=_Generator):
             return self.function_fallback_sql(expression)
 
         start_ts = exp.cast(
-            exp.Literal.string("1970-01-01 00:00:00+00"), to=exp.DataType.Type.TIMESTAMPTZ
+            exp.Literal.string("1970-01-01 00:00:00+00"),
+            to=exp.DataType.Type.TIMESTAMPTZ,
         )
 
         return self.sql(
@@ -4616,3 +4649,26 @@ class Generator(metaclass=_Generator):
     def xmlelement_sql(self, expression: exp.XMLElement) -> str:
         name = f"NAME {self.sql(expression, 'this')}"
         return self.func("XMLELEMENT", name, *expression.expressions)
+
+    def partitionbyrangeproperty_sql(self, expression: exp.PartitionByRangeProperty) -> str:
+        partitions = self.expressions(expression, "partition_expressions")
+        create = self.expressions(expression, "create_expressions")
+        return f"PARTITION BY RANGE {self.wrap(partitions)} {self.wrap(create)}"
+
+    def partitionbyrangepropertydynamic_sql(
+        self, expression: exp.PartitionByRangePropertyDynamic
+    ) -> str:
+        start = self.sql(expression, "start")
+        end = self.sql(expression, "end")
+
+        every = expression.args["every"]
+        if isinstance(every, exp.Interval) and every.this.is_string:
+            every.this.replace(exp.Literal.number(every.name))
+
+        return f"START {self.wrap(start)} END {self.wrap(end)} EVERY {self.wrap(self.sql(every))}"
+
+    def unpivotcolumns_sql(self, expression: exp.UnpivotColumns) -> str:
+        name = self.sql(expression, "this")
+        values = self.expressions(expression, flat=True)
+
+        return f"NAME {name} VALUE {values}"

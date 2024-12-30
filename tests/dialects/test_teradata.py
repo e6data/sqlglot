@@ -171,7 +171,8 @@ class TestTeradata(Validator):
 
     def test_insert(self):
         self.validate_all(
-            "INS INTO x SELECT * FROM y", write={"teradata": "INSERT INTO x SELECT * FROM y"}
+            "INS INTO x SELECT * FROM y",
+            write={"teradata": "INSERT INTO x SELECT * FROM y"},
         )
 
     def test_mod(self):

@@ -250,10 +250,12 @@ class TestDuckDB(Validator):
 
         # https://github.com/duckdb/duckdb/releases/tag/v0.8.0
         self.assertEqual(
-            parse_one("a / b", read="duckdb").assert_is(exp.Div).sql(dialect="duckdb"), "a / b"
+            parse_one("a / b", read="duckdb").assert_is(exp.Div).sql(dialect="duckdb"),
+            "a / b",
         )
         self.assertEqual(
-            parse_one("a // b", read="duckdb").assert_is(exp.IntDiv).sql(dialect="duckdb"), "a // b"
+            parse_one("a // b", read="duckdb").assert_is(exp.IntDiv).sql(dialect="duckdb"),
+            "a // b",
         )
 
         self.validate_identity("SELECT UNNEST([1, 2])").selects[0].assert_is(exp.UDTF)
@@ -276,12 +278,6 @@ class TestDuckDB(Validator):
         self.validate_identity("SELECT UNNEST(col, recursive := TRUE) FROM t")
         self.validate_identity("VAR_POP(a)")
         self.validate_identity("SELECT * FROM foo ASOF LEFT JOIN bar ON a = b")
-        self.validate_identity("PIVOT Cities ON Year USING SUM(Population)")
-        self.validate_identity("PIVOT Cities ON Year USING FIRST(Population)")
-        self.validate_identity("PIVOT Cities ON Year USING SUM(Population) GROUP BY Country")
-        self.validate_identity("PIVOT Cities ON Country, Name USING SUM(Population)")
-        self.validate_identity("PIVOT Cities ON Country || '_' || Name USING SUM(Population)")
-        self.validate_identity("PIVOT Cities ON Year USING SUM(Population) GROUP BY Country, Name")
         self.validate_identity("SELECT {'a': 1} AS x")
         self.validate_identity("SELECT {'a': {'b': {'c': 1}}, 'd': {'e': 2}} AS x")
         self.validate_identity("SELECT {'x': 1, 'y': 2, 'z': 3}")
@@ -314,7 +310,8 @@ class TestDuckDB(Validator):
             "SUMMARIZE TABLE 'https://blobs.duckdb.org/data/Star_Trek-Season_1.csv'"
         ).assert_is(exp.Summarize)
         self.validate_identity(
-            "SELECT * FROM x LEFT JOIN UNNEST(y)", "SELECT * FROM x LEFT JOIN UNNEST(y) ON TRUE"
+            "SELECT * FROM x LEFT JOIN UNNEST(y)",
+            "SELECT * FROM x LEFT JOIN UNNEST(y) ON TRUE",
         )
         self.validate_identity(
             """SELECT '{ "family": "anatidae", "species": [ "duck", "goose", "swan", null ] }' ->> ['$.family', '$.species']""",
@@ -468,7 +465,8 @@ class TestDuckDB(Validator):
             write={"duckdb": "PIVOT Cities ON Year USING SUM(Population)"},
         )
         self.validate_all(
-            "WITH t AS (SELECT 1) FROM t", write={"duckdb": "WITH t AS (SELECT 1) SELECT * FROM t"}
+            "WITH t AS (SELECT 1) FROM t",
+            write={"duckdb": "WITH t AS (SELECT 1) SELECT * FROM t"},
         )
         self.validate_all(
             "WITH t AS (SELECT 1) SELECT * FROM (FROM t)",
@@ -953,7 +951,8 @@ class TestDuckDB(Validator):
         self.validate_identity("SELECT CURRENT_TIMESTAMP")
 
         self.validate_all(
-            "SELECT MAKE_DATE(2016, 12, 25)", read={"bigquery": "SELECT DATE(2016, 12, 25)"}
+            "SELECT MAKE_DATE(2016, 12, 25)",
+            read={"bigquery": "SELECT DATE(2016, 12, 25)"},
         )
         self.validate_all(
             "SELECT CAST(CAST('2016-12-25 23:59:59' AS TIMESTAMP) AS DATE)",
@@ -1415,3 +1414,28 @@ class TestDuckDB(Validator):
         self.validate_identity("DETACH IF EXISTS file")
 
         self.validate_identity("DETACH DATABASE db", "DETACH db")
+
+    def test_simplified_pivot_unpivot(self):
+        self.validate_identity("PIVOT Cities ON Year USING SUM(Population)")
+        self.validate_identity("PIVOT Cities ON Year USING FIRST(Population)")
+        self.validate_identity("PIVOT Cities ON Year USING SUM(Population) GROUP BY Country")
+        self.validate_identity("PIVOT Cities ON Country, Name USING SUM(Population)")
+        self.validate_identity("PIVOT Cities ON Country || '_' || Name USING SUM(Population)")
+        self.validate_identity("PIVOT Cities ON Year USING SUM(Population) GROUP BY Country, Name")
+
+        self.validate_identity("UNPIVOT (SELECT 1 AS col1, 2 AS col2) ON foo, bar")
+        self.validate_identity(
+            "UNPIVOT monthly_sales ON jan, feb, mar, apr, may, jun INTO NAME month VALUE sales"
+        )
+        self.validate_identity(
+            "UNPIVOT monthly_sales ON COLUMNS(* EXCLUDE (empid, dept)) INTO NAME month VALUE sales"
+        )
+        self.validate_identity(
+            "UNPIVOT monthly_sales ON (jan, feb, mar) AS q1, (apr, may, jun) AS q2 INTO NAME quarter VALUE month_1_sales, month_2_sales, month_3_sales"
+        )
+        self.validate_identity(
+            "WITH unpivot_alias AS (UNPIVOT monthly_sales ON COLUMNS(* EXCLUDE (empid, dept)) INTO NAME month VALUE sales) SELECT * FROM unpivot_alias"
+        )
+        self.validate_identity(
+            "SELECT * FROM (UNPIVOT monthly_sales ON COLUMNS(* EXCLUDE (empid, dept)) INTO NAME month VALUE sales) AS unpivot_alias"
+        )

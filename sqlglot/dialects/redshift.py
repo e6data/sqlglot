@@ -69,7 +69,8 @@ class Redshift(Postgres):
             "GETDATE": exp.CurrentTimestamp.from_arg_list,
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "SPLIT_TO_ARRAY": lambda args: exp.StringToArray(
-                this=seq_get(args, 0), expression=seq_get(args, 1) or exp.Literal.string(",")
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1) or exp.Literal.string(","),
             ),
             "STRTOL": exp.FromBase.from_arg_list,
         }

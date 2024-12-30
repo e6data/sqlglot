@@ -181,7 +181,8 @@ class TestSchema(unittest.TestCase):
             exp.DataType.Type.VARCHAR,
         )
         self.assertEqual(
-            schema.get_column_type(exp.table_("b", db="a"), "c").this, exp.DataType.Type.VARCHAR
+            schema.get_column_type(exp.table_("b", db="a"), "c").this,
+            exp.DataType.Type.VARCHAR,
         )
         schema = MappingSchema({"a": {"b": {"c": {"d": "varchar"}}}})
         self.assertEqual(
@@ -228,7 +229,8 @@ class TestSchema(unittest.TestCase):
         # Note: T-SQL is case-insensitive by default, so `fo` in clickhouse will match the normalized table name
         schema = MappingSchema(schema={"[Fo]": {"x": "int"}}, dialect="tsql")
         self.assertEqual(
-            schema.column_names("[Fo]"), schema.column_names("`fo`", dialect="clickhouse")
+            schema.column_names("[Fo]"),
+            schema.column_names("`fo`", dialect="clickhouse"),
         )
 
         # Check that all column identifiers are normalized to lowercase for BigQuery, even quoted

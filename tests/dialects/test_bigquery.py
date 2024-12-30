@@ -1708,7 +1708,12 @@ WHERE
 
             for actual, expected in zip(
                 statements,
-                ("BEGIN DECLARE 1", "IF from_date IS NULL THEN SET x = 1", "END IF", "END"),
+                (
+                    "BEGIN DECLARE 1",
+                    "IF from_date IS NULL THEN SET x = 1",
+                    "END IF",
+                    "END",
+                ),
             ):
                 self.assertEqual(actual.sql(dialect="bigquery"), expected)
 
@@ -1797,7 +1802,10 @@ WHERE
             )
             self.assertEqual(
                 [s.sql(dialect="bigquery") for s in for_in_stmts],
-                ["FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word", "END FOR"],
+                [
+                    "FOR record IN (SELECT word FROM shakespeare) DO SELECT record.word",
+                    "END FOR",
+                ],
             )
             self.assertIn("'END FOR'", cm.output[0])
 
@@ -2057,7 +2065,10 @@ OPTIONS (
     def test_convert(self):
         for value, expected in [
             (datetime.datetime(2023, 1, 1), "CAST('2023-01-01 00:00:00' AS DATETIME)"),
-            (datetime.datetime(2023, 1, 1, 12, 13, 14), "CAST('2023-01-01 12:13:14' AS DATETIME)"),
+            (
+                datetime.datetime(2023, 1, 1, 12, 13, 14),
+                "CAST('2023-01-01 12:13:14' AS DATETIME)",
+            ),
             (
                 datetime.datetime(2023, 1, 1, 12, 13, 14, tzinfo=datetime.timezone.utc),
                 "CAST('2023-01-01 12:13:14+00:00' AS TIMESTAMP)",
@@ -2180,7 +2191,8 @@ OPTIONS (
                 )
 
                 self.assertEqual(
-                    self.parse_one(sql).sql("bigquery", normalize_functions="upper"), sql
+                    self.parse_one(sql).sql("bigquery", normalize_functions="upper"),
+                    sql,
                 )
 
         # Test double quote escaping
@@ -2209,7 +2221,8 @@ OPTIONS (
                 )
 
                 self.assertEqual(
-                    self.parse_one(sql).sql("bigquery", normalize_functions="upper"), sql
+                    self.parse_one(sql).sql("bigquery", normalize_functions="upper"),
+                    sql,
                 )
 
     def test_unix_seconds(self):

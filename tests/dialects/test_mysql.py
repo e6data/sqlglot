@@ -18,6 +18,7 @@ class TestMySQL(Validator):
         self.validate_identity("CREATE TABLE foo (a BIGINT, UNIQUE (b) USING BTREE)")
         self.validate_identity("CREATE TABLE foo (id BIGINT)")
         self.validate_identity("CREATE TABLE 00f (1d BIGINT)")
+        self.validate_identity("CREATE TABLE temp (id SERIAL PRIMARY KEY)")
         self.validate_identity("UPDATE items SET items.price = 0 WHERE items.id >= 5 LIMIT 10")
         self.validate_identity("DELETE FROM t WHERE a <= 10 LIMIT 10")
         self.validate_identity("CREATE TABLE foo (a BIGINT, INDEX USING BTREE (b))")
@@ -30,14 +31,16 @@ class TestMySQL(Validator):
         self.validate_identity("ALTER VIEW v AS SELECT a, b, c, d FROM foo")
         self.validate_identity("ALTER VIEW v AS SELECT * FROM foo WHERE c > 100")
         self.validate_identity(
-            "ALTER ALGORITHM = MERGE VIEW v AS SELECT * FROM foo", check_command_warning=True
+            "ALTER ALGORITHM = MERGE VIEW v AS SELECT * FROM foo",
+            check_command_warning=True,
         )
         self.validate_identity(
             "ALTER DEFINER = 'admin'@'localhost' VIEW v AS SELECT * FROM foo",
             check_command_warning=True,
         )
         self.validate_identity(
-            "ALTER SQL SECURITY = DEFINER VIEW v AS SELECT * FROM foo", check_command_warning=True
+            "ALTER SQL SECURITY = DEFINER VIEW v AS SELECT * FROM foo",
+            check_command_warning=True,
         )
         self.validate_identity(
             "INSERT INTO things (a, b) VALUES (1, 2) AS new_data ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), a = new_data.a, b = new_data.b"
@@ -180,7 +183,8 @@ class TestMySQL(Validator):
         self.validate_identity("SELECT * FROM t1, t2 FOR SHARE OF t1, t2 SKIP LOCKED")
         self.validate_identity("SELECT a || b", "SELECT a OR b")
         self.validate_identity(
-            "SELECT * FROM x ORDER BY BINARY a", "SELECT * FROM x ORDER BY CAST(a AS BINARY)"
+            "SELECT * FROM x ORDER BY BINARY a",
+            "SELECT * FROM x ORDER BY CAST(a AS BINARY)",
         )
         self.validate_identity(
             """SELECT * FROM foo WHERE 3 MEMBER OF(JSON_EXTRACT(info, '$.value'))"""
@@ -189,7 +193,8 @@ class TestMySQL(Validator):
             "SELECT * FROM t1, t2, t3 FOR SHARE OF t1 NOWAIT FOR UPDATE OF t2, t3 SKIP LOCKED"
         )
         self.validate_identity(
-            "REPLACE INTO table SELECT id FROM table2 WHERE cnt > 100", check_command_warning=True
+            "REPLACE INTO table SELECT id FROM table2 WHERE cnt > 100",
+            check_command_warning=True,
         )
         self.validate_identity(
             "CAST(x AS VARCHAR)",
@@ -653,7 +658,8 @@ class TestMySQL(Validator):
             write={"presto": "CAST(DATE_PARSE(x, '%Y-%m-%d') AS DATE)"},
         )
         self.validate_all(
-            "STR_TO_DATE(x, '%Y-%m-%dT%T')", write={"presto": "DATE_PARSE(x, '%Y-%m-%dT%T')"}
+            "STR_TO_DATE(x, '%Y-%m-%dT%T')",
+            write={"presto": "DATE_PARSE(x, '%Y-%m-%dT%T')"},
         )
         self.validate_all(
             "SELECT FROM_UNIXTIME(col)",
@@ -846,7 +852,8 @@ class TestMySQL(Validator):
             },
         )
         self.validate_all(
-            "SELECT * FROM t LOCK IN SHARE MODE", write={"mysql": "SELECT * FROM t FOR SHARE"}
+            "SELECT * FROM t LOCK IN SHARE MODE",
+            write={"mysql": "SELECT * FROM t FOR SHARE"},
         )
         self.validate_all(
             "SELECT DATE(DATE_SUB(`dt`, INTERVAL DAYOFMONTH(`dt`) - 1 DAY)) AS __timestamp FROM tableT",
@@ -1235,7 +1242,8 @@ COMMENT='客户账户表'"""
 
     def test_is_null(self):
         self.validate_all(
-            "SELECT ISNULL(x)", write={"": "SELECT (x IS NULL)", "mysql": "SELECT (x IS NULL)"}
+            "SELECT ISNULL(x)",
+            write={"": "SELECT (x IS NULL)", "mysql": "SELECT (x IS NULL)"},
         )
 
     def test_monthname(self):

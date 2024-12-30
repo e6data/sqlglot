@@ -1404,13 +1404,17 @@ class E6(Dialect):
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "TIMESTAMP_DIFF": lambda args: exp.TimestampDiff(
-                this=seq_get(args, 1), expression=seq_get(args, 2), unit=seq_get(args, 0)
+                this=seq_get(args, 1),
+                expression=seq_get(args, 2),
+                unit=seq_get(args, 0),
             ),
             "TO_CHAR": lambda args: exp.TimeToStr(
-                this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
+                this=seq_get(args, 0),
+                format=E6().convert_format_time(expression=seq_get(args, 1)),
             ),
             "TO_DATE": lambda args: exp.TimeToStr(
-                this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
+                this=seq_get(args, 0),
+                format=E6().convert_format_time(expression=seq_get(args, 1)),
             ),
             "TO_HEX": exp.Hex.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
