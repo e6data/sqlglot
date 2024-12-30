@@ -392,6 +392,7 @@ class Snowflake(Dialect):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
+            "ARRAY_CAT": exp.ArrayConcat.from_arg_list,
             "ARRAY_CONSTRUCT": lambda args: exp.Array(expressions=args),
             "ARRAY_CONTAINS": lambda args: exp.ArrayContains(
                 this=seq_get(args, 1), expression=seq_get(args, 0)
@@ -402,6 +403,10 @@ class Snowflake(Dialect):
                 end=exp.Sub(this=seq_get(args, 1), expression=exp.Literal.number(1)),
                 step=seq_get(args, 2),
             ),
+            "BITNOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
+            "BIT_NOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
+            "BITAND": _build_bitwise(exp.BitwiseAnd, "BITAND"),
+            "BIT_AND": _build_bitwise(exp.BitwiseAnd, "BITAND"),
             "BITXOR": _build_bitwise(exp.BitwiseXor, "BITXOR"),
             "BIT_XOR": _build_bitwise(exp.BitwiseXor, "BITXOR"),
             "BITOR": _build_bitwise(exp.BitwiseOr, "BITOR"),
@@ -899,6 +904,8 @@ class Snowflake(Dialect):
             exp.AtTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), e.this
             ),
+            exp.BitwiseNot: lambda self, e: self.func("BITNOT", e.this),
+            exp.BitwiseAnd: rename_func("BITAND"),
             exp.BitwiseOr: rename_func("BITOR"),
             exp.BitwiseXor: rename_func("BITXOR"),
             exp.BitwiseLeftShift: rename_func("BITSHIFTLEFT"),

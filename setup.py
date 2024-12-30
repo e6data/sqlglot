@@ -26,7 +26,7 @@ setup(
         "local_scheme": "no-local-version",
     },
     setup_requires=["setuptools_scm"],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     extras_require={
         "dev": [
             "duckdb>=0.6",
