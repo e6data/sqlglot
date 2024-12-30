@@ -2373,7 +2373,6 @@ SINGLE = TRUE""",
         self.validate_identity("SELECT BITNOT(a) FROM table")
 
     def test_bit_not_function(self):
-
         self.validate_identity("SELECT BIT_NOT(a) FROM table", "SELECT BITNOT(a) FROM table")
 
     def test_bitand_function(self):
