@@ -271,6 +271,23 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(A)",
+            read={
+                "databricks": "SELECT TO_UNIX_TIMESTAMP(A)"
+            },
+            write={
+                "databricks": "SELECT TO_UNIX_TIMESTAMP(A)"
+            }
+        )
+
+        self.validate_all(
+            "SELECT CONVERT_TIMEZONE('Asia/Seoul', 'UTC', CAST('2016-08-31' AS TIMESTAMP))",
+            read={
+                "databricks": "SELECT to_utc_timestamp('2016-08-31', 'Asia/Seoul')"
+            }
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",

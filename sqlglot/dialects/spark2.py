@@ -297,9 +297,11 @@ class Spark2(Hive):
                     transforms.any_to_exists,
                 ]
             ),
+            exp.StrToUnix: rename_func("TO_UNIX_TIMESTAMP"),
             exp.StrToDate: _str_to_date,
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
+            exp.TimeToUnix: rename_func("TO_UNIX_TIMESTAMP"),
             exp.Trim: trim_sql,
             exp.UnixToTime: _unix_to_time_sql,
             exp.VariancePop: rename_func("VAR_POP"),
