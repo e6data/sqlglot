@@ -503,3 +503,22 @@ class TestE6(Validator):
                 "sqlite": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
             },
         )
+
+    def test_array_slice(self):
+        self.validate_all(
+            "SELECT ARRAY_SLICE(A, B, C + B)",
+            read={
+                "databricks": "SELECT SLICE(A,B,C)",
+                "presto": "SELECT SLICE(A,B,C)",
+            }
+        )
+        self.validate_all(
+            "SELECT ARRAY_SLICE(A,B,C)",
+            write={
+                "databricks": "SELECT SLICE(A, B, C - B)",
+                "presto": "SELECT SLICE(A, B, C - B)",
+                "snowflake": "SELECT ARRAY_SLICE(A, B, C)"
+            }
+        )
+
+

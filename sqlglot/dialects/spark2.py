@@ -10,7 +10,7 @@ from sqlglot.dialects.dialect import (
     pivot_column_names,
     rename_func,
     trim_sql,
-    unit_to_str,
+    unit_to_str, map_date_part
 )
 from typing import List
 from sqlglot.dialects.hive import Hive
@@ -168,6 +168,37 @@ def _parse_is_null_functions(args: List[exp.Expression], func_name: str):
         return exp.Not(this=exp.Is(this=seq_get(args,0), expression=exp.Null()))
     else:
         raise ValueError(f"Unsupported function name: {func_name}")
+# Newly added
+def _build_array_slice(args: list) -> exp.ArraySlice:
+    """
+    Parses arguments for the SLICE function and constructs an ArraySlice expression.
+
+    Args:
+        args (list): List of arguments passed to the SLICE function.
+
+    Returns:
+        exp.ArraySlice: The constructed ArraySlice expression.
+
+    Raises:
+        ValueError: If required arguments are missing.
+    """
+    this = seq_get(args, 0)
+    from_index = seq_get(args, 1)
+    to_index = seq_get(args, 2)
+
+    if this is None:
+        raise ValueError("SLICE function requires a valid array to slice ('this').")
+
+    if from_index is None:
+        raise ValueError("SLICE function requires a valid 'fromIndex' argument.")
+
+    if to_index is None:
+        raise ValueError("SLICE function requires a valid 'to' argument.")
+
+    # Construct the ArraySlice expression
+    return exp.ArraySlice(this=this, fromIndex=from_index, to=to_index + from_index)
+
+
 
 class Spark2(Hive):
     ANNOTATORS = {
@@ -220,6 +251,7 @@ class Spark2(Hive):
             "RLIKE": exp.RegexpLike.from_arg_list,
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
             "SHIFTRIGHT": binary_from_function(exp.BitwiseRightShift),
+            "SLICE":_build_array_slice,
             "STRING": _build_as_cast("string"),
             "TIMESTAMP": _build_as_cast("timestamp"),
             "TO_TIMESTAMP": lambda args: (
@@ -324,6 +356,9 @@ class Spark2(Hive):
                 ]
             ),
             exp.StrToUnix: rename_func("TO_UNIX_TIMESTAMP"),
+            exp.ArraySlice: lambda self, e:self.func(
+                "SLICE", e.args.get("this"),e.args.get("fromIndex"),e.args.get("to") - e.args.get("fromIndex"),
+            ),
             exp.StrToDate: _str_to_date,
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),

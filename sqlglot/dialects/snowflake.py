@@ -445,7 +445,7 @@ class Snowflake(Dialect):
             "REGEXP_SUBSTR": _build_regexp_extract(exp.RegexpExtract),
             "REGEXP_SUBSTR_ALL": _build_regexp_extract(exp.RegexpExtractAll),
             "RLIKE": exp.RegexpLike.from_arg_list,
-            "SLICE": exp.ArraySlice.from_arg_list,
+            "ARRAY_SLICE": exp.ArraySlice.from_arg_list,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "TIMEADD": _build_date_time_add(exp.TimeAdd),
@@ -900,7 +900,7 @@ class Snowflake(Dialect):
             exp.Array: inline_array_sql,
             exp.ArrayConcat: lambda self, e: self.arrayconcat_sql(e, name="ARRAY_CAT"),
             exp.ArrayContains: lambda self, e: self.func("ARRAY_CONTAINS", e.expression, e.this),
-            exp.ArraySlice: rename_func("SLICE"),
+            exp.ArraySlice: rename_func("ARRAY_SLICE"),
             exp.AtTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), e.this
             ),
