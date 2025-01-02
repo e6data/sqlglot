@@ -296,6 +296,26 @@ class TestE6(Validator):
             }
         )
 
+        self.validate_all(
+            "SELECT NOT A IS NULL",
+            read={
+                "databricks": "SELECT ISNOTNULL(A)"
+            },
+            write={
+                "databricks": "SELECT NOT A IS NULL"
+            }
+        )
+
+        self.validate_all(
+            "SELECT A IS NULL",
+            read={
+                "databricks": "SELECT ISNULL(A)"
+            },
+            write={
+                "databricks": "SELECT A IS NULL"
+            }
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",

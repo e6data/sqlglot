@@ -291,3 +291,11 @@ class TestDatabricks(Validator):
         self.validate_identity("GRANT SELECT ON TABLE sample_data TO `alf@melmak.et`")
         self.validate_identity("GRANT ALL PRIVILEGES ON TABLE forecasts TO finance")
         self.validate_identity("GRANT SELECT ON TABLE t TO `fab9e00e-ca35-11ec-9d64-0242ac120002`")
+
+    def test_is_null_and_is_not_null(self):
+        self.validate_identity("SELECT ISNULL(col)","SELECT col IS NULL")
+        self.validate_identity("SELECT ISNOTNULL(col)", "SELECT NOT col IS NULL")
+
+    def test_date_part(self):
+        self.validate_identity("SELECT DATE_PART(fieldStr, Str)","SELECT EXTRACT(fieldStr FROM Str)")
+

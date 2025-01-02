@@ -12,6 +12,7 @@ from sqlglot.dialects.dialect import (
     trim_sql,
     unit_to_str,
 )
+from typing import List
 from sqlglot.dialects.hive import Hive
 from sqlglot.helper import seq_get, ensure_list
 from sqlglot.tokens import TokenType
@@ -147,6 +148,26 @@ def _annotate_by_similar_args(
     self._set_type(expression, exp.DataType.Type.UNKNOWN if has_unknown else last_datatype)
     return expression
 
+def _parse_is_null_functions(args: List[exp.Expression], func_name: str):
+    """
+    Unified parser method for `isnull` and `isnotnull` functions.
+
+    Args:
+        args (List[exp.Expression]): List of arguments passed to the function.
+        func_name (str): The name of the function (e.g., "isnull" or "isnotnull").
+
+    Returns:
+        exp.Expression: An AST node representing the corresponding IS NULL or IS NOT NULL condition.
+    """
+    if not args or len(args) != 1:
+        raise ValueError(f"{func_name.upper()} function expects exactly one argument.")
+
+    if func_name.lower() == "isnull":
+        return exp.Is(this=seq_get(args,0), expression=exp.Null())
+    elif func_name.lower() == "isnotnull":
+        return exp.Not(this=exp.Is(this=seq_get(args,0), expression=exp.Null()))
+    else:
+        raise ValueError(f"Unsupported function name: {func_name}")
 
 class Spark2(Hive):
     ANNOTATORS = {
@@ -193,6 +214,8 @@ class Spark2(Hive):
                 zone=seq_get(args, 1),
             ),
             "INT": _build_as_cast("int"),
+            "ISNULL": lambda args : _parse_is_null_functions(args, "isnull"),
+            "ISNOTNULL": lambda args: _parse_is_null_functions(args, "isnotnull"),
             "MAP_FROM_ARRAYS": exp.Map.from_arg_list,
             "RLIKE": exp.RegexpLike.from_arg_list,
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
