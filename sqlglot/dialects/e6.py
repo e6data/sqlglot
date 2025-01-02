@@ -1419,7 +1419,7 @@ class E6(Dialect):
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "TIMESTAMP_DIFF": lambda args: exp.TimestampDiff(
-                this=seq_get(args, 1), expression=seq_get(args, 2), unit=seq_get(args, 0)
+                this=seq_get(args, 0), expression=seq_get(args, 1), unit=seq_get(args, 2)
             ),
             "TO_CHAR": lambda args: exp.TimeToStr(
                 this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
@@ -2051,10 +2051,13 @@ class E6(Dialect):
                 "TIMESTAMP_ADD", unit_to_str(e), e.expression, e.this
             ),
             exp.TimestampDiff: lambda self, e: self.func(
+                # this will not directly give correct order of args in first .transpile from X to E6.
+                # But as per our current flow, we again do E6 to E6 and it sets it right. This is due to the way it is taking args.
+                # This ensures the tight coupling of timestampdiff of bigquery, presto, databricks, MYSQL, snowflake PROPERLY.
                 "TIMESTAMP_DIFF",
-                unit_to_str(e),
                 e.expression,
                 e.this,
+                unit_to_str(e)
             ),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
