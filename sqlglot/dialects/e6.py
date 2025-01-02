@@ -425,16 +425,37 @@ class E6(Dialect):
     UNIT_PART_MAPPING = {
         "'milliseconds'": "MILLISECOND",
         "'millisecond'": "MILLISECOND",
+        "'s'": "SECOND",
+        "'sec'": "SECOND",
+        "'secs'": "SECOND",
         "'seconds'": "SECOND",
         "'second'": "SECOND",
+        "'m'": "MINUTE",
+        "'min'": "MINUTE",
+        "'mins'": "MINUTE",
         "'minutes'": "MINUTE",
         "'minute'": "MINUTE",
+        "'h'": "HOUR",
+        "'hr'": "HOUR",
+        "'hrs'": "HOUR",
         "'hours'": "HOUR",
         "'hour'": "HOUR",
+        "'days'": "DAY",
+        "'d'": "DAY",
         "'day'": "DAY",
+        "'mon'": "MONTH",
+        "'mons'": "MONTH",
+        "'months'": "MONTH",
         "'month'": "MONTH",
+        "'y'": "YEAR",
+        "'yrs'": "YEAR",
+        "'yr'": "YEAR",
+        "'years'": "YEAR",
         "'year'": "YEAR",
+        "'w'": "WEEK",
+        "'weeks'": "WEEK",
         "'week'": "WEEK",
+        "'qtr'": "QUARTER",
         "'quarter'": "QUARTER",
     }
 
@@ -1729,8 +1750,9 @@ class E6(Dialect):
 
         def extract_sql(self: E6.Generator, expression: exp.Extract) -> str:
             unit = expression.this.name
+            unit_mapped = E6.UNIT_PART_MAPPING.get(f"'{unit.lower()}'", unit)
             expression_sql = self.sql(expression, "expression")
-            extract_str = f"EXTRACT({unit} FROM {expression_sql})"
+            extract_str = f"EXTRACT({unit_mapped} FROM {expression_sql})"
             return extract_str
 
         def filter_array_sql(self: E6.Generator, expression: exp.ArrayFilter) -> str:

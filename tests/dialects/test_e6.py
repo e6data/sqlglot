@@ -288,6 +288,14 @@ class TestE6(Validator):
             }
         )
 
+        self.validate_all(
+            "SELECT EXTRACT(fieldStr FROM date_expr)",
+            read={
+                "databricks": "SELECT DATE_PART(fieldStr, date_expr)",
+                "E6": "SELECT DATEPART(fieldStr, date_expr)"
+            }
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",

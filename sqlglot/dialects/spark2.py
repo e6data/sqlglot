@@ -180,6 +180,9 @@ class Spark2(Hive):
             "DATE_TRUNC": lambda args: exp.TimestampTrunc(
                 this=seq_get(args, 1), unit=exp.var(seq_get(args, 0))
             ),
+            "DATE_PART": lambda args: exp.Extract(
+                this=seq_get(args, 0), expression=seq_get(args, 1)
+            ),
             "DAYOFMONTH": lambda args: exp.DayOfMonth(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "DAYOFWEEK": lambda args: exp.DayOfWeek(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "DAYOFYEAR": lambda args: exp.DayOfYear(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
