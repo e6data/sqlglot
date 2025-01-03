@@ -273,47 +273,33 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT TO_UNIX_TIMESTAMP(A)",
-            read={
-                "databricks": "SELECT TO_UNIX_TIMESTAMP(A)"
-            },
-            write={
-                "databricks": "SELECT TO_UNIX_TIMESTAMP(A)"
-            }
+            read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
+            write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
         )
 
         self.validate_all(
             "SELECT CONVERT_TIMEZONE('Asia/Seoul', 'UTC', CAST('2016-08-31' AS TIMESTAMP))",
-            read={
-                "databricks": "SELECT to_utc_timestamp('2016-08-31', 'Asia/Seoul')"
-            }
+            read={"databricks": "SELECT to_utc_timestamp('2016-08-31', 'Asia/Seoul')"},
         )
 
         self.validate_all(
             "SELECT EXTRACT(fieldStr FROM date_expr)",
             read={
                 "databricks": "SELECT DATE_PART(fieldStr, date_expr)",
-                "E6": "SELECT DATEPART(fieldStr, date_expr)"
-            }
+                "E6": "SELECT DATEPART(fieldStr, date_expr)",
+            },
         )
 
         self.validate_all(
             "SELECT NOT A IS NULL",
-            read={
-                "databricks": "SELECT ISNOTNULL(A)"
-            },
-            write={
-                "databricks": "SELECT NOT A IS NULL"
-            }
+            read={"databricks": "SELECT ISNOTNULL(A)"},
+            write={"databricks": "SELECT NOT A IS NULL"},
         )
 
         self.validate_all(
             "SELECT A IS NULL",
-            read={
-                "databricks": "SELECT ISNULL(A)"
-            },
-            write={
-                "databricks": "SELECT A IS NULL"
-            }
+            read={"databricks": "SELECT ISNULL(A)"},
+            write={"databricks": "SELECT A IS NULL"},
         )
 
     def test_regex(self):
@@ -510,15 +496,13 @@ class TestE6(Validator):
             read={
                 "databricks": "SELECT SLICE(A,B,C)",
                 "presto": "SELECT SLICE(A,B,C)",
-            }
+            },
         )
         self.validate_all(
             "SELECT ARRAY_SLICE(A,B,C)",
             write={
                 "databricks": "SELECT SLICE(A, B, C - B)",
                 "presto": "SELECT SLICE(A, B, C - B)",
-                "snowflake": "SELECT ARRAY_SLICE(A, B, C)"
-            }
+                "snowflake": "SELECT ARRAY_SLICE(A, B, C)",
+            },
         )
-
-

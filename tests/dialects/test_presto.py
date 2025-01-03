@@ -322,7 +322,7 @@ class TestPresto(Validator):
                 "duckdb": "EPOCH(x)",
                 "presto": "TO_UNIXTIME(x)",
                 "hive": "UNIX_TIMESTAMP(x)",
-                "spark": "UNIX_TIMESTAMP(x)",
+                "spark": "TO_UNIX_TIMESTAMP(x)",
             },
         )
         self.validate_all(

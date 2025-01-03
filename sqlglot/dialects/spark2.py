@@ -10,7 +10,7 @@ from sqlglot.dialects.dialect import (
     pivot_column_names,
     rename_func,
     trim_sql,
-    unit_to_str, map_date_part
+    unit_to_str,
 )
 from typing import List
 from sqlglot.dialects.hive import Hive
@@ -148,6 +148,7 @@ def _annotate_by_similar_args(
     self._set_type(expression, exp.DataType.Type.UNKNOWN if has_unknown else last_datatype)
     return expression
 
+
 def _parse_is_null_functions(args: List[exp.Expression], func_name: str):
     """
     Unified parser method for `isnull` and `isnotnull` functions.
@@ -163,11 +164,13 @@ def _parse_is_null_functions(args: List[exp.Expression], func_name: str):
         raise ValueError(f"{func_name.upper()} function expects exactly one argument.")
 
     if func_name.lower() == "isnull":
-        return exp.Is(this=seq_get(args,0), expression=exp.Null())
+        return exp.Is(this=seq_get(args, 0), expression=exp.Null())
     elif func_name.lower() == "isnotnull":
-        return exp.Not(this=exp.Is(this=seq_get(args,0), expression=exp.Null()))
+        return exp.Not(this=exp.Is(this=seq_get(args, 0), expression=exp.Null()))
     else:
         raise ValueError(f"Unsupported function name: {func_name}")
+
+
 # Newly added
 def _build_array_slice(args: list) -> exp.ArraySlice:
     """
@@ -197,7 +200,6 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
 
     # Construct the ArraySlice expression
     return exp.ArraySlice(this=this, fromIndex=from_index, to=to_index + from_index)
-
 
 
 class Spark2(Hive):
@@ -245,13 +247,13 @@ class Spark2(Hive):
                 zone=seq_get(args, 1),
             ),
             "INT": _build_as_cast("int"),
-            "ISNULL": lambda args : _parse_is_null_functions(args, "isnull"),
+            "ISNULL": lambda args: _parse_is_null_functions(args, "isnull"),
             "ISNOTNULL": lambda args: _parse_is_null_functions(args, "isnotnull"),
             "MAP_FROM_ARRAYS": exp.Map.from_arg_list,
             "RLIKE": exp.RegexpLike.from_arg_list,
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
             "SHIFTRIGHT": binary_from_function(exp.BitwiseRightShift),
-            "SLICE":_build_array_slice,
+            "SLICE": _build_array_slice,
             "STRING": _build_as_cast("string"),
             "TIMESTAMP": _build_as_cast("timestamp"),
             "TO_TIMESTAMP": lambda args: (
@@ -356,8 +358,11 @@ class Spark2(Hive):
                 ]
             ),
             exp.StrToUnix: rename_func("TO_UNIX_TIMESTAMP"),
-            exp.ArraySlice: lambda self, e:self.func(
-                "SLICE", e.args.get("this"),e.args.get("fromIndex"),e.args.get("to") - e.args.get("fromIndex"),
+            exp.ArraySlice: lambda self, e: self.func(
+                "SLICE",
+                e.args.get("this"),
+                e.args.get("fromIndex"),
+                e.args.get("to") - e.args.get("fromIndex"),
             ),
             exp.StrToDate: _str_to_date,
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),

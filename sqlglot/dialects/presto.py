@@ -398,7 +398,10 @@ class Presto(Dialect):
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayContains: rename_func("CONTAINS"),
             exp.ArraySlice: lambda self, e: self.func(
-                "SLICE", e.args.get("this"), e.args.get("fromIndex"), e.args.get("to") - e.args.get("fromIndex"),
+                "SLICE",
+                e.args.get("this"),
+                e.args.get("fromIndex"),
+                e.args.get("to") - e.args.get("fromIndex"),
             ),
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArrayUniqueAgg: rename_func("SET_AGG"),

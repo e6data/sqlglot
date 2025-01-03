@@ -225,8 +225,8 @@ def _from_unixtime_withunit_sql(
 
 
 def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
-    if len(args)==2:
-        return exp.Anonymous(this="TO_UNIX_TIMESTAMP",expressions=args )
+    if len(args) == 2:
+        return exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=args)
     value = seq_get(args, 0)
 
     # If value is a string literal, cast it to TIMESTAMP
@@ -2057,7 +2057,7 @@ class E6(Dialect):
                 "TIMESTAMP_DIFF",
                 e.expression,
                 e.this,
-                unit_to_str(e)
+                unit_to_str(e),
             ),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
