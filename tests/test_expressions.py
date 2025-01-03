@@ -59,7 +59,8 @@ class TestExpressions(unittest.TestCase):
         self.assertEqual(exp.Table(pivots=[]), exp.Table())
         self.assertNotEqual(exp.Table(pivots=[None]), exp.Table())
         self.assertEqual(
-            exp.DataType.build("int"), exp.DataType(this=exp.DataType.Type.INT, nested=False)
+            exp.DataType.build("int"),
+            exp.DataType(this=exp.DataType.Type.INT, nested=False),
         )
 
     def test_find(self):
@@ -222,7 +223,8 @@ class TestExpressions(unittest.TestCase):
             "foo.`{bar,er}`",
         )
         self.assertEqual(
-            exp.table_name(parse_one("/*c*/foo.bar", into=exp.Table), identify=True), '"foo"."bar"'
+            exp.table_name(parse_one("/*c*/foo.bar", into=exp.Table), identify=True),
+            '"foo"."bar"',
         )
 
     def test_table(self):
@@ -335,7 +337,9 @@ class TestExpressions(unittest.TestCase):
         )
         self.assertEqual(
             exp.replace_placeholders(
-                parse_one("select * from foo WHERE x > :int1 AND y IS :bool1"), int1=0, bool1=False
+                parse_one("select * from foo WHERE x > :int1 AND y IS :bool1"),
+                int1=0,
+                bool1=False,
             ).sql(),
             "SELECT * FROM foo WHERE x > 0 AND y IS FALSE",
         )
@@ -348,7 +352,8 @@ class TestExpressions(unittest.TestCase):
         self.assertEqual(exp.func("bloo").sql(), "BLOO()")
         self.assertEqual(exp.func("concat", exp.convert("a")).sql("duckdb"), "CONCAT('a')")
         self.assertEqual(
-            exp.func("locate", "'x'", "'xo'", dialect="hive").sql("hive"), "LOCATE('x', 'xo')"
+            exp.func("locate", "'x'", "'xo'", dialect="hive").sql("hive"),
+            "LOCATE('x', 'xo')",
         )
         self.assertEqual(
             exp.func("log", exp.to_identifier("x"), 2, dialect="bigquery").sql("bigquery"),
@@ -787,7 +792,10 @@ class TestExpressions(unittest.TestCase):
         week = unit.find(exp.Week)
         self.assertEqual(week.this, exp.var("thursday"))
 
-        for abbreviated_unit, unnabreviated_unit in exp.TimeUnit.UNABBREVIATED_UNIT_NAME.items():
+        for (
+            abbreviated_unit,
+            unnabreviated_unit,
+        ) in exp.TimeUnit.UNABBREVIATED_UNIT_NAME.items():
             interval = parse_one(f"interval '500 {abbreviated_unit}'")
             self.assertIsInstance(interval.unit, exp.Var)
             self.assertEqual(interval.unit.name, unnabreviated_unit)
@@ -885,7 +893,13 @@ class TestExpressions(unittest.TestCase):
         for value, expected in [
             (
                 datetime.datetime(
-                    2022, 10, 1, 1, 1, 1, tzinfo=zoneinfo.ZoneInfo("America/Los_Angeles")
+                    2022,
+                    10,
+                    1,
+                    1,
+                    1,
+                    1,
+                    tzinfo=zoneinfo.ZoneInfo("America/Los_Angeles"),
                 ),
                 "TIME_STR_TO_TIME('2022-10-01 01:01:01-07:00', 'America/Los_Angeles')",
             )
@@ -950,7 +964,8 @@ FROM foo""",
         self.assertEqual(exp.to_interval(exp.Literal.string("1day")).sql(), "INTERVAL '1' DAY")
         self.assertEqual(exp.to_interval(exp.Literal.string("-2 day")).sql(), "INTERVAL '-2' DAY")
         self.assertEqual(
-            exp.to_interval(exp.Literal.string("  5   months")).sql(), "INTERVAL '5' MONTHS"
+            exp.to_interval(exp.Literal.string("  5   months")).sql(),
+            "INTERVAL '5' MONTHS",
         )
 
     def test_to_table(self):

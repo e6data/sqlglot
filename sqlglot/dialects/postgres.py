@@ -428,7 +428,8 @@ class Postgres(Dialect):
                 exp.JSONExtract, arrow_req_json_type=self.JSON_ARROWS_REQUIRE_JSON_TYPE
             )([this, path]),
             TokenType.DARROW: lambda self, this, path: build_json_extract_path(
-                exp.JSONExtractScalar, arrow_req_json_type=self.JSON_ARROWS_REQUIRE_JSON_TYPE
+                exp.JSONExtractScalar,
+                arrow_req_json_type=self.JSON_ARROWS_REQUIRE_JSON_TYPE,
             )([this, path]),
         }
 

@@ -205,6 +205,7 @@ class MySQL(Dialect):
             "MEDIUMINT": TokenType.MEDIUMINT,
             "MEMBER OF": TokenType.MEMBER_OF,
             "SEPARATOR": TokenType.SEPARATOR,
+            "SERIAL": TokenType.SERIAL,
             "START": TokenType.BEGIN,
             "SIGNED": TokenType.BIGINT,
             "SIGNED INTEGER": TokenType.BIGINT,
@@ -297,7 +298,9 @@ class MySQL(Dialect):
             "CHAR_LENGTH": exp.Length.from_arg_list,
             "CHARACTER_LENGTH": exp.Length.from_arg_list,
             "CONVERT_TZ": lambda args: exp.ConvertTimezone(
-                source_tz=seq_get(args, 1), target_tz=seq_get(args, 2), timestamp=seq_get(args, 0)
+                source_tz=seq_get(args, 1),
+                target_tz=seq_get(args, 2),
+                timestamp=seq_get(args, 0),
             ),
             "DATE": lambda args: exp.TsOrDsToDate(this=seq_get(args, 0)),
             "DATE_ADD": build_date_delta_with_interval(exp.DateAdd),
@@ -639,7 +642,8 @@ class MySQL(Dialect):
                     return self.expression(exp.Cast, this=self._parse_column(), to=data_type)
 
             return super()._parse_type(
-                parse_interval=parse_interval, fallback_to_identifier=fallback_to_identifier
+                parse_interval=parse_interval,
+                fallback_to_identifier=fallback_to_identifier,
             )
 
         def _parse_group_concat(self) -> t.Optional[exp.Expression]:
@@ -716,7 +720,8 @@ class MySQL(Dialect):
             exp.ArrayAgg: rename_func("GROUP_CONCAT"),
             exp.CurrentDate: no_paren_current_date_sql,
             exp.DateDiff: _remove_ts_or_ds_to_date(
-                lambda self, e: self.func("DATEDIFF", e.this, e.expression), ("this", "expression")
+                lambda self, e: self.func("DATEDIFF", e.this, e.expression),
+                ("this", "expression"),
             ),
             exp.DateAdd: _remove_ts_or_ds_to_date(date_add_sql("ADD")),
             exp.DateStrToDate: datestrtodate_sql,

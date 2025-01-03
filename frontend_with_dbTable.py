@@ -42,7 +42,16 @@ if mode == "Single Query":
     # Dropdown for selecting From SQL and To SQL
     from_sql = st.selectbox(
         "From SQL",
-        ["snowflake", "databricks", "athena", "presto", "postgres", "bigquery", "E6", "trino"],
+        [
+            "snowflake",
+            "databricks",
+            "athena",
+            "presto",
+            "postgres",
+            "bigquery",
+            "E6",
+            "trino",
+        ],
     )
 
     if from_sql:
@@ -77,7 +86,16 @@ elif mode == "CSV Mode":
 
     from_sql = st.selectbox(
         "From SQL",
-        ["snowflake", "databricks", "athena", "presto", "postgres", "bigquery", "E6", "trino"],
+        [
+            "snowflake",
+            "databricks",
+            "athena",
+            "presto",
+            "postgres",
+            "bigquery",
+            "E6",
+            "trino",
+        ],
         key="csv_from_sql",
     )
 

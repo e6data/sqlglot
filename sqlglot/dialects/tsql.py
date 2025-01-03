@@ -232,7 +232,7 @@ def _build_date_delta(
         if start_date and start_date.is_number:
             # Numeric types are valid DATETIME values
             if start_date.is_int:
-                adds = DEFAULT_START_DATE + datetime.timedelta(days=int(start_date.this))
+                adds = DEFAULT_START_DATE + datetime.timedelta(days=start_date.to_py())
                 start_date = exp.Literal.string(adds.strftime("%F"))
             else:
                 # We currently don't handle float values, i.e. they're not converted to equivalent DATETIMEs.
@@ -368,6 +368,16 @@ def _timestrtotime_sql(self: TSQL.Generator, expression: exp.TimeStrToTime):
         # If you dont have AT TIME ZONE 'UTC', wrapping that expression in another cast back to DATETIME2 just drops the timezone information
         return self.sql(exp.AtTimeZone(this=sql, zone=exp.Literal.string("UTC")))
     return sql
+
+
+def _build_datetrunc(args: t.List) -> exp.TimestampTrunc:
+    unit = seq_get(args, 0)
+    this = seq_get(args, 1)
+
+    if this and this.is_string:
+        this = exp.cast(this, exp.DataType.Type.DATETIME2)
+
+    return exp.TimestampTrunc(this=this, unit=unit)
 
 
 class TSQL(Dialect):
@@ -570,12 +580,20 @@ class TSQL(Dialect):
             "SUSER_SNAME": exp.CurrentUser.from_arg_list,
             "SYSTEM_USER": exp.CurrentUser.from_arg_list,
             "TIMEFROMPARTS": _build_timefromparts,
+            "DATETRUNC": _build_datetrunc,
         }
 
         JOIN_HINTS = {"LOOP", "HASH", "MERGE", "REMOTE"}
 
         PROCEDURE_OPTIONS = dict.fromkeys(
-            ("ENCRYPTION", "RECOMPILE", "SCHEMABINDING", "NATIVE_COMPILATION", "EXECUTE"), tuple()
+            (
+                "ENCRYPTION",
+                "RECOMPILE",
+                "SCHEMABINDING",
+                "NATIVE_COMPILATION",
+                "EXECUTE",
+            ),
+            tuple(),
         )
 
         RETURNS_TABLE_TOKENS = parser.Parser.ID_VAR_TOKENS - {
@@ -629,7 +647,9 @@ class TSQL(Dialect):
 
                 self._match(TokenType.EQ)
                 return self.expression(
-                    exp.QueryOption, this=option, expression=self._parse_primary_or_var()
+                    exp.QueryOption,
+                    this=option,
+                    expression=self._parse_primary_or_var(),
                 )
 
             return self._parse_wrapped_csv(_parse_option)
@@ -928,7 +948,9 @@ class TSQL(Dialect):
             exp.Subquery: transforms.preprocess([qualify_derived_table_outputs]),
             exp.SHA: lambda self, e: self.func("HASHBYTES", exp.Literal.string("SHA1"), e.this),
             exp.SHA2: lambda self, e: self.func(
-                "HASHBYTES", exp.Literal.string(f"SHA2_{e.args.get('length', 256)}"), e.this
+                "HASHBYTES",
+                exp.Literal.string(f"SHA2_{e.args.get('length', 256)}"),
+                e.this,
             ),
             exp.TemporaryProperty: lambda self, e: "",
             exp.TimeStrToTime: _timestrtotime_sql,
@@ -936,6 +958,7 @@ class TSQL(Dialect):
             exp.Trim: trim_sql,
             exp.TsOrDsAdd: date_delta_sql("DATEADD", cast=True),
             exp.TsOrDsDiff: date_delta_sql("DATEDIFF"),
+            exp.TimestampTrunc: lambda self, e: self.func("DATETRUNC", e.unit, e.this),
         }
 
         TRANSFORMS.pop(exp.ReturnsProperty)
@@ -967,7 +990,10 @@ class TSQL(Dialect):
         def convert_sql(self, expression: exp.Convert) -> str:
             name = "TRY_CONVERT" if expression.args.get("safe") else "CONVERT"
             return self.func(
-                name, expression.this, expression.expression, expression.args.get("style")
+                name,
+                expression.this,
+                expression.expression,
+                expression.args.get("style"),
             )
 
         def queryoption_sql(self, expression: exp.QueryOption) -> str:
@@ -1007,7 +1033,9 @@ class TSQL(Dialect):
                 return ""
 
             return self.func(
-                "PARSENAME", this, exp.Literal.number(split_count + 1 - part_index.to_py())
+                "PARSENAME",
+                this,
+                exp.Literal.number(split_count + 1 - part_index.to_py()),
             )
 
         def timefromparts_sql(self, expression: exp.TimeFromParts) -> str:

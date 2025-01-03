@@ -479,7 +479,8 @@ class TestParser(unittest.TestCase):
             parse_one("TIMESTAMP '2022-01-01'").sql(), "CAST('2022-01-01' AS TIMESTAMP)"
         )
         self.assertEqual(
-            parse_one("TIMESTAMP(1) '2022-01-01'").sql(), "CAST('2022-01-01' AS TIMESTAMP(1))"
+            parse_one("TIMESTAMP(1) '2022-01-01'").sql(),
+            "CAST('2022-01-01' AS TIMESTAMP(1))",
         )
         self.assertEqual(
             parse_one("TIMESTAMP WITH TIME ZONE '2022-01-01'").sql(),
@@ -733,7 +734,8 @@ class TestParser(unittest.TestCase):
 
     def test_parse_properties(self):
         self.assertEqual(
-            parse_one("create materialized table x").sql(), "CREATE MATERIALIZED TABLE x"
+            parse_one("create materialized table x").sql(),
+            "CREATE MATERIALIZED TABLE x",
         )
 
     def test_parse_floats(self):
@@ -852,7 +854,8 @@ class TestParser(unittest.TestCase):
         )
 
         self.assertEqual(
-            ";\n".join(e.sql() for e in expressions), "SELECT * FROM x;\n/* my comment */"
+            ";\n".join(e.sql() for e in expressions),
+            "SELECT * FROM x;\n/* my comment */",
         )
 
     def test_parse_prop_eq(self):
@@ -888,3 +891,15 @@ class TestParser(unittest.TestCase):
         ast = parse_one("ALTER TABLE tbl DROP COLUMN col")
         self.assertEqual(len(list(ast.find_all(exp.Table))), 1)
         self.assertEqual(len(list(ast.find_all(exp.Column))), 1)
+
+    def test_udf_meta(self):
+        ast = parse_one("YEAR(a) /* sqlglot.anonymous */")
+        self.assertIsInstance(ast, exp.Anonymous)
+
+        # Meta flag is case sensitive
+        ast = parse_one("YEAR(a) /* sqlglot.anONymous */")
+        self.assertIsInstance(ast, exp.Year)
+
+        # Incomplete or incorrect anonymous meta comments are not registered
+        ast = parse_one("YEAR(a) /* sqlglot.anon */")
+        self.assertIsInstance(ast, exp.Year)

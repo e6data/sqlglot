@@ -249,20 +249,30 @@ class ChangeDistiller:
         return edit_script
 
     def _generate_move_edits(
-        self, source: exp.Expression, target: exp.Expression, matchings: t.Dict[int, int]
+        self,
+        source: exp.Expression,
+        target: exp.Expression,
+        matchings: t.Dict[int, int],
     ) -> t.List[Move]:
         source_args = [id(e) for e in _expression_only_args(source)]
         target_args = [id(e) for e in _expression_only_args(target)]
 
         args_lcs = set(
-            _lcs(source_args, target_args, lambda l, r: matchings.get(t.cast(int, l)) == r)
+            _lcs(
+                source_args,
+                target_args,
+                lambda l, r: matchings.get(t.cast(int, l)) == r,
+            )
         )
 
         move_edits = []
         for a in source_args:
             if a not in args_lcs and a not in self._unmatched_source_nodes:
                 move_edits.append(
-                    Move(source=self._source_index[a], target=self._target_index[matchings[a]])
+                    Move(
+                        source=self._source_index[a],
+                        target=self._target_index[matchings[a]],
+                    )
                 )
 
         return move_edits
@@ -387,7 +397,9 @@ def _get_expression_leaves(expression: exp.Expression) -> t.Iterator[exp.Express
         yield expression
 
 
-def _get_non_expression_leaves(expression: exp.Expression) -> t.Iterator[t.Tuple[str, t.Any]]:
+def _get_non_expression_leaves(
+    expression: exp.Expression,
+) -> t.Iterator[t.Tuple[str, t.Any]]:
     for arg, value in expression.args.items():
         if isinstance(value, exp.Expression) or (
             isinstance(value, list) and isinstance(seq_get(value, 0), exp.Expression)

@@ -140,7 +140,10 @@ class Drill(Dialect):
             exp.StrToDate: _str_to_date,
             exp.Pow: rename_func("POW"),
             exp.Select: transforms.preprocess(
-                [transforms.eliminate_distinct_on, transforms.eliminate_semi_and_anti_joins]
+                [
+                    transforms.eliminate_distinct_on,
+                    transforms.eliminate_semi_and_anti_joins,
+                ]
             ),
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.TimeStrToDate: lambda self, e: self.sql(exp.cast(e.this, exp.DataType.Type.DATE)),

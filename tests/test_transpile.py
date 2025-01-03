@@ -165,7 +165,8 @@ class TestTranspile(unittest.TestCase):
             "SELECT 1 /* inline */ FROM foo /* comment */",
         )
         self.validate(
-            "SELECT FUN(x) /*x*/, [1,2,3] /*y*/", "SELECT FUN(x) /* x */, ARRAY(1, 2, 3) /* y */"
+            "SELECT FUN(x) /*x*/, [1,2,3] /*y*/",
+            "SELECT FUN(x) /* x */, ARRAY(1, 2, 3) /* y */",
         )
         self.validate(
             """
@@ -901,9 +902,12 @@ FROM tbl1""",
 
     def test_normalize_name(self):
         self.assertEqual(
-            transpile("cardinality(x)", read="presto", write="presto", normalize_functions="lower")[
-                0
-            ],
+            transpile(
+                "cardinality(x)",
+                read="presto",
+                write="presto",
+                normalize_functions="lower",
+            )[0],
             "cardinality(x)",
         )
 

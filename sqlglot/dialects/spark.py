@@ -3,7 +3,12 @@ from __future__ import annotations
 import typing as t
 
 from sqlglot import exp
-from sqlglot.dialects.dialect import rename_func, unit_to_var, timestampdiff_sql, build_date_delta
+from sqlglot.dialects.dialect import (
+    rename_func,
+    unit_to_var,
+    timestampdiff_sql,
+    build_date_delta,
+)
 from sqlglot.dialects.hive import _build_with_ignore_nulls
 from sqlglot.dialects.spark2 import Spark2, temporary_storage_provider, _build_as_cast
 from sqlglot.helper import ensure_list, seq_get
@@ -37,7 +42,9 @@ def _build_datediff(args: t.List) -> exp.Expression:
         this = args[2]
 
     return exp.DateDiff(
-        this=exp.TsOrDsToDate(this=this), expression=exp.TsOrDsToDate(this=expression), unit=unit
+        this=exp.TsOrDsToDate(this=this),
+        expression=exp.TsOrDsToDate(this=expression),
+        unit=unit,
     )
 
 
@@ -102,6 +109,8 @@ class Spark(Spark2):
         ]
 
     class Parser(Spark2.Parser):
+        OPTIONAL_ALIAS_TOKEN_CTE = True
+
         FUNCTIONS = {
             **Spark2.Parser.FUNCTIONS,
             "ANY_VALUE": _build_with_ignore_nulls(exp.AnyValue),

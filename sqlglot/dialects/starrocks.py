@@ -14,27 +14,40 @@ from sqlglot.dialects.dialect import (
 )
 from sqlglot.dialects.mysql import MySQL
 from sqlglot.helper import seq_get
+from sqlglot.tokens import TokenType
 
 
 class StarRocks(MySQL):
     STRICT_JSON_PATH_SYNTAX = False
+
+    class Tokenizer(MySQL.Tokenizer):
+        KEYWORDS = {
+            **MySQL.Tokenizer.KEYWORDS,
+            "LARGEINT": TokenType.INT128,
+        }
 
     class Parser(MySQL.Parser):
         FUNCTIONS = {
             **MySQL.Parser.FUNCTIONS,
             "DATE_TRUNC": build_timestamp_trunc,
             "DATEDIFF": lambda args: exp.DateDiff(
-                this=seq_get(args, 0), expression=seq_get(args, 1), unit=exp.Literal.string("DAY")
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                unit=exp.Literal.string("DAY"),
             ),
             "DATE_DIFF": lambda args: exp.DateDiff(
-                this=seq_get(args, 1), expression=seq_get(args, 2), unit=seq_get(args, 0)
+                this=seq_get(args, 1),
+                expression=seq_get(args, 2),
+                unit=seq_get(args, 0),
             ),
             "REGEXP": exp.RegexpLike.from_arg_list,
         }
 
         PROPERTY_PARSERS = {
             **MySQL.Parser.PROPERTY_PARSERS,
+            "UNIQUE": lambda self: self._parse_composite_key_property(exp.UniqueKeyProperty),
             "PROPERTIES": lambda self: self._parse_wrapped_properties(),
+            "PARTITION BY": lambda self: self._parse_partition_by_opt_range(),
         }
 
         def _parse_create(self) -> exp.Create | exp.Command:
@@ -60,7 +73,8 @@ class StarRocks(MySQL):
                 if not alias:
                     # Starrocks defaults to naming the table alias as "unnest"
                     alias = exp.TableAlias(
-                        this=exp.to_identifier("unnest"), columns=[exp.to_identifier("unnest")]
+                        this=exp.to_identifier("unnest"),
+                        columns=[exp.to_identifier("unnest")],
                     )
                     unnest.set("alias", alias)
                 elif not alias.args.get("columns"):
@@ -69,6 +83,34 @@ class StarRocks(MySQL):
                     alias.set("columns", [exp.to_identifier("unnest")])
 
             return unnest
+
+        def _parse_partitioning_granularity_dynamic(
+            self,
+        ) -> exp.PartitionByRangePropertyDynamic:
+            self._match_text_seq("START")
+            start = self._parse_wrapped(self._parse_string)
+            self._match_text_seq("END")
+            end = self._parse_wrapped(self._parse_string)
+            self._match_text_seq("EVERY")
+            every = self._parse_wrapped(lambda: self._parse_interval() or self._parse_number())
+            return self.expression(
+                exp.PartitionByRangePropertyDynamic, start=start, end=end, every=every
+            )
+
+        def _parse_partition_by_opt_range(
+            self,
+        ) -> exp.PartitionedByProperty | exp.PartitionByRangeProperty:
+            if self._match_text_seq("RANGE"):
+                partition_expressions = self._parse_wrapped_id_vars()
+                create_expressions = self._parse_wrapped_csv(
+                    self._parse_partitioning_granularity_dynamic
+                )
+                return self.expression(
+                    exp.PartitionByRangeProperty,
+                    partition_expressions=partition_expressions,
+                    create_expressions=create_expressions,
+                )
+            return super()._parse_partitioned_by()
 
     class Generator(MySQL.Generator):
         EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
@@ -81,6 +123,7 @@ class StarRocks(MySQL):
 
         TYPE_MAPPING = {
             **MySQL.Generator.TYPE_MAPPING,
+            exp.DataType.Type.INT128: "LARGEINT",
             exp.DataType.Type.TEXT: "STRING",
             exp.DataType.Type.TIMESTAMP: "DATETIME",
             exp.DataType.Type.TIMESTAMPTZ: "DATETIME",
@@ -89,6 +132,8 @@ class StarRocks(MySQL):
         PROPERTIES_LOCATION = {
             **MySQL.Generator.PROPERTIES_LOCATION,
             exp.PrimaryKey: exp.Properties.Location.POST_SCHEMA,
+            exp.UniqueKeyProperty: exp.Properties.Location.POST_SCHEMA,
+            exp.PartitionByRangeProperty: exp.Properties.Location.POST_SCHEMA,
         }
 
         TRANSFORMS = {
@@ -284,6 +329,11 @@ class StarRocks(MySQL):
                     # otherwise insert it at the beginning
                     engine = props.find(exp.EngineProperty)
                     engine_index = (engine.index or 0) if engine else -1
-                    props.set("expressions", primary_key.pop(), engine_index + 1, overwrite=False)
+                    props.set(
+                        "expressions",
+                        primary_key.pop(),
+                        engine_index + 1,
+                        overwrite=False,
+                    )
 
             return super().create_sql(expression)

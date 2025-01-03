@@ -172,7 +172,10 @@ class TestBuild(unittest.TestCase):
                 lambda: select("x").distinct(distinct=True).from_("tbl"),
                 "SELECT DISTINCT x FROM tbl",
             ),
-            (lambda: select("x").distinct(distinct=False).from_("tbl"), "SELECT x FROM tbl"),
+            (
+                lambda: select("x").distinct(distinct=False).from_("tbl"),
+                "SELECT x FROM tbl",
+            ),
             (
                 lambda: select("x").lateral("OUTER explode(y) tbl2 AS z").from_("tbl"),
                 "SELECT x FROM tbl LATERAL VIEW OUTER EXPLODE(y) tbl2 AS z",
@@ -268,7 +271,10 @@ class TestBuild(unittest.TestCase):
                 .from_("merged_df")
                 .join(
                     "vte_diagnosis_df",
-                    using=[exp.to_identifier("patient_id"), exp.to_identifier("encounter_id")],
+                    using=[
+                        exp.to_identifier("patient_id"),
+                        exp.to_identifier("encounter_id"),
+                    ],
                 ),
                 "SELECT x, y, z FROM merged_df JOIN vte_diagnosis_df USING (patient_id, encounter_id)",
             ),
@@ -379,13 +385,23 @@ class TestBuild(unittest.TestCase):
             (
                 lambda: select("x")
                 .from_("tbl")
-                .with_("tbl", as_=select("x").from_("tbl2"), recursive=True, materialized=True),
+                .with_(
+                    "tbl",
+                    as_=select("x").from_("tbl2"),
+                    recursive=True,
+                    materialized=True,
+                ),
                 "WITH RECURSIVE tbl AS MATERIALIZED (SELECT x FROM tbl2) SELECT x FROM tbl",
             ),
             (
                 lambda: select("x")
                 .from_("tbl")
-                .with_("tbl", as_=select("x").from_("tbl2"), recursive=True, materialized=False),
+                .with_(
+                    "tbl",
+                    as_=select("x").from_("tbl2"),
+                    recursive=True,
+                    materialized=False,
+                ),
                 "WITH RECURSIVE tbl AS NOT MATERIALIZED (SELECT x FROM tbl2) SELECT x FROM tbl",
             ),
             (
@@ -552,7 +568,10 @@ class TestBuild(unittest.TestCase):
                 "SELECT 1 UNION SELECT 2 LIMIT 5 OFFSET 2",
             ),
             (lambda: parse_one("(SELECT 1)").subquery(), "((SELECT 1))"),
-            (lambda: parse_one("(SELECT 1)").subquery("alias"), "((SELECT 1)) AS alias"),
+            (
+                lambda: parse_one("(SELECT 1)").subquery("alias"),
+                "((SELECT 1)) AS alias",
+            ),
             (
                 lambda: parse_one("(select * from foo)").with_("foo", "select 1 as c"),
                 "WITH foo AS (SELECT 1 AS c) (SELECT * FROM foo)",
@@ -665,7 +684,10 @@ class TestBuild(unittest.TestCase):
                 "(VALUES ('1', 2, NULL), ('2', 3, NULL)) AS alias(col1, col2, col3)",
             ),
             (lambda: exp.delete("y", where="x > 1"), "DELETE FROM y WHERE x > 1"),
-            (lambda: exp.delete("y", where=exp.and_("x > 1")), "DELETE FROM y WHERE x > 1"),
+            (
+                lambda: exp.delete("y", where=exp.and_("x > 1")),
+                "DELETE FROM y WHERE x > 1",
+            ),
             (
                 lambda: select("AVG(a) OVER b")
                 .from_("table")
@@ -685,7 +707,10 @@ class TestBuild(unittest.TestCase):
                 .qualify("row_number() OVER (PARTITION BY a ORDER BY b) = 1"),
                 "SELECT * FROM table QUALIFY ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) = 1",
             ),
-            (lambda: exp.delete("tbl1", "x = 1").delete("tbl2"), "DELETE FROM tbl2 WHERE x = 1"),
+            (
+                lambda: exp.delete("tbl1", "x = 1").delete("tbl2"),
+                "DELETE FROM tbl2 WHERE x = 1",
+            ),
             (lambda: exp.delete("tbl").where("x = 1"), "DELETE FROM tbl WHERE x = 1"),
             (lambda: exp.delete(exp.table_("tbl")), "DELETE FROM tbl"),
             (
@@ -748,7 +773,10 @@ class TestBuild(unittest.TestCase):
                 "postgres",
             ),
             (lambda: exp.cast("CAST(x AS INT)", "int"), "CAST(x AS INT)"),
-            (lambda: exp.cast("CAST(x AS TEXT)", "int"), "CAST(CAST(x AS TEXT) AS INT)"),
+            (
+                lambda: exp.cast("CAST(x AS TEXT)", "int"),
+                "CAST(CAST(x AS TEXT) AS INT)",
+            ),
             (
                 lambda: exp.rename_column("table1", "c1", "c2", True),
                 "ALTER TABLE table1 RENAME COLUMN IF EXISTS c1 TO c2",
@@ -794,6 +822,23 @@ class TestBuild(unittest.TestCase):
             (
                 lambda: exp.merge(
                     "WHEN MATCHED THEN UPDATE SET target.name = source.name",
+                    into=exp.table_("target_table").as_("target"),
+                    using=exp.table_("source_table").as_("source"),
+                    on="target.id = source.id",
+                    returning="target.*",
+                ),
+                "MERGE INTO target_table AS target USING source_table AS source ON target.id = source.id WHEN MATCHED THEN UPDATE SET target.name = source.name RETURNING target.*",
+            ),
+            (
+                lambda: exp.merge(
+                    exp.When(
+                        matched=True,
+                        then=exp.Update(
+                            expressions=[
+                                exp.column("name", "target").eq(exp.column("name", "source"))
+                            ]
+                        ),
+                    ),
                     into=exp.table_("target_table").as_("target"),
                     using=exp.table_("source_table").as_("source"),
                     on="target.id = source.id",
