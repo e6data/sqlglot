@@ -4,11 +4,11 @@ import e6_storage_service.ttypes as ttypes
 from thrift.protocol import TBinaryProtocol, TMultiplexedProtocol
 from thrift.transport.TTransport import TTransportException
 from thrift.transport import TSocket
-
-
+import sqlglot
 
 class StorageServiceClient:
-    def __init__(self, host='localhost', port=9005, timeout=1000):
+    def __init__(self, host='localhost', port=9006, timeout=1000):
+        
         """
         Initialize the StorageService client with connection parameters.
         """
@@ -107,7 +107,20 @@ class StorageServiceClient:
             'tables': self.get_table_names(catalog_name, db_name),
             'columns': self.get_columns(catalog_name, db_name, table_name)
         }
-    
+
+    def get_partition_info(self, catalog_name, db_name, table_name):
+        """
+        Get partition information for a table
+        
+        """
+        self.ensure_connection()
+        try:
+            return self.storage.getTablePartitions(catalogName=catalog_name, dbName=db_name, tableName=table_name,requestId="1234",forceRefresh=False,lastUpdateTimeFromCache=0)
+        except Exception as e:
+            self.reconnect()
+            return self.storage.getTablePartitions(catalogName=catalog_name, dbName=db_name, tableName=table_name,requestId="1234",forceRefresh=False,lastUpdateTimeFromCache=0)
+            # return self.storage.getTablePartitions(catalog_name, db_name, table_name,"",False,0)
+
     def __enter__(self):
         """Context manager entry"""
         return self
@@ -117,12 +130,34 @@ class StorageServiceClient:
         self.close()
 
 
+def Get_table_info(sql_query,catalog,db):
+    client = StorageServiceClient()
+    thing = sqlglot.parse(sql=sql_query, error_level=None)
+    
+    # do stuff get a list of columns
+
+    # get table and partition info
+    
+    # get table info
+
+    try:
+        return client.get_table_info()
+
+    finally:
+        client.close()
 
 if __name__ == "__main__":
     client = StorageServiceClient()
     try:
-        columns = client.get_db_names("hivecatalog")
-        print(columns)
-        # Do more operations...
+        col = client.get_columns("hive","tpcds_1000","item")
+        for j in col:
+            print("column-> ",j," \n")
+
+        print("\n\n\n")
+        partitions = client.get_partition_info("hive","tpcds_1000","item")
+        print(partitions)
+        
     finally:
         client.close()
+
+# GetTablePartitionsResponse(partitions=[E6PartitionInfo(filePathName='s3a://tpcds-datagen/tpcds-1000/item', fieldNames=[], fieldValues=[], fieldTypes=[], containsRecordCount=False, virtualPartitionId=None, virtualPartitionVersionId=None)], tableSizeInBytes=None, lastUpdateTimeMillis=1735999136844)
