@@ -1087,3 +1087,12 @@ i->:  478 expression is  e
 {'columns': [], 'limits': [], 'table': 'diddy', 'where_columns': ['id']}
 
 
+
+
+
+
+curl -X POST "http://localhost:8100/guardrail" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "query=SELECT *, d.d_year, d.d_month_seq, SUM(ws.ws_net_paid) as total_net_sales, COUNT(DISTINCT ws.ws_order_number) as number_of_orders, AVG(ws.ws_net_profit) as avg_profit_per_sale FROM web_sales ws JOIN date_dim d ON ws.ws_sold_date_sk = d.d_date_sk WHERE d.d_year = 2023 AND d.d_holiday = 'N' AND ws.ws_net_paid > 0 AND ws.ws_quantity > 0 GROUP BY d.d_year, d.d_month_seq HAVING SUM(ws.ws_net_paid) > 1000 ORDER BY d.d_month_seq;" \
+     -d "schema=hive" \
+     -d "catalog=tpcds_1000"

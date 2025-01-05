@@ -312,11 +312,12 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
 
     # Post-process to remove duplicates within each table entry
     list_of_tables = []
+    entries = []
     for entry in components:
+        if entry['table'] in cte_names:
+            continue
         list_of_tables.append(entry['table'])
-        entry['columns'] = sorted(list(set(entry['columns'])))
-        entry['where_columns'] = sorted(list(set(entry['where_columns'])))
-        entry['limits'] = sorted(list(set(entry['limits'])))
+        entries.append(entry)
 
-    return components, list_of_tables
+    return entries, list_of_tables
 

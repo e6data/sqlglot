@@ -5,9 +5,9 @@ from thrift.protocol import TBinaryProtocol, TMultiplexedProtocol
 from thrift.transport.TTransport import TTransportException
 from thrift.transport import TSocket
 import sqlglot
-from rules_validator import validate_queries_dynamic 
-from extract import extract_sql_components_per_table_with_alias
-from rules_validator import validate_queries
+from .rules_validator import validate_queries_dynamic 
+from .extract import extract_sql_components_per_table_with_alias
+from .rules_validator import validate_queries
 
 
 class StorageServiceClient:
@@ -150,7 +150,7 @@ def Get_table_info(sql_query,catalog,db):
     finally:
         client.close()
 
-def get_table_infos(tables):
+def get_table_infos(tables,catalog="hive",schema="tpcds_1000"):
     """
     Get detailed table information for a list of table names
     
@@ -186,7 +186,7 @@ def get_table_infos(tables):
             }
             
             # Get column information
-            columns = client.get_columns("hive", "tpcds_1000", table_name)
+            columns = client.get_columns(catalog,schema,table_name)
             if columns:
                 column_list = []
                 for col in columns:
@@ -218,21 +218,39 @@ if __name__ == "__main__":
     try:
 
         sql = """
-        SELECT * FROM web_sales 
-        WHERE ws_net_profit > 100.00
-        AND ws_quantity >= 5
-        AND ws_wholesale_cost < ws_sales_price
-        AND ws_net_paid_inc_tax > 1000.00;
-        """
+            SELECT 
+                *,
+                d.d_year,
+                d.d_month_seq,
+                SUM(ws.ws_net_paid) as total_net_sales,
+                COUNT(DISTINCT ws.ws_order_number) as number_of_orders,
+                AVG(ws.ws_net_profit) as avg_profit_per_sale
+            FROM 
+                web_sales ws
+                JOIN date_dim d ON ws.ws_sold_date_sk = d.d_date_sk
+            WHERE 
+                d.d_year = 2023
+                AND d.d_holiday = 'N'
+                AND ws.ws_net_paid > 0
+                AND ws.ws_quantity > 0
+            GROUP BY 
+                d.d_year,
+                d.d_month_seq
+            HAVING 
+                SUM(ws.ws_net_paid) > 1000
+            ORDER BY 
+                d.d_month_seq;        
+                """
         
-        parsed = sqlglot.parse(sql, read='snowflake', error_level=None)
+        print("SQL is",sql,"\n")
+        parsed = sqlglot.parse(sql, error_level=None)
         # print("\nParsed is\n",parsed)
         queries , tables = extract_sql_components_per_table_with_alias(parsed) 
-        print("\nQueries is\n",queries)
+        print("\Extracted info from query is \n",queries)
         # tables = client.get_table_names(catalog_name="hive", db_name="tpcds_1000")
-        table_map = get_table_infos(tables)    
+        table_map = [] #get_table_infos(tables)    
         # print("\nInfo is\n",info)
-        print("\nInfo is\n",table_map)    
+        print("\nGot info from Storage Service for tables -> ",tables,"\n")    
         violations_found = validate_queries(queries, table_map)
         
         if violations_found:
@@ -241,7 +259,6 @@ if __name__ == "__main__":
                 print(f"Query {v['query_index']} on table '{v['table']}': {v['violation']}")
         else:
             print("No violations found.")
-
 
         # for name in db:
         #     col = client.get_columns("hive","tpcds_1000",name)
