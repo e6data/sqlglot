@@ -534,7 +534,6 @@ class FieldMetadata(object):
     """
     thrift_spec = None
 
-
     def __init__(self, fieldName = None, fieldType = None, childFields = None,):
         self.fieldName = fieldName
         self.fieldType = fieldType

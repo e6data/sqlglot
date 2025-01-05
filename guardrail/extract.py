@@ -319,3 +319,4 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
         entry['limits'] = sorted(list(set(entry['limits'])))
 
     return components, list_of_tables
+
