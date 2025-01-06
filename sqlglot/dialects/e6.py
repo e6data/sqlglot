@@ -252,18 +252,6 @@ def _build_datetime_for_DT(args: t.List) -> exp.AtTimeZone:
     return exp.AtTimeZone(this=seq_get(args, 0), zone=seq_get(args, 1))
 
 
-def _build_regexp_extract(args: t.List) -> exp.RegexpExtract:
-    expr = seq_get(args, 0)
-    pattern = seq_get(args, 1)
-
-    # if exp.DataType.is_type(pattern, exp.DataType.Type.TEXT) or exp.DataType.is_type(pattern, exp.DataType.Type.INT) or isinstance():
-    #     return exp.RegexpExtract(this=expr, expression=pattern)
-    # else:
-    #     raise ValueError("regexp_extract only supports integer and string datatypes")
-
-    return exp.RegexpExtract(this=expr, expression=pattern)
-
-
 def _parse_filter_array(args: t.List) -> exp.ArrayFilter:
     """
     Parses the FILTER_ARRAY function, ensuring that the lambda expression
@@ -1388,13 +1376,9 @@ class E6(Dialect):
             "POWER": exp.Pow.from_arg_list,
             "REGEXP_CONTAINS": exp.RegexpLike.from_arg_list,
             "REGEXP_COUNT": _build_regexp_count,
-            "REGEXP_EXTRACT": _build_regexp_extract,
+            "REGEXP_EXTRACT": exp.RegexpExtract.from_arg_list,
             "REGEXP_LIKE": exp.RegexpLike.from_arg_list,
-            "REGEXP_REPLACE": lambda args: exp.RegexpReplace(
-                this=seq_get(args, 0),
-                expression=seq_get(args, 1),
-                replacement=seq_get(args, 2),
-            ),
+            "REGEXP_REPLACE": exp.RegexpReplace.from_arg_list,
             "REPLACE": exp.RegexpReplace.from_arg_list,
             "ROUND": exp.Round.from_arg_list,
             "RIGHT": _build_with_arg_as_text(exp.Right),
@@ -1609,33 +1593,6 @@ class E6(Dialect):
             # Construct and return the final ORDER BY clause
             return f"{main_expression}{sort_order}{nulls_sort_change}"
 
-        def regexp_replace_sql(self, expression: exp.RegexpReplace) -> str:
-            """
-            Generate the SQL for the REGEXP_REPLACE function in the E6 dialect.
-
-            The REGEXP_REPLACE function can be called with either two or three arguments:
-            1. REGEXP_REPLACE(source, pattern)
-            2. REGEXP_REPLACE(source, pattern, replacement)
-
-            This method ensures that the generated SQL is correct regardless of the number of arguments provided.
-
-            Args:
-                expression (exp.RegexpReplace): The expression representing the REGEXP_REPLACE function.
-
-            Returns:
-                str: The SQL string for the REGEXP_REPLACE function.
-            """
-            # Retrieve the 'replacement' argument if it exists
-            replacement = expression.args.get("replacement")
-
-            if replacement is None:
-                # If 'replacement' is not provided, generate SQL with two arguments
-                return self.func("REGEXP_REPLACE", expression.this, expression.expression)
-            else:
-                # If 'replacement' is provided, generate SQL with three arguments
-                return self.func(
-                    "REGEXP_REPLACE", expression.this, expression.expression, replacement
-                )
 
         def convert_format_time(self, expression, **kwargs):
             """
@@ -1993,6 +1950,7 @@ class E6(Dialect):
             exp.Day: rename_func("DAYS"),
             exp.DayOfMonth: rename_func("DAYS"),
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
+            exp.DayOfWeek: rename_func("DAYOFWEEK"),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: explode_sql,
             exp.Extract: extract_sql,
@@ -2021,7 +1979,7 @@ class E6(Dialect):
             exp.RegexpExtract: rename_func("REGEXP_EXTRACT"),
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
-            exp.RegexpReplace: regexp_replace_sql,
+            exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
             exp.RegexpSplit: rename_func("SPLIT"),
             # exp.Select: select_sql,
             exp.Split: rename_func("SPLIT"),
