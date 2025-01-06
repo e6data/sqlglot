@@ -225,6 +225,8 @@ def _from_unixtime_withunit_sql(
 
 
 def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
+    if len(args) == 2:
+        return exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=args)
     value = seq_get(args, 0)
 
     # If value is a string literal, cast it to TIMESTAMP
@@ -236,14 +238,6 @@ def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
     #     raise ValueError("Argument for TO_UNIX_TIMESTAMP must be of type TIMESTAMP")
 
     return exp.TimeToUnix(this=value)
-
-
-def _to_unix_timestamp_sql(self: E6.Generator, expression: exp.TimeToUnix | exp.StrToUnix) -> str:
-    timestamp = self.sql(expression, "this")
-    # if not (isinstance(timestamp, exp.Cast) and timestamp.to.is_type(exp.DataType.Type.TIMESTAMP)):
-    # if isinstance(timestamp, (exp.Literal, exp.Column)):
-    #     timestamp = f"CAST({timestamp} AS TIMESTAMP)"
-    return self.func("TO_UNIX_TIMESTAMP", timestamp)
 
 
 def _build_convert_timezone(args: t.List) -> exp.Anonymous | exp.AtTimeZone:
@@ -431,16 +425,37 @@ class E6(Dialect):
     UNIT_PART_MAPPING = {
         "'milliseconds'": "MILLISECOND",
         "'millisecond'": "MILLISECOND",
+        "'s'": "SECOND",
+        "'sec'": "SECOND",
+        "'secs'": "SECOND",
         "'seconds'": "SECOND",
         "'second'": "SECOND",
+        "'m'": "MINUTE",
+        "'min'": "MINUTE",
+        "'mins'": "MINUTE",
         "'minutes'": "MINUTE",
         "'minute'": "MINUTE",
+        "'h'": "HOUR",
+        "'hr'": "HOUR",
+        "'hrs'": "HOUR",
         "'hours'": "HOUR",
         "'hour'": "HOUR",
+        "'days'": "DAY",
+        "'d'": "DAY",
         "'day'": "DAY",
+        "'mon'": "MONTH",
+        "'mons'": "MONTH",
+        "'months'": "MONTH",
         "'month'": "MONTH",
+        "'y'": "YEAR",
+        "'yrs'": "YEAR",
+        "'yr'": "YEAR",
+        "'years'": "YEAR",
         "'year'": "YEAR",
+        "'w'": "WEEK",
+        "'weeks'": "WEEK",
         "'week'": "WEEK",
+        "'qtr'": "QUARTER",
         "'quarter'": "QUARTER",
     }
 
@@ -1739,8 +1754,9 @@ class E6(Dialect):
 
         def extract_sql(self: E6.Generator, expression: exp.Extract) -> str:
             unit = expression.this.name
+            unit_mapped = E6.UNIT_PART_MAPPING.get(f"'{unit.lower()}'", unit)
             expression_sql = self.sql(expression, "expression")
-            extract_str = f"EXTRACT({unit} FROM {expression_sql})"
+            extract_str = f"EXTRACT({unit_mapped} FROM {expression_sql})"
             return extract_str
 
         def filter_array_sql(self: E6.Generator, expression: exp.ArrayFilter) -> str:
@@ -1988,7 +2004,7 @@ class E6(Dialect):
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
             exp.FromTimeZone: lambda self, e: self.func(
-                "CONVERT_TIMEZONE", "'UTC'", e.args.get("zone"), e.this
+                "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
             exp.GenerateSeries: generateseries_sql,
             exp.GroupConcat: string_agg_sql,
@@ -2027,22 +2043,25 @@ class E6(Dialect):
                 "TO_DATE", e.this, add_single_quotes(self.convert_format_time(e))
             ),
             exp.StrToTime: to_timestamp_sql,
-            exp.StrToUnix: _to_unix_timestamp_sql,
+            exp.StrToUnix: rename_func("TO_UNIX_TIMESTAMP"),
             exp.StartsWith: rename_func("STARTS_WITH"),
             # exp.Struct: struct_sql,
             exp.TimeToStr: format_date_sql,
             exp.TimeStrToTime: timestrtotime_sql,
             exp.TimeStrToDate: datestrtodate_sql,
-            exp.TimeToUnix: _to_unix_timestamp_sql,
+            exp.TimeToUnix: rename_func("TO_UNIX_TIMESTAMP"),
             exp.Timestamp: lambda self, e: self.func("TIMESTAMP", e.this),
             exp.TimestampAdd: lambda self, e: self.func(
                 "TIMESTAMP_ADD", unit_to_str(e), e.expression, e.this
             ),
             exp.TimestampDiff: lambda self, e: self.func(
+                # this will not directly give correct order of args in first .transpile from X to E6.
+                # But as per our current flow, we again do E6 to E6 and it sets it right. This is due to the way it is taking args.
+                # This ensures the tight coupling of timestampdiff of bigquery, presto, databricks, MYSQL, snowflake PROPERLY.
                 "TIMESTAMP_DIFF",
-                unit_to_str(e),
                 e.expression,
                 e.this,
+                unit_to_str(e),
             ),
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,

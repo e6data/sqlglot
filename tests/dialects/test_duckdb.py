@@ -991,7 +991,7 @@ class TestDuckDB(Validator):
                 "bigquery": "TIME_TO_UNIX(x)",
                 "duckdb": "EPOCH(x)",
                 "presto": "TO_UNIXTIME(x)",
-                "spark": "UNIX_TIMESTAMP(x)",
+                "spark": "TO_UNIX_TIMESTAMP(x)",
             },
         )
         self.validate_all(

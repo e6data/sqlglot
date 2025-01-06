@@ -262,8 +262,8 @@ TBLPROPERTIES (
         self.validate_identity("TRIM(TRAILING 'SL' FROM 'SSparkSQLS')")
         self.validate_identity("SPLIT(str, pattern, lim)")
         self.validate_identity(
-            "SELECT UNIX_TIMESTAMP()",
-            "SELECT UNIX_TIMESTAMP(CURRENT_TIMESTAMP())",
+            "SELECT TO_UNIX_TIMESTAMP()",
+            "SELECT TO_UNIX_TIMESTAMP()",
         )
         self.validate_identity(
             "SELECT CAST('2023-01-01' AS TIMESTAMP) + INTERVAL 23 HOUR + 59 MINUTE + 59 SECONDS",

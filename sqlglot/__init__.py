@@ -136,12 +136,10 @@ def parse_one(
     """
 
     dialect = Dialect.get_or_raise(read or dialect)
-
     if into:
         result = dialect.parse_into(into, sql, **opts)
     else:
         result = dialect.parse(sql, **opts)
-
     for expression in result:
         if not expression:
             raise ParseError(f"No expression was parsed from '{sql}'")

@@ -812,12 +812,12 @@ FROM tbl1""",
         self.validate("UNIX_TO_TIME(123)", "FROM_UNIXTIME(123)", write="presto")
 
         self.validate("STR_TO_TIME('x', 'y')", "TO_TIMESTAMP('x', 'y')", write="spark")
-        self.validate("STR_TO_UNIX('x', 'y')", "UNIX_TIMESTAMP('x', 'y')", write="spark")
+        self.validate("STR_TO_UNIX('x', 'y')", "TO_UNIX_TIMESTAMP('x', 'y')", write="spark")
         self.validate("TIME_TO_STR(x, 'y')", "DATE_FORMAT(x, 'y')", write="spark")
 
         self.validate(
             "TIME_TO_UNIX(x)",
-            "UNIX_TIMESTAMP(x)",
+            "TO_UNIX_TIMESTAMP(x)",
             write="spark",
         )
         self.validate("UNIX_TO_STR(123, 'y')", "FROM_UNIXTIME(123, 'y')", write="spark")

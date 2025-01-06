@@ -192,7 +192,7 @@ def _date_delta_sql(
     return _delta_sql
 
 
-def _build_arraySlice(args: list) -> exp.ArraySlice:
+def _build_array_slice(args: list) -> exp.ArraySlice:
     """
     Parses arguments for the SLICE function and constructs an ArraySlice expression.
 
@@ -336,7 +336,7 @@ class Presto(Dialect):
             "ROW": exp.Struct.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
-            "SLICE": _build_arraySlice,
+            "SLICE": _build_array_slice,
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
             "STRPOS": lambda args: exp.StrPosition(
@@ -412,7 +412,10 @@ class Presto(Dialect):
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayContains: rename_func("CONTAINS"),
             exp.ArraySlice: lambda self, e: self.func(
-                "SLICE", e.this, e.fromIndex, e.to - e.fromIndex
+                "SLICE",
+                e.args.get("this"),
+                e.args.get("fromIndex"),
+                e.args.get("to") - e.args.get("fromIndex"),
             ),
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArrayUniqueAgg: rename_func("SET_AGG"),
