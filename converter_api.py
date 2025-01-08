@@ -11,7 +11,7 @@ from guardrail.main import extract_sql_components_per_table_with_alias, get_tabl
 from guardrail.rules_validator import validate_queries
 
 
-ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "True")
+ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "cops-beta1-storage-storage-blue") #cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", "9006")
 
@@ -129,10 +129,13 @@ async def Transgaurd(
             converted_query = replace_struct_in_query(converted_query)
 
             converted_query_ast = parse_one(converted_query, read=to_sql)
+            
             double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
                 dialect=to_sql
             )
 
+            #------------------------#
+            #GuardRail Application
             parsed = sqlglot.parse(double_quotes_added_query, error_level=None)
 
             # now lets validate the query

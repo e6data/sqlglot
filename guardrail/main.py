@@ -198,7 +198,7 @@ def get_table_infos(tables,client,catalog="hive",schema="tpcds_1000"):
                 table_info["column_count"] = len(column_list)
             
             # Get partition information
-            partitions = client.get_partition_info("hive", "tpcds_1000", table_name)
+            partitions = client.get_partition_info(catalog, schema, table_name)
             if partitions and partitions.partitions:
                 # Assuming the first partition contains the field names
                 # since they should be consistent across all partitions
