@@ -283,6 +283,21 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "TO_JSON(x)",
+            read={
+                "spark": "TO_JSON(x)",
+                "bigquery": "TO_JSON_STRING(x)",
+                "presto": "JSON_FORMAT(x)"
+            },
+            write={
+                "bigquery": "TO_JSON_STRING(x)",
+                "duckdb": "CAST(TO_JSON(x) AS TEXT)",
+                "presto": "JSON_FORMAT(x)",
+                "spark": "TO_JSON(x)",
+            },
+        )
+
+        self.validate_all(
             "SELECT EXTRACT(fieldStr FROM date_expr)",
             read={
                 "databricks": "SELECT DATE_PART(fieldStr, date_expr)",
@@ -300,6 +315,24 @@ class TestE6(Validator):
             "SELECT A IS NULL",
             read={"databricks": "SELECT ISNULL(A)"},
             write={"databricks": "SELECT A IS NULL"},
+        )
+
+        self.validate_all(
+            "TO_CHAR(CAST(x AS TIMESTAMP),'y')",
+            read={
+                "snowflake": "TO_VARCHAR(x, y)",
+                "databricks": "TO_CHAR(x, y)",
+                "oracle": "TO_CHAR(x, y)",
+                "teradata": "TO_CHAR(x, y)",
+            },
+            write={
+                "databricks": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "drill": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "oracle": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "postgres": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "snowflake": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "teradata": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+            },
         )
 
     def test_regex(self):

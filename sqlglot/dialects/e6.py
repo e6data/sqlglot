@@ -15,7 +15,6 @@ from sqlglot.dialects.dialect import (
     locate_to_strposition,
     rename_func,
     unit_to_str,
-    approx_count_distinct_sql,
     timestrtotime_sql,
     datestrtodate_sql,
     trim_sql,
@@ -1365,7 +1364,6 @@ class E6(Dialect):
             ),
             "DATE_TRUNC": date_trunc_to_time,
             "DATETIME": _build_datetime_for_DT,
-            "DAYNAME": exp.DayOfWeek.from_arg_list,
             "DAYOFWEEKISO": exp.DayOfWeekIso.from_arg_list,
             "DAYS": exp.Day.from_arg_list,
             "ELEMENT_AT": lambda args: exp.Bracket(
@@ -1432,13 +1430,14 @@ class E6(Dialect):
             "TIMESTAMP_DIFF": lambda args: exp.TimestampDiff(
                 this=seq_get(args, 0), expression=seq_get(args, 1), unit=seq_get(args, 2)
             ),
-            "TO_CHAR": lambda args: exp.TimeToStr(
+            "TO_CHAR": lambda args: exp.ToChar(
                 this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
             ),
             "TO_DATE": lambda args: exp.TimeToStr(
                 this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
             ),
             "TO_HEX": exp.Hex.from_arg_list,
+            "TO_JSON": exp.JSONFormat.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_UTF8": lambda args: exp.Encode(
@@ -1933,7 +1932,7 @@ class E6(Dialect):
             **generator.Generator.TRANSFORMS,
             exp.Anonymous: anonymous_sql,
             exp.AnyValue: rename_func("ARBITRARY"),
-            exp.ApproxDistinct: approx_count_distinct_sql,
+            exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
             exp.ApproxQuantile: rename_func("APPROX_PERCENTILE"),
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
@@ -1993,6 +1992,7 @@ class E6(Dialect):
             exp.Interval: interval_sql,
             exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
             exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
+            exp.JSONFormat: rename_func("TO_JSON"),
             exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
