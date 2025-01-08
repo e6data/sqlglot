@@ -240,6 +240,13 @@ def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
     return exp.TimeToUnix(this=value)
 
 
+def _build_trim(args: t.List, is_left: bool = True):
+    return exp.Trim(
+        this=seq_get(args, 1),
+        expression=seq_get(args, 0),
+        position="LEADING" if is_left else "TRAILING",
+    )
+
 def _build_convert_timezone(args: t.List) -> exp.Anonymous | exp.AtTimeZone:
     if len(args) == 3:
         return exp.Anonymous(this="CONVERT_TIMEZONE", expressions=args)
@@ -344,6 +351,26 @@ def format_time_for_parsefunctions(expression):
 def add_single_quotes(expression) -> str:
     quoted_str = f"'{expression}'"
     return quoted_str
+
+
+def _trim_sql(self:E6.Generator, expression: exp.Trim) -> str:
+    target = self.sql(expression, "this")
+    trim_type = self.sql(expression, "position")
+    remove_chars = self.sql(expression, "expression")
+
+    if trim_type.upper() == 'LEADING':
+        if remove_chars:
+            return self.func("LTRIM", remove_chars, target)
+        else:
+            return self.func("LTRIM", target)
+    elif trim_type.upper() == 'TRAILING':
+        if remove_chars:
+            return self.func("RTRIM", remove_chars, target)
+        else:
+            return self.func("RTRIM", target)
+
+    else:
+        return trim_sql(self,expression)
 
 
 class E6(Dialect):
@@ -1365,6 +1392,7 @@ class E6(Dialect):
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "LOCATE": locate_to_strposition,
             "LOG": exp.Log.from_arg_list,
+            "LTRIM": lambda args: _build_trim(args),
             "MAX_BY": exp.ArgMax.from_arg_list,
             "MD5": exp.MD5Digest.from_arg_list,
             "MOD": lambda args: parser.build_mod(args),
@@ -1382,6 +1410,7 @@ class E6(Dialect):
             "REPLACE": exp.RegexpReplace.from_arg_list,
             "ROUND": exp.Round.from_arg_list,
             "RIGHT": _build_with_arg_as_text(exp.Right),
+            "RTRIM": lambda args: _build_trim(args, is_left=False),
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SHIFTRIGHT": binary_from_function(exp.BitwiseRightShift),
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
@@ -2016,7 +2045,7 @@ class E6(Dialect):
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
             # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
-            exp.Trim: trim_sql,
+            exp.Trim: _trim_sql,
             exp.TryCast: lambda self, e: self.func(
                 "TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"
             ),
