@@ -15,7 +15,6 @@ from sqlglot.dialects.dialect import (
     locate_to_strposition,
     rename_func,
     unit_to_str,
-    approx_count_distinct_sql,
     timestrtotime_sql,
     datestrtodate_sql,
     trim_sql,
@@ -240,6 +239,14 @@ def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
     return exp.TimeToUnix(this=value)
 
 
+def _build_trim(args: t.List, is_left: bool = True):
+    return exp.Trim(
+        this=seq_get(args, 1),
+        expression=seq_get(args, 0),
+        position="LEADING" if is_left else "TRAILING",
+    )
+
+
 def _build_convert_timezone(args: t.List) -> exp.Anonymous | exp.AtTimeZone:
     if len(args) == 3:
         return exp.Anonymous(this="CONVERT_TIMEZONE", expressions=args)
@@ -250,18 +257,6 @@ def _build_datetime_for_DT(args: t.List) -> exp.AtTimeZone:
     if len(args) == 1:
         return exp.AtTimeZone(this=seq_get(args, 0), zone="UTC")
     return exp.AtTimeZone(this=seq_get(args, 0), zone=seq_get(args, 1))
-
-
-def _build_regexp_extract(args: t.List) -> exp.RegexpExtract:
-    expr = seq_get(args, 0)
-    pattern = seq_get(args, 1)
-
-    # if exp.DataType.is_type(pattern, exp.DataType.Type.TEXT) or exp.DataType.is_type(pattern, exp.DataType.Type.INT) or isinstance():
-    #     return exp.RegexpExtract(this=expr, expression=pattern)
-    # else:
-    #     raise ValueError("regexp_extract only supports integer and string datatypes")
-
-    return exp.RegexpExtract(this=expr, expression=pattern)
 
 
 def _parse_filter_array(args: t.List) -> exp.ArrayFilter:
@@ -356,6 +351,26 @@ def format_time_for_parsefunctions(expression):
 def add_single_quotes(expression) -> str:
     quoted_str = f"'{expression}'"
     return quoted_str
+
+
+def _trim_sql(self: E6.Generator, expression: exp.Trim) -> str:
+    target = self.sql(expression, "this")
+    trim_type = self.sql(expression, "position")
+    remove_chars = self.sql(expression, "expression")
+
+    if trim_type.upper() == "LEADING":
+        if remove_chars:
+            return self.func("LTRIM", remove_chars, target)
+        else:
+            return self.func("LTRIM", target)
+    elif trim_type.upper() == "TRAILING":
+        if remove_chars:
+            return self.func("RTRIM", remove_chars, target)
+        else:
+            return self.func("RTRIM", target)
+
+    else:
+        return trim_sql(self, expression)
 
 
 class E6(Dialect):
@@ -1350,7 +1365,6 @@ class E6(Dialect):
             ),
             "DATE_TRUNC": date_trunc_to_time,
             "DATETIME": _build_datetime_for_DT,
-            "DAYNAME": exp.DayOfWeek.from_arg_list,
             "DAYOFWEEKISO": exp.DayOfWeekIso.from_arg_list,
             "DAYS": exp.Day.from_arg_list,
             "ELEMENT_AT": lambda args: exp.Bracket(
@@ -1370,8 +1384,6 @@ class E6(Dialect):
             "JSON_VALUE": parser.build_extract_json_with_path(exp.JSONExtractScalar),
             "LAST_DAY": lambda args: exp.LastDay(this=seq_get(args, 0)),
             "LAST_VALUE": exp.LastValue,
-            "LAG": lambda args: exp.Lag(this=seq_get(args, 0), offset=seq_get(args, 1)),
-            "LEAD": lambda args: exp.Lead(this=seq_get(args, 0), offset=seq_get(args, 1)),
             "LEFT": _build_with_arg_as_text(exp.Left),
             "LEN": exp.Length.from_arg_list,
             "LENGTH": exp.Length.from_arg_list,
@@ -1379,6 +1391,7 @@ class E6(Dialect):
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "LOCATE": locate_to_strposition,
             "LOG": exp.Log.from_arg_list,
+            "LTRIM": lambda args: _build_trim(args),
             "MAX_BY": exp.ArgMax.from_arg_list,
             "MD5": exp.MD5Digest.from_arg_list,
             "MOD": lambda args: parser.build_mod(args),
@@ -1390,16 +1403,13 @@ class E6(Dialect):
             "POWER": exp.Pow.from_arg_list,
             "REGEXP_CONTAINS": exp.RegexpLike.from_arg_list,
             "REGEXP_COUNT": _build_regexp_count,
-            "REGEXP_EXTRACT": _build_regexp_extract,
+            "REGEXP_EXTRACT": exp.RegexpExtract.from_arg_list,
             "REGEXP_LIKE": exp.RegexpLike.from_arg_list,
-            "REGEXP_REPLACE": lambda args: exp.RegexpReplace(
-                this=seq_get(args, 0),
-                expression=seq_get(args, 1),
-                replacement=seq_get(args, 2),
-            ),
+            "REGEXP_REPLACE": exp.RegexpReplace.from_arg_list,
             "REPLACE": exp.RegexpReplace.from_arg_list,
             "ROUND": exp.Round.from_arg_list,
             "RIGHT": _build_with_arg_as_text(exp.Right),
+            "RTRIM": lambda args: _build_trim(args, is_left=False),
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SHIFTRIGHT": binary_from_function(exp.BitwiseRightShift),
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
@@ -1419,19 +1429,16 @@ class E6(Dialect):
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "TIMESTAMP_DIFF": lambda args: exp.TimestampDiff(
-                this=seq_get(args, 1),
-                expression=seq_get(args, 2),
-                unit=seq_get(args, 0),
+                this=seq_get(args, 0), expression=seq_get(args, 1), unit=seq_get(args, 2)
             ),
-            "TO_CHAR": lambda args: exp.TimeToStr(
-                this=seq_get(args, 0),
-                format=E6().convert_format_time(expression=seq_get(args, 1)),
+            "TO_CHAR": lambda args: exp.ToChar(
+                this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
             ),
             "TO_DATE": lambda args: exp.TimeToStr(
-                this=seq_get(args, 0),
-                format=E6().convert_format_time(expression=seq_get(args, 1)),
+                this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
             ),
             "TO_HEX": exp.Hex.from_arg_list,
+            "TO_JSON": exp.JSONFormat.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_UTF8": lambda args: exp.Encode(
@@ -1614,34 +1621,6 @@ class E6(Dialect):
 
             # Construct and return the final ORDER BY clause
             return f"{main_expression}{sort_order}{nulls_sort_change}"
-
-        def regexp_replace_sql(self, expression: exp.RegexpReplace) -> str:
-            """
-            Generate the SQL for the REGEXP_REPLACE function in the E6 dialect.
-
-            The REGEXP_REPLACE function can be called with either two or three arguments:
-            1. REGEXP_REPLACE(source, pattern)
-            2. REGEXP_REPLACE(source, pattern, replacement)
-
-            This method ensures that the generated SQL is correct regardless of the number of arguments provided.
-
-            Args:
-                expression (exp.RegexpReplace): The expression representing the REGEXP_REPLACE function.
-
-            Returns:
-                str: The SQL string for the REGEXP_REPLACE function.
-            """
-            # Retrieve the 'replacement' argument if it exists
-            replacement = expression.args.get("replacement")
-
-            if replacement is None:
-                # If 'replacement' is not provided, generate SQL with two arguments
-                return self.func("REGEXP_REPLACE", expression.this, expression.expression)
-            else:
-                # If 'replacement' is provided, generate SQL with three arguments
-                return self.func(
-                    "REGEXP_REPLACE", expression.this, expression.expression, replacement
-                )
 
         def convert_format_time(self, expression, **kwargs):
             """
@@ -1953,7 +1932,7 @@ class E6(Dialect):
             **generator.Generator.TRANSFORMS,
             exp.Anonymous: anonymous_sql,
             exp.AnyValue: rename_func("ARBITRARY"),
-            exp.ApproxDistinct: approx_count_distinct_sql,
+            exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
             exp.ApproxQuantile: rename_func("APPROX_PERCENTILE"),
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
@@ -1999,6 +1978,7 @@ class E6(Dialect):
             exp.Day: rename_func("DAYS"),
             exp.DayOfMonth: rename_func("DAYS"),
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
+            exp.DayOfWeek: rename_func("DAYOFWEEK"),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: explode_sql,
             exp.Extract: extract_sql,
@@ -2012,11 +1992,10 @@ class E6(Dialect):
             exp.Interval: interval_sql,
             exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
             exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
+            exp.JSONFormat: rename_func("TO_JSON"),
             exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),
-            exp.Lag: lambda self, e: self.func("LAG", e.this, e.args.get("offset")),
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
-            exp.Lead: lambda self, e: self.func("LEAD", e.this, e.args.get("offset")),
             exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
             exp.Map: lambda self, e: var_map_sql(self, e, "NAMED_STRUCT"),
@@ -2029,7 +2008,7 @@ class E6(Dialect):
             exp.RegexpExtract: rename_func("REGEXP_EXTRACT"),
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
-            exp.RegexpReplace: regexp_replace_sql,
+            exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
             exp.RegexpSplit: rename_func("SPLIT"),
             # exp.Select: select_sql,
             exp.Split: rename_func("SPLIT"),
@@ -2066,7 +2045,7 @@ class E6(Dialect):
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
             # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
-            exp.Trim: trim_sql,
+            exp.Trim: _trim_sql,
             exp.TryCast: lambda self, e: self.func(
                 "TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"
             ),
