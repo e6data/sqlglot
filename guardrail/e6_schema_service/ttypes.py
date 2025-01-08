@@ -12,7 +12,6 @@ from thrift.TRecursive import fix_spec
 from uuid import UUID
 
 import sys
-import e6_metadata_common.ttypes
 
 from thrift.transport import TTransport
 

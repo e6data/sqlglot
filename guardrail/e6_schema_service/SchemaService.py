@@ -13,6 +13,8 @@ from uuid import UUID
 
 import sys
 import logging
+
+import guardrail
 from .ttypes import *
 from thrift.Thrift import TProcessor
 from thrift.transport import TTransport
@@ -3937,7 +3939,7 @@ class getTableFilePaths_args(object):
                     self.partitions = []
                     (_etype112, _size109) = iprot.readListBegin()
                     for _i113 in range(_size109):
-                        _elem114 = e6_metadata_common.ttypes.E6Partition()
+                        _elem114 = guardrail.e6_metadata_common.ttypes.E6Partition()
                         _elem114.read(iprot)
                         self.partitions.append(_elem114)
                     iprot.readListEnd()
@@ -4044,7 +4046,7 @@ getTableFilePaths_args.thrift_spec = (
         4,
         TType.LIST,
         "partitions",
-        (TType.STRUCT, [e6_metadata_common.ttypes.E6Partition, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.E6Partition, None], False),
         None,
     ),  # 4
     (
@@ -4426,7 +4428,7 @@ class getAdditionalData_args(object):
                     self.partitions = []
                     (_etype126, _size123) = iprot.readListBegin()
                     for _i127 in range(_size123):
-                        _elem128 = e6_metadata_common.ttypes.E6PartitionInfo()
+                        _elem128 = guardrail.e6_metadata_common.ttypes.E6PartitionInfo()
                         _elem128.read(iprot)
                         self.partitions.append(_elem128)
                     iprot.readListEnd()
@@ -4542,7 +4544,7 @@ getAdditionalData_args.thrift_spec = (
         4,
         TType.LIST,
         "partitions",
-        (TType.STRUCT, [e6_metadata_common.ttypes.E6PartitionInfo, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.E6PartitionInfo, None], False),
         None,
     ),  # 4
     (
@@ -5074,7 +5076,7 @@ class getTablePartitionsForDelta_args(object):
                     iprot.skip(ftype)
             elif fid == 5:
                 if ftype == TType.STRUCT:
-                    self.tableVersionInfo = e6_metadata_common.ttypes.TableVersionInfo()
+                    self.tableVersionInfo = guardrail.e6_metadata_common.ttypes.TableVersionInfo()
                     self.tableVersionInfo.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -5187,7 +5189,7 @@ getTablePartitionsForDelta_args.thrift_spec = (
         5,
         TType.STRUCT,
         "tableVersionInfo",
-        [e6_metadata_common.ttypes.TableVersionInfo, None],
+        [guardrail.e6_metadata_common.ttypes.TableVersionInfo, None],
         None,
     ),  # 5
     (

@@ -1,7 +1,7 @@
 # validator.py
 import logging
 from typing import List, Dict, Any
-from rules import (
+from guardrail.rules import (
     LimitCheckRule,
     WildcardUsageRule,
     WherePartitionRule,

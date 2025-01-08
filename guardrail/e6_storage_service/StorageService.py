@@ -4547,7 +4547,7 @@ class getConnectionMetadata_result(object):
                 break
             if fid == 0:
                 if ftype == TType.STRUCT:
-                    self.success = e6_schema_service.ttypes.ConnectionMetadata()
+                    self.success = guardrail.e6_schema_service.ttypes.ConnectionMetadata()
                     self.success.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -4598,7 +4598,7 @@ getConnectionMetadata_result.thrift_spec = (
         0,
         TType.STRUCT,
         "success",
-        [e6_schema_service.ttypes.ConnectionMetadata, None],
+        [guardrail.e6_schema_service.ttypes.ConnectionMetadata, None],
         None,
     ),  # 0
     (
@@ -8928,7 +8928,7 @@ class getTablePartitionsAtVersion_args(object):
                     iprot.skip(ftype)
             elif fid == 5:
                 if ftype == TType.STRUCT:
-                    self.timeTravelInfo = e6_metadata_common.ttypes.TableVersionInfo()
+                    self.timeTravelInfo = guardrail.e6_metadata_common.ttypes.TableVersionInfo()
                     self.timeTravelInfo.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -9023,7 +9023,7 @@ getTablePartitionsAtVersion_args.thrift_spec = (
         5,
         TType.STRUCT,
         "timeTravelInfo",
-        [e6_metadata_common.ttypes.TableVersionInfo, None],
+        [guardrail.e6_metadata_common.ttypes.TableVersionInfo, None],
         None,
     ),  # 5
 )
@@ -9210,7 +9210,7 @@ class getTablePartitionFileAndMetadataAtVersion_args(object):
                     self.partitions = []
                     (_etype232, _size229) = iprot.readListBegin()
                     for _i233 in range(_size229):
-                        _elem234 = e6_metadata_common.ttypes.E6PartitionInfo()
+                        _elem234 = guardrail.e6_metadata_common.ttypes.E6PartitionInfo()
                         _elem234.read(iprot)
                         self.partitions.append(_elem234)
                     iprot.readListEnd()
@@ -9227,7 +9227,7 @@ class getTablePartitionFileAndMetadataAtVersion_args(object):
                     iprot.skip(ftype)
             elif fid == 6:
                 if ftype == TType.STRUCT:
-                    self.timeTravelInfo = e6_metadata_common.ttypes.TableVersionInfo()
+                    self.timeTravelInfo = guardrail.e6_metadata_common.ttypes.TableVersionInfo()
                     self.timeTravelInfo.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -9361,7 +9361,7 @@ getTablePartitionFileAndMetadataAtVersion_args.thrift_spec = (
         4,
         TType.LIST,
         "partitions",
-        (TType.STRUCT, [e6_metadata_common.ttypes.E6PartitionInfo, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.E6PartitionInfo, None], False),
         None,
     ),  # 4
     (
@@ -9375,7 +9375,7 @@ getTablePartitionFileAndMetadataAtVersion_args.thrift_spec = (
         6,
         TType.STRUCT,
         "timeTravelInfo",
-        [e6_metadata_common.ttypes.TableVersionInfo, None],
+        [guardrail.e6_metadata_common.ttypes.TableVersionInfo, None],
         None,
     ),  # 6
     (
@@ -9438,7 +9438,7 @@ class getTablePartitionFileAndMetadataAtVersion_result(object):
                     self.success = []
                     (_etype246, _size243) = iprot.readListBegin()
                     for _i247 in range(_size243):
-                        _elem248 = e6_metadata_common.ttypes.PartitionPartFiles()
+                        _elem248 = guardrail.e6_metadata_common.ttypes.PartitionPartFiles()
                         _elem248.read(iprot)
                         self.success.append(_elem248)
                     iprot.readListEnd()
@@ -9494,7 +9494,7 @@ getTablePartitionFileAndMetadataAtVersion_result.thrift_spec = (
         0,
         TType.LIST,
         "success",
-        (TType.STRUCT, [e6_metadata_common.ttypes.PartitionPartFiles, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.PartitionPartFiles, None], False),
         None,
     ),  # 0
     (
@@ -9885,7 +9885,7 @@ class getTablePartitionFileAndMetadata_args(object):
                     self.partitions = []
                     (_etype253, _size250) = iprot.readListBegin()
                     for _i254 in range(_size250):
-                        _elem255 = e6_metadata_common.ttypes.E6PartitionInfo()
+                        _elem255 = guardrail.e6_metadata_common.ttypes.E6PartitionInfo()
                         _elem255.read(iprot)
                         self.partitions.append(_elem255)
                     iprot.readListEnd()
@@ -10035,7 +10035,7 @@ getTablePartitionFileAndMetadata_args.thrift_spec = (
         4,
         TType.LIST,
         "partitions",
-        (TType.STRUCT, [e6_metadata_common.ttypes.E6PartitionInfo, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.E6PartitionInfo, None], False),
         None,
     ),  # 4
     (
@@ -10112,7 +10112,7 @@ class getTablePartitionFileAndMetadata_result(object):
                     self.success = []
                     (_etype267, _size264) = iprot.readListBegin()
                     for _i268 in range(_size264):
-                        _elem269 = e6_metadata_common.ttypes.PartitionPartFiles()
+                        _elem269 = guardrail.e6_metadata_common.ttypes.PartitionPartFiles()
                         _elem269.read(iprot)
                         self.success.append(_elem269)
                     iprot.readListEnd()
@@ -10168,7 +10168,7 @@ getTablePartitionFileAndMetadata_result.thrift_spec = (
         0,
         TType.LIST,
         "success",
-        (TType.STRUCT, [e6_metadata_common.ttypes.PartitionPartFiles, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.PartitionPartFiles, None], False),
         None,
     ),  # 0
     (
@@ -10217,7 +10217,7 @@ class putFileMetadata_args(object):
                     self.partFiles = []
                     (_etype274, _size271) = iprot.readListBegin()
                     for _i275 in range(_size271):
-                        _elem276 = e6_metadata_common.ttypes.PartFile()
+                        _elem276 = guardrail.e6_metadata_common.ttypes.PartFile()
                         _elem276.read(iprot)
                         self.partFiles.append(_elem276)
                     iprot.readListEnd()
@@ -10280,7 +10280,7 @@ putFileMetadata_args.thrift_spec = (
         1,
         TType.LIST,
         "partFiles",
-        (TType.STRUCT, [e6_metadata_common.ttypes.PartFile, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.PartFile, None], False),
         None,
     ),  # 1
     (
@@ -11564,7 +11564,7 @@ class dBNamesCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -11621,7 +11621,7 @@ dBNamesCallback_args.thrift_spec = (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -11752,7 +11752,7 @@ class tableNamesCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -11809,7 +11809,7 @@ tableNamesCallback_args.thrift_spec = (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -11937,7 +11937,7 @@ class tablesCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -11994,7 +11994,7 @@ tablesCallback_args.thrift_spec = (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -12116,7 +12116,7 @@ class tableStatisticsCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -12170,7 +12170,7 @@ tableStatisticsCallback_args.thrift_spec = (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -12290,7 +12290,7 @@ class tablePartitionsCallback_args(object):
                     self.partitions = []
                     (_etype309, _size306) = iprot.readListBegin()
                     for _i310 in range(_size306):
-                        _elem311 = e6_metadata_common.ttypes.E6Partition()
+                        _elem311 = guardrail.e6_metadata_common.ttypes.E6Partition()
                         _elem311.read(iprot)
                         self.partitions.append(_elem311)
                     iprot.readListEnd()
@@ -12298,7 +12298,7 @@ class tablePartitionsCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -12348,14 +12348,14 @@ tablePartitionsCallback_args.thrift_spec = (
         1,
         TType.LIST,
         "partitions",
-        (TType.STRUCT, [e6_metadata_common.ttypes.E6Partition, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.E6Partition, None], False),
         None,
     ),  # 1
     (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -12478,7 +12478,7 @@ class deltaTablePartitionsCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -12532,7 +12532,7 @@ deltaTablePartitionsCallback_args.thrift_spec = (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -12630,7 +12630,7 @@ class tablePartitionFilesCallback_args(object):
                         _val319 = []
                         (_etype323, _size320) = iprot.readListBegin()
                         for _i324 in range(_size320):
-                            _elem325 = e6_schema_service.ttypes.FileStatus()
+                            _elem325 = guardrail.e6_schema_service.ttypes.FileStatus()
                             _elem325.read(iprot)
                             _val319.append(_elem325)
                         iprot.readListEnd()
@@ -12640,7 +12640,7 @@ class tablePartitionFilesCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -12702,7 +12702,7 @@ tablePartitionFilesCallback_args.thrift_spec = (
             TType.STRING,
             "UTF8",
             TType.LIST,
-            (TType.STRUCT, [e6_schema_service.ttypes.FileStatus, None], False),
+            (TType.STRUCT, [guardrail.e6_schema_service.ttypes.FileStatus, None], False),
             False,
         ),
         None,
@@ -12711,7 +12711,7 @@ tablePartitionFilesCallback_args.thrift_spec = (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -12831,7 +12831,7 @@ class tableFileMetadataCallback_args(object):
                     self.listFileMetadata = []
                     (_etype332, _size329) = iprot.readListBegin()
                     for _i333 in range(_size329):
-                        _elem334 = e6_metadata_common.ttypes.PartFile()
+                        _elem334 = guardrail.e6_metadata_common.ttypes.PartFile()
                         _elem334.read(iprot)
                         self.listFileMetadata.append(_elem334)
                     iprot.readListEnd()
@@ -12839,7 +12839,7 @@ class tableFileMetadataCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -12889,14 +12889,14 @@ tableFileMetadataCallback_args.thrift_spec = (
         1,
         TType.LIST,
         "listFileMetadata",
-        (TType.STRUCT, [e6_metadata_common.ttypes.PartFile, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.PartFile, None], False),
         None,
     ),  # 1
     (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -13029,7 +13029,7 @@ class getAdditionalDataCallback_args(object):
                                 if sys.version_info[0] == 2
                                 else iprot.readString()
                             )
-                            _val349 = e6_metadata_common.ttypes.DeletionVector()
+                            _val349 = guardrail.e6_metadata_common.ttypes.DeletionVector()
                             _val349.read(iprot)
                             _val342[_key348] = _val349
                         iprot.readMapEnd()
@@ -13039,7 +13039,7 @@ class getAdditionalDataCallback_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRUCT:
-                    self.requestContext = e6_schema_service.ttypes.RequestContext()
+                    self.requestContext = guardrail.e6_schema_service.ttypes.RequestContext()
                     self.requestContext.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -13106,7 +13106,7 @@ getAdditionalDataCallback_args.thrift_spec = (
                 TType.STRING,
                 "UTF8",
                 TType.STRUCT,
-                [e6_metadata_common.ttypes.DeletionVector, None],
+                [guardrail.e6_metadata_common.ttypes.DeletionVector, None],
                 False,
             ),
             False,
@@ -13117,7 +13117,7 @@ getAdditionalDataCallback_args.thrift_spec = (
         2,
         TType.STRUCT,
         "requestContext",
-        [e6_schema_service.ttypes.RequestContext, None],
+        [guardrail.e6_schema_service.ttypes.RequestContext, None],
         None,
     ),  # 2
 )
@@ -14373,7 +14373,7 @@ class upsertTablePartitionFiles_args(object):
                         _val388 = []
                         (_etype392, _size389) = iprot.readListBegin()
                         for _i393 in range(_size389):
-                            _elem394 = e6_schema_service.ttypes.FileStatus()
+                            _elem394 = guardrail.e6_schema_service.ttypes.FileStatus()
                             _elem394.read(iprot)
                             _val388.append(_elem394)
                         iprot.readListEnd()
@@ -14472,7 +14472,7 @@ upsertTablePartitionFiles_args.thrift_spec = (
             TType.STRING,
             "UTF8",
             TType.LIST,
-            (TType.STRUCT, [e6_schema_service.ttypes.FileStatus, None], False),
+            (TType.STRUCT, [guardrail.e6_schema_service.ttypes.FileStatus, None], False),
             False,
         ),
         None,
@@ -14624,7 +14624,7 @@ class upsertTableFileMetadata_args(object):
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRUCT:
-                    self.fileMetadata = e6_metadata_common.ttypes.PartFile()
+                    self.fileMetadata = guardrail.e6_metadata_common.ttypes.PartFile()
                     self.fileMetadata.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -14706,7 +14706,7 @@ upsertTableFileMetadata_args.thrift_spec = (
         4,
         TType.STRUCT,
         "fileMetadata",
-        [e6_metadata_common.ttypes.PartFile, None],
+        [guardrail.e6_metadata_common.ttypes.PartFile, None],
         None,
     ),  # 4
 )

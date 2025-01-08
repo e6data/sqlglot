@@ -1,11 +1,8 @@
-import e6_metadata_common.ttypes as ttypes
-import e6_storage_service.StorageService as StorageService
-import e6_storage_service.ttypes as ttypes
+import guardrail.e6_storage_service.StorageService as StorageService
 from thrift.protocol import TBinaryProtocol, TMultiplexedProtocol
 from thrift.transport.TTransport import TTransportException
 from thrift.transport import TSocket
 import sqlglot
-from .rules_validator import validate_queries_dynamic
 from .extract import extract_sql_components_per_table_with_alias
 from .rules_validator import validate_queries
 

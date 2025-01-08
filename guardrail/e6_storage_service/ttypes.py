@@ -6,14 +6,11 @@
 #  options string: py
 #
 
-from thrift.Thrift import TType, TMessageType, TFrozenDict, TException, TApplicationException
-from thrift.protocol.TProtocol import TProtocolException
+from thrift.Thrift import TType, TException
 from thrift.TRecursive import fix_spec
-from uuid import UUID
 
 import sys
-import e6_schema_service.ttypes
-import e6_metadata_common.ttypes
+import guardrail.e6_metadata_common.ttypes
 
 from thrift.transport import TTransport
 
@@ -933,7 +930,7 @@ class DeltaTableChangeResponse(object):
                     self.activePartitionsWithFiles = []
                     (_etype54, _size51) = iprot.readListBegin()
                     for _i55 in range(_size51):
-                        _elem56 = e6_metadata_common.ttypes.E6Partition()
+                        _elem56 = guardrail.e6_metadata_common.ttypes.E6Partition()
                         _elem56.read(iprot)
                         self.activePartitionsWithFiles.append(_elem56)
                     iprot.readListEnd()
@@ -944,7 +941,7 @@ class DeltaTableChangeResponse(object):
                     self.inactivePartitionsWithFiles = []
                     (_etype60, _size57) = iprot.readListBegin()
                     for _i61 in range(_size57):
-                        _elem62 = e6_metadata_common.ttypes.E6Partition()
+                        _elem62 = guardrail.e6_metadata_common.ttypes.E6Partition()
                         _elem62.read(iprot)
                         self.inactivePartitionsWithFiles.append(_elem62)
                     iprot.readListEnd()
@@ -1139,7 +1136,7 @@ class GetTablePartitionsResponse(object):
                     self.partitions = []
                     (_etype68, _size65) = iprot.readListBegin()
                     for _i69 in range(_size65):
-                        _elem70 = e6_metadata_common.ttypes.E6PartitionInfo()
+                        _elem70 = guardrail.e6_metadata_common.ttypes.E6PartitionInfo()
                         _elem70.read(iprot)
                         self.partitions.append(_elem70)
                     iprot.readListEnd()
@@ -2279,14 +2276,14 @@ DeltaTableChangeResponse.thrift_spec = (
         5,
         TType.LIST,
         "activePartitionsWithFiles",
-        (TType.STRUCT, [e6_metadata_common.ttypes.E6Partition, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.E6Partition, None], False),
         None,
     ),  # 5
     (
         6,
         TType.LIST,
         "inactivePartitionsWithFiles",
-        (TType.STRUCT, [e6_metadata_common.ttypes.E6Partition, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.E6Partition, None], False),
         None,
     ),  # 6
     (
@@ -2322,7 +2319,7 @@ GetTablePartitionsResponse.thrift_spec = (
         1,
         TType.LIST,
         "partitions",
-        (TType.STRUCT, [e6_metadata_common.ttypes.E6PartitionInfo, None], False),
+        (TType.STRUCT, [guardrail.e6_metadata_common.ttypes.E6PartitionInfo, None], False),
         None,
     ),  # 1
     (
