@@ -150,7 +150,7 @@ def Get_table_info(sql_query,catalog,db):
     finally:
         client.close()
 
-def get_table_infos(tables,catalog="hive",schema="tpcds_1000"):
+def get_table_infos(tables,client,catalog="hive",schema="tpcds_1000"):
     """
     Get detailed table information for a list of table names
     
@@ -174,7 +174,7 @@ def get_table_infos(tables,catalog="hive",schema="tpcds_1000"):
                 ...
             }
     """
-    client = StorageServiceClient()
+    # client = StorageServiceClient()
     table_infos = {}
     
     try:
@@ -204,8 +204,7 @@ def get_table_infos(tables,catalog="hive",schema="tpcds_1000"):
                 # since they should be consistent across all partitions
                 table_info["partition_values"] = partitions.partitions[0].fieldNames
             
-            table_infos[table_name] = table_info
-            
+            table_infos[table_name] = table_info            
     except Exception as e:
         print(f"Error processing table information: {str(e)}")
     finally:

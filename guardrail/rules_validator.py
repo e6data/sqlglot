@@ -27,6 +27,7 @@ def load_rules(rules_service) -> List[Any]:
         applicable_tables = rule_def.get('applicable_tables', [])
 
         if scope == 'global':
+
             if rule_type == 'limit_check':
                 rule = LimitCheckRule(
                     rule_id=rule_def['id'],
@@ -58,6 +59,7 @@ def load_rules(rules_service) -> List[Any]:
             else:
                 logging.warning(f"Unknown global rule type: {rule_type}. Skipping rule ID: {rule_def['id']}")
                 continue
+
         elif scope == 'table_specific':
             if rule_type == 'required_column':
                 rule = RequiredColumnRule(
@@ -92,6 +94,7 @@ def validate_queries_dynamic(queries: List[Dict[str, Any]], table_map: Dict[str,
     for idx, query in enumerate(queries, start=1):
         table = query.get('table')
         logging.info(f"Validating Query {idx} on table '{table}'.")
+
         if table not in table_map:
             violation = {
                 'query_index': idx,
@@ -106,6 +109,7 @@ def validate_queries_dynamic(queries: List[Dict[str, Any]], table_map: Dict[str,
             continue
 
         table_info = table_map[table]
+
         for rule in rules:
             # For table-specific rules, ensure the rule applies to the current table
             if isinstance(rule, (RequiredColumnRule, ForbiddenColumnRule)):
@@ -127,6 +131,8 @@ def validate_queries_dynamic(queries: List[Dict[str, Any]], table_map: Dict[str,
 
     return violations
 
+
+## OLD SHIT USE THE NEW RULE VALIDATOR
 def validate_queries(queries, table_map):
     violations = []
 
