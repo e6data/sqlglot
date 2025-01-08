@@ -283,6 +283,21 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "TO_JSON(x)",
+            read={
+                "spark": "TO_JSON(x)",
+                "bigquery": "TO_JSON_STRING(x)",
+                "presto": "JSON_FORMAT(x)",
+            },
+            write={
+                "bigquery": "TO_JSON_STRING(x)",
+                "duckdb": "CAST(TO_JSON(x) AS TEXT)",
+                "presto": "JSON_FORMAT(x)",
+                "spark": "TO_JSON(x)",
+            },
+        )
+
+        self.validate_all(
             "SELECT EXTRACT(fieldStr FROM date_expr)",
             read={
                 "databricks": "SELECT DATE_PART(fieldStr, date_expr)",
@@ -300,6 +315,24 @@ class TestE6(Validator):
             "SELECT A IS NULL",
             read={"databricks": "SELECT ISNULL(A)"},
             write={"databricks": "SELECT A IS NULL"},
+        )
+
+        self.validate_all(
+            "TO_CHAR(CAST(x AS TIMESTAMP),'y')",
+            read={
+                "snowflake": "TO_VARCHAR(x, y)",
+                "databricks": "TO_CHAR(x, y)",
+                "oracle": "TO_CHAR(x, y)",
+                "teradata": "TO_CHAR(x, y)",
+            },
+            write={
+                "databricks": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "drill": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "oracle": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "postgres": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "snowflake": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+                "teradata": "TO_CHAR(CAST(x AS TIMESTAMP), y)",
+            },
         )
 
     def test_regex(self):
@@ -504,5 +537,56 @@ class TestE6(Validator):
                 "databricks": "SELECT SLICE(A, B, C - B)",
                 "presto": "SELECT SLICE(A, B, C - B)",
                 "snowflake": "SELECT ARRAY_SLICE(A, B, C)",
+            },
+        )
+
+    def test_trim(self):
+        self.validate_all(
+            "TRIM('a' FROM 'abc')",
+            read={
+                "bigquery": "TRIM('abc', 'a')",
+                "snowflake": "TRIM('abc', 'a')",
+                "databricks": "TRIM('a' FROM 'abc')",
+            },
+            write={
+                "bigquery": "TRIM('abc', 'a')",
+                "snowflake": "TRIM('abc', 'a')",
+                "databricks": "TRIM('a' FROM 'abc')",
+            },
+        )
+
+        self.validate_all(
+            "LTRIM('H', 'Hello World')",
+            read={
+                "oracle": "LTRIM('Hello World', 'H')",
+                "clickhouse": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "databricks": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "snowflake": "LTRIM('Hello World', 'H')",
+                "bigquery": "LTRIM('Hello World', 'H')",
+            },
+            write={
+                "clickhouse": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "oracle": "LTRIM('Hello World', 'H')",
+                "snowflake": "LTRIM('Hello World', 'H')",
+                "bigquery": "LTRIM('Hello World', 'H')",
+                "databricks": "TRIM(LEADING 'H' FROM 'Hello World')",
+            },
+        )
+
+        self.validate_all(
+            "RTRIM('d', 'Hello World')",
+            read={
+                "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "databricks": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "oracle": "RTRIM('Hello World', 'd')",
+                "snowflake": "RTRIM('Hello World', 'd')",
+                "bigquery": "RTRIM('Hello World', 'd')",
+            },
+            write={
+                "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "databricks": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "oracle": "RTRIM('Hello World', 'd')",
+                "snowflake": "RTRIM('Hello World', 'd')",
+                "bigquery": "RTRIM('Hello World', 'd')",
             },
         )
