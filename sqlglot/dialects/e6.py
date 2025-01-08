@@ -246,6 +246,7 @@ def _build_trim(args: t.List, is_left: bool = True):
         position="LEADING" if is_left else "TRAILING",
     )
 
+
 def _build_convert_timezone(args: t.List) -> exp.Anonymous | exp.AtTimeZone:
     if len(args) == 3:
         return exp.Anonymous(this="CONVERT_TIMEZONE", expressions=args)
@@ -352,24 +353,24 @@ def add_single_quotes(expression) -> str:
     return quoted_str
 
 
-def _trim_sql(self:E6.Generator, expression: exp.Trim) -> str:
+def _trim_sql(self: E6.Generator, expression: exp.Trim) -> str:
     target = self.sql(expression, "this")
     trim_type = self.sql(expression, "position")
     remove_chars = self.sql(expression, "expression")
 
-    if trim_type.upper() == 'LEADING':
+    if trim_type.upper() == "LEADING":
         if remove_chars:
             return self.func("LTRIM", remove_chars, target)
         else:
             return self.func("LTRIM", target)
-    elif trim_type.upper() == 'TRAILING':
+    elif trim_type.upper() == "TRAILING":
         if remove_chars:
             return self.func("RTRIM", remove_chars, target)
         else:
             return self.func("RTRIM", target)
 
     else:
-        return trim_sql(self,expression)
+        return trim_sql(self, expression)
 
 
 class E6(Dialect):
@@ -1620,7 +1621,6 @@ class E6(Dialect):
 
             # Construct and return the final ORDER BY clause
             return f"{main_expression}{sort_order}{nulls_sort_change}"
-
 
         def convert_format_time(self, expression, **kwargs):
             """

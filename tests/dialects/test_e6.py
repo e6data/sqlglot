@@ -287,7 +287,7 @@ class TestE6(Validator):
             read={
                 "spark": "TO_JSON(x)",
                 "bigquery": "TO_JSON_STRING(x)",
-                "presto": "JSON_FORMAT(x)"
+                "presto": "JSON_FORMAT(x)",
             },
             write={
                 "bigquery": "TO_JSON_STRING(x)",
@@ -540,19 +540,18 @@ class TestE6(Validator):
             },
         )
 
-
     def test_trim(self):
         self.validate_all(
             "TRIM('a' FROM 'abc')",
             read={
                 "bigquery": "TRIM('abc', 'a')",
                 "snowflake": "TRIM('abc', 'a')",
-                "databricks": "TRIM('a' FROM 'abc')"
+                "databricks": "TRIM('a' FROM 'abc')",
             },
             write={
                 "bigquery": "TRIM('abc', 'a')",
                 "snowflake": "TRIM('abc', 'a')",
-                "databricks": "TRIM('a' FROM 'abc')"
+                "databricks": "TRIM('a' FROM 'abc')",
             },
         )
 
@@ -570,7 +569,7 @@ class TestE6(Validator):
                 "oracle": "LTRIM('Hello World', 'H')",
                 "snowflake": "LTRIM('Hello World', 'H')",
                 "bigquery": "LTRIM('Hello World', 'H')",
-                "databricks": "TRIM(LEADING 'H' FROM 'Hello World')"
+                "databricks": "TRIM(LEADING 'H' FROM 'Hello World')",
             },
         )
 
