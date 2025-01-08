@@ -42,6 +42,7 @@ setup(
             "types-pytz",
             "typing_extensions",
             "maturin>=1.4,<2.0",
+            "thrift==0.21.0",
         ],
         "rs": [f"sqlglotrs=={sqlglotrs_version()}"],
     },
