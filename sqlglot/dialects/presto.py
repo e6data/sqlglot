@@ -85,7 +85,10 @@ def _ts_or_ds_to_date_sql(self: Presto.Generator, expression: exp.TsOrDsToDate) 
     if time_format and time_format not in (Presto.TIME_FORMAT, Presto.DATE_FORMAT):
         return self.sql(exp.cast(_str_to_time_sql(self, expression), exp.DataType.Type.DATE))
     return self.sql(
-        exp.cast(exp.cast(expression.this, exp.DataType.Type.TIMESTAMP), exp.DataType.Type.DATE)
+        exp.cast(
+            exp.cast(expression.this, exp.DataType.Type.TIMESTAMP),
+            exp.DataType.Type.DATE,
+        )
     )
 
 
@@ -293,10 +296,14 @@ class Presto(Dialect):
             "CARDINALITY": exp.ArraySize.from_arg_list,
             "CONTAINS": exp.ArrayContains.from_arg_list,
             "DATE_ADD": lambda args: exp.DateAdd(
-                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+                this=seq_get(args, 2),
+                expression=seq_get(args, 1),
+                unit=seq_get(args, 0),
             ),
             "DATE_DIFF": lambda args: exp.DateDiff(
-                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+                this=seq_get(args, 2),
+                expression=seq_get(args, 1),
+                unit=seq_get(args, 0),
             ),
             "DATE_FORMAT": build_formatted_time(exp.TimeToStr, "presto"),
             "DATE_PARSE": build_formatted_time(exp.StrToTime, "presto"),
@@ -304,13 +311,18 @@ class Presto(Dialect):
             "DAY_OF_WEEK": exp.DayOfWeekIso.from_arg_list,
             "DOW": exp.DayOfWeekIso.from_arg_list,
             "ELEMENT_AT": lambda args: exp.Bracket(
-                this=seq_get(args, 0), expressions=[seq_get(args, 1)], offset=1, safe=True
+                this=seq_get(args, 0),
+                expressions=[seq_get(args, 1)],
+                offset=1,
+                safe=True,
             ),
             "FORMAT_DATETIME": build_formatted_time(exp.TimeToStr, "presto"),
             "FROM_HEX": exp.Unhex.from_arg_list,
             "FROM_UNIXTIME": _build_from_unixtime,
             "FROM_UTF8": lambda args: exp.Decode(
-                this=seq_get(args, 0), replace=seq_get(args, 1), charset=exp.Literal.string("utf-8")
+                this=seq_get(args, 0),
+                replace=seq_get(args, 1),
+                charset=exp.Literal.string("utf-8"),
             ),
             "LEVENSHTEIN_DISTANCE": exp.Levenshtein.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
@@ -328,7 +340,9 @@ class Presto(Dialect):
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
             "STRPOS": lambda args: exp.StrPosition(
-                this=seq_get(args, 0), substr=seq_get(args, 1), instance=seq_get(args, 2)
+                this=seq_get(args, 0),
+                substr=seq_get(args, 1),
+                instance=seq_get(args, 2),
             ),
             "TO_CHAR": _build_to_char,
             "TO_UNIXTIME": exp.TimeToUnix.from_arg_list,
@@ -668,7 +682,10 @@ class Presto(Dialect):
             return f"START TRANSACTION{modes}"
 
         def offset_limit_modifiers(
-            self, expression: exp.Expression, fetch: bool, limit: t.Optional[exp.Fetch | exp.Limit]
+            self,
+            expression: exp.Expression,
+            fetch: bool,
+            limit: t.Optional[exp.Fetch | exp.Limit],
         ) -> t.List[str]:
             return [
                 self.sql(expression, "offset"),
@@ -715,7 +732,10 @@ class Presto(Dialect):
             # VARIANT extract (e.g. col:x.y) should map to dot notation (i.e ROW access) in Presto/Trino
             if not expression.args.get("variant_extract") or is_json_extract:
                 return self.func(
-                    "JSON_EXTRACT", expression.this, expression.expression, *expression.expressions
+                    "JSON_EXTRACT",
+                    expression.this,
+                    expression.expression,
+                    *expression.expressions,
                 )
 
             this = self.sql(expression, "this")

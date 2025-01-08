@@ -154,7 +154,10 @@ class AbstractMappingSchema:
         return [part.name for part in reversed(table.parts)]
 
     def find(
-        self, table: exp.Table, raise_on_missing: bool = True, ensure_data_types: bool = False
+        self,
+        table: exp.Table,
+        raise_on_missing: bool = True,
+        ensure_data_types: bool = False,
     ) -> t.Optional[t.Any]:
         """
         Returns the schema of a given table.
@@ -187,7 +190,10 @@ class AbstractMappingSchema:
         return self.nested_get(parts, raise_on_missing=raise_on_missing)
 
     def nested_get(
-        self, parts: t.Sequence[str], d: t.Optional[t.Dict] = None, raise_on_missing=True
+        self,
+        parts: t.Sequence[str],
+        d: t.Optional[t.Dict] = None,
+        raise_on_missing=True,
     ) -> t.Optional[t.Any]:
         return nested_get(
             d or self.mapping,
@@ -241,10 +247,15 @@ class MappingSchema(AbstractMappingSchema, Schema):
         )
 
     def find(
-        self, table: exp.Table, raise_on_missing: bool = True, ensure_data_types: bool = False
+        self,
+        table: exp.Table,
+        raise_on_missing: bool = True,
+        ensure_data_types: bool = False,
     ) -> t.Optional[t.Any]:
         schema = super().find(
-            table, raise_on_missing=raise_on_missing, ensure_data_types=ensure_data_types
+            table,
+            raise_on_missing=raise_on_missing,
+            ensure_data_types=ensure_data_types,
         )
         if ensure_data_types and isinstance(schema, dict):
             schema = {
@@ -335,7 +346,9 @@ class MappingSchema(AbstractMappingSchema, Schema):
         normalized_table = self._normalize_table(table, dialect=dialect, normalize=normalize)
 
         normalized_column_name = self._normalize_name(
-            column if isinstance(column, str) else column.this, dialect=dialect, normalize=normalize
+            column if isinstance(column, str) else column.this,
+            dialect=dialect,
+            normalize=normalize,
         )
 
         table_schema = self.find(normalized_table, raise_on_missing=False)
@@ -359,7 +372,9 @@ class MappingSchema(AbstractMappingSchema, Schema):
         normalized_table = self._normalize_table(table, dialect=dialect, normalize=normalize)
 
         normalized_column_name = self._normalize_name(
-            column if isinstance(column, str) else column.this, dialect=dialect, normalize=normalize
+            column if isinstance(column, str) else column.this,
+            dialect=dialect,
+            normalize=normalize,
         )
 
         table_schema = self.find(normalized_table, raise_on_missing=False)
@@ -389,7 +404,8 @@ class MappingSchema(AbstractMappingSchema, Schema):
             if isinstance(first(columns.values()), dict):
                 raise SchemaError(
                     error_msg.format(
-                        ".".join(keys + flatten_schema(columns)[0]), len(flattened_schema[0])
+                        ".".join(keys + flatten_schema(columns)[0]),
+                        len(flattened_schema[0]),
                     ),
                 )
 

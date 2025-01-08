@@ -121,7 +121,10 @@ def merge_derived_tables(expression: E, leave_tables_isolated: bool = False) -> 
 
 
 def _mergeable(
-    outer_scope: Scope, inner_scope: Scope, leave_tables_isolated: bool, from_or_join: FromOrJoin
+    outer_scope: Scope,
+    inner_scope: Scope,
+    leave_tables_isolated: bool,
+    from_or_join: FromOrJoin,
 ) -> bool:
     """
     Return True if `inner_select` can be merged into outer query.

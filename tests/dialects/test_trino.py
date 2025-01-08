@@ -62,7 +62,8 @@ class TestTrino(Validator):
             "ALTER TABLE people SET AUTHORIZATION alice", check_command_warning=True
         )
         self.validate_identity(
-            "ALTER TABLE people SET AUTHORIZATION ROLE PUBLIC", check_command_warning=True
+            "ALTER TABLE people SET AUTHORIZATION ROLE PUBLIC",
+            check_command_warning=True,
         )
         self.validate_identity(
             "ALTER TABLE people SET PROPERTIES x = 'y'", check_command_warning=True

@@ -23,7 +23,9 @@ class Materialize(Postgres):
         LAMBDAS = {
             **Postgres.Parser.LAMBDAS,
             TokenType.FARROW: lambda self, expressions: self.expression(
-                exp.Kwarg, this=seq_get(expressions, 0), expression=self._parse_assignment()
+                exp.Kwarg,
+                this=seq_get(expressions, 0),
+                expression=self._parse_assignment(),
             ),
         }
 

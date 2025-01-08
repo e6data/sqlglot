@@ -47,7 +47,9 @@ UNESCAPED_SEQUENCES = {
 }
 
 
-def _annotate_with_type_lambda(data_type: exp.DataType.Type) -> t.Callable[[TypeAnnotator, E], E]:
+def _annotate_with_type_lambda(
+    data_type: exp.DataType.Type,
+) -> t.Callable[[TypeAnnotator, E], E]:
     return lambda self, e: self._annotate_with_type(e, data_type)
 
 
@@ -166,7 +168,9 @@ class _Dialect(type):
             klass.tokenizer_class._IDENTIFIERS.items()
         )[0]
 
-        def get_start_end(token_type: TokenType) -> t.Tuple[t.Optional[str], t.Optional[str]]:
+        def get_start_end(
+            token_type: TokenType,
+        ) -> t.Tuple[t.Optional[str], t.Optional[str]]:
             return next(
                 (
                     (s, e)
@@ -420,6 +424,9 @@ class Dialect(metaclass=_Dialect):
 
     SUPPORTS_VALUES_DEFAULT = True
     """Whether the DEFAULT keyword is supported in the VALUES clause."""
+
+    NUMBERS_CAN_BE_UNDERSCORE_SEPARATED = False
+    """Whether number literals can include underscores for better readability"""
 
     REGEXP_EXTRACT_DEFAULT_GROUP = 0
     """The default value for the capturing group."""
@@ -696,7 +703,8 @@ class Dialect(metaclass=_Dialect):
         exp.Case: lambda self, e: self._annotate_by_args(e, "default", "ifs"),
         exp.Coalesce: lambda self, e: self._annotate_by_args(e, "this", "expressions"),
         exp.Count: lambda self, e: self._annotate_with_type(
-            e, exp.DataType.Type.BIGINT if e.args.get("big_int") else exp.DataType.Type.INT
+            e,
+            exp.DataType.Type.BIGINT if e.args.get("big_int") else exp.DataType.Type.INT,
         ),
         exp.DataType: lambda self, e: self._annotate_with_type(e, e.copy()),
         exp.DateAdd: lambda self, e: self._annotate_timeunit(e),
@@ -1017,7 +1025,8 @@ def inline_array_unless_query(self: Generator, expression: exp.Array) -> str:
 def no_ilike_sql(self: Generator, expression: exp.ILike) -> str:
     return self.like_sql(
         exp.Like(
-            this=exp.Lower(this=expression.this), expression=exp.Lower(this=expression.expression)
+            this=exp.Lower(this=expression.this),
+            expression=exp.Lower(this=expression.expression),
         )
     )
 
@@ -1208,7 +1217,9 @@ def date_add_interval_sql(
     return func
 
 
-def timestamptrunc_sql(zone: bool = False) -> t.Callable[[Generator, exp.TimestampTrunc], str]:
+def timestamptrunc_sql(
+    zone: bool = False,
+) -> t.Callable[[Generator, exp.TimestampTrunc], str]:
     def _timestamptrunc_sql(self: Generator, expression: exp.TimestampTrunc) -> str:
         args = [unit_to_str(expression), expression.this]
         if zone:
@@ -1239,7 +1250,8 @@ def no_time_sql(self: Generator, expression: exp.Time) -> str:
     # Transpile BQ's TIME(timestamp, zone) to CAST(TIMESTAMPTZ <timestamp> AT TIME ZONE <zone> AS TIME)
     this = exp.cast(expression.this, exp.DataType.Type.TIMESTAMPTZ)
     expr = exp.cast(
-        exp.AtTimeZone(this=this, zone=expression.args.get("zone")), exp.DataType.Type.TIME
+        exp.AtTimeZone(this=this, zone=expression.args.get("zone")),
+        exp.DataType.Type.TIME,
     )
     return self.sql(expr)
 
@@ -1268,14 +1280,19 @@ def locate_to_strposition(args: t.List) -> exp.Expression:
 
 def strposition_to_locate_sql(self: Generator, expression: exp.StrPosition) -> str:
     return self.func(
-        "LOCATE", expression.args.get("substr"), expression.this, expression.args.get("position")
+        "LOCATE",
+        expression.args.get("substr"),
+        expression.this,
+        expression.args.get("position"),
     )
 
 
 def left_to_substring_sql(self: Generator, expression: exp.Left) -> str:
     return self.sql(
         exp.Substring(
-            this=expression.this, start=exp.Literal.number(1), length=expression.expression
+            this=expression.this,
+            start=exp.Literal.number(1),
+            length=expression.expression,
         )
     )
 
@@ -1304,7 +1321,8 @@ def timestrtotime_sql(
         precision = subsecond_precision(expression.this.name)
         if precision > 0:
             datatype = exp.DataType.build(
-                datatype.this, expressions=[exp.DataTypeParam(this=exp.Literal.number(precision))]
+                datatype.this,
+                expressions=[exp.DataTypeParam(this=exp.Literal.number(precision))],
             )
 
     return self.sql(exp.cast(expression.this, datatype, dialect=self.dialect))
@@ -1396,7 +1414,10 @@ def regexp_extract_sql(
 @unsupported_args("position", "occurrence", "modifiers")
 def regexp_replace_sql(self: Generator, expression: exp.RegexpReplace) -> str:
     return self.func(
-        "REGEXP_REPLACE", expression.this, expression.expression, expression.args["replacement"]
+        "REGEXP_REPLACE",
+        expression.this,
+        expression.expression,
+        expression.args["replacement"],
     )
 
 
@@ -1461,7 +1482,9 @@ def generatedasidentitycolumnconstraint_sql(
     return f"IDENTITY({start}, {increment})"
 
 
-def arg_max_or_min_no_count(name: str) -> t.Callable[[Generator, exp.ArgMax | exp.ArgMin], str]:
+def arg_max_or_min_no_count(
+    name: str,
+) -> t.Callable[[Generator, exp.ArgMax | exp.ArgMin], str]:
     @unsupported_args("count")
     def _arg_max_or_min_sql(self: Generator, expression: exp.ArgMax | exp.ArgMin) -> str:
         return self.func(name, expression.this, expression.expression)
@@ -1573,7 +1596,9 @@ def merge_without_target_sql(self: Generator, expression: exp.Merge) -> str:
 
 
 def build_json_extract_path(
-    expr_type: t.Type[F], zero_based_indexing: bool = True, arrow_req_json_type: bool = False
+    expr_type: t.Type[F],
+    zero_based_indexing: bool = True,
+    arrow_req_json_type: bool = False,
 ) -> t.Callable[[t.List], F]:
     def _builder(args: t.List) -> F:
         segments: t.List[exp.JSONPathPart] = [exp.JSONPathRoot()]

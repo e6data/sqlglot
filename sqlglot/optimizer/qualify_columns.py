@@ -238,7 +238,10 @@ def _expand_using(scope: Scope, resolver: Resolver) -> t.Dict[str, t.Any]:
 
 
 def _expand_alias_refs(
-    scope: Scope, resolver: Resolver, dialect: Dialect, expand_only_groupby: bool = False
+    scope: Scope,
+    resolver: Resolver,
+    dialect: Dialect,
+    expand_only_groupby: bool = False,
 ) -> None:
     """
     Expand references to aliases.
@@ -254,7 +257,9 @@ def _expand_alias_refs(
     alias_to_expression: t.Dict[str, t.Tuple[exp.Expression, int]] = {}
 
     def replace_columns(
-        node: t.Optional[exp.Expression], resolve_table: bool = False, literal_index: bool = False
+        node: t.Optional[exp.Expression],
+        resolve_table: bool = False,
+        literal_index: bool = False,
     ) -> None:
         is_group_by = isinstance(node, exp.Group)
         if not node or (expand_only_groupby and not is_group_by):
@@ -370,7 +375,10 @@ def _expand_order_by(scope: Scope, resolver: Resolver) -> None:
 
 
 def _expand_positional_references(
-    scope: Scope, expressions: t.Iterable[exp.Expression], dialect: DialectType, alias: bool = False
+    scope: Scope,
+    expressions: t.Iterable[exp.Expression],
+    dialect: DialectType,
+    alias: bool = False,
 ) -> t.List[exp.Expression]:
     new_nodes: t.List[exp.Expression] = []
     ambiguous_projections = None
@@ -705,7 +713,9 @@ def _add_rename_columns(
 
 
 def _add_replace_columns(
-    expression: exp.Expression, tables, replace_columns: t.Dict[int, t.Dict[str, exp.Alias]]
+    expression: exp.Expression,
+    tables,
+    replace_columns: t.Dict[int, t.Dict[str, exp.Alias]],
 ) -> None:
     replace = expression.args.get("replace")
 
@@ -898,16 +908,29 @@ class Resolver:
                     for (name, alias) in itertools.zip_longest(columns, column_aliases)
                 ]
 
+            pseudocolumns = self._get_source_pseudocolumns(name)
+            if pseudocolumns:
+                columns = list(columns)
+                columns.extend(c for c in pseudocolumns if c not in columns)
+
             self._get_source_columns_cache[cache_key] = columns
 
         return self._get_source_columns_cache[cache_key]
+
+    def _get_source_pseudocolumns(self, name: str) -> t.Sequence[str]:
+        if self.schema.dialect == "snowflake" and self.scope.expression.args.get("connect"):
+            # When there is a CONNECT BY clause, there is only one table being scanned
+            # See: https://docs.snowflake.com/en/sql-reference/constructs/connect-by
+            return ["LEVEL"]
+        return []
 
     def _get_all_source_columns(self) -> t.Dict[str, t.Sequence[str]]:
         if self._source_columns is None:
             self._source_columns = {
                 source_name: self.get_source_columns(source_name)
                 for source_name, source in itertools.chain(
-                    self.scope.selected_sources.items(), self.scope.lateral_sources.items()
+                    self.scope.selected_sources.items(),
+                    self.scope.lateral_sources.items(),
                 )
             }
         return self._source_columns

@@ -281,7 +281,9 @@ class Hive(Dialect):
             "COLLECT_LIST": lambda args: exp.ArrayAgg(this=seq_get(args, 0), nulls_excluded=True),
             "COLLECT_SET": exp.ArrayUniqueAgg.from_arg_list,
             "DATE_ADD": lambda args: exp.TsOrDsAdd(
-                this=seq_get(args, 0), expression=seq_get(args, 1), unit=exp.Literal.string("DAY")
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                unit=exp.Literal.string("DAY"),
             ),
             "DATE_FORMAT": lambda args: build_formatted_time(exp.TimeToStr, "hive")(
                 [
@@ -382,7 +384,10 @@ class Hive(Dialect):
             )
 
         def _parse_types(
-            self, check_func: bool = False, schema: bool = False, allow_identifiers: bool = True
+            self,
+            check_func: bool = False,
+            schema: bool = False,
+            allow_identifiers: bool = True,
         ) -> t.Optional[exp.Expression]:
             """
             Spark (and most likely Hive) treats casts to CHAR(length) and VARCHAR(length) as casts to
@@ -403,7 +408,9 @@ class Hive(Dialect):
             Reference: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
             """
             this = super()._parse_types(
-                check_func=check_func, schema=schema, allow_identifiers=allow_identifiers
+                check_func=check_func,
+                schema=schema,
+                allow_identifiers=allow_identifiers,
             )
 
             if this and not schema:

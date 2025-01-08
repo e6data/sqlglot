@@ -91,7 +91,12 @@ def qualify_tables(
                         name = source.name
 
                     # Mutates the source by attaching an alias to it
-                    alias(source, name or source.name or next_alias_name(), copy=False, table=True)
+                    alias(
+                        source,
+                        name or source.name or next_alias_name(),
+                        copy=False,
+                        table=True,
+                    )
 
                 table_aliases[".".join(p.name for p in source.parts)] = exp.to_identifier(
                     source.alias
@@ -101,7 +106,8 @@ def qualify_tables(
 
                 if pivots and not pivots[0].alias:
                     pivots[0].set(
-                        "alias", exp.TableAlias(this=exp.to_identifier(next_alias_name()))
+                        "alias",
+                        exp.TableAlias(this=exp.to_identifier(next_alias_name())),
                     )
 
                 if infer_csv_schemas and schema and isinstance(source.this, exp.ReadCSV):

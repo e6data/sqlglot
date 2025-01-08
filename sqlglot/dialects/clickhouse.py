@@ -54,7 +54,8 @@ def _unix_to_time_sql(self: ClickHouse.Generator, expression: exp.UnixToTime) ->
     return self.func(
         "fromUnixTimestamp",
         exp.cast(
-            exp.Div(this=timestamp, expression=exp.func("POW", 10, scale)), exp.DataType.Type.BIGINT
+            exp.Div(this=timestamp, expression=exp.func("POW", 10, scale)),
+            exp.DataType.Type.BIGINT,
         ),
     )
 
@@ -166,6 +167,8 @@ class ClickHouse(Dialect):
     LOG_BASE_FIRST: t.Optional[bool] = None
     FORCE_EARLY_ALIAS_REF_EXPANSION = True
     PRESERVE_ORIGINAL_NAMES = True
+    NUMBERS_CAN_BE_UNDERSCORE_SEPARATED = True
+    IDENTIFIERS_CAN_START_WITH_DIGIT = True
 
     # https://github.com/ClickHouse/ClickHouse/issues/33935#issue-1112165779
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_SENSITIVE
@@ -430,7 +433,10 @@ class ClickHouse(Dialect):
             }
         )(AGG_FUNCTIONS, AGG_FUNCTIONS_SUFFIXES)
 
-        FUNCTIONS_WITH_ALIASED_ARGS = {*parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS, "TUPLE"}
+        FUNCTIONS_WITH_ALIASED_ARGS = {
+            *parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS,
+            "TUPLE",
+        }
 
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
@@ -486,7 +492,10 @@ class ClickHouse(Dialect):
                 "settings",
                 self._advance() or self._parse_csv(self._parse_assignment),
             ),
-            TokenType.FORMAT: lambda self: ("format", self._advance() or self._parse_id_var()),
+            TokenType.FORMAT: lambda self: (
+                "format",
+                self._advance() or self._parse_id_var(),
+            ),
         }
 
         CONSTRAINT_PARSERS = {
@@ -515,10 +524,15 @@ class ClickHouse(Dialect):
             return self._parse_lambda()
 
         def _parse_types(
-            self, check_func: bool = False, schema: bool = False, allow_identifiers: bool = True
+            self,
+            check_func: bool = False,
+            schema: bool = False,
+            allow_identifiers: bool = True,
         ) -> t.Optional[exp.Expression]:
             dtype = super()._parse_types(
-                check_func=check_func, schema=schema, allow_identifiers=allow_identifiers
+                check_func=check_func,
+                schema=schema,
+                allow_identifiers=allow_identifiers,
             )
             if isinstance(dtype, exp.DataType) and dtype.args.get("nullable") is not True:
                 # Mark every type as non-nullable which is ClickHouse's default, unless it's
@@ -565,6 +579,8 @@ class ClickHouse(Dialect):
             Parse a placeholder expression like SELECT {abc: UInt32} or FROM {table: Identifier}
             https://clickhouse.com/docs/en/sql-reference/syntax#defining-and-using-query-parameters
             """
+            index = self._index
+
             this = self._parse_id_var()
             self._match(TokenType.COLON)
             kind = self._parse_types(check_func=False, allow_identifiers=False) or (
@@ -572,11 +588,31 @@ class ClickHouse(Dialect):
             )
 
             if not kind:
-                self.raise_error("Expecting a placeholder type or 'Identifier' for tables")
+                self._retreat(index)
+                return None
             elif not self._match(TokenType.R_BRACE):
                 self.raise_error("Expecting }")
 
             return self.expression(exp.Placeholder, this=this, kind=kind)
+
+        def _parse_bracket(
+            self, this: t.Optional[exp.Expression] = None
+        ) -> t.Optional[exp.Expression]:
+            l_brace = self._match(TokenType.L_BRACE, advance=False)
+            bracket = super()._parse_bracket(this)
+
+            if l_brace and isinstance(bracket, exp.Struct):
+                varmap = exp.VarMap(keys=exp.Array(), values=exp.Array())
+                for expression in bracket.expressions:
+                    if not isinstance(expression, exp.PropertyEQ):
+                        break
+
+                    varmap.args["keys"].append("expressions", exp.Literal.string(expression.name))
+                    varmap.args["values"].append("expressions", expression.expression)
+
+                return varmap
+
+            return bracket
 
         def _parse_in(self, this: t.Optional[exp.Expression], is_global: bool = False) -> exp.In:
             this = super()._parse_in(this)
@@ -609,7 +645,7 @@ class ClickHouse(Dialect):
             return super()._parse_position(haystack_first=True)
 
         # https://clickhouse.com/docs/en/sql-reference/statements/select/with/
-        def _parse_cte(self) -> exp.CTE:
+        def _parse_cte(self) -> t.Optional[exp.CTE]:
             # WITH <identifier> AS <subquery expression>
             cte: t.Optional[exp.CTE] = self._try_parse(super()._parse_cte)
 
@@ -795,7 +831,9 @@ class ClickHouse(Dialect):
                 return None
 
             return self.expression(
-                exp.ReplacePartition, expression=partition, source=self._parse_table_parts()
+                exp.ReplacePartition,
+                expression=partition,
+                source=self._parse_table_parts(),
             )
 
         def _parse_projection_def(self) -> t.Optional[exp.ProjectionDef]:

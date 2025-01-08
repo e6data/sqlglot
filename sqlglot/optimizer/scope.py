@@ -102,7 +102,13 @@ class Scope:
         self._references = None
 
     def branch(
-        self, expression, scope_type, sources=None, cte_sources=None, lateral_sources=None, **kwargs
+        self,
+        expression,
+        scope_type,
+        sources=None,
+        cte_sources=None,
+        lateral_sources=None,
+        **kwargs,
     ):
         """Branch from the current scope to a new, inner scope"""
         return Scope(
@@ -278,7 +284,13 @@ class Scope:
             self._columns = []
             for column in columns + external_columns:
                 ancestor = column.find_ancestor(
-                    exp.Select, exp.Qualify, exp.Order, exp.Having, exp.Hint, exp.Table, exp.Star
+                    exp.Select,
+                    exp.Qualify,
+                    exp.Order,
+                    exp.Having,
+                    exp.Hint,
+                    exp.Table,
+                    exp.Star,
                 )
                 if (
                     not ancestor

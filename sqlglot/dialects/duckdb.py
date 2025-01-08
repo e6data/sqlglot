@@ -42,7 +42,12 @@ from sqlglot.tokens import TokenType
 from sqlglot.parser import binary_range_parser
 
 DATETIME_DELTA = t.Union[
-    exp.DateAdd, exp.TimeAdd, exp.DatetimeAdd, exp.TsOrDsAdd, exp.DateSub, exp.DatetimeSub
+    exp.DateAdd,
+    exp.TimeAdd,
+    exp.DatetimeAdd,
+    exp.TsOrDsAdd,
+    exp.DateSub,
+    exp.DatetimeSub,
 ]
 
 WINDOW_FUNCS_WITH_IGNORE_NULLS = (
@@ -122,7 +127,9 @@ def _build_date_diff(args: t.List) -> exp.Expression:
     return exp.DateDiff(this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0))
 
 
-def _build_generate_series(end_exclusive: bool = False) -> t.Callable[[t.List], exp.GenerateSeries]:
+def _build_generate_series(
+    end_exclusive: bool = False,
+) -> t.Callable[[t.List], exp.GenerateSeries]:
     def _builder(args: t.List) -> exp.GenerateSeries:
         # Check https://duckdb.org/docs/sql/functions/nested.html#range-functions
         if len(args) == 1:
@@ -242,7 +249,8 @@ def _date_diff_sql(self: DuckDB.Generator, expression: exp.DateDiff) -> str:
 
 
 def _generate_datetime_array_sql(
-    self: DuckDB.Generator, expression: t.Union[exp.GenerateDateArray, exp.GenerateTimestampArray]
+    self: DuckDB.Generator,
+    expression: t.Union[exp.GenerateDateArray, exp.GenerateTimestampArray],
 ) -> str:
     is_generate_date_array = isinstance(expression, exp.GenerateDateArray)
 
@@ -361,7 +369,10 @@ class DuckDB(Dialect):
             TokenType.DSTAR: exp.Pow,
         }
 
-        FUNCTIONS_WITH_ALIASED_ARGS = {*parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS, "STRUCT_PACK"}
+        FUNCTIONS_WITH_ALIASED_ARGS = {
+            *parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS,
+            "STRUCT_PACK",
+        }
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -651,7 +662,9 @@ class DuckDB(Dialect):
                 "STRFTIME", self.func("TO_TIMESTAMP", e.this), self.format_time(e)
             ),
             exp.DatetimeTrunc: lambda self, e: self.func(
-                "DATE_TRUNC", unit_to_str(e), exp.cast(e.this, exp.DataType.Type.DATETIME)
+                "DATE_TRUNC",
+                unit_to_str(e),
+                exp.cast(e.this, exp.DataType.Type.DATETIME),
             ),
             exp.UnixToTime: _unix_to_time_sql,
             exp.UnixToTimeStr: lambda self, e: f"CAST(TO_TIMESTAMP({self.sql(e, 'this')}) AS TEXT)",
@@ -810,7 +823,8 @@ class DuckDB(Dialect):
             nano = expression.args.get("nano")
             if nano is not None:
                 expression.set(
-                    "sec", expression.args["sec"] + nano.pop() / exp.Literal.number(1000000000.0)
+                    "sec",
+                    expression.args["sec"] + nano.pop() / exp.Literal.number(1000000000.0),
                 )
 
             return rename_func("MAKE_TIME")(self, expression)

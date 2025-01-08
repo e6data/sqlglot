@@ -253,7 +253,10 @@ class Teradata(Dialect):
             exp.Pow: lambda self, e: self.binary(e, "**"),
             exp.Rand: lambda self, e: self.func("RANDOM", e.args.get("lower"), e.args.get("upper")),
             exp.Select: transforms.preprocess(
-                [transforms.eliminate_distinct_on, transforms.eliminate_semi_and_anti_joins]
+                [
+                    transforms.eliminate_distinct_on,
+                    transforms.eliminate_semi_and_anti_joins,
+                ]
             ),
             exp.StrToDate: lambda self,
             e: f"CAST({self.sql(e, 'this')} AS DATE FORMAT {self.format_time(e)})",

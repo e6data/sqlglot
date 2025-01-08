@@ -61,7 +61,9 @@ def preprocess(
     return _to_sql
 
 
-def unnest_generate_date_array_using_recursive_cte(expression: exp.Expression) -> exp.Expression:
+def unnest_generate_date_array_using_recursive_cte(
+    expression: exp.Expression,
+) -> exp.Expression:
     if isinstance(expression, exp.Select):
         count = 0
         recursive_ctes = []
@@ -87,7 +89,10 @@ def unnest_generate_date_array_using_recursive_cte(expression: exp.Expression) -
 
             start = exp.cast(start, "date")
             date_add = exp.func(
-                "date_add", column_name, exp.Literal.number(step.name), step.args.get("unit")
+                "date_add",
+                column_name,
+                exp.Literal.number(step.name),
+                step.args.get("unit"),
             )
             cast_date_add = exp.cast(date_add, "date")
 
@@ -291,7 +296,8 @@ def remove_precision_parameterized_types(expression: exp.Expression) -> exp.Expr
     """
     for node in expression.find_all(exp.DataType):
         node.set(
-            "expressions", [e for e in node.expressions if not isinstance(e, exp.DataTypeParam)]
+            "expressions",
+            [e for e in node.expressions if not isinstance(e, exp.DataTypeParam)],
         )
 
     return expression
@@ -410,7 +416,9 @@ def unnest_to_explode(
     return expression
 
 
-def explode_to_unnest(index_offset: int = 0) -> t.Callable[[exp.Expression], exp.Expression]:
+def explode_to_unnest(
+    index_offset: int = 0,
+) -> t.Callable[[exp.Expression], exp.Expression]:
     """Convert explode/posexplode into unnest."""
 
     def _explode_to_unnest(expression: exp.Expression) -> exp.Expression:
@@ -465,7 +473,8 @@ def explode_to_unnest(index_offset: int = 0) -> t.Callable[[exp.Expression], exp
                         explode_arg = exp.func(
                             "IF",
                             exp.func(
-                                "ARRAY_SIZE", exp.func("COALESCE", explode_arg, exp.Array())
+                                "ARRAY_SIZE",
+                                exp.func("COALESCE", explode_arg, exp.Array()),
                             ).eq(0),
                             exp.array(bracket, copy=False),
                             explode_arg,
@@ -656,7 +665,10 @@ def eliminate_full_outer_join(expression: exp.Expression) -> exp.Expression:
             expression.set("limit", None)
             index, full_outer_join = full_outer_joins[0]
 
-            tables = (expression.args["from"].alias_or_name, full_outer_join.alias_or_name)
+            tables = (
+                expression.args["from"].alias_or_name,
+                full_outer_join.alias_or_name,
+            )
             join_conditions = full_outer_join.args.get("on") or exp.and_(
                 *[
                     exp.column(col, tables[0]).eq(exp.column(col, tables[1]))

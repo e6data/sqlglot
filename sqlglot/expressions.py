@@ -59,6 +59,7 @@ class _Expression(type):
 
 
 SQLGLOT_META = "sqlglot.meta"
+SQLGLOT_ANONYMOUS = "sqlglot.anonymous"
 TABLE_PARTS = ("this", "db", "catalog")
 COLUMN_PARTS = ("this", "table", "db", "catalog")
 
@@ -97,7 +98,16 @@ class Expression(metaclass=_Expression):
 
     key = "expression"
     arg_types = {"this": True}
-    __slots__ = ("args", "parent", "arg_key", "index", "comments", "_type", "_meta", "_hash")
+    __slots__ = (
+        "args",
+        "parent",
+        "arg_key",
+        "index",
+        "comments",
+        "_type",
+        "_meta",
+        "_hash",
+    )
 
     def __init__(self, **args: t.Any):
         self.args: t.Dict[str, t.Any] = args
@@ -582,7 +592,7 @@ class Expression(metaclass=_Expression):
         """
         for node in self.dfs(prune=lambda n: n.parent and type(n) is not self.__class__):
             if type(node) is not self.__class__:
-                yield node.unnest() if unnest and not isinstance(node, Subquery) else node
+                yield (node.unnest() if unnest and not isinstance(node, Subquery) else node)
 
     def __str__(self) -> str:
         return self.sql()
@@ -866,7 +876,8 @@ class Expression(metaclass=_Expression):
 
     def __getitem__(self, other: ExpOrStr | t.Tuple[ExpOrStr]) -> Bracket:
         return Bracket(
-            this=self.copy(), expressions=[convert(e, copy=True) for e in ensure_list(other)]
+            this=self.copy(),
+            expressions=[convert(e, copy=True) for e in ensure_list(other)],
         )
 
     def __iter__(self) -> t.Iterator:
@@ -1062,7 +1073,11 @@ class Query(Expression):
         return Subquery(this=instance, alias=alias)
 
     def limit(
-        self: Q, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
+        self: Q,
+        expression: ExpOrStr | int,
+        dialect: DialectType = None,
+        copy: bool = True,
+        **opts,
     ) -> Q:
         """
         Adds a LIMIT clause to this query.
@@ -1096,7 +1111,11 @@ class Query(Expression):
         )
 
     def offset(
-        self: Q, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
+        self: Q,
+        expression: ExpOrStr | int,
+        dialect: DialectType = None,
+        copy: bool = True,
+        **opts,
     ) -> Q:
         """
         Set the OFFSET expression.
@@ -1261,7 +1280,11 @@ class Query(Expression):
         )
 
     def union(
-        self, *expressions: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+        self,
+        *expressions: ExpOrStr,
+        distinct: bool = True,
+        dialect: DialectType = None,
+        **opts,
     ) -> Union:
         """
         Builds a UNION expression.
@@ -1284,7 +1307,11 @@ class Query(Expression):
         return union(self, *expressions, distinct=distinct, dialect=dialect, **opts)
 
     def intersect(
-        self, *expressions: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+        self,
+        *expressions: ExpOrStr,
+        distinct: bool = True,
+        dialect: DialectType = None,
+        **opts,
     ) -> Intersect:
         """
         Builds an INTERSECT expression.
@@ -1307,7 +1334,11 @@ class Query(Expression):
         return intersect(self, *expressions, distinct=distinct, dialect=dialect, **opts)
 
     def except_(
-        self, *expressions: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
+        self,
+        *expressions: ExpOrStr,
+        distinct: bool = True,
+        dialect: DialectType = None,
+        **opts,
     ) -> Except:
         """
         Builds an EXCEPT expression.
@@ -1620,7 +1651,13 @@ class UnicodeString(Condition):
 
 
 class Column(Condition):
-    arg_types = {"this": True, "table": False, "db": False, "catalog": False, "join_mark": False}
+    arg_types = {
+        "this": True,
+        "table": False,
+        "db": False,
+        "catalog": False,
+        "join_mark": False,
+    }
 
     @property
     def table(self) -> str:
@@ -1923,7 +1960,12 @@ class TitleColumnConstraint(ColumnConstraintKind):
 
 
 class UniqueColumnConstraint(ColumnConstraintKind):
-    arg_types = {"this": False, "index_type": False, "on_conflict": False, "nulls": False}
+    arg_types = {
+        "this": False,
+        "index_type": False,
+        "on_conflict": False,
+        "nulls": False,
+    }
 
 
 class UppercaseColumnConstraint(ColumnConstraintKind):
@@ -2290,6 +2332,7 @@ class OnConflict(Expression):
         "action": False,
         "conflict_keys": False,
         "constraint": False,
+        "where": False,
     }
 
 
@@ -2383,7 +2426,12 @@ class Lambda(Expression):
 
 
 class Limit(Expression):
-    arg_types = {"this": False, "expression": True, "offset": False, "expressions": False}
+    arg_types = {
+        "this": False,
+        "expression": True,
+        "offset": False,
+        "expressions": False,
+    }
 
 
 class Literal(Condition):
@@ -2853,6 +2901,21 @@ class OnCommitProperty(Property):
 
 class PartitionedByProperty(Property):
     arg_types = {"this": True}
+
+
+# https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/
+class PartitionByRangeProperty(Property):
+    arg_types = {"partition_expressions": True, "create_expressions": True}
+
+
+# https://docs.starrocks.io/docs/table_design/data_distribution/#range-partitioning
+class PartitionByRangePropertyDynamic(Expression):
+    arg_types = {"this": False, "start": True, "end": True, "every": True}
+
+
+# https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/
+class UniqueKeyProperty(Property):
+    arg_types = {"expressions": True}
 
 
 # https://www.postgresql.org/docs/current/sql-createtable.html
@@ -3344,7 +3407,11 @@ class Update(DML):
     }
 
     def table(
-        self, expression: ExpOrStr, dialect: DialectType = None, copy: bool = True, **opts
+        self,
+        expression: ExpOrStr,
+        dialect: DialectType = None,
+        copy: bool = True,
+        **opts,
     ) -> Update:
         """
         Set the table to update.
@@ -3584,7 +3651,11 @@ class Select(Query):
     }
 
     def from_(
-        self, expression: ExpOrStr, dialect: DialectType = None, copy: bool = True, **opts
+        self,
+        expression: ExpOrStr,
+        dialect: DialectType = None,
+        copy: bool = True,
+        **opts,
     ) -> Select:
         """
         Set the FROM expression.
@@ -4116,7 +4187,8 @@ class Select(Query):
         """
         inst = maybe_copy(self, copy)
         inst.set(
-            "hint", Hint(expressions=[maybe_parse(h, copy=copy, dialect=dialect) for h in hints])
+            "hint",
+            Hint(expressions=[maybe_parse(h, copy=copy, dialect=dialect) for h in hints]),
         )
 
         return inst
@@ -4228,11 +4300,18 @@ class Pivot(Expression):
         "columns": False,
         "include_nulls": False,
         "default_on_null": False,
+        "into": False,
     }
 
     @property
     def unpivot(self) -> bool:
         return bool(self.args.get("unpivot"))
+
+
+# https://duckdb.org/docs/sql/statements/unpivot#simplified-unpivot-syntax
+# UNPIVOT ... INTO [NAME <col_name> VALUE <col_value>][...,]
+class UnpivotColumns(Expression):
+    arg_types = {"this": True, "expressions": True}
 
 
 class Window(Condition):
@@ -5229,7 +5308,12 @@ class List(Func):
 
 # String pad, kind True -> LPAD, False -> RPAD
 class Pad(Func):
-    arg_types = {"this": True, "expression": True, "fill_pattern": False, "is_left": True}
+    arg_types = {
+        "this": True,
+        "expression": True,
+        "fill_pattern": False,
+        "is_left": True,
+    }
 
 
 # https://docs.snowflake.com/en/sql-reference/functions/to_char
@@ -5816,7 +5900,12 @@ class FromBase64(Func):
 
 
 class FeaturesAtTime(Func):
-    arg_types = {"this": True, "time": False, "num_rows": False, "ignore_feature_nulls": False}
+    arg_types = {
+        "this": True,
+        "time": False,
+        "num_rows": False,
+        "ignore_feature_nulls": False,
+    }
 
 
 class ToBase64(Func):
@@ -6104,7 +6193,12 @@ class JSONExtractArray(Func):
 
 
 class JSONExtractScalar(Binary, Func):
-    arg_types = {"this": True, "expression": True, "only_json_types": False, "expressions": False}
+    arg_types = {
+        "this": True,
+        "expression": True,
+        "only_json_types": False,
+        "expressions": False,
+    }
     _sql_names = ["JSON_EXTRACT_SCALAR"]
     is_var_len_args = True
 
@@ -6354,7 +6448,12 @@ class Reduce(Func):
 
 class RegexpCount(Func):
     _sql_names = ["REGEXP_COUNT"]
-    arg_types = {"this": True, "expression": True, "position": False, "parameters": False}
+    arg_types = {
+        "this": True,
+        "expression": True,
+        "position": False,
+        "parameters": False,
+    }
 
 
 class RegexpExtract(Func):
@@ -7153,7 +7252,12 @@ def union(
     """
     assert len(expressions) >= 2, "At least two expressions are required by `union`."
     return _apply_set_operation(
-        *expressions, set_operation=Union, distinct=distinct, dialect=dialect, copy=copy, **opts
+        *expressions,
+        set_operation=Union,
+        distinct=distinct,
+        dialect=dialect,
+        copy=copy,
+        **opts,
     )
 
 
@@ -7184,7 +7288,12 @@ def intersect(
     """
     assert len(expressions) >= 2, "At least two expressions are required by `intersect`."
     return _apply_set_operation(
-        *expressions, set_operation=Intersect, distinct=distinct, dialect=dialect, copy=copy, **opts
+        *expressions,
+        set_operation=Intersect,
+        distinct=distinct,
+        dialect=dialect,
+        copy=copy,
+        **opts,
     )
 
 
@@ -7215,7 +7324,12 @@ def except_(
     """
     assert len(expressions) >= 2, "At least two expressions are required by `except_`."
     return _apply_set_operation(
-        *expressions, set_operation=Except, distinct=distinct, dialect=dialect, copy=copy, **opts
+        *expressions,
+        set_operation=Except,
+        distinct=distinct,
+        dialect=dialect,
+        copy=copy,
+        **opts,
     )
 
 
@@ -7433,11 +7547,10 @@ def merge(
     Returns:
         Merge: The syntax tree for the MERGE statement.
     """
-    expressions = []
+    expressions: t.List[Expression] = []
     for when_expr in when_exprs:
-        expressions.extend(
-            maybe_parse(when_expr, dialect=dialect, copy=copy, into=Whens, **opts).expressions
-        )
+        expression = maybe_parse(when_expr, dialect=dialect, copy=copy, into=Whens, **opts)
+        expressions.extend([expression] if isinstance(expression, When) else expression.expressions)
 
     merge = Merge(
         this=maybe_parse(into, dialect=dialect, copy=copy, **opts),
@@ -7912,13 +8025,20 @@ def column(
 
     if fields:
         this = Dot.build(
-            (this, *(to_identifier(field, quoted=quoted, copy=copy) for field in fields))
+            (
+                this,
+                *(to_identifier(field, quoted=quoted, copy=copy) for field in fields),
+            )
         )
     return this
 
 
 def cast(
-    expression: ExpOrStr, to: DATA_TYPE, copy: bool = True, dialect: DialectType = None, **opts
+    expression: ExpOrStr,
+    to: DATA_TYPE,
+    copy: bool = True,
+    dialect: DialectType = None,
+    **opts,
 ) -> Cast:
     """Cast an expression to a data type.
 
@@ -8152,7 +8272,8 @@ def convert(value: t.Any, copy: bool = False) -> Expression:
             return Struct(
                 expressions=[
                     PropertyEQ(
-                        this=to_identifier(k), expression=convert(getattr(value, k), copy=copy)
+                        this=to_identifier(k),
+                        expression=convert(getattr(value, k), copy=copy),
                     )
                     for k in value._fields
                 ]
@@ -8301,7 +8422,10 @@ def normalize_table_name(table: str | Table, dialect: DialectType = None, copy: 
 
 
 def replace_tables(
-    expression: E, mapping: t.Dict[str, str], dialect: DialectType = None, copy: bool = True
+    expression: E,
+    mapping: t.Dict[str, str],
+    dialect: DialectType = None,
+    copy: bool = True,
 ) -> E:
     """Replace all tables in expression according to the mapping.
 

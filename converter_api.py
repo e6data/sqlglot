@@ -33,7 +33,9 @@ def replace_struct_in_query(query):
 
 @app.post("/convert-query")
 async def convert_query(
-    query: str = Form(...), from_sql: str = Form(...), to_sql: Optional[str] = Form("E6")
+    query: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("E6"),
 ):
     try:
         # This is the main method will which help in transpiling to our e6data SQL dialects from other dialects

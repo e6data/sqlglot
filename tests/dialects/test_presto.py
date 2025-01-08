@@ -414,7 +414,10 @@ class TestPresto(Validator):
         self.validate_all(
             "CAST(x AS TIMESTAMP)",
             write={"presto": "CAST(x AS TIMESTAMP)"},
-            read={"mysql": "CAST(x AS DATETIME)", "clickhouse": "CAST(x AS DATETIME64)"},
+            read={
+                "mysql": "CAST(x AS DATETIME)",
+                "clickhouse": "CAST(x AS DATETIME64)",
+            },
         )
         self.validate_all(
             "CAST(x AS TIMESTAMP)",
@@ -640,9 +643,10 @@ class TestPresto(Validator):
 
     def test_presto(self):
         self.assertEqual(
-            exp.func("md5", exp.func("concat", exp.cast("x", "text"), exp.Literal.string("s"))).sql(
-                dialect="presto"
-            ),
+            exp.func(
+                "md5",
+                exp.func("concat", exp.cast("x", "text"), exp.Literal.string("s")),
+            ).sql(dialect="presto"),
             "LOWER(TO_HEX(MD5(TO_UTF8(CONCAT(CAST(x AS VARCHAR), CAST('s' AS VARCHAR))))))",
         )
 

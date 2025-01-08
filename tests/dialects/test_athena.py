@@ -143,7 +143,8 @@ class TestAthena(Validator):
             write_sql="ALTER TABLE `foo` ADD COLUMNS (`id` STRING)",
         )
         self.validate_identity(
-            'ALTER TABLE "foo" DROP COLUMN "id"', write_sql="ALTER TABLE `foo` DROP COLUMN `id`"
+            'ALTER TABLE "foo" DROP COLUMN "id"',
+            write_sql="ALTER TABLE `foo` DROP COLUMN `id`",
         )
 
         self.validate_identity(
