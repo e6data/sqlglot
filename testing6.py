@@ -20,7 +20,10 @@ import logging
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
-def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -> List[Dict[str, Any]]:
+
+def extract_sql_components_per_table_with_alias(
+    expressions: List[Expression],
+) -> List[Dict[str, Any]]:
     """
     Extracts SQL components (tables, columns, where_columns, limits) from parsed SQL expressions,
     associating LIMIT clauses with the specific tables involved in their respective SELECT statements.
@@ -34,17 +37,12 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
     """
     components = []
     alias_mapping = {}
-    
+
     # Helper function to find or create a table entry
     def get_or_create_table_entry(table_name: str) -> Dict[str, Any]:
-        table_entry = next((item for item in components if item['table'] == table_name), None)
+        table_entry = next((item for item in components if item["table"] == table_name), None)
         if not table_entry:
-            table_entry = {
-                'table': table_name,
-                'columns': [],
-                'where_columns': [],
-                'limits': []
-            }
+            table_entry = {"table": table_name, "columns": [], "where_columns": [], "limits": []}
             components.append(table_entry)
         return table_entry
 
@@ -66,7 +64,7 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
             current_select_tables = set()
 
             # Extract tables from FROM clause
-            from_clause = select_node.args.get('from')
+            from_clause = select_node.args.get("from")
             if from_clause:
                 for table in from_clause.find_all(Table):
                     table_name = table.name
@@ -104,19 +102,27 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
                     table_alias = expr_col.table
                     if table_alias:
                         actual_table = alias_mapping.get(table_alias, table_alias)
-                        table_entry = next((item for item in components if item['table'] == actual_table), None)
+                        table_entry = next(
+                            (item for item in components if item["table"] == actual_table), None
+                        )
                         if table_entry and column_name:
-                            table_entry['columns'].append(column_name)
+                            table_entry["columns"].append(column_name)
                         else:
-                            logger.warning(f"Column '{column_name}' has alias '{table_alias}' which does not match any table.")
+                            logger.warning(
+                                f"Column '{column_name}' has alias '{table_alias}' which does not match any table."
+                            )
                     else:
                         if current_select_tables:
                             for table in current_select_tables:
-                                table_entry = next((item for item in components if item['table'] == table), None)
+                                table_entry = next(
+                                    (item for item in components if item["table"] == table), None
+                                )
                                 if table_entry and column_name:
-                                    table_entry['columns'].append(column_name)
+                                    table_entry["columns"].append(column_name)
                         else:
-                            logger.warning(f"Column '{column_name}' has no table alias and no tables found in SELECT.")
+                            logger.warning(
+                                f"Column '{column_name}' has no table alias and no tables found in SELECT."
+                            )
 
                 elif isinstance(expr_col, Alias):
                     if isinstance(expr_col.this, Column):
@@ -124,67 +130,88 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
                         table_alias = expr_col.this.table
                         if table_alias:
                             actual_table = alias_mapping.get(table_alias, table_alias)
-                            table_entry = next((item for item in components if item['table'] == actual_table), None)
+                            table_entry = next(
+                                (item for item in components if item["table"] == actual_table), None
+                            )
                             if table_entry and column_name:
-                                table_entry['columns'].append(column_name)
+                                table_entry["columns"].append(column_name)
                             else:
-                                logger.warning(f"Aliased column '{column_name}' has alias '{table_alias}' which does not match any table.")
+                                logger.warning(
+                                    f"Aliased column '{column_name}' has alias '{table_alias}' which does not match any table."
+                                )
                         else:
                             if current_select_tables:
                                 for table in current_select_tables:
-                                    table_entry = next((item for item in components if item['table'] == table), None)
+                                    table_entry = next(
+                                        (item for item in components if item["table"] == table),
+                                        None,
+                                    )
                                     if table_entry and column_name:
-                                        table_entry['columns'].append(column_name)
+                                        table_entry["columns"].append(column_name)
                             else:
-                                logger.warning(f"Aliased column '{column_name}' has no table alias and no tables found in SELECT.")
+                                logger.warning(
+                                    f"Aliased column '{column_name}' has no table alias and no tables found in SELECT."
+                                )
                     else:
                         # Handle expressions or functions aliased as columns
                         pass  # Can be extended if needed
 
             # Extract WHERE columns
-            where_clause = select_node.args.get('where')
+            where_clause = select_node.args.get("where")
             if where_clause:
                 for condition in where_clause.find_all(Column):
                     column_name = condition.name
                     table_alias = condition.table
                     if table_alias:
                         actual_table = alias_mapping.get(table_alias, table_alias)
-                        table_entry = next((item for item in components if item['table'] == actual_table), None)
+                        table_entry = next(
+                            (item for item in components if item["table"] == actual_table), None
+                        )
                         if table_entry and column_name:
-                            table_entry['where_columns'].append(column_name)
+                            table_entry["where_columns"].append(column_name)
                         else:
-                            logger.warning(f"WHERE condition column '{column_name}' has alias '{table_alias}' which does not match any table.")
+                            logger.warning(
+                                f"WHERE condition column '{column_name}' has alias '{table_alias}' which does not match any table."
+                            )
                     else:
                         if current_select_tables:
                             for table in current_select_tables:
-                                table_entry = next((item for item in components if item['table'] == table), None)
+                                table_entry = next(
+                                    (item for item in components if item["table"] == table), None
+                                )
                                 if table_entry and column_name:
-                                    table_entry['where_columns'].append(column_name)
+                                    table_entry["where_columns"].append(column_name)
                         else:
-                            logger.warning(f"WHERE condition column '{column_name}' has no table alias and no tables found in SELECT.")
+                            logger.warning(
+                                f"WHERE condition column '{column_name}' has no table alias and no tables found in SELECT."
+                            )
 
             # Extract LIMIT only for main Select node
-            limit_node = select_node.args.get('limit')
+            limit_node = select_node.args.get("limit")
             if limit_node:
                 limit_value = limit_node.this
                 if isinstance(limit_value, Literal):
-                    print("limti value ",limit_value)
+                    print("limti value ", limit_value)
                     limit_num = limit_value.this
                     # Only assign LIMIT to main Select node's tables, not CTEs
                     if not is_cte:
-                        logger.debug(f"Assigning LIMIT {limit_num} to tables: {current_select_tables}")
+                        logger.debug(
+                            f"Assigning LIMIT {limit_num} to tables: {current_select_tables}"
+                        )
                         for table in current_select_tables:
-                            table_entry = next((item for item in components if item['table'] == table), None)
+                            table_entry = next(
+                                (item for item in components if item["table"] == table), None
+                            )
                             if table_entry:
-                                table_entry['limits'].append(limit_num)
+                                table_entry["limits"].append(limit_num)
                 else:
                     logger.warning(f"LIMIT value is not a Literal: {limit_value}")
 
     # Remove duplicates
     for entry in components:
-        entry['columns'] = sorted(list(set(entry['columns'])))
-        entry['where_columns'] = sorted(list(set(entry['where_columns'])))
-        entry['limits'] = sorted(list(set(entry['limits'])))
+        entry["columns"] = sorted(list(set(entry["columns"])))
+        entry["where_columns"] = sorted(list(set(entry["where_columns"])))
+        entry["limits"] = sorted(list(set(entry["limits"])))
 
     return components
 
@@ -297,13 +324,14 @@ LIMIT 100;
     """
 
     # Parse the SQL query
-    parsed = sqlglot.parse(sql, read='snowflake', error_level=None)
+    parsed = sqlglot.parse(sql, read="snowflake", error_level=None)
 
     # Extract components per table with alias handling
     components = extract_sql_components_per_table_with_alias(parsed)
 
     # Display the result
     from pprint import pprint
+
     for c in components:
         pprint(c)
         print("\n")

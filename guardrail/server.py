@@ -5,12 +5,14 @@ import uvicorn
 
 app = FastAPI()
 
+
 class RuleRequest(BaseModel):
     sql_string: str
     catalog_name: str
     schema_name: str
     rule_json: Dict
     requestid: str
+
 
 def get_table_info(sql_string: str) -> str:
     # Placeholder for actual table info retrieval logic
@@ -21,10 +23,12 @@ def get_table_info(sql_string: str) -> str:
     else:
         return "no"
 
+
 @app.post("/validate_rule")
 async def validate_rule(request: RuleRequest):
     status = get_table_info(request.sql_string)
     return {"status": status}
 
+
 # if __name__ == "__main__":
-    # uvicorn.run(app, host="0.0.0.0", port=8000)
+# uvicorn.run(app, host="0.0.0.0", port=8000)

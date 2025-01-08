@@ -39,65 +39,55 @@ def parse_select(select_expr: exp.Select) -> List[Dict[str, Any]]:
         List[Dict[str, Any]]: The extracted information from the SELECT expression.
     """
     infos = []
-    main_info = {
-        'tables': [],
-        'columns': [],
-        'where_columns': [],
-        'limits': []
-    }
+    main_info = {"tables": [], "columns": [], "where_columns": [], "limits": []}
 
     # Extract tables from FROM clause
-    from_expr = select_expr.args.get('from')
+    from_expr = select_expr.args.get("from")
     if from_expr:
         for table in from_expr.find_all(exp.Table):
-            main_info['tables'].append(table.name)
+            main_info["tables"].append(table.name)
 
     # Extract columns from SELECT expressions
     for select_exp in select_expr.expressions:
         column = extract_column(select_exp)
         if column:
-            main_info['columns'].append(column)
+            main_info["columns"].append(column)
 
     # Extract WHERE clause
-    where_expr = select_expr.args.get('where')
+    where_expr = select_expr.args.get("where")
     if where_expr:
-        main_info['where_columns'] = process_where(where_expr.this)
+        main_info["where_columns"] = process_where(where_expr.this)
 
     # Extract LIMIT clause
-    limit_expr = select_expr.args.get('limit')
+    limit_expr = select_expr.args.get("limit")
     if limit_expr:
-        main_info['limits'].append(limit_expr.sql())
+        main_info["limits"].append(limit_expr.sql())
 
     # Append main_info to infos
     infos.append(main_info)
 
     # Process JOINs
-    joins = select_expr.args.get('joins', [])
+    joins = select_expr.args.get("joins", [])
     for join in joins:
-        join_info = {
-            'tables': [],
-            'columns': [],
-            'where_columns': [],
-            'limits': []
-        }
+        join_info = {"tables": [], "columns": [], "where_columns": [], "limits": []}
         join_table = join.this
         if isinstance(join_table, exp.Table):
-            join_info['tables'].append(join_table.name)
+            join_info["tables"].append(join_table.name)
         elif isinstance(join_table, exp.Subquery):
             # Recursively process the subquery in the JOIN
             sub_infos = parse_select(join_table.this)
             if sub_infos:
                 # Assuming the first dictionary corresponds to the subquery
                 sub_info = sub_infos[0]
-                join_info['tables'].extend(sub_info['tables'])
-                join_info['columns'].extend(sub_info['columns'])
-                join_info['where_columns'].extend(sub_info['where_columns'])
-                join_info['limits'].extend(sub_info['limits'])
+                join_info["tables"].extend(sub_info["tables"])
+                join_info["columns"].extend(sub_info["columns"])
+                join_info["where_columns"].extend(sub_info["where_columns"])
+                join_info["limits"].extend(sub_info["limits"])
 
         # Process the JOIN condition (ON clause)
-        on_expr = join.args.get('on')
+        on_expr = join.args.get("on")
         if on_expr:
-            join_info['where_columns'] = process_where(on_expr.this)
+            join_info["where_columns"] = process_where(on_expr.this)
 
         # Append join_info to infos
         infos.append(join_info)
@@ -118,7 +108,7 @@ def extract_column(select_exp: exp.Expression) -> str:
     if isinstance(select_exp, exp.Column):
         return select_exp.name
     elif isinstance(select_exp, exp.Star):
-        return '*'
+        return "*"
     else:
         # Handle expressions like functions or aliases
         return select_exp.sql()
@@ -151,33 +141,28 @@ def process_where(where_condition: exp.Expression) -> List[Dict[str, Any]]:
         for subquery in subqueries:
             sub_select = subquery.this
             if isinstance(sub_select, exp.Select):
-                sub_info = {
-                    'tables': [],
-                    'columns': [],
-                    'where_columns': [],
-                    'limits': []
-                }
+                sub_info = {"tables": [], "columns": [], "where_columns": [], "limits": []}
                 # Extract tables from the subquery's FROM clause
-                from_expr = sub_select.args.get('from')
+                from_expr = sub_select.args.get("from")
                 if from_expr:
                     for table in from_expr.find_all(exp.Table):
-                        sub_info['tables'].append(table.name)
+                        sub_info["tables"].append(table.name)
 
                 # Extract columns from the subquery's SELECT expressions
                 for select_exp in sub_select.expressions:
                     column = extract_column(select_exp)
                     if column:
-                        sub_info['columns'].append(column)
+                        sub_info["columns"].append(column)
 
                 # Extract WHERE clause from the subquery
-                where_expr = sub_select.args.get('where')
+                where_expr = sub_select.args.get("where")
                 if where_expr:
-                    sub_info['where_columns'] = process_where(where_expr.this)
+                    sub_info["where_columns"] = process_where(where_expr.this)
 
                 # Extract LIMIT clause from the subquery
-                limit_expr = sub_select.args.get('limit')
+                limit_expr = sub_select.args.get("limit")
                 if limit_expr:
-                    sub_info['limits'].append(limit_expr.sql())
+                    sub_info["limits"].append(limit_expr.sql())
 
                 # Append the subquery info to where_columns
                 where_columns.append(sub_info)
@@ -206,7 +191,7 @@ if __name__ == "__main__":
        );
     """
 
-    print(repr(parse_one(test_sql,read="snowflake")))
+    print(repr(parse_one(test_sql, read="snowflake")))
     # Parse the SQL and extract infos
     infos = parse_sql(test_sql, dialect="snowflake")
 
@@ -214,4 +199,3 @@ if __name__ == "__main__":
     import pprint
 
     pprint.pprint(infos)
-

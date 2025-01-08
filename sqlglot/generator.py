@@ -767,7 +767,7 @@ class Generator(metaclass=_Generator):
             expression = move_ctes_to_top_level(expression)
         # print(expression)
         # print("\n\n")
-        
+
         return expression
 
     def unsupported(self, message: str) -> None:

@@ -14,6 +14,7 @@ from uuid import UUID
 import sys
 
 from thrift.transport import TTransport
+
 all_structs = []
 
 
@@ -81,10 +82,17 @@ class E6Partition(object):
      - numRows
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, partitionInfo = None, numNulls = None, inactiveFiles = None, activePartFiles = None, numRows = None,):
+    def __init__(
+        self,
+        partitionInfo=None,
+        numNulls=None,
+        inactiveFiles=None,
+        activePartFiles=None,
+        numRows=None,
+    ):
         self.partitionInfo = partitionInfo
         self.numNulls = numNulls
         self.inactiveFiles = inactiveFiles
@@ -92,7 +100,11 @@ class E6Partition(object):
         self.numRows = numRows
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -116,7 +128,11 @@ class E6Partition(object):
                     self.inactiveFiles = []
                     (_etype3, _size0) = iprot.readListBegin()
                     for _i4 in range(_size0):
-                        _elem5 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem5 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.inactiveFiles.append(_elem5)
                     iprot.readListEnd()
                 else:
@@ -147,31 +163,31 @@ class E6Partition(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('E6Partition')
+        oprot.writeStructBegin("E6Partition")
         if self.partitionInfo is not None:
-            oprot.writeFieldBegin('partitionInfo', TType.STRUCT, 1)
+            oprot.writeFieldBegin("partitionInfo", TType.STRUCT, 1)
             self.partitionInfo.write(oprot)
             oprot.writeFieldEnd()
         if self.numNulls is not None:
-            oprot.writeFieldBegin('numNulls', TType.I64, 2)
+            oprot.writeFieldBegin("numNulls", TType.I64, 2)
             oprot.writeI64(self.numNulls)
             oprot.writeFieldEnd()
         if self.inactiveFiles is not None:
-            oprot.writeFieldBegin('inactiveFiles', TType.LIST, 3)
+            oprot.writeFieldBegin("inactiveFiles", TType.LIST, 3)
             oprot.writeListBegin(TType.STRING, len(self.inactiveFiles))
             for iter12 in self.inactiveFiles:
-                oprot.writeString(iter12.encode('utf-8') if sys.version_info[0] == 2 else iter12)
+                oprot.writeString(iter12.encode("utf-8") if sys.version_info[0] == 2 else iter12)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.activePartFiles is not None:
-            oprot.writeFieldBegin('activePartFiles', TType.LIST, 4)
+            oprot.writeFieldBegin("activePartFiles", TType.LIST, 4)
             oprot.writeListBegin(TType.STRUCT, len(self.activePartFiles))
             for iter13 in self.activePartFiles:
                 iter13.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.numRows is not None:
-            oprot.writeFieldBegin('numRows', TType.I64, 5)
+            oprot.writeFieldBegin("numRows", TType.I64, 5)
             oprot.writeI64(self.numRows)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -181,9 +197,8 @@ class E6Partition(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -198,14 +213,21 @@ class OptionalString(object):
      - value
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, value = None,):
+    def __init__(
+        self,
+        value=None,
+    ):
         self.value = value
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -215,7 +237,11 @@ class OptionalString(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.value = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.value = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -228,10 +254,12 @@ class OptionalString(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('OptionalString')
+        oprot.writeStructBegin("OptionalString")
         if self.value is not None:
-            oprot.writeFieldBegin('value', TType.STRING, 1)
-            oprot.writeString(self.value.encode('utf-8') if sys.version_info[0] == 2 else self.value)
+            oprot.writeFieldBegin("value", TType.STRING, 1)
+            oprot.writeString(
+                self.value.encode("utf-8") if sys.version_info[0] == 2 else self.value
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -240,9 +268,8 @@ class OptionalString(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -263,10 +290,19 @@ class E6PartitionInfo(object):
      - virtualPartitionVersionId
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, filePathName = None, fieldNames = None, fieldValues = None, fieldTypes = None, containsRecordCount = None, virtualPartitionId = None, virtualPartitionVersionId = None,):
+    def __init__(
+        self,
+        filePathName=None,
+        fieldNames=None,
+        fieldValues=None,
+        fieldTypes=None,
+        containsRecordCount=None,
+        virtualPartitionId=None,
+        virtualPartitionVersionId=None,
+    ):
         self.filePathName = filePathName
         self.fieldNames = fieldNames
         self.fieldValues = fieldValues
@@ -276,7 +312,11 @@ class E6PartitionInfo(object):
         self.virtualPartitionVersionId = virtualPartitionVersionId
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -286,7 +326,11 @@ class E6PartitionInfo(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.filePathName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.filePathName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -294,7 +338,11 @@ class E6PartitionInfo(object):
                     self.fieldNames = []
                     (_etype17, _size14) = iprot.readListBegin()
                     for _i18 in range(_size14):
-                        _elem19 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem19 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.fieldNames.append(_elem19)
                     iprot.readListEnd()
                 else:
@@ -327,12 +375,20 @@ class E6PartitionInfo(object):
                     iprot.skip(ftype)
             elif fid == 6:
                 if ftype == TType.STRING:
-                    self.virtualPartitionId = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.virtualPartitionId = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 7:
                 if ftype == TType.STRING:
-                    self.virtualPartitionVersionId = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.virtualPartitionVersionId = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -345,43 +401,53 @@ class E6PartitionInfo(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('E6PartitionInfo')
+        oprot.writeStructBegin("E6PartitionInfo")
         if self.filePathName is not None:
-            oprot.writeFieldBegin('filePathName', TType.STRING, 1)
-            oprot.writeString(self.filePathName.encode('utf-8') if sys.version_info[0] == 2 else self.filePathName)
+            oprot.writeFieldBegin("filePathName", TType.STRING, 1)
+            oprot.writeString(
+                self.filePathName.encode("utf-8") if sys.version_info[0] == 2 else self.filePathName
+            )
             oprot.writeFieldEnd()
         if self.fieldNames is not None:
-            oprot.writeFieldBegin('fieldNames', TType.LIST, 2)
+            oprot.writeFieldBegin("fieldNames", TType.LIST, 2)
             oprot.writeListBegin(TType.STRING, len(self.fieldNames))
             for iter32 in self.fieldNames:
-                oprot.writeString(iter32.encode('utf-8') if sys.version_info[0] == 2 else iter32)
+                oprot.writeString(iter32.encode("utf-8") if sys.version_info[0] == 2 else iter32)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.fieldValues is not None:
-            oprot.writeFieldBegin('fieldValues', TType.LIST, 3)
+            oprot.writeFieldBegin("fieldValues", TType.LIST, 3)
             oprot.writeListBegin(TType.STRUCT, len(self.fieldValues))
             for iter33 in self.fieldValues:
                 iter33.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.fieldTypes is not None:
-            oprot.writeFieldBegin('fieldTypes', TType.LIST, 4)
+            oprot.writeFieldBegin("fieldTypes", TType.LIST, 4)
             oprot.writeListBegin(TType.I32, len(self.fieldTypes))
             for iter34 in self.fieldTypes:
                 oprot.writeI32(iter34)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.containsRecordCount is not None:
-            oprot.writeFieldBegin('containsRecordCount', TType.BOOL, 5)
+            oprot.writeFieldBegin("containsRecordCount", TType.BOOL, 5)
             oprot.writeBool(self.containsRecordCount)
             oprot.writeFieldEnd()
         if self.virtualPartitionId is not None:
-            oprot.writeFieldBegin('virtualPartitionId', TType.STRING, 6)
-            oprot.writeString(self.virtualPartitionId.encode('utf-8') if sys.version_info[0] == 2 else self.virtualPartitionId)
+            oprot.writeFieldBegin("virtualPartitionId", TType.STRING, 6)
+            oprot.writeString(
+                self.virtualPartitionId.encode("utf-8")
+                if sys.version_info[0] == 2
+                else self.virtualPartitionId
+            )
             oprot.writeFieldEnd()
         if self.virtualPartitionVersionId is not None:
-            oprot.writeFieldBegin('virtualPartitionVersionId', TType.STRING, 7)
-            oprot.writeString(self.virtualPartitionVersionId.encode('utf-8') if sys.version_info[0] == 2 else self.virtualPartitionVersionId)
+            oprot.writeFieldBegin("virtualPartitionVersionId", TType.STRING, 7)
+            oprot.writeString(
+                self.virtualPartitionVersionId.encode("utf-8")
+                if sys.version_info[0] == 2
+                else self.virtualPartitionVersionId
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -390,9 +456,8 @@ class E6PartitionInfo(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -412,10 +477,18 @@ class PartFile(object):
      - additionalInfo
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, filePath = None, fileSizeInBytes = None, numRecords = None, footer = None, rowIndexOffsets = None, additionalInfo = None,):
+    def __init__(
+        self,
+        filePath=None,
+        fileSizeInBytes=None,
+        numRecords=None,
+        footer=None,
+        rowIndexOffsets=None,
+        additionalInfo=None,
+    ):
         self.filePath = filePath
         self.fileSizeInBytes = fileSizeInBytes
         self.numRecords = numRecords
@@ -424,7 +497,11 @@ class PartFile(object):
         self.additionalInfo = additionalInfo
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -434,7 +511,11 @@ class PartFile(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.filePath = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.filePath = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -478,32 +559,34 @@ class PartFile(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('PartFile')
+        oprot.writeStructBegin("PartFile")
         if self.filePath is not None:
-            oprot.writeFieldBegin('filePath', TType.STRING, 1)
-            oprot.writeString(self.filePath.encode('utf-8') if sys.version_info[0] == 2 else self.filePath)
+            oprot.writeFieldBegin("filePath", TType.STRING, 1)
+            oprot.writeString(
+                self.filePath.encode("utf-8") if sys.version_info[0] == 2 else self.filePath
+            )
             oprot.writeFieldEnd()
         if self.fileSizeInBytes is not None:
-            oprot.writeFieldBegin('fileSizeInBytes', TType.I64, 2)
+            oprot.writeFieldBegin("fileSizeInBytes", TType.I64, 2)
             oprot.writeI64(self.fileSizeInBytes)
             oprot.writeFieldEnd()
         if self.numRecords is not None:
-            oprot.writeFieldBegin('numRecords', TType.I64, 3)
+            oprot.writeFieldBegin("numRecords", TType.I64, 3)
             oprot.writeI64(self.numRecords)
             oprot.writeFieldEnd()
         if self.footer is not None:
-            oprot.writeFieldBegin('footer', TType.STRING, 4)
+            oprot.writeFieldBegin("footer", TType.STRING, 4)
             oprot.writeBinary(self.footer)
             oprot.writeFieldEnd()
         if self.rowIndexOffsets is not None:
-            oprot.writeFieldBegin('rowIndexOffsets', TType.LIST, 5)
+            oprot.writeFieldBegin("rowIndexOffsets", TType.LIST, 5)
             oprot.writeListBegin(TType.I64, len(self.rowIndexOffsets))
             for iter41 in self.rowIndexOffsets:
                 oprot.writeI64(iter41)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.additionalInfo is not None:
-            oprot.writeFieldBegin('additionalInfo', TType.STRUCT, 6)
+            oprot.writeFieldBegin("additionalInfo", TType.STRUCT, 6)
             self.additionalInfo.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -513,9 +596,8 @@ class PartFile(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -531,15 +613,23 @@ class AdditionalInfo(object):
      - icebergPartFileInfo
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, deltaPartFileInfo = None, icebergPartFileInfo = None,):
+    def __init__(
+        self,
+        deltaPartFileInfo=None,
+        icebergPartFileInfo=None,
+    ):
         self.deltaPartFileInfo = deltaPartFileInfo
         self.icebergPartFileInfo = icebergPartFileInfo
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -569,13 +659,13 @@ class AdditionalInfo(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('AdditionalInfo')
+        oprot.writeStructBegin("AdditionalInfo")
         if self.deltaPartFileInfo is not None:
-            oprot.writeFieldBegin('deltaPartFileInfo', TType.STRUCT, 1)
+            oprot.writeFieldBegin("deltaPartFileInfo", TType.STRUCT, 1)
             self.deltaPartFileInfo.write(oprot)
             oprot.writeFieldEnd()
         if self.icebergPartFileInfo is not None:
-            oprot.writeFieldBegin('icebergPartFileInfo', TType.STRUCT, 2)
+            oprot.writeFieldBegin("icebergPartFileInfo", TType.STRUCT, 2)
             self.icebergPartFileInfo.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -585,9 +675,8 @@ class AdditionalInfo(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -605,17 +694,27 @@ class DeltaPartFileInfo(object):
      - tightBounds
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, deletionVector = None, stats = None, mapColumnStats = None, tightBounds = None,):
+    def __init__(
+        self,
+        deletionVector=None,
+        stats=None,
+        mapColumnStats=None,
+        tightBounds=None,
+    ):
         self.deletionVector = deletionVector
         self.stats = stats
         self.mapColumnStats = mapColumnStats
         self.tightBounds = tightBounds
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -645,7 +744,11 @@ class DeltaPartFileInfo(object):
                     self.mapColumnStats = {}
                     (_ktype49, _vtype50, _size48) = iprot.readMapBegin()
                     for _i52 in range(_size48):
-                        _key53 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _key53 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         _val54 = ColumnStats()
                         _val54.read(iprot)
                         self.mapColumnStats[_key53] = _val54
@@ -667,28 +770,28 @@ class DeltaPartFileInfo(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('DeltaPartFileInfo')
+        oprot.writeStructBegin("DeltaPartFileInfo")
         if self.deletionVector is not None:
-            oprot.writeFieldBegin('deletionVector', TType.STRUCT, 1)
+            oprot.writeFieldBegin("deletionVector", TType.STRUCT, 1)
             self.deletionVector.write(oprot)
             oprot.writeFieldEnd()
         if self.stats is not None:
-            oprot.writeFieldBegin('stats', TType.LIST, 2)
+            oprot.writeFieldBegin("stats", TType.LIST, 2)
             oprot.writeListBegin(TType.STRUCT, len(self.stats))
             for iter55 in self.stats:
                 iter55.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.mapColumnStats is not None:
-            oprot.writeFieldBegin('mapColumnStats', TType.MAP, 3)
+            oprot.writeFieldBegin("mapColumnStats", TType.MAP, 3)
             oprot.writeMapBegin(TType.STRING, TType.STRUCT, len(self.mapColumnStats))
             for kiter56, viter57 in self.mapColumnStats.items():
-                oprot.writeString(kiter56.encode('utf-8') if sys.version_info[0] == 2 else kiter56)
+                oprot.writeString(kiter56.encode("utf-8") if sys.version_info[0] == 2 else kiter56)
                 viter57.write(oprot)
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
         if self.tightBounds is not None:
-            oprot.writeFieldBegin('tightBounds', TType.BOOL, 4)
+            oprot.writeFieldBegin("tightBounds", TType.BOOL, 4)
             oprot.writeBool(self.tightBounds)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -698,9 +801,8 @@ class DeltaPartFileInfo(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -717,16 +819,25 @@ class IcebergPartFileInfo(object):
      - mapColumnStats
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, deletionVector = None, stats = None, mapColumnStats = None,):
+    def __init__(
+        self,
+        deletionVector=None,
+        stats=None,
+        mapColumnStats=None,
+    ):
         self.deletionVector = deletionVector
         self.stats = stats
         self.mapColumnStats = mapColumnStats
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -756,7 +867,11 @@ class IcebergPartFileInfo(object):
                     self.mapColumnStats = {}
                     (_ktype65, _vtype66, _size64) = iprot.readMapBegin()
                     for _i68 in range(_size64):
-                        _key69 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _key69 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         _val70 = ColumnStats()
                         _val70.read(iprot)
                         self.mapColumnStats[_key69] = _val70
@@ -773,23 +888,23 @@ class IcebergPartFileInfo(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('IcebergPartFileInfo')
+        oprot.writeStructBegin("IcebergPartFileInfo")
         if self.deletionVector is not None:
-            oprot.writeFieldBegin('deletionVector', TType.STRUCT, 1)
+            oprot.writeFieldBegin("deletionVector", TType.STRUCT, 1)
             self.deletionVector.write(oprot)
             oprot.writeFieldEnd()
         if self.stats is not None:
-            oprot.writeFieldBegin('stats', TType.LIST, 2)
+            oprot.writeFieldBegin("stats", TType.LIST, 2)
             oprot.writeListBegin(TType.STRUCT, len(self.stats))
             for iter71 in self.stats:
                 iter71.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.mapColumnStats is not None:
-            oprot.writeFieldBegin('mapColumnStats', TType.MAP, 3)
+            oprot.writeFieldBegin("mapColumnStats", TType.MAP, 3)
             oprot.writeMapBegin(TType.STRING, TType.STRUCT, len(self.mapColumnStats))
             for kiter72, viter73 in self.mapColumnStats.items():
-                oprot.writeString(kiter72.encode('utf-8') if sys.version_info[0] == 2 else kiter72)
+                oprot.writeString(kiter72.encode("utf-8") if sys.version_info[0] == 2 else kiter72)
                 viter73.write(oprot)
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
@@ -800,9 +915,8 @@ class IcebergPartFileInfo(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -822,10 +936,18 @@ class DeletionVector(object):
      - sizeOfFileInBytes
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, storageType = None, pathOrInlineDv = None, offset = None, sizeInBytes = None, cardinality = None, sizeOfFileInBytes = None,):
+    def __init__(
+        self,
+        storageType=None,
+        pathOrInlineDv=None,
+        offset=None,
+        sizeInBytes=None,
+        cardinality=None,
+        sizeOfFileInBytes=None,
+    ):
         self.storageType = storageType
         self.pathOrInlineDv = pathOrInlineDv
         self.offset = offset
@@ -834,7 +956,11 @@ class DeletionVector(object):
         self.sizeOfFileInBytes = sizeOfFileInBytes
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -844,7 +970,11 @@ class DeletionVector(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.storageType = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.storageType = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -882,29 +1012,31 @@ class DeletionVector(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('DeletionVector')
+        oprot.writeStructBegin("DeletionVector")
         if self.storageType is not None:
-            oprot.writeFieldBegin('storageType', TType.STRING, 1)
-            oprot.writeString(self.storageType.encode('utf-8') if sys.version_info[0] == 2 else self.storageType)
+            oprot.writeFieldBegin("storageType", TType.STRING, 1)
+            oprot.writeString(
+                self.storageType.encode("utf-8") if sys.version_info[0] == 2 else self.storageType
+            )
             oprot.writeFieldEnd()
         if self.pathOrInlineDv is not None:
-            oprot.writeFieldBegin('pathOrInlineDv', TType.STRING, 2)
+            oprot.writeFieldBegin("pathOrInlineDv", TType.STRING, 2)
             oprot.writeBinary(self.pathOrInlineDv)
             oprot.writeFieldEnd()
         if self.offset is not None:
-            oprot.writeFieldBegin('offset', TType.I32, 3)
+            oprot.writeFieldBegin("offset", TType.I32, 3)
             oprot.writeI32(self.offset)
             oprot.writeFieldEnd()
         if self.sizeInBytes is not None:
-            oprot.writeFieldBegin('sizeInBytes', TType.I32, 4)
+            oprot.writeFieldBegin("sizeInBytes", TType.I32, 4)
             oprot.writeI32(self.sizeInBytes)
             oprot.writeFieldEnd()
         if self.cardinality is not None:
-            oprot.writeFieldBegin('cardinality', TType.I64, 5)
+            oprot.writeFieldBegin("cardinality", TType.I64, 5)
             oprot.writeI64(self.cardinality)
             oprot.writeFieldEnd()
         if self.sizeOfFileInBytes is not None:
-            oprot.writeFieldBegin('sizeOfFileInBytes', TType.I64, 6)
+            oprot.writeFieldBegin("sizeOfFileInBytes", TType.I64, 6)
             oprot.writeI64(self.sizeOfFileInBytes)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -914,9 +1046,8 @@ class DeletionVector(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -933,16 +1064,25 @@ class PartitionPartFiles(object):
      - columnsWithStats
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, partition = None, partFiles = None, columnsWithStats = None,):
+    def __init__(
+        self,
+        partition=None,
+        partFiles=None,
+        columnsWithStats=None,
+    ):
         self.partition = partition
         self.partFiles = partFiles
         self.columnsWithStats = columnsWithStats
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -972,7 +1112,11 @@ class PartitionPartFiles(object):
                     self.columnsWithStats = []
                     (_etype83, _size80) = iprot.readListBegin()
                     for _i84 in range(_size80):
-                        _elem85 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem85 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.columnsWithStats.append(_elem85)
                     iprot.readListEnd()
                 else:
@@ -987,23 +1131,23 @@ class PartitionPartFiles(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('PartitionPartFiles')
+        oprot.writeStructBegin("PartitionPartFiles")
         if self.partition is not None:
-            oprot.writeFieldBegin('partition', TType.STRUCT, 1)
+            oprot.writeFieldBegin("partition", TType.STRUCT, 1)
             self.partition.write(oprot)
             oprot.writeFieldEnd()
         if self.partFiles is not None:
-            oprot.writeFieldBegin('partFiles', TType.LIST, 2)
+            oprot.writeFieldBegin("partFiles", TType.LIST, 2)
             oprot.writeListBegin(TType.STRUCT, len(self.partFiles))
             for iter86 in self.partFiles:
                 iter86.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.columnsWithStats is not None:
-            oprot.writeFieldBegin('columnsWithStats', TType.LIST, 3)
+            oprot.writeFieldBegin("columnsWithStats", TType.LIST, 3)
             oprot.writeListBegin(TType.STRING, len(self.columnsWithStats))
             for iter87 in self.columnsWithStats:
-                oprot.writeString(iter87.encode('utf-8') if sys.version_info[0] == 2 else iter87)
+                oprot.writeString(iter87.encode("utf-8") if sys.version_info[0] == 2 else iter87)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1013,9 +1157,8 @@ class PartitionPartFiles(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1031,15 +1174,23 @@ class LongStats(object):
      - max
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, min = None, max = None,):
+    def __init__(
+        self,
+        min=None,
+        max=None,
+    ):
         self.min = min
         self.max = max
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1067,13 +1218,13 @@ class LongStats(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('LongStats')
+        oprot.writeStructBegin("LongStats")
         if self.min is not None:
-            oprot.writeFieldBegin('min', TType.I64, 1)
+            oprot.writeFieldBegin("min", TType.I64, 1)
             oprot.writeI64(self.min)
             oprot.writeFieldEnd()
         if self.max is not None:
-            oprot.writeFieldBegin('max', TType.I64, 2)
+            oprot.writeFieldBegin("max", TType.I64, 2)
             oprot.writeI64(self.max)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1083,9 +1234,8 @@ class LongStats(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1101,15 +1251,23 @@ class DoubleStats(object):
      - max
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, min = None, max = None,):
+    def __init__(
+        self,
+        min=None,
+        max=None,
+    ):
         self.min = min
         self.max = max
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1137,13 +1295,13 @@ class DoubleStats(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('DoubleStats')
+        oprot.writeStructBegin("DoubleStats")
         if self.min is not None:
-            oprot.writeFieldBegin('min', TType.DOUBLE, 1)
+            oprot.writeFieldBegin("min", TType.DOUBLE, 1)
             oprot.writeDouble(self.min)
             oprot.writeFieldEnd()
         if self.max is not None:
-            oprot.writeFieldBegin('max', TType.DOUBLE, 2)
+            oprot.writeFieldBegin("max", TType.DOUBLE, 2)
             oprot.writeDouble(self.max)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1153,9 +1311,8 @@ class DoubleStats(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1171,15 +1328,23 @@ class StringStats(object):
      - max
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, min = None, max = None,):
+    def __init__(
+        self,
+        min=None,
+        max=None,
+    ):
         self.min = min
         self.max = max
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1189,12 +1354,20 @@ class StringStats(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.min = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.min = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.max = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.max = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -1207,14 +1380,14 @@ class StringStats(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('StringStats')
+        oprot.writeStructBegin("StringStats")
         if self.min is not None:
-            oprot.writeFieldBegin('min', TType.STRING, 1)
-            oprot.writeString(self.min.encode('utf-8') if sys.version_info[0] == 2 else self.min)
+            oprot.writeFieldBegin("min", TType.STRING, 1)
+            oprot.writeString(self.min.encode("utf-8") if sys.version_info[0] == 2 else self.min)
             oprot.writeFieldEnd()
         if self.max is not None:
-            oprot.writeFieldBegin('max', TType.STRING, 2)
-            oprot.writeString(self.max.encode('utf-8') if sys.version_info[0] == 2 else self.max)
+            oprot.writeFieldBegin("max", TType.STRING, 2)
+            oprot.writeString(self.max.encode("utf-8") if sys.version_info[0] == 2 else self.max)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -1223,9 +1396,8 @@ class StringStats(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1242,16 +1414,25 @@ class Stats(object):
      - stringStats
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, longStats = None, doubleStats = None, stringStats = None,):
+    def __init__(
+        self,
+        longStats=None,
+        doubleStats=None,
+        stringStats=None,
+    ):
         self.longStats = longStats
         self.doubleStats = doubleStats
         self.stringStats = stringStats
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1287,17 +1468,17 @@ class Stats(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('Stats')
+        oprot.writeStructBegin("Stats")
         if self.longStats is not None:
-            oprot.writeFieldBegin('longStats', TType.STRUCT, 1)
+            oprot.writeFieldBegin("longStats", TType.STRUCT, 1)
             self.longStats.write(oprot)
             oprot.writeFieldEnd()
         if self.doubleStats is not None:
-            oprot.writeFieldBegin('doubleStats', TType.STRUCT, 2)
+            oprot.writeFieldBegin("doubleStats", TType.STRUCT, 2)
             self.doubleStats.write(oprot)
             oprot.writeFieldEnd()
         if self.stringStats is not None:
-            oprot.writeFieldBegin('stringStats', TType.STRUCT, 3)
+            oprot.writeFieldBegin("stringStats", TType.STRUCT, 3)
             self.stringStats.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1307,9 +1488,8 @@ class Stats(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1325,15 +1505,23 @@ class ColumnStats(object):
      - nullCount
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, stats = None, nullCount = None,):
+    def __init__(
+        self,
+        stats=None,
+        nullCount=None,
+    ):
         self.stats = stats
         self.nullCount = nullCount
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1362,13 +1550,13 @@ class ColumnStats(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('ColumnStats')
+        oprot.writeStructBegin("ColumnStats")
         if self.stats is not None:
-            oprot.writeFieldBegin('stats', TType.STRUCT, 1)
+            oprot.writeFieldBegin("stats", TType.STRUCT, 1)
             self.stats.write(oprot)
             oprot.writeFieldEnd()
         if self.nullCount is not None:
-            oprot.writeFieldBegin('nullCount', TType.I64, 2)
+            oprot.writeFieldBegin("nullCount", TType.I64, 2)
             oprot.writeI64(self.nullCount)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1378,9 +1566,8 @@ class ColumnStats(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1396,15 +1583,23 @@ class TableVersionInfo(object):
      - logVersion
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, timestamp = None, logVersion = None,):
+    def __init__(
+        self,
+        timestamp=None,
+        logVersion=None,
+    ):
         self.timestamp = timestamp
         self.logVersion = logVersion
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1432,13 +1627,13 @@ class TableVersionInfo(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('TableVersionInfo')
+        oprot.writeStructBegin("TableVersionInfo")
         if self.timestamp is not None:
-            oprot.writeFieldBegin('timestamp', TType.I64, 1)
+            oprot.writeFieldBegin("timestamp", TType.I64, 1)
             oprot.writeI64(self.timestamp)
             oprot.writeFieldEnd()
         if self.logVersion is not None:
-            oprot.writeFieldBegin('logVersion', TType.I64, 2)
+            oprot.writeFieldBegin("logVersion", TType.I64, 2)
             oprot.writeI64(self.logVersion)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1448,124 +1643,425 @@ class TableVersionInfo(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(E6Partition)
 E6Partition.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'partitionInfo', [E6PartitionInfo, None], None, ),  # 1
-    (2, TType.I64, 'numNulls', None, None, ),  # 2
-    (3, TType.LIST, 'inactiveFiles', (TType.STRING, 'UTF8', False), None, ),  # 3
-    (4, TType.LIST, 'activePartFiles', (TType.STRUCT, [PartFile, None], False), None, ),  # 4
-    (5, TType.I64, 'numRows', None, None, ),  # 5
+    (
+        1,
+        TType.STRUCT,
+        "partitionInfo",
+        [E6PartitionInfo, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I64,
+        "numNulls",
+        None,
+        None,
+    ),  # 2
+    (
+        3,
+        TType.LIST,
+        "inactiveFiles",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 3
+    (
+        4,
+        TType.LIST,
+        "activePartFiles",
+        (TType.STRUCT, [PartFile, None], False),
+        None,
+    ),  # 4
+    (
+        5,
+        TType.I64,
+        "numRows",
+        None,
+        None,
+    ),  # 5
 )
 all_structs.append(OptionalString)
 OptionalString.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'value', 'UTF8', None, ),  # 1
+    (
+        1,
+        TType.STRING,
+        "value",
+        "UTF8",
+        None,
+    ),  # 1
 )
 all_structs.append(E6PartitionInfo)
 E6PartitionInfo.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'filePathName', 'UTF8', None, ),  # 1
-    (2, TType.LIST, 'fieldNames', (TType.STRING, 'UTF8', False), None, ),  # 2
-    (3, TType.LIST, 'fieldValues', (TType.STRUCT, [OptionalString, None], False), None, ),  # 3
-    (4, TType.LIST, 'fieldTypes', (TType.I32, None, False), None, ),  # 4
-    (5, TType.BOOL, 'containsRecordCount', None, None, ),  # 5
-    (6, TType.STRING, 'virtualPartitionId', 'UTF8', None, ),  # 6
-    (7, TType.STRING, 'virtualPartitionVersionId', 'UTF8', None, ),  # 7
+    (
+        1,
+        TType.STRING,
+        "filePathName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.LIST,
+        "fieldNames",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 2
+    (
+        3,
+        TType.LIST,
+        "fieldValues",
+        (TType.STRUCT, [OptionalString, None], False),
+        None,
+    ),  # 3
+    (
+        4,
+        TType.LIST,
+        "fieldTypes",
+        (TType.I32, None, False),
+        None,
+    ),  # 4
+    (
+        5,
+        TType.BOOL,
+        "containsRecordCount",
+        None,
+        None,
+    ),  # 5
+    (
+        6,
+        TType.STRING,
+        "virtualPartitionId",
+        "UTF8",
+        None,
+    ),  # 6
+    (
+        7,
+        TType.STRING,
+        "virtualPartitionVersionId",
+        "UTF8",
+        None,
+    ),  # 7
 )
 all_structs.append(PartFile)
 PartFile.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'filePath', 'UTF8', None, ),  # 1
-    (2, TType.I64, 'fileSizeInBytes', None, None, ),  # 2
-    (3, TType.I64, 'numRecords', None, None, ),  # 3
-    (4, TType.STRING, 'footer', 'BINARY', None, ),  # 4
-    (5, TType.LIST, 'rowIndexOffsets', (TType.I64, None, False), None, ),  # 5
-    (6, TType.STRUCT, 'additionalInfo', [AdditionalInfo, None], None, ),  # 6
+    (
+        1,
+        TType.STRING,
+        "filePath",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I64,
+        "fileSizeInBytes",
+        None,
+        None,
+    ),  # 2
+    (
+        3,
+        TType.I64,
+        "numRecords",
+        None,
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "footer",
+        "BINARY",
+        None,
+    ),  # 4
+    (
+        5,
+        TType.LIST,
+        "rowIndexOffsets",
+        (TType.I64, None, False),
+        None,
+    ),  # 5
+    (
+        6,
+        TType.STRUCT,
+        "additionalInfo",
+        [AdditionalInfo, None],
+        None,
+    ),  # 6
 )
 all_structs.append(AdditionalInfo)
 AdditionalInfo.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'deltaPartFileInfo', [DeltaPartFileInfo, None], None, ),  # 1
-    (2, TType.STRUCT, 'icebergPartFileInfo', [IcebergPartFileInfo, None], None, ),  # 2
+    (
+        1,
+        TType.STRUCT,
+        "deltaPartFileInfo",
+        [DeltaPartFileInfo, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "icebergPartFileInfo",
+        [IcebergPartFileInfo, None],
+        None,
+    ),  # 2
 )
 all_structs.append(DeltaPartFileInfo)
 DeltaPartFileInfo.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'deletionVector', [DeletionVector, None], None, ),  # 1
-    (2, TType.LIST, 'stats', (TType.STRUCT, [ColumnStats, None], False), None, ),  # 2
-    (3, TType.MAP, 'mapColumnStats', (TType.STRING, 'UTF8', TType.STRUCT, [ColumnStats, None], False), None, ),  # 3
-    (4, TType.BOOL, 'tightBounds', None, None, ),  # 4
+    (
+        1,
+        TType.STRUCT,
+        "deletionVector",
+        [DeletionVector, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.LIST,
+        "stats",
+        (TType.STRUCT, [ColumnStats, None], False),
+        None,
+    ),  # 2
+    (
+        3,
+        TType.MAP,
+        "mapColumnStats",
+        (TType.STRING, "UTF8", TType.STRUCT, [ColumnStats, None], False),
+        None,
+    ),  # 3
+    (
+        4,
+        TType.BOOL,
+        "tightBounds",
+        None,
+        None,
+    ),  # 4
 )
 all_structs.append(IcebergPartFileInfo)
 IcebergPartFileInfo.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'deletionVector', [DeletionVector, None], None, ),  # 1
-    (2, TType.LIST, 'stats', (TType.STRUCT, [ColumnStats, None], False), None, ),  # 2
-    (3, TType.MAP, 'mapColumnStats', (TType.STRING, 'UTF8', TType.STRUCT, [ColumnStats, None], False), None, ),  # 3
+    (
+        1,
+        TType.STRUCT,
+        "deletionVector",
+        [DeletionVector, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.LIST,
+        "stats",
+        (TType.STRUCT, [ColumnStats, None], False),
+        None,
+    ),  # 2
+    (
+        3,
+        TType.MAP,
+        "mapColumnStats",
+        (TType.STRING, "UTF8", TType.STRUCT, [ColumnStats, None], False),
+        None,
+    ),  # 3
 )
 all_structs.append(DeletionVector)
 DeletionVector.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'storageType', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'pathOrInlineDv', 'BINARY', None, ),  # 2
-    (3, TType.I32, 'offset', None, None, ),  # 3
-    (4, TType.I32, 'sizeInBytes', None, None, ),  # 4
-    (5, TType.I64, 'cardinality', None, None, ),  # 5
-    (6, TType.I64, 'sizeOfFileInBytes', None, None, ),  # 6
+    (
+        1,
+        TType.STRING,
+        "storageType",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "pathOrInlineDv",
+        "BINARY",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.I32,
+        "offset",
+        None,
+        None,
+    ),  # 3
+    (
+        4,
+        TType.I32,
+        "sizeInBytes",
+        None,
+        None,
+    ),  # 4
+    (
+        5,
+        TType.I64,
+        "cardinality",
+        None,
+        None,
+    ),  # 5
+    (
+        6,
+        TType.I64,
+        "sizeOfFileInBytes",
+        None,
+        None,
+    ),  # 6
 )
 all_structs.append(PartitionPartFiles)
 PartitionPartFiles.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'partition', [E6PartitionInfo, None], None, ),  # 1
-    (2, TType.LIST, 'partFiles', (TType.STRUCT, [PartFile, None], False), None, ),  # 2
-    (3, TType.LIST, 'columnsWithStats', (TType.STRING, 'UTF8', False), None, ),  # 3
+    (
+        1,
+        TType.STRUCT,
+        "partition",
+        [E6PartitionInfo, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.LIST,
+        "partFiles",
+        (TType.STRUCT, [PartFile, None], False),
+        None,
+    ),  # 2
+    (
+        3,
+        TType.LIST,
+        "columnsWithStats",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 3
 )
 all_structs.append(LongStats)
 LongStats.thrift_spec = (
     None,  # 0
-    (1, TType.I64, 'min', None, None, ),  # 1
-    (2, TType.I64, 'max', None, None, ),  # 2
+    (
+        1,
+        TType.I64,
+        "min",
+        None,
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I64,
+        "max",
+        None,
+        None,
+    ),  # 2
 )
 all_structs.append(DoubleStats)
 DoubleStats.thrift_spec = (
     None,  # 0
-    (1, TType.DOUBLE, 'min', None, None, ),  # 1
-    (2, TType.DOUBLE, 'max', None, None, ),  # 2
+    (
+        1,
+        TType.DOUBLE,
+        "min",
+        None,
+        None,
+    ),  # 1
+    (
+        2,
+        TType.DOUBLE,
+        "max",
+        None,
+        None,
+    ),  # 2
 )
 all_structs.append(StringStats)
 StringStats.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'min', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'max', 'UTF8', None, ),  # 2
+    (
+        1,
+        TType.STRING,
+        "min",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "max",
+        "UTF8",
+        None,
+    ),  # 2
 )
 all_structs.append(Stats)
 Stats.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'longStats', [LongStats, None], None, ),  # 1
-    (2, TType.STRUCT, 'doubleStats', [DoubleStats, None], None, ),  # 2
-    (3, TType.STRUCT, 'stringStats', [StringStats, None], None, ),  # 3
+    (
+        1,
+        TType.STRUCT,
+        "longStats",
+        [LongStats, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "doubleStats",
+        [DoubleStats, None],
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRUCT,
+        "stringStats",
+        [StringStats, None],
+        None,
+    ),  # 3
 )
 all_structs.append(ColumnStats)
 ColumnStats.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'stats', [Stats, None], None, ),  # 1
-    (2, TType.I64, 'nullCount', None, None, ),  # 2
+    (
+        1,
+        TType.STRUCT,
+        "stats",
+        [Stats, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I64,
+        "nullCount",
+        None,
+        None,
+    ),  # 2
 )
 all_structs.append(TableVersionInfo)
 TableVersionInfo.thrift_spec = (
     None,  # 0
-    (1, TType.I64, 'timestamp', None, None, ),  # 1
-    (2, TType.I64, 'logVersion', None, None, ),  # 2
+    (
+        1,
+        TType.I64,
+        "timestamp",
+        None,
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I64,
+        "logVersion",
+        None,
+        None,
+    ),  # 2
 )
 fix_spec(all_structs)
 del all_structs

@@ -10,7 +10,7 @@ from sqlglot.expressions import (
     CTE,
     Join,
     Literal,
-    Star
+    Star,
 )
 from sqlglot import parse_one
 from collections import defaultdict
@@ -19,6 +19,7 @@ import logging
 # Configure logging for debugging purposes
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+
 
 def build_alias_mapping(expressions: List[Expression]) -> Dict[str, str]:
     """
@@ -64,8 +65,9 @@ def build_alias_mapping(expressions: List[Expression]) -> Dict[str, str]:
     return alias_mapping
 
 
-
-def ccextract_sql_components_per_table_with_alias(expressions: List[Expression]) -> List[Dict[str, Any]]:
+def ccextract_sql_components_per_table_with_alias(
+    expressions: List[Expression],
+) -> List[Dict[str, Any]]:
     """
     Extracts SQL components (tables, columns, where_columns, limits) from parsed SQL expressions,
     associating LIMIT clauses with the specific tables involved in their respective SELECT statements.
@@ -82,20 +84,16 @@ def ccextract_sql_components_per_table_with_alias(expressions: List[Expression])
 
     # Helper function to find or create a table entry
     def get_or_create_table_entry(table_name: str) -> Dict[str, Any]:
-        table_entry = next((item for item in components if item['table'] == table_name), None)
+        table_entry = next((item for item in components if item["table"] == table_name), None)
         if not table_entry:
-            table_entry = {
-                'table': table_name,
-                'columns': [],
-                'where_columns': [],
-                'limits': []
-            }
+            table_entry = {"table": table_name, "columns": [], "where_columns": [], "limits": []}
             components.append(table_entry)
         return table_entry
+
     cte_names = set()
 
     for expr in expressions:
-        with_clause = expr.args.get('with')
+        with_clause = expr.args.get("with")
         if with_clause:
             for cte in with_clause.find_all(CTE):
                 cte_name = cte.alias_or_name
@@ -103,7 +101,7 @@ def ccextract_sql_components_per_table_with_alias(expressions: List[Expression])
                     cte_names.add(cte_name)  # Use lowercase for consistent comparison
     print("cte_names: ", cte_names)
     # Traverse the AST using the walk method provided by Expression class
-    i = 0 
+    i = 0
     for expression in expressions:
         for node in expression.walk():
             i += 1
@@ -146,7 +144,7 @@ def ccextract_sql_components_per_table_with_alias(expressions: List[Expression])
 
                             current_select_tables.add(table_name)
                             get_or_create_table_entry(table_name)
-                
+
                 alias_mapping = build_alias_mapping(expressions)
 
                 # Handle JOIN tables
@@ -174,43 +172,68 @@ def ccextract_sql_components_per_table_with_alias(expressions: List[Expression])
                         table_alias = expr.table
                         if table_alias:
                             actual_table = alias_mapping.get(table_alias, table_alias)
-                            table_entry = next((item for item in components if item['table'] == actual_table), None)
+                            table_entry = next(
+                                (item for item in components if item["table"] == actual_table), None
+                            )
                             if table_entry and column_name:
-                                table_entry['columns'].append(column_name)
+                                table_entry["columns"].append(column_name)
                             else:
-                                logger.warning(f"Column '{column_name}' has an alias '{table_alias}' which does not match any table.")
+                                logger.warning(
+                                    f"Column '{column_name}' has an alias '{table_alias}' which does not match any table."
+                                )
                         else:
                             # If no table alias, associate with all tables in the current SELECT (ambiguous)
                             if current_select_tables:
                                 for table in current_select_tables:
-                                    table_entry = next((item for item in components if item['table'] == table), None)
+                                    table_entry = next(
+                                        (item for item in components if item["table"] == table),
+                                        None,
+                                    )
                                     if table_entry and column_name:
-                                        table_entry['columns'].append(column_name)
+                                        table_entry["columns"].append(column_name)
                             else:
-                                logger.warning(f"Column '{column_name}' has no table alias and no tables found in SELECT.")
+                                logger.warning(
+                                    f"Column '{column_name}' has no table alias and no tables found in SELECT."
+                                )
                     elif isinstance(expr, Star):
                         # Handle wildcard '*'
                         # Check if the Star has a table alias (e.g., 'e.*')
                         # print("expr.parent: ", expr)
-                        table_alias = expr.parent.alias_or_name if isinstance(expr.parent, Alias) else None
+                        table_alias = (
+                            expr.parent.alias_or_name if isinstance(expr.parent, Alias) else None
+                        )
                         if table_alias:
                             actual_table = alias_mapping.get(table_alias, table_alias)
-                            table_entry = next((item for item in components if item['table'].lower() == actual_table.lower()), None)
+                            table_entry = next(
+                                (
+                                    item
+                                    for item in components
+                                    if item["table"].lower() == actual_table.lower()
+                                ),
+                                None,
+                            )
                             if table_entry:
-                                if '*' not in table_entry['columns']:
-                                    table_entry['columns'].append('*')
+                                if "*" not in table_entry["columns"]:
+                                    table_entry["columns"].append("*")
                         else:
                             # Unqualified '*', associate with all current SELECT tables
                             if current_select_tables:
                                 for table in current_select_tables:
-                                    table_entry = next((item for item in components if item['table'].lower() == table.lower()), None)
+                                    table_entry = next(
+                                        (
+                                            item
+                                            for item in components
+                                            if item["table"].lower() == table.lower()
+                                        ),
+                                        None,
+                                    )
                                     if table_entry:
-                                        if '*' not in table_entry['columns']:
-                                            table_entry['columns'].append('*')
+                                        if "*" not in table_entry["columns"]:
+                                            table_entry["columns"].append("*")
                             else:
-                                logger.warning("Unqualified '*' found but no tables are associated with the current SELECT.")
-
-
+                                logger.warning(
+                                    "Unqualified '*' found but no tables are associated with the current SELECT."
+                                )
 
                     elif isinstance(expr, Alias):
                         # Handle aliased columns or expressions
@@ -219,74 +242,112 @@ def ccextract_sql_components_per_table_with_alias(expressions: List[Expression])
                             table_alias = expr.this.table
                             if table_alias:
                                 actual_table = alias_mapping.get(table_alias, table_alias)
-                                table_entry = next((item for item in components if item['table'] == actual_table), None)
+                                table_entry = next(
+                                    (item for item in components if item["table"] == actual_table),
+                                    None,
+                                )
                                 # print("Table entry is ->: ",table_entry, "actual_table is ->: ",actual_table, "table_alias is ->: ",table_alias, "column_name is ->: ",column_name)
                                 if table_entry and column_name:
-                                    table_entry['columns'].append(column_name)
+                                    table_entry["columns"].append(column_name)
                                 else:
-                                    logger.warning(f"Aliased column '{column_name}' has an alias '{table_alias}' which does not match any table.")
+                                    logger.warning(
+                                        f"Aliased column '{column_name}' has an alias '{table_alias}' which does not match any table."
+                                    )
                             else:
                                 # If no table alias, associate with all tables in the current SELECT (ambiguous)
                                 if current_select_tables:
                                     for table in current_select_tables:
-                                        table_entry = next((item for item in components if item['table'] == table), None)
+                                        table_entry = next(
+                                            (item for item in components if item["table"] == table),
+                                            None,
+                                        )
                                         if table_entry and column_name:
-                                            table_entry['columns'].append(column_name)
+                                            table_entry["columns"].append(column_name)
                                 else:
-                                    logger.warning(f"Aliased column '{column_name}' has no table alias and no tables found in SELECT.")
+                                    logger.warning(
+                                        f"Aliased column '{column_name}' has no table alias and no tables found in SELECT."
+                                    )
                             # print("values is ",table_entry['columns'])
 
                         elif isinstance(node, Star):
                             # Handle wildcard '*'
                             # Check if the Star has a table alias (e.g., 'e.*')
-                            table_alias = node.parent.alias_or_name if isinstance(node.parent, Alias) else None
+                            table_alias = (
+                                node.parent.alias_or_name
+                                if isinstance(node.parent, Alias)
+                                else None
+                            )
                             if table_alias:
                                 actual_table = alias_mapping.get(table_alias, table_alias)
-                                table_entry = next((item for item in components if item['table'].lower() == actual_table.lower()), None)
+                                table_entry = next(
+                                    (
+                                        item
+                                        for item in components
+                                        if item["table"].lower() == actual_table.lower()
+                                    ),
+                                    None,
+                                )
                                 if table_entry:
-                                    if '*' not in table_entry['columns']:
-                                        table_entry['columns'].append('*')
+                                    if "*" not in table_entry["columns"]:
+                                        table_entry["columns"].append("*")
                             else:
                                 # Unqualified '*', associate with all current SELECT tables
                                 if current_select_tables:
                                     for table in current_select_tables:
-                                        table_entry = next((item for item in components if item['table'].lower() == table.lower()), None)
+                                        table_entry = next(
+                                            (
+                                                item
+                                                for item in components
+                                                if item["table"].lower() == table.lower()
+                                            ),
+                                            None,
+                                        )
                                         if table_entry:
-                                            if '*' not in table_entry['columns']:
-                                                table_entry['columns'].append('*')
+                                            if "*" not in table_entry["columns"]:
+                                                table_entry["columns"].append("*")
                                 else:
-                                    logger.warning("Unqualified '*' found but no tables are associated with the current SELECT.")
+                                    logger.warning(
+                                        "Unqualified '*' found but no tables are associated with the current SELECT."
+                                    )
 
-                        
                         else:
                             # Handle expressions or functions aliased as columns
                             pass  # Can be extended if needed
 
                 # Extract WHERE columns
-                where_clause = node.args.get('where')
+                where_clause = node.args.get("where")
                 if where_clause:
                     for condition in where_clause.find_all(Column):
                         column_name = condition.name
                         table_alias = condition.table
                         if table_alias:
                             actual_table = alias_mapping.get(table_alias, table_alias)
-                            table_entry = next((item for item in components if item['table'] == actual_table), None)
+                            table_entry = next(
+                                (item for item in components if item["table"] == actual_table), None
+                            )
                             if table_entry and column_name:
-                                table_entry['where_columns'].append(column_name)
+                                table_entry["where_columns"].append(column_name)
                             else:
-                                logger.warning(f"WHERE condition column '{column_name}' has an alias '{table_alias}' which does not match any table.")
+                                logger.warning(
+                                    f"WHERE condition column '{column_name}' has an alias '{table_alias}' which does not match any table."
+                                )
                         else:
                             # If no table alias, associate with all tables in the current SELECT (ambiguous)
                             if current_select_tables:
                                 for table in current_select_tables:
-                                    table_entry = next((item for item in components if item['table'] == table), None)
+                                    table_entry = next(
+                                        (item for item in components if item["table"] == table),
+                                        None,
+                                    )
                                     if table_entry and column_name:
-                                        table_entry['where_columns'].append(column_name)
+                                        table_entry["where_columns"].append(column_name)
                             else:
-                                logger.warning(f"WHERE condition column '{column_name}' has no table alias and no tables found in SELECT.")
+                                logger.warning(
+                                    f"WHERE condition column '{column_name}' has no table alias and no tables found in SELECT."
+                                )
 
                 # Extract LIMIT
-                limit_clause = node.args.get('limit')
+                limit_clause = node.args.get("limit")
                 if limit_clause:
                     # print("len is ",len(limit_clause))
                     for limit_value in limit_clause.find_all(Literal):
@@ -296,11 +357,16 @@ def ccextract_sql_components_per_table_with_alias(expressions: List[Expression])
                                 print("limit current_select_tables: ", current_select_tables)
                                 for table in current_select_tables:
                                     # print("limit table: ", table)
-                                    table_entry = next((item for item in components if item['table'] == table), None)
+                                    table_entry = next(
+                                        (item for item in components if item["table"] == table),
+                                        None,
+                                    )
                                     if table_entry:
-                                        table_entry['limits'].append(limit_num)
+                                        table_entry["limits"].append(limit_num)
                             else:
-                                logger.warning(f"LIMIT '{limit_num}' found but no tables are associated with the current SELECT.")
+                                logger.warning(
+                                    f"LIMIT '{limit_num}' found but no tables are associated with the current SELECT."
+                                )
 
             elif isinstance(node, CTE):
                 # CTEs are handled implicitly by traversing their SELECT statements
@@ -314,14 +380,13 @@ def ccextract_sql_components_per_table_with_alias(expressions: List[Expression])
     list_of_tables = []
     entries = []
     for entry in components:
-        if entry['table'] in cte_names:
-            print("found cte: ", entry['table'])
+        if entry["table"] in cte_names:
+            print("found cte: ", entry["table"])
             continue
-        list_of_tables.append(entry['table'])
+        list_of_tables.append(entry["table"])
         entries.append(entry)
 
     return entries
-
 
 
 sql3 = """
@@ -561,7 +626,7 @@ LIMIT 100;
     """
 
     # Parse the SQL query
-    parsed = sqlglot.parse(sql2, read='snowflake', error_level=None)
+    parsed = sqlglot.parse(sql2, read="snowflake", error_level=None)
 
     # Extract components per table with alias handling
     # alias_mapping = build_alias_mapping(parsed)

@@ -15,6 +15,7 @@ import sys
 import e6_metadata_common.ttypes
 
 from thrift.transport import TTransport
+
 all_structs = []
 
 
@@ -42,11 +43,14 @@ class SchemaServiceException(TException):
      - reason
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, reason = None,):
-        super(SchemaServiceException, self).__setattr__('reason', reason)
+    def __init__(
+        self,
+        reason=None,
+    ):
+        super(SchemaServiceException, self).__setattr__("reason", reason)
 
     def __setattr__(self, *args):
         raise TypeError("can't modify immutable instance")
@@ -55,11 +59,15 @@ class SchemaServiceException(TException):
         raise TypeError("can't modify immutable instance")
 
     def __hash__(self):
-        return hash(self.__class__) ^ hash((self.reason, ))
+        return hash(self.__class__) ^ hash((self.reason,))
 
     @classmethod
     def read(cls, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and cls.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and cls.thrift_spec is not None
+        ):
             return iprot._fast_decode(None, iprot, [cls, cls.thrift_spec])
         iprot.readStructBegin()
         reason = None
@@ -69,7 +77,11 @@ class SchemaServiceException(TException):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    reason = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    reason = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -85,10 +97,12 @@ class SchemaServiceException(TException):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('SchemaServiceException')
+        oprot.writeStructBegin("SchemaServiceException")
         if self.reason is not None:
-            oprot.writeFieldBegin('reason', TType.STRING, 1)
-            oprot.writeString(self.reason.encode('utf-8') if sys.version_info[0] == 2 else self.reason)
+            oprot.writeFieldBegin("reason", TType.STRING, 1)
+            oprot.writeString(
+                self.reason.encode("utf-8") if sys.version_info[0] == 2 else self.reason
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -100,9 +114,8 @@ class SchemaServiceException(TException):
         return repr(self)
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -118,15 +131,23 @@ class FileStatus(object):
      - fileSize
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, filePath = None, fileSize = None,):
+    def __init__(
+        self,
+        filePath=None,
+        fileSize=None,
+    ):
         self.filePath = filePath
         self.fileSize = fileSize
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -136,7 +157,11 @@ class FileStatus(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.filePath = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.filePath = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -154,13 +179,15 @@ class FileStatus(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('FileStatus')
+        oprot.writeStructBegin("FileStatus")
         if self.filePath is not None:
-            oprot.writeFieldBegin('filePath', TType.STRING, 1)
-            oprot.writeString(self.filePath.encode('utf-8') if sys.version_info[0] == 2 else self.filePath)
+            oprot.writeFieldBegin("filePath", TType.STRING, 1)
+            oprot.writeString(
+                self.filePath.encode("utf-8") if sys.version_info[0] == 2 else self.filePath
+            )
             oprot.writeFieldEnd()
         if self.fileSize is not None:
-            oprot.writeFieldBegin('fileSize', TType.I64, 2)
+            oprot.writeFieldBegin("fileSize", TType.I64, 2)
             oprot.writeI64(self.fileSize)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -170,9 +197,8 @@ class FileStatus(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -190,17 +216,27 @@ class ConnectionMetadata(object):
      - cloudSettings
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogType = None, catalogConnection = None, cloudType = None, cloudSettings = None,):
+    def __init__(
+        self,
+        catalogType=None,
+        catalogConnection=None,
+        cloudType=None,
+        cloudSettings=None,
+    ):
         self.catalogType = catalogType
         self.catalogConnection = catalogConnection
         self.cloudType = cloudType
         self.cloudSettings = cloudSettings
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -210,7 +246,11 @@ class ConnectionMetadata(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogType = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogType = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -221,7 +261,11 @@ class ConnectionMetadata(object):
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.cloudType = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.cloudType = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -240,21 +284,25 @@ class ConnectionMetadata(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('ConnectionMetadata')
+        oprot.writeStructBegin("ConnectionMetadata")
         if self.catalogType is not None:
-            oprot.writeFieldBegin('catalogType', TType.STRING, 1)
-            oprot.writeString(self.catalogType.encode('utf-8') if sys.version_info[0] == 2 else self.catalogType)
+            oprot.writeFieldBegin("catalogType", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogType.encode("utf-8") if sys.version_info[0] == 2 else self.catalogType
+            )
             oprot.writeFieldEnd()
         if self.catalogConnection is not None:
-            oprot.writeFieldBegin('catalogConnection', TType.STRUCT, 2)
+            oprot.writeFieldBegin("catalogConnection", TType.STRUCT, 2)
             self.catalogConnection.write(oprot)
             oprot.writeFieldEnd()
         if self.cloudType is not None:
-            oprot.writeFieldBegin('cloudType', TType.STRING, 3)
-            oprot.writeString(self.cloudType.encode('utf-8') if sys.version_info[0] == 2 else self.cloudType)
+            oprot.writeFieldBegin("cloudType", TType.STRING, 3)
+            oprot.writeString(
+                self.cloudType.encode("utf-8") if sys.version_info[0] == 2 else self.cloudType
+            )
             oprot.writeFieldEnd()
         if self.cloudSettings is not None:
-            oprot.writeFieldBegin('cloudSettings', TType.STRUCT, 4)
+            oprot.writeFieldBegin("cloudSettings", TType.STRUCT, 4)
             self.cloudSettings.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -264,9 +312,8 @@ class ConnectionMetadata(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -284,17 +331,27 @@ class CatalogConnectionMetadata(object):
      - fabricConnection
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, hiveConnection = None, glueConnection = None, unityConnection = None, fabricConnection = None,):
+    def __init__(
+        self,
+        hiveConnection=None,
+        glueConnection=None,
+        unityConnection=None,
+        fabricConnection=None,
+    ):
         self.hiveConnection = hiveConnection
         self.glueConnection = glueConnection
         self.unityConnection = unityConnection
         self.fabricConnection = fabricConnection
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -336,21 +393,21 @@ class CatalogConnectionMetadata(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('CatalogConnectionMetadata')
+        oprot.writeStructBegin("CatalogConnectionMetadata")
         if self.hiveConnection is not None:
-            oprot.writeFieldBegin('hiveConnection', TType.STRUCT, 1)
+            oprot.writeFieldBegin("hiveConnection", TType.STRUCT, 1)
             self.hiveConnection.write(oprot)
             oprot.writeFieldEnd()
         if self.glueConnection is not None:
-            oprot.writeFieldBegin('glueConnection', TType.STRUCT, 2)
+            oprot.writeFieldBegin("glueConnection", TType.STRUCT, 2)
             self.glueConnection.write(oprot)
             oprot.writeFieldEnd()
         if self.unityConnection is not None:
-            oprot.writeFieldBegin('unityConnection', TType.STRUCT, 3)
+            oprot.writeFieldBegin("unityConnection", TType.STRUCT, 3)
             self.unityConnection.write(oprot)
             oprot.writeFieldEnd()
         if self.fabricConnection is not None:
-            oprot.writeFieldBegin('fabricConnection', TType.STRUCT, 4)
+            oprot.writeFieldBegin("fabricConnection", TType.STRUCT, 4)
             self.fabricConnection.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -360,9 +417,8 @@ class CatalogConnectionMetadata(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -378,15 +434,23 @@ class HiveConnectionMetadata(object):
      - port
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, host = None, port = None,):
+    def __init__(
+        self,
+        host=None,
+        port=None,
+    ):
         self.host = host
         self.port = port
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -396,7 +460,11 @@ class HiveConnectionMetadata(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.host = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.host = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -414,13 +482,13 @@ class HiveConnectionMetadata(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('HiveConnectionMetadata')
+        oprot.writeStructBegin("HiveConnectionMetadata")
         if self.host is not None:
-            oprot.writeFieldBegin('host', TType.STRING, 1)
-            oprot.writeString(self.host.encode('utf-8') if sys.version_info[0] == 2 else self.host)
+            oprot.writeFieldBegin("host", TType.STRING, 1)
+            oprot.writeString(self.host.encode("utf-8") if sys.version_info[0] == 2 else self.host)
             oprot.writeFieldEnd()
         if self.port is not None:
-            oprot.writeFieldBegin('port', TType.I32, 2)
+            oprot.writeFieldBegin("port", TType.I32, 2)
             oprot.writeI32(self.port)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -430,9 +498,8 @@ class HiveConnectionMetadata(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -448,15 +515,23 @@ class GlueConnectionMetadata(object):
      - catalogId
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, region = None, catalogId = None,):
+    def __init__(
+        self,
+        region=None,
+        catalogId=None,
+    ):
         self.region = region
         self.catalogId = catalogId
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -466,12 +541,20 @@ class GlueConnectionMetadata(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.region = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.region = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.catalogId = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogId = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -484,14 +567,18 @@ class GlueConnectionMetadata(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('GlueConnectionMetadata')
+        oprot.writeStructBegin("GlueConnectionMetadata")
         if self.region is not None:
-            oprot.writeFieldBegin('region', TType.STRING, 1)
-            oprot.writeString(self.region.encode('utf-8') if sys.version_info[0] == 2 else self.region)
+            oprot.writeFieldBegin("region", TType.STRING, 1)
+            oprot.writeString(
+                self.region.encode("utf-8") if sys.version_info[0] == 2 else self.region
+            )
             oprot.writeFieldEnd()
         if self.catalogId is not None:
-            oprot.writeFieldBegin('catalogId', TType.STRING, 2)
-            oprot.writeString(self.catalogId.encode('utf-8') if sys.version_info[0] == 2 else self.catalogId)
+            oprot.writeFieldBegin("catalogId", TType.STRING, 2)
+            oprot.writeString(
+                self.catalogId.encode("utf-8") if sys.version_info[0] == 2 else self.catalogId
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -500,9 +587,8 @@ class GlueConnectionMetadata(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -522,10 +608,18 @@ class UnityConnectionMetadata(object):
      - accountId
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, host = None, bearerToken = None, catalogName = None, adminUserName = None, adminPassword = None, accountId = None,):
+    def __init__(
+        self,
+        host=None,
+        bearerToken=None,
+        catalogName=None,
+        adminUserName=None,
+        adminPassword=None,
+        accountId=None,
+    ):
         self.host = host
         self.bearerToken = bearerToken
         self.catalogName = catalogName
@@ -534,7 +628,11 @@ class UnityConnectionMetadata(object):
         self.accountId = accountId
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -544,32 +642,56 @@ class UnityConnectionMetadata(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.host = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.host = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.bearerToken = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.bearerToken = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRING:
-                    self.adminUserName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.adminUserName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 5:
                 if ftype == TType.STRING:
-                    self.adminPassword = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.adminPassword = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 6:
                 if ftype == TType.STRING:
-                    self.accountId = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.accountId = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -582,30 +704,44 @@ class UnityConnectionMetadata(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('UnityConnectionMetadata')
+        oprot.writeStructBegin("UnityConnectionMetadata")
         if self.host is not None:
-            oprot.writeFieldBegin('host', TType.STRING, 1)
-            oprot.writeString(self.host.encode('utf-8') if sys.version_info[0] == 2 else self.host)
+            oprot.writeFieldBegin("host", TType.STRING, 1)
+            oprot.writeString(self.host.encode("utf-8") if sys.version_info[0] == 2 else self.host)
             oprot.writeFieldEnd()
         if self.bearerToken is not None:
-            oprot.writeFieldBegin('bearerToken', TType.STRING, 2)
-            oprot.writeString(self.bearerToken.encode('utf-8') if sys.version_info[0] == 2 else self.bearerToken)
+            oprot.writeFieldBegin("bearerToken", TType.STRING, 2)
+            oprot.writeString(
+                self.bearerToken.encode("utf-8") if sys.version_info[0] == 2 else self.bearerToken
+            )
             oprot.writeFieldEnd()
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 3)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 3)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.adminUserName is not None:
-            oprot.writeFieldBegin('adminUserName', TType.STRING, 4)
-            oprot.writeString(self.adminUserName.encode('utf-8') if sys.version_info[0] == 2 else self.adminUserName)
+            oprot.writeFieldBegin("adminUserName", TType.STRING, 4)
+            oprot.writeString(
+                self.adminUserName.encode("utf-8")
+                if sys.version_info[0] == 2
+                else self.adminUserName
+            )
             oprot.writeFieldEnd()
         if self.adminPassword is not None:
-            oprot.writeFieldBegin('adminPassword', TType.STRING, 5)
-            oprot.writeString(self.adminPassword.encode('utf-8') if sys.version_info[0] == 2 else self.adminPassword)
+            oprot.writeFieldBegin("adminPassword", TType.STRING, 5)
+            oprot.writeString(
+                self.adminPassword.encode("utf-8")
+                if sys.version_info[0] == 2
+                else self.adminPassword
+            )
             oprot.writeFieldEnd()
         if self.accountId is not None:
-            oprot.writeFieldBegin('accountId', TType.STRING, 6)
-            oprot.writeString(self.accountId.encode('utf-8') if sys.version_info[0] == 2 else self.accountId)
+            oprot.writeFieldBegin("accountId", TType.STRING, 6)
+            oprot.writeString(
+                self.accountId.encode("utf-8") if sys.version_info[0] == 2 else self.accountId
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -614,9 +750,8 @@ class UnityConnectionMetadata(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -632,15 +767,23 @@ class FabricConnectionMetadata(object):
      - bearerToken
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, workspaceId = None, bearerToken = None,):
+    def __init__(
+        self,
+        workspaceId=None,
+        bearerToken=None,
+    ):
         self.workspaceId = workspaceId
         self.bearerToken = bearerToken
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -650,12 +793,20 @@ class FabricConnectionMetadata(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.workspaceId = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.workspaceId = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.bearerToken = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.bearerToken = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -668,14 +819,18 @@ class FabricConnectionMetadata(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('FabricConnectionMetadata')
+        oprot.writeStructBegin("FabricConnectionMetadata")
         if self.workspaceId is not None:
-            oprot.writeFieldBegin('workspaceId', TType.STRING, 1)
-            oprot.writeString(self.workspaceId.encode('utf-8') if sys.version_info[0] == 2 else self.workspaceId)
+            oprot.writeFieldBegin("workspaceId", TType.STRING, 1)
+            oprot.writeString(
+                self.workspaceId.encode("utf-8") if sys.version_info[0] == 2 else self.workspaceId
+            )
             oprot.writeFieldEnd()
         if self.bearerToken is not None:
-            oprot.writeFieldBegin('bearerToken', TType.STRING, 2)
-            oprot.writeString(self.bearerToken.encode('utf-8') if sys.version_info[0] == 2 else self.bearerToken)
+            oprot.writeFieldBegin("bearerToken", TType.STRING, 2)
+            oprot.writeString(
+                self.bearerToken.encode("utf-8") if sys.version_info[0] == 2 else self.bearerToken
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -684,9 +839,8 @@ class FabricConnectionMetadata(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -704,17 +858,27 @@ class CloudSettings(object):
      - localSettings
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, awsSettings = None, gcpSettings = None, azureSettings = None, localSettings = None,):
+    def __init__(
+        self,
+        awsSettings=None,
+        gcpSettings=None,
+        azureSettings=None,
+        localSettings=None,
+    ):
         self.awsSettings = awsSettings
         self.gcpSettings = gcpSettings
         self.azureSettings = azureSettings
         self.localSettings = localSettings
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -756,21 +920,21 @@ class CloudSettings(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('CloudSettings')
+        oprot.writeStructBegin("CloudSettings")
         if self.awsSettings is not None:
-            oprot.writeFieldBegin('awsSettings', TType.STRUCT, 1)
+            oprot.writeFieldBegin("awsSettings", TType.STRUCT, 1)
             self.awsSettings.write(oprot)
             oprot.writeFieldEnd()
         if self.gcpSettings is not None:
-            oprot.writeFieldBegin('gcpSettings', TType.STRUCT, 2)
+            oprot.writeFieldBegin("gcpSettings", TType.STRUCT, 2)
             self.gcpSettings.write(oprot)
             oprot.writeFieldEnd()
         if self.azureSettings is not None:
-            oprot.writeFieldBegin('azureSettings', TType.STRUCT, 3)
+            oprot.writeFieldBegin("azureSettings", TType.STRUCT, 3)
             self.azureSettings.write(oprot)
             oprot.writeFieldEnd()
         if self.localSettings is not None:
-            oprot.writeFieldBegin('localSettings', TType.STRUCT, 4)
+            oprot.writeFieldBegin("localSettings", TType.STRUCT, 4)
             self.localSettings.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -780,9 +944,8 @@ class CloudSettings(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -800,17 +963,27 @@ class AwsSettings(object):
      - externalId
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, assumedRole = None, assumedRoleName = None, region = "us-east-1", externalId = "",):
+    def __init__(
+        self,
+        assumedRole=None,
+        assumedRoleName=None,
+        region="us-east-1",
+        externalId="",
+    ):
         self.assumedRole = assumedRole
         self.assumedRoleName = assumedRoleName
         self.region = region
         self.externalId = externalId
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -825,17 +998,29 @@ class AwsSettings(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.assumedRoleName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.assumedRoleName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.region = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.region = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRING:
-                    self.externalId = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.externalId = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -848,22 +1033,30 @@ class AwsSettings(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('AwsSettings')
+        oprot.writeStructBegin("AwsSettings")
         if self.assumedRole is not None:
-            oprot.writeFieldBegin('assumedRole', TType.BOOL, 1)
+            oprot.writeFieldBegin("assumedRole", TType.BOOL, 1)
             oprot.writeBool(self.assumedRole)
             oprot.writeFieldEnd()
         if self.assumedRoleName is not None:
-            oprot.writeFieldBegin('assumedRoleName', TType.STRING, 2)
-            oprot.writeString(self.assumedRoleName.encode('utf-8') if sys.version_info[0] == 2 else self.assumedRoleName)
+            oprot.writeFieldBegin("assumedRoleName", TType.STRING, 2)
+            oprot.writeString(
+                self.assumedRoleName.encode("utf-8")
+                if sys.version_info[0] == 2
+                else self.assumedRoleName
+            )
             oprot.writeFieldEnd()
         if self.region is not None:
-            oprot.writeFieldBegin('region', TType.STRING, 3)
-            oprot.writeString(self.region.encode('utf-8') if sys.version_info[0] == 2 else self.region)
+            oprot.writeFieldBegin("region", TType.STRING, 3)
+            oprot.writeString(
+                self.region.encode("utf-8") if sys.version_info[0] == 2 else self.region
+            )
             oprot.writeFieldEnd()
         if self.externalId is not None:
-            oprot.writeFieldBegin('externalId', TType.STRING, 4)
-            oprot.writeString(self.externalId.encode('utf-8') if sys.version_info[0] == 2 else self.externalId)
+            oprot.writeFieldBegin("externalId", TType.STRING, 4)
+            oprot.writeString(
+                self.externalId.encode("utf-8") if sys.version_info[0] == 2 else self.externalId
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -872,9 +1065,8 @@ class AwsSettings(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -886,9 +1078,12 @@ class AwsSettings(object):
 class GcpSettings(object):
     thrift_spec = None
 
-
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -906,7 +1101,7 @@ class GcpSettings(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('GcpSettings')
+        oprot.writeStructBegin("GcpSettings")
         oprot.writeFieldStop()
         oprot.writeStructEnd()
 
@@ -914,9 +1109,8 @@ class GcpSettings(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -928,9 +1122,12 @@ class GcpSettings(object):
 class AzureSettings(object):
     thrift_spec = None
 
-
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -948,7 +1145,7 @@ class AzureSettings(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('AzureSettings')
+        oprot.writeStructBegin("AzureSettings")
         oprot.writeFieldStop()
         oprot.writeStructEnd()
 
@@ -956,9 +1153,8 @@ class AzureSettings(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -970,9 +1166,12 @@ class AzureSettings(object):
 class LocalSettings(object):
     thrift_spec = None
 
-
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -990,7 +1189,7 @@ class LocalSettings(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('LocalSettings')
+        oprot.writeStructBegin("LocalSettings")
         oprot.writeFieldStop()
         oprot.writeStructEnd()
 
@@ -998,9 +1197,8 @@ class LocalSettings(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1021,10 +1219,19 @@ class RequestContext(object):
      - error
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, hostName = None, hostPort = None, requestId = None, partNum = None, totalParts = None, requestStatus = None, error = None,):
+    def __init__(
+        self,
+        hostName=None,
+        hostPort=None,
+        requestId=None,
+        partNum=None,
+        totalParts=None,
+        requestStatus=None,
+        error=None,
+    ):
         self.hostName = hostName
         self.hostPort = hostPort
         self.requestId = requestId
@@ -1034,7 +1241,11 @@ class RequestContext(object):
         self.error = error
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1044,7 +1255,11 @@ class RequestContext(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.hostName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.hostName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -1054,7 +1269,11 @@ class RequestContext(object):
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.requestId = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.requestId = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -1074,7 +1293,11 @@ class RequestContext(object):
                     iprot.skip(ftype)
             elif fid == 7:
                 if ftype == TType.STRING:
-                    self.error = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.error = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -1087,34 +1310,40 @@ class RequestContext(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('RequestContext')
+        oprot.writeStructBegin("RequestContext")
         if self.hostName is not None:
-            oprot.writeFieldBegin('hostName', TType.STRING, 1)
-            oprot.writeString(self.hostName.encode('utf-8') if sys.version_info[0] == 2 else self.hostName)
+            oprot.writeFieldBegin("hostName", TType.STRING, 1)
+            oprot.writeString(
+                self.hostName.encode("utf-8") if sys.version_info[0] == 2 else self.hostName
+            )
             oprot.writeFieldEnd()
         if self.hostPort is not None:
-            oprot.writeFieldBegin('hostPort', TType.I32, 2)
+            oprot.writeFieldBegin("hostPort", TType.I32, 2)
             oprot.writeI32(self.hostPort)
             oprot.writeFieldEnd()
         if self.requestId is not None:
-            oprot.writeFieldBegin('requestId', TType.STRING, 3)
-            oprot.writeString(self.requestId.encode('utf-8') if sys.version_info[0] == 2 else self.requestId)
+            oprot.writeFieldBegin("requestId", TType.STRING, 3)
+            oprot.writeString(
+                self.requestId.encode("utf-8") if sys.version_info[0] == 2 else self.requestId
+            )
             oprot.writeFieldEnd()
         if self.partNum is not None:
-            oprot.writeFieldBegin('partNum', TType.I32, 4)
+            oprot.writeFieldBegin("partNum", TType.I32, 4)
             oprot.writeI32(self.partNum)
             oprot.writeFieldEnd()
         if self.totalParts is not None:
-            oprot.writeFieldBegin('totalParts', TType.I32, 5)
+            oprot.writeFieldBegin("totalParts", TType.I32, 5)
             oprot.writeI32(self.totalParts)
             oprot.writeFieldEnd()
         if self.requestStatus is not None:
-            oprot.writeFieldBegin('requestStatus', TType.I32, 6)
+            oprot.writeFieldBegin("requestStatus", TType.I32, 6)
             oprot.writeI32(self.requestStatus)
             oprot.writeFieldEnd()
         if self.error is not None:
-            oprot.writeFieldBegin('error', TType.STRING, 7)
-            oprot.writeString(self.error.encode('utf-8') if sys.version_info[0] == 2 else self.error)
+            oprot.writeFieldBegin("error", TType.STRING, 7)
+            oprot.writeString(
+                self.error.encode("utf-8") if sys.version_info[0] == 2 else self.error
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -1123,9 +1352,8 @@ class RequestContext(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1144,10 +1372,17 @@ class TableMetadataResponse(object):
      - error
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, tableName = None, tableType = None, columnNames = None, columnTypes = None, error = None,):
+    def __init__(
+        self,
+        tableName=None,
+        tableType=None,
+        columnNames=None,
+        columnTypes=None,
+        error=None,
+    ):
         self.tableName = tableName
         self.tableType = tableType
         self.columnNames = columnNames
@@ -1155,7 +1390,11 @@ class TableMetadataResponse(object):
         self.error = error
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1165,12 +1404,20 @@ class TableMetadataResponse(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.tableType = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableType = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
@@ -1178,7 +1425,11 @@ class TableMetadataResponse(object):
                     self.columnNames = []
                     (_etype3, _size0) = iprot.readListBegin()
                     for _i4 in range(_size0):
-                        _elem5 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem5 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.columnNames.append(_elem5)
                     iprot.readListEnd()
                 else:
@@ -1188,14 +1439,22 @@ class TableMetadataResponse(object):
                     self.columnTypes = []
                     (_etype9, _size6) = iprot.readListBegin()
                     for _i10 in range(_size6):
-                        _elem11 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem11 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.columnTypes.append(_elem11)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 5:
                 if ftype == TType.STRING:
-                    self.error = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.error = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -1208,32 +1467,38 @@ class TableMetadataResponse(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('TableMetadataResponse')
+        oprot.writeStructBegin("TableMetadataResponse")
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 1)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 1)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.tableType is not None:
-            oprot.writeFieldBegin('tableType', TType.STRING, 2)
-            oprot.writeString(self.tableType.encode('utf-8') if sys.version_info[0] == 2 else self.tableType)
+            oprot.writeFieldBegin("tableType", TType.STRING, 2)
+            oprot.writeString(
+                self.tableType.encode("utf-8") if sys.version_info[0] == 2 else self.tableType
+            )
             oprot.writeFieldEnd()
         if self.columnNames is not None:
-            oprot.writeFieldBegin('columnNames', TType.LIST, 3)
+            oprot.writeFieldBegin("columnNames", TType.LIST, 3)
             oprot.writeListBegin(TType.STRING, len(self.columnNames))
             for iter12 in self.columnNames:
-                oprot.writeString(iter12.encode('utf-8') if sys.version_info[0] == 2 else iter12)
+                oprot.writeString(iter12.encode("utf-8") if sys.version_info[0] == 2 else iter12)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.columnTypes is not None:
-            oprot.writeFieldBegin('columnTypes', TType.LIST, 4)
+            oprot.writeFieldBegin("columnTypes", TType.LIST, 4)
             oprot.writeListBegin(TType.STRING, len(self.columnTypes))
             for iter13 in self.columnTypes:
-                oprot.writeString(iter13.encode('utf-8') if sys.version_info[0] == 2 else iter13)
+                oprot.writeString(iter13.encode("utf-8") if sys.version_info[0] == 2 else iter13)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.error is not None:
-            oprot.writeFieldBegin('error', TType.STRING, 5)
-            oprot.writeString(self.error.encode('utf-8') if sys.version_info[0] == 2 else self.error)
+            oprot.writeFieldBegin("error", TType.STRING, 5)
+            oprot.writeString(
+                self.error.encode("utf-8") if sys.version_info[0] == 2 else self.error
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -1242,9 +1507,8 @@ class TableMetadataResponse(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1262,17 +1526,27 @@ class DeltaTablePartitionInfo(object):
      - tableMetadata
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, lastKnownCheckpointVersion = None, lastKnownLogVersion = None, absoluteTablePath = None, tableMetadata = None,):
+    def __init__(
+        self,
+        lastKnownCheckpointVersion=None,
+        lastKnownLogVersion=None,
+        absoluteTablePath=None,
+        tableMetadata=None,
+    ):
         self.lastKnownCheckpointVersion = lastKnownCheckpointVersion
         self.lastKnownLogVersion = lastKnownLogVersion
         self.absoluteTablePath = absoluteTablePath
         self.tableMetadata = tableMetadata
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1292,7 +1566,11 @@ class DeltaTablePartitionInfo(object):
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.absoluteTablePath = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.absoluteTablePath = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -1310,21 +1588,25 @@ class DeltaTablePartitionInfo(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('DeltaTablePartitionInfo')
+        oprot.writeStructBegin("DeltaTablePartitionInfo")
         if self.lastKnownCheckpointVersion is not None:
-            oprot.writeFieldBegin('lastKnownCheckpointVersion', TType.I64, 1)
+            oprot.writeFieldBegin("lastKnownCheckpointVersion", TType.I64, 1)
             oprot.writeI64(self.lastKnownCheckpointVersion)
             oprot.writeFieldEnd()
         if self.lastKnownLogVersion is not None:
-            oprot.writeFieldBegin('lastKnownLogVersion', TType.I64, 2)
+            oprot.writeFieldBegin("lastKnownLogVersion", TType.I64, 2)
             oprot.writeI64(self.lastKnownLogVersion)
             oprot.writeFieldEnd()
         if self.absoluteTablePath is not None:
-            oprot.writeFieldBegin('absoluteTablePath', TType.STRING, 3)
-            oprot.writeString(self.absoluteTablePath.encode('utf-8') if sys.version_info[0] == 2 else self.absoluteTablePath)
+            oprot.writeFieldBegin("absoluteTablePath", TType.STRING, 3)
+            oprot.writeString(
+                self.absoluteTablePath.encode("utf-8")
+                if sys.version_info[0] == 2
+                else self.absoluteTablePath
+            )
             oprot.writeFieldEnd()
         if self.tableMetadata is not None:
-            oprot.writeFieldBegin('tableMetadata', TType.STRING, 4)
+            oprot.writeFieldBegin("tableMetadata", TType.STRING, 4)
             oprot.writeBinary(self.tableMetadata)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1334,9 +1616,8 @@ class DeltaTablePartitionInfo(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1357,10 +1638,19 @@ class MetastoreUser(object):
      - groupIds
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, name = None, firstName = None, lastName = None, emailAddress = None, id = None, groupNames = None, groupIds = None,):
+    def __init__(
+        self,
+        name=None,
+        firstName=None,
+        lastName=None,
+        emailAddress=None,
+        id=None,
+        groupNames=None,
+        groupIds=None,
+    ):
         self.name = name
         self.firstName = firstName
         self.lastName = lastName
@@ -1370,7 +1660,11 @@ class MetastoreUser(object):
         self.groupIds = groupIds
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1380,27 +1674,47 @@ class MetastoreUser(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.name = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.name = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.firstName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.firstName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.lastName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.lastName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRING:
-                    self.emailAddress = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.emailAddress = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 5:
                 if ftype == TType.STRING:
-                    self.id = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.id = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 6:
@@ -1408,7 +1722,11 @@ class MetastoreUser(object):
                     self.groupNames = []
                     (_etype17, _size14) = iprot.readListBegin()
                     for _i18 in range(_size14):
-                        _elem19 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem19 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.groupNames.append(_elem19)
                     iprot.readListEnd()
                 else:
@@ -1418,7 +1736,11 @@ class MetastoreUser(object):
                     self.groupIds = []
                     (_etype23, _size20) = iprot.readListBegin()
                     for _i24 in range(_size20):
-                        _elem25 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem25 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.groupIds.append(_elem25)
                     iprot.readListEnd()
                 else:
@@ -1433,39 +1755,45 @@ class MetastoreUser(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('MetastoreUser')
+        oprot.writeStructBegin("MetastoreUser")
         if self.name is not None:
-            oprot.writeFieldBegin('name', TType.STRING, 1)
-            oprot.writeString(self.name.encode('utf-8') if sys.version_info[0] == 2 else self.name)
+            oprot.writeFieldBegin("name", TType.STRING, 1)
+            oprot.writeString(self.name.encode("utf-8") if sys.version_info[0] == 2 else self.name)
             oprot.writeFieldEnd()
         if self.firstName is not None:
-            oprot.writeFieldBegin('firstName', TType.STRING, 2)
-            oprot.writeString(self.firstName.encode('utf-8') if sys.version_info[0] == 2 else self.firstName)
+            oprot.writeFieldBegin("firstName", TType.STRING, 2)
+            oprot.writeString(
+                self.firstName.encode("utf-8") if sys.version_info[0] == 2 else self.firstName
+            )
             oprot.writeFieldEnd()
         if self.lastName is not None:
-            oprot.writeFieldBegin('lastName', TType.STRING, 3)
-            oprot.writeString(self.lastName.encode('utf-8') if sys.version_info[0] == 2 else self.lastName)
+            oprot.writeFieldBegin("lastName", TType.STRING, 3)
+            oprot.writeString(
+                self.lastName.encode("utf-8") if sys.version_info[0] == 2 else self.lastName
+            )
             oprot.writeFieldEnd()
         if self.emailAddress is not None:
-            oprot.writeFieldBegin('emailAddress', TType.STRING, 4)
-            oprot.writeString(self.emailAddress.encode('utf-8') if sys.version_info[0] == 2 else self.emailAddress)
+            oprot.writeFieldBegin("emailAddress", TType.STRING, 4)
+            oprot.writeString(
+                self.emailAddress.encode("utf-8") if sys.version_info[0] == 2 else self.emailAddress
+            )
             oprot.writeFieldEnd()
         if self.id is not None:
-            oprot.writeFieldBegin('id', TType.STRING, 5)
-            oprot.writeString(self.id.encode('utf-8') if sys.version_info[0] == 2 else self.id)
+            oprot.writeFieldBegin("id", TType.STRING, 5)
+            oprot.writeString(self.id.encode("utf-8") if sys.version_info[0] == 2 else self.id)
             oprot.writeFieldEnd()
         if self.groupNames is not None:
-            oprot.writeFieldBegin('groupNames', TType.LIST, 6)
+            oprot.writeFieldBegin("groupNames", TType.LIST, 6)
             oprot.writeListBegin(TType.STRING, len(self.groupNames))
             for iter26 in self.groupNames:
-                oprot.writeString(iter26.encode('utf-8') if sys.version_info[0] == 2 else iter26)
+                oprot.writeString(iter26.encode("utf-8") if sys.version_info[0] == 2 else iter26)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.groupIds is not None:
-            oprot.writeFieldBegin('groupIds', TType.LIST, 7)
+            oprot.writeFieldBegin("groupIds", TType.LIST, 7)
             oprot.writeListBegin(TType.STRING, len(self.groupIds))
             for iter27 in self.groupIds:
-                oprot.writeString(iter27.encode('utf-8') if sys.version_info[0] == 2 else iter27)
+                oprot.writeString(iter27.encode("utf-8") if sys.version_info[0] == 2 else iter27)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1475,9 +1803,8 @@ class MetastoreUser(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1495,17 +1822,27 @@ class MetastoreGroup(object):
      - userIds
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, name = None, id = None, userNames = None, userIds = None,):
+    def __init__(
+        self,
+        name=None,
+        id=None,
+        userNames=None,
+        userIds=None,
+    ):
         self.name = name
         self.id = id
         self.userNames = userNames
         self.userIds = userIds
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1515,12 +1852,20 @@ class MetastoreGroup(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.name = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.name = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.id = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.id = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 6:
@@ -1528,7 +1873,11 @@ class MetastoreGroup(object):
                     self.userNames = []
                     (_etype31, _size28) = iprot.readListBegin()
                     for _i32 in range(_size28):
-                        _elem33 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem33 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.userNames.append(_elem33)
                     iprot.readListEnd()
                 else:
@@ -1538,7 +1887,11 @@ class MetastoreGroup(object):
                     self.userIds = []
                     (_etype37, _size34) = iprot.readListBegin()
                     for _i38 in range(_size34):
-                        _elem39 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem39 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.userIds.append(_elem39)
                     iprot.readListEnd()
                 else:
@@ -1553,27 +1906,27 @@ class MetastoreGroup(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('MetastoreGroup')
+        oprot.writeStructBegin("MetastoreGroup")
         if self.name is not None:
-            oprot.writeFieldBegin('name', TType.STRING, 1)
-            oprot.writeString(self.name.encode('utf-8') if sys.version_info[0] == 2 else self.name)
+            oprot.writeFieldBegin("name", TType.STRING, 1)
+            oprot.writeString(self.name.encode("utf-8") if sys.version_info[0] == 2 else self.name)
             oprot.writeFieldEnd()
         if self.id is not None:
-            oprot.writeFieldBegin('id', TType.STRING, 2)
-            oprot.writeString(self.id.encode('utf-8') if sys.version_info[0] == 2 else self.id)
+            oprot.writeFieldBegin("id", TType.STRING, 2)
+            oprot.writeString(self.id.encode("utf-8") if sys.version_info[0] == 2 else self.id)
             oprot.writeFieldEnd()
         if self.userNames is not None:
-            oprot.writeFieldBegin('userNames', TType.LIST, 6)
+            oprot.writeFieldBegin("userNames", TType.LIST, 6)
             oprot.writeListBegin(TType.STRING, len(self.userNames))
             for iter40 in self.userNames:
-                oprot.writeString(iter40.encode('utf-8') if sys.version_info[0] == 2 else iter40)
+                oprot.writeString(iter40.encode("utf-8") if sys.version_info[0] == 2 else iter40)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.userIds is not None:
-            oprot.writeFieldBegin('userIds', TType.LIST, 7)
+            oprot.writeFieldBegin("userIds", TType.LIST, 7)
             oprot.writeListBegin(TType.STRING, len(self.userIds))
             for iter41 in self.userIds:
-                oprot.writeString(iter41.encode('utf-8') if sys.version_info[0] == 2 else iter41)
+                oprot.writeString(iter41.encode("utf-8") if sys.version_info[0] == 2 else iter41)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1583,9 +1936,8 @@ class MetastoreGroup(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1605,10 +1957,18 @@ class MetastorePermission(object):
      - privileges
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, schemaName = None, tableName = None, columns = None, isAllowed = True, privileges = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        schemaName=None,
+        tableName=None,
+        columns=None,
+        isAllowed=True,
+        privileges=None,
+    ):
         self.catalogName = catalogName
         self.schemaName = schemaName
         self.tableName = tableName
@@ -1617,7 +1977,11 @@ class MetastorePermission(object):
         self.privileges = privileges
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1627,17 +1991,29 @@ class MetastorePermission(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.schemaName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.schemaName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -1645,7 +2021,11 @@ class MetastorePermission(object):
                     self.columns = []
                     (_etype45, _size42) = iprot.readListBegin()
                     for _i46 in range(_size42):
-                        _elem47 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem47 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.columns.append(_elem47)
                     iprot.readListEnd()
                 else:
@@ -1660,11 +2040,19 @@ class MetastorePermission(object):
                     self.privileges = {}
                     (_ktype49, _vtype50, _size48) = iprot.readMapBegin()
                     for _i52 in range(_size48):
-                        _key53 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _key53 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         _val54 = []
                         (_etype58, _size55) = iprot.readListBegin()
                         for _i59 in range(_size55):
-                            _elem60 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                            _elem60 = (
+                                iprot.readString().decode("utf-8", errors="replace")
+                                if sys.version_info[0] == 2
+                                else iprot.readString()
+                            )
                             _val54.append(_elem60)
                         iprot.readListEnd()
                         self.privileges[_key53] = _val54
@@ -1681,38 +2069,46 @@ class MetastorePermission(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('MetastorePermission')
+        oprot.writeStructBegin("MetastorePermission")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.schemaName is not None:
-            oprot.writeFieldBegin('schemaName', TType.STRING, 2)
-            oprot.writeString(self.schemaName.encode('utf-8') if sys.version_info[0] == 2 else self.schemaName)
+            oprot.writeFieldBegin("schemaName", TType.STRING, 2)
+            oprot.writeString(
+                self.schemaName.encode("utf-8") if sys.version_info[0] == 2 else self.schemaName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 3)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 3)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.columns is not None:
-            oprot.writeFieldBegin('columns', TType.LIST, 4)
+            oprot.writeFieldBegin("columns", TType.LIST, 4)
             oprot.writeListBegin(TType.STRING, len(self.columns))
             for iter61 in self.columns:
-                oprot.writeString(iter61.encode('utf-8') if sys.version_info[0] == 2 else iter61)
+                oprot.writeString(iter61.encode("utf-8") if sys.version_info[0] == 2 else iter61)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.isAllowed is not None:
-            oprot.writeFieldBegin('isAllowed', TType.BOOL, 5)
+            oprot.writeFieldBegin("isAllowed", TType.BOOL, 5)
             oprot.writeBool(self.isAllowed)
             oprot.writeFieldEnd()
         if self.privileges is not None:
-            oprot.writeFieldBegin('privileges', TType.MAP, 6)
+            oprot.writeFieldBegin("privileges", TType.MAP, 6)
             oprot.writeMapBegin(TType.STRING, TType.LIST, len(self.privileges))
             for kiter62, viter63 in self.privileges.items():
-                oprot.writeString(kiter62.encode('utf-8') if sys.version_info[0] == 2 else kiter62)
+                oprot.writeString(kiter62.encode("utf-8") if sys.version_info[0] == 2 else kiter62)
                 oprot.writeListBegin(TType.STRING, len(viter63))
                 for iter64 in viter63:
-                    oprot.writeString(iter64.encode('utf-8') if sys.version_info[0] == 2 else iter64)
+                    oprot.writeString(
+                        iter64.encode("utf-8") if sys.version_info[0] == 2 else iter64
+                    )
                 oprot.writeListEnd()
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
@@ -1723,9 +2119,8 @@ class MetastorePermission(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -1743,17 +2138,27 @@ class CalculatedStats(object):
      - ndvs
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, schemaName = None, tableName = None, ndvs = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        schemaName=None,
+        tableName=None,
+        ndvs=None,
+    ):
         self.catalogName = catalogName
         self.schemaName = schemaName
         self.tableName = tableName
         self.ndvs = ndvs
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1763,17 +2168,29 @@ class CalculatedStats(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.schemaName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.schemaName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -1781,7 +2198,11 @@ class CalculatedStats(object):
                     self.ndvs = {}
                     (_ktype66, _vtype67, _size65) = iprot.readMapBegin()
                     for _i69 in range(_size65):
-                        _key70 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _key70 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         _val71 = iprot.readI32()
                         self.ndvs[_key70] = _val71
                     iprot.readMapEnd()
@@ -1797,24 +2218,30 @@ class CalculatedStats(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('CalculatedStats')
+        oprot.writeStructBegin("CalculatedStats")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.schemaName is not None:
-            oprot.writeFieldBegin('schemaName', TType.STRING, 2)
-            oprot.writeString(self.schemaName.encode('utf-8') if sys.version_info[0] == 2 else self.schemaName)
+            oprot.writeFieldBegin("schemaName", TType.STRING, 2)
+            oprot.writeString(
+                self.schemaName.encode("utf-8") if sys.version_info[0] == 2 else self.schemaName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 3)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 3)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.ndvs is not None:
-            oprot.writeFieldBegin('ndvs', TType.MAP, 4)
+            oprot.writeFieldBegin("ndvs", TType.MAP, 4)
             oprot.writeMapBegin(TType.STRING, TType.I32, len(self.ndvs))
             for kiter72, viter73 in self.ndvs.items():
-                oprot.writeString(kiter72.encode('utf-8') if sys.version_info[0] == 2 else kiter72)
+                oprot.writeString(kiter72.encode("utf-8") if sys.version_info[0] == 2 else kiter72)
                 oprot.writeI32(viter73)
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
@@ -1825,162 +2252,568 @@ class CalculatedStats(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(SchemaServiceException)
 SchemaServiceException.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'reason', 'UTF8', None, ),  # 1
+    (
+        1,
+        TType.STRING,
+        "reason",
+        "UTF8",
+        None,
+    ),  # 1
 )
 all_structs.append(FileStatus)
 FileStatus.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'filePath', 'UTF8', None, ),  # 1
-    (2, TType.I64, 'fileSize', None, None, ),  # 2
+    (
+        1,
+        TType.STRING,
+        "filePath",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I64,
+        "fileSize",
+        None,
+        None,
+    ),  # 2
 )
 all_structs.append(ConnectionMetadata)
 ConnectionMetadata.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogType', 'UTF8', None, ),  # 1
-    (2, TType.STRUCT, 'catalogConnection', [CatalogConnectionMetadata, None], None, ),  # 2
-    (3, TType.STRING, 'cloudType', 'UTF8', None, ),  # 3
-    (4, TType.STRUCT, 'cloudSettings', [CloudSettings, None], None, ),  # 4
+    (
+        1,
+        TType.STRING,
+        "catalogType",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "catalogConnection",
+        [CatalogConnectionMetadata, None],
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "cloudType",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "cloudSettings",
+        [CloudSettings, None],
+        None,
+    ),  # 4
 )
 all_structs.append(CatalogConnectionMetadata)
 CatalogConnectionMetadata.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'hiveConnection', [HiveConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRUCT, 'glueConnection', [GlueConnectionMetadata, None], None, ),  # 2
-    (3, TType.STRUCT, 'unityConnection', [UnityConnectionMetadata, None], None, ),  # 3
-    (4, TType.STRUCT, 'fabricConnection', [FabricConnectionMetadata, None], None, ),  # 4
+    (
+        1,
+        TType.STRUCT,
+        "hiveConnection",
+        [HiveConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "glueConnection",
+        [GlueConnectionMetadata, None],
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRUCT,
+        "unityConnection",
+        [UnityConnectionMetadata, None],
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "fabricConnection",
+        [FabricConnectionMetadata, None],
+        None,
+    ),  # 4
 )
 all_structs.append(HiveConnectionMetadata)
 HiveConnectionMetadata.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'host', 'UTF8', None, ),  # 1
-    (2, TType.I32, 'port', None, None, ),  # 2
+    (
+        1,
+        TType.STRING,
+        "host",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I32,
+        "port",
+        None,
+        None,
+    ),  # 2
 )
 all_structs.append(GlueConnectionMetadata)
 GlueConnectionMetadata.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'region', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'catalogId', 'UTF8', None, ),  # 2
+    (
+        1,
+        TType.STRING,
+        "region",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "catalogId",
+        "UTF8",
+        None,
+    ),  # 2
 )
 all_structs.append(UnityConnectionMetadata)
 UnityConnectionMetadata.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'host', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'bearerToken', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'catalogName', 'UTF8', None, ),  # 3
-    (4, TType.STRING, 'adminUserName', 'UTF8', None, ),  # 4
-    (5, TType.STRING, 'adminPassword', 'UTF8', None, ),  # 5
-    (6, TType.STRING, 'accountId', 'UTF8', None, ),  # 6
+    (
+        1,
+        TType.STRING,
+        "host",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "bearerToken",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "adminUserName",
+        "UTF8",
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRING,
+        "adminPassword",
+        "UTF8",
+        None,
+    ),  # 5
+    (
+        6,
+        TType.STRING,
+        "accountId",
+        "UTF8",
+        None,
+    ),  # 6
 )
 all_structs.append(FabricConnectionMetadata)
 FabricConnectionMetadata.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'workspaceId', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'bearerToken', 'UTF8', None, ),  # 2
+    (
+        1,
+        TType.STRING,
+        "workspaceId",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "bearerToken",
+        "UTF8",
+        None,
+    ),  # 2
 )
 all_structs.append(CloudSettings)
 CloudSettings.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'awsSettings', [AwsSettings, None], None, ),  # 1
-    (2, TType.STRUCT, 'gcpSettings', [GcpSettings, None], None, ),  # 2
-    (3, TType.STRUCT, 'azureSettings', [AzureSettings, None], None, ),  # 3
-    (4, TType.STRUCT, 'localSettings', [LocalSettings, None], None, ),  # 4
+    (
+        1,
+        TType.STRUCT,
+        "awsSettings",
+        [AwsSettings, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "gcpSettings",
+        [GcpSettings, None],
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRUCT,
+        "azureSettings",
+        [AzureSettings, None],
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "localSettings",
+        [LocalSettings, None],
+        None,
+    ),  # 4
 )
 all_structs.append(AwsSettings)
 AwsSettings.thrift_spec = (
     None,  # 0
-    (1, TType.BOOL, 'assumedRole', None, None, ),  # 1
-    (2, TType.STRING, 'assumedRoleName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'region', 'UTF8', "us-east-1", ),  # 3
-    (4, TType.STRING, 'externalId', 'UTF8', "", ),  # 4
+    (
+        1,
+        TType.BOOL,
+        "assumedRole",
+        None,
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "assumedRoleName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "region",
+        "UTF8",
+        "us-east-1",
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "externalId",
+        "UTF8",
+        "",
+    ),  # 4
 )
 all_structs.append(GcpSettings)
-GcpSettings.thrift_spec = (
-)
+GcpSettings.thrift_spec = ()
 all_structs.append(AzureSettings)
-AzureSettings.thrift_spec = (
-)
+AzureSettings.thrift_spec = ()
 all_structs.append(LocalSettings)
-LocalSettings.thrift_spec = (
-)
+LocalSettings.thrift_spec = ()
 all_structs.append(RequestContext)
 RequestContext.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'hostName', 'UTF8', None, ),  # 1
-    (2, TType.I32, 'hostPort', None, None, ),  # 2
-    (3, TType.STRING, 'requestId', 'UTF8', None, ),  # 3
-    (4, TType.I32, 'partNum', None, None, ),  # 4
-    (5, TType.I32, 'totalParts', None, None, ),  # 5
-    (6, TType.I32, 'requestStatus', None, None, ),  # 6
-    (7, TType.STRING, 'error', 'UTF8', None, ),  # 7
+    (
+        1,
+        TType.STRING,
+        "hostName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I32,
+        "hostPort",
+        None,
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "requestId",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.I32,
+        "partNum",
+        None,
+        None,
+    ),  # 4
+    (
+        5,
+        TType.I32,
+        "totalParts",
+        None,
+        None,
+    ),  # 5
+    (
+        6,
+        TType.I32,
+        "requestStatus",
+        None,
+        None,
+    ),  # 6
+    (
+        7,
+        TType.STRING,
+        "error",
+        "UTF8",
+        None,
+    ),  # 7
 )
 all_structs.append(TableMetadataResponse)
 TableMetadataResponse.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'tableName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'tableType', 'UTF8', None, ),  # 2
-    (3, TType.LIST, 'columnNames', (TType.STRING, 'UTF8', False), None, ),  # 3
-    (4, TType.LIST, 'columnTypes', (TType.STRING, 'UTF8', False), None, ),  # 4
-    (5, TType.STRING, 'error', 'UTF8', None, ),  # 5
+    (
+        1,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "tableType",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.LIST,
+        "columnNames",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 3
+    (
+        4,
+        TType.LIST,
+        "columnTypes",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRING,
+        "error",
+        "UTF8",
+        None,
+    ),  # 5
 )
 all_structs.append(DeltaTablePartitionInfo)
 DeltaTablePartitionInfo.thrift_spec = (
     None,  # 0
-    (1, TType.I64, 'lastKnownCheckpointVersion', None, None, ),  # 1
-    (2, TType.I64, 'lastKnownLogVersion', None, None, ),  # 2
-    (3, TType.STRING, 'absoluteTablePath', 'UTF8', None, ),  # 3
-    (4, TType.STRING, 'tableMetadata', 'BINARY', None, ),  # 4
+    (
+        1,
+        TType.I64,
+        "lastKnownCheckpointVersion",
+        None,
+        None,
+    ),  # 1
+    (
+        2,
+        TType.I64,
+        "lastKnownLogVersion",
+        None,
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "absoluteTablePath",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "tableMetadata",
+        "BINARY",
+        None,
+    ),  # 4
 )
 all_structs.append(MetastoreUser)
 MetastoreUser.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'name', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'firstName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'lastName', 'UTF8', None, ),  # 3
-    (4, TType.STRING, 'emailAddress', 'UTF8', None, ),  # 4
-    (5, TType.STRING, 'id', 'UTF8', None, ),  # 5
-    (6, TType.LIST, 'groupNames', (TType.STRING, 'UTF8', False), None, ),  # 6
-    (7, TType.LIST, 'groupIds', (TType.STRING, 'UTF8', False), None, ),  # 7
+    (
+        1,
+        TType.STRING,
+        "name",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "firstName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "lastName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "emailAddress",
+        "UTF8",
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRING,
+        "id",
+        "UTF8",
+        None,
+    ),  # 5
+    (
+        6,
+        TType.LIST,
+        "groupNames",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 6
+    (
+        7,
+        TType.LIST,
+        "groupIds",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 7
 )
 all_structs.append(MetastoreGroup)
 MetastoreGroup.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'name', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'id', 'UTF8', None, ),  # 2
+    (
+        1,
+        TType.STRING,
+        "name",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "id",
+        "UTF8",
+        None,
+    ),  # 2
     None,  # 3
     None,  # 4
     None,  # 5
-    (6, TType.LIST, 'userNames', (TType.STRING, 'UTF8', False), None, ),  # 6
-    (7, TType.LIST, 'userIds', (TType.STRING, 'UTF8', False), None, ),  # 7
+    (
+        6,
+        TType.LIST,
+        "userNames",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 6
+    (
+        7,
+        TType.LIST,
+        "userIds",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 7
 )
 all_structs.append(MetastorePermission)
 MetastorePermission.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'schemaName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'tableName', 'UTF8', None, ),  # 3
-    (4, TType.LIST, 'columns', (TType.STRING, 'UTF8', False), None, ),  # 4
-    (5, TType.BOOL, 'isAllowed', None, True, ),  # 5
-    (6, TType.MAP, 'privileges', (TType.STRING, 'UTF8', TType.LIST, (TType.STRING, 'UTF8', False), False), None, ),  # 6
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "schemaName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.LIST,
+        "columns",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 4
+    (
+        5,
+        TType.BOOL,
+        "isAllowed",
+        None,
+        True,
+    ),  # 5
+    (
+        6,
+        TType.MAP,
+        "privileges",
+        (TType.STRING, "UTF8", TType.LIST, (TType.STRING, "UTF8", False), False),
+        None,
+    ),  # 6
 )
 all_structs.append(CalculatedStats)
 CalculatedStats.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'schemaName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'tableName', 'UTF8', None, ),  # 3
-    (4, TType.MAP, 'ndvs', (TType.STRING, 'UTF8', TType.I32, None, False), None, ),  # 4
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "schemaName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.MAP,
+        "ndvs",
+        (TType.STRING, "UTF8", TType.I32, None, False),
+        None,
+    ),  # 4
 )
 fix_spec(all_structs)
 del all_structs

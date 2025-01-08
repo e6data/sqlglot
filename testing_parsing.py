@@ -17,14 +17,17 @@ from sqlglot.expressions import (
 )
 from sqlglot import parse_one
 
-def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -> List[Dict[str, Any]]:
+
+def extract_sql_components_per_table_with_alias(
+    expressions: List[Expression],
+) -> List[Dict[str, Any]]:
     components = []
     alias_mapping = {}
 
     def traverse(node: Expression):
         if isinstance(node, Select):
             # Extract FROM tables and their aliases
-            from_clause = node.args.get('from')
+            from_clause = node.args.get("from")
             if from_clause:
                 for source in from_clause.find_all(Table):
                     table_name = source.name
@@ -32,7 +35,7 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
                     if isinstance(source, Alias):
                         alias = source.alias
                         alias_mapping[alias] = table_name
-                    elif source.args.get('alias'):
+                    elif source.args.get("alias"):
                         alias = source.alias
                         alias_mapping[alias] = table_name
 
@@ -40,13 +43,15 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
                         continue
 
                     # Check if table is already in components
-                    table_entry = next((item for item in components if item['table'] == table_name), None)
+                    table_entry = next(
+                        (item for item in components if item["table"] == table_name), None
+                    )
                     if not table_entry:
                         table_entry = {
-                            'table': table_name,
-                            'columns': [],
-                            'where_columns': [],
-                            'limits': []
+                            "table": table_name,
+                            "columns": [],
+                            "where_columns": [],
+                            "limits": [],
                         }
                         components.append(table_entry)
 
@@ -55,37 +60,46 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
                         if isinstance(expr, Column):
                             column_name = expr.name
                             if column_name:
-                                table_entry['columns'].append(column_name)
+                                table_entry["columns"].append(column_name)
                         elif isinstance(expr, Alias):
                             if isinstance(expr.this, Column):
                                 column_name = expr.this.name
                                 if column_name:
-                                    table_entry['columns'].append(column_name)
+                                    table_entry["columns"].append(column_name)
 
                     # Extract WHERE columns
-                    where_clause = node.args.get('where')
+                    where_clause = node.args.get("where")
                     if where_clause:
                         for condition in where_clause.find_all(Column):
                             column_name = condition.name
                             if column_name:
                                 # Determine the actual table if column is prefixed with alias
                                 if condition.table:
-                                    actual_table = alias_mapping.get(condition.table, condition.table)
-                                    table_entry = next((item for item in components if item['table'] == actual_table), None)
+                                    actual_table = alias_mapping.get(
+                                        condition.table, condition.table
+                                    )
+                                    table_entry = next(
+                                        (
+                                            item
+                                            for item in components
+                                            if item["table"] == actual_table
+                                        ),
+                                        None,
+                                    )
                                     if table_entry:
-                                        table_entry['where_columns'].append(column_name)
+                                        table_entry["where_columns"].append(column_name)
                                 # else:
                                 #     table_entry['where_columns'].append(column_name)
 
                     # Extract LIMIT
-                    limit_clause = node.args.get('limit')
+                    limit_clause = node.args.get("limit")
                     if limit_clause:
                         limit_value = limit_clause.this
                         if isinstance(limit_value, Literal):
-                            table_entry['limits'].append(limit_value.this)
+                            table_entry["limits"].append(limit_value.this)
 
             # Handle subqueries in WITH clauses or elsewhere
-            with_clause = node.args.get('with')
+            with_clause = node.args.get("with")
             if with_clause:
                 for cte in with_clause.expressions:
                     traverse(cte.this)
@@ -111,9 +125,9 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
 
     # Post-process to remove duplicates within each table entry
     for entry in components:
-        entry['columns'] = list(set(entry['columns']))
-        entry['where_columns'] = list(set(entry['where_columns']))
-        entry['limits'] = list(set(entry['limits']))
+        entry["columns"] = list(set(entry["columns"]))
+        entry["where_columns"] = list(set(entry["where_columns"]))
+        entry["limits"] = list(set(entry["limits"]))
 
     return components
 
@@ -136,9 +150,9 @@ def extract_sql_components_per_table_with_alias(expressions: List[Expression]) -
 #             id,
 #             random_value,
 #             date_generated,
-#             CASE 
-#                 WHEN MOD(id, 2) = 0 THEN 'even' 
-#                 ELSE 'odd' 
+#             CASE
+#                 WHEN MOD(id, 2) = 0 THEN 'even'
+#                 ELSE 'odd'
 #             END AS id_parity,
 #             IFF(random_value > 50, 'high', 'low') AS random_category,
 #             TO_VARCHAR(date_generated, 'YYYY-MM-DD') AS formatted_date,
@@ -370,17 +384,20 @@ ORDER BY
     pp.project_cost DESC
 LIMIT 100;
     """
-    
+
     # Parse the SQL query
     parsed = sqlglot.parse(sql, error_level=None)
-    print(parsed,"\n\n")
+    print(parsed, "\n\n")
 
     # Extract components per table with alias handling
     components = extract_sql_components_per_table_with_alias(parsed)
 
     # Display the result
     from pprint import pprint
+
     for c in components:
-        pprint(c,)
+        pprint(
+            c,
+        )
         print("\n")
     # pprint(components)

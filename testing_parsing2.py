@@ -187,7 +187,7 @@
 #     sql = """
 # WITH RECURSIVE EmployeeHierarchy AS (
 #     -- Base case: top-level managers
-#     SELECT 
+#     SELECT
 #         e.employee_id,
 #         e.full_name,
 #         e.manager_id,
@@ -198,9 +198,9 @@
 #     WHERE e.manager_id IS NULL
 
 #     UNION ALL
-    
+
 #     -- Recursive case: employees with managers
-#     SELECT 
+#     SELECT
 #         e.employee_id,
 #         e.full_name,
 #         e.manager_id,
@@ -212,7 +212,7 @@
 # ),
 
 # DepartmentMetrics AS (
-#     SELECT 
+#     SELECT
 #         d.department_id,
 #         d.department_name,
 #         COUNT(DISTINCT e.employee_id) as employee_count,
@@ -228,14 +228,14 @@
 # ),
 
 # ProjectPerformance AS (
-#     SELECT 
+#     SELECT
 #         p.project_id,
 #         p.project_name,
 #         p.start_date,
 #         p.end_date,
 #         COUNT(DISTINCT pa.employee_id) as team_size,
 #         SUM(p.total_cost) as project_cost,
-#         CASE 
+#         CASE
 #             WHEN p.end_date < CURRENT_DATE THEN 'Completed'
 #             WHEN p.start_date > CURRENT_DATE THEN 'Not Started'
 #             ELSE 'In Progress'
@@ -246,7 +246,7 @@
 #     GROUP BY p.project_id, p.project_name, p.start_date, p.end_date, p.department_id
 # )
 
-# SELECT 
+# SELECT
 #     eh.hierarchy_path,
 #     eh.level as organization_depth,
 #     dm.department_name,
@@ -258,10 +258,10 @@
 #     pp.project_status,
 #     ROUND(pp.project_cost, 2) as current_project_cost,
 #     ROUND(pp.previous_project_cost, 2) as previous_project_cost,
-#     ROUND((pp.project_cost - COALESCE(pp.previous_project_cost, 0)) / 
+#     ROUND((pp.project_cost - COALESCE(pp.previous_project_cost, 0)) /
 #           NULLIF(pp.previous_project_cost, 0) * 100, 2) as cost_change_percentage,
 #     FIRST_VALUE(pp.project_name) OVER (
-#         PARTITION BY dm.department_id 
+#         PARTITION BY dm.department_id
 #         ORDER BY pp.project_cost DESC
 #     ) as most_expensive_project,
 #     COUNT(*) OVER (
@@ -270,7 +270,7 @@
 # FROM EmployeeHierarchy eh
 # INNER JOIN DepartmentMetrics dm ON eh.department_id = dm.department_id
 # LEFT JOIN ProjectPerformance pp ON eh.department_id = pp.department_id
-# WHERE 
+# WHERE
 #     eh.level <= 3
 #     AND dm.employee_count >= 5
 #     AND dm.total_project_cost > (
@@ -283,7 +283,7 @@
 #         WHERE pa.employee_id = eh.employee_id
 #         AND pa.end_date > CURRENT_DATE
 #     )
-# ORDER BY 
+# ORDER BY
 #     eh.hierarchy_path,
 #     dm.salary_rank,
 #     pp.project_cost DESC
@@ -324,6 +324,7 @@ from sqlglot.expressions import (
     Func,
 )
 
+
 class TableContext:
     def __init__(self, name: str):
         self.name = name
@@ -333,12 +334,13 @@ class TableContext:
         self.referenced_in_joins: Set[str] = set()
         self.source_cte: Optional[str] = None
 
+
 class SQLComponentExtractor:
     def __init__(self):
         self.contexts: Dict[str, TableContext] = {}
         self.alias_mapping: Dict[str, str] = {}
         self.cte_definitions: Dict[str, Set[str]] = {}
-        
+
     def get_or_create_context(self, table_name: str) -> TableContext:
         if table_name not in self.contexts:
             self.contexts[table_name] = TableContext(table_name)
@@ -362,7 +364,7 @@ class SQLComponentExtractor:
                 for table in current_scope:
                     context = self.get_or_create_context(table)
                     context.columns.add(column_name)
-        
+
         elif isinstance(expr, Func):
             # Handle function arguments
             for arg in expr.args.values():
@@ -383,7 +385,7 @@ class SQLComponentExtractor:
         if isinstance(condition, Binary):
             self.process_where_condition(condition.left, current_scope)
             self.process_where_condition(condition.right, current_scope)
-            
+
         elif isinstance(condition, Column):
             table_alias = condition.table
             column_name = condition.name
@@ -407,10 +409,10 @@ class SQLComponentExtractor:
             table_name = join.this.name
             if join.this.alias:
                 self.alias_mapping[join.this.alias] = table_name
-            
+
             current_scope.append(table_name)
             context = self.get_or_create_context(table_name)
-            
+
             # Process join conditions
             if join.on:
                 self.process_where_condition(join.on, current_scope)
@@ -418,10 +420,10 @@ class SQLComponentExtractor:
     def process_select(self, select: Select, parent_scope: List[str]) -> List[str]:
         """Process SELECT statement and return list of referenced tables"""
         current_scope = parent_scope.copy()
-        
+
         # Process FROM clause
-        if select.args.get('from'):
-            for source in select.args['from'].find_all(Table):
+        if select.args.get("from"):
+            for source in select.args["from"].find_all(Table):
                 table_name = source.name
                 if source.alias:
                     self.alias_mapping[source.alias] = table_name
@@ -439,12 +441,12 @@ class SQLComponentExtractor:
                 self.extract_column_references(expr, current_scope)
 
         # Process WHERE clause
-        where_clause = select.args.get('where')
+        where_clause = select.args.get("where")
         if where_clause:
             self.process_where_condition(where_clause, current_scope)
 
         # Process LIMIT
-        limit_clause = select.args.get('limit')
+        limit_clause = select.args.get("limit")
         if limit_clause and isinstance(limit_clause.this, Literal):
             limit_value = limit_clause.this.this
             for table in current_scope:
@@ -457,7 +459,7 @@ class SQLComponentExtractor:
         """Process CTE definition"""
         cte_name = cte.alias
         self.cte_definitions[cte_name] = set()
-        
+
         if isinstance(cte.this, Select):
             referenced_tables = self.process_select(cte.this, [])
             self.cte_definitions[cte_name].update(referenced_tables)
@@ -471,7 +473,7 @@ class SQLComponentExtractor:
         print("\n")
         print("\n")
         # Process WITH clause first
-        with_clause = parsed.args.get('with')
+        with_clause = parsed.args.get("with")
         if with_clause:
             for cte in with_clause.expressions:
                 self.process_cte(cte)
@@ -484,14 +486,15 @@ class SQLComponentExtractor:
         result = []
         for table_name, context in self.contexts.items():
             entry = {
-                'table': table_name,
-                'columns': sorted(list(context.columns)),
-                'where_columns': sorted(list(context.where_columns)),
-                'limits': sorted(list(context.limits))
+                "table": table_name,
+                "columns": sorted(list(context.columns)),
+                "where_columns": sorted(list(context.where_columns)),
+                "limits": sorted(list(context.limits)),
             }
             result.append(entry)
 
         return result
+
 
 def analyze_sql_query(sql: str) -> List[Dict[str, Any]]:
     extractor = SQLComponentExtractor()
@@ -609,6 +612,7 @@ if __name__ == "__main__":
     # Test with your SQL query
     components = analyze_sql_query(sql)
     from pprint import pprint
+
     for component in components:
         pprint(component)
         print("\n")

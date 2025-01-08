@@ -107,6 +107,7 @@ ORDER BY
 LIMIT 100;
     """
 
+
 def test_preprocess():
     # Create a test expression
     # sql = "SELECT id, name FROM users WHERE age > 18"
@@ -116,7 +117,7 @@ def test_preprocess():
         print("---------------***----------------")
         print("---------------***----------------")
         print(f"Original expression: {expression}")
-        print("\n","-"*5)
+        print("\n", "-" * 5)
 
         processed_expr = gen.preprocess(e)
         print(f"Processed expression: {processed_expr}")
@@ -125,12 +126,12 @@ def test_preprocess():
             print(f"Processed expression: {p}")
             print("\n\n")
 
-            
     # Generate SQL from processed expression
     # result = gen.generate(processed_expr)
-    
+
     # print(f"Original SQL: {sql}")
     # print(f"Processed SQL: {result}")
+
 
 if __name__ == "__main__":
     test_preprocess()

@@ -16,6 +16,7 @@ import logging
 from .ttypes import *
 from thrift.Thrift import TProcessor
 from thrift.transport import TTransport
+
 all_structs = []
 
 
@@ -83,7 +84,9 @@ class Iface(object):
         """
         pass
 
-    def getTableStatistics(self, catalogName, dbName, tableName, connectionMetadata, requestContext):
+    def getTableStatistics(
+        self, catalogName, dbName, tableName, connectionMetadata, requestContext
+    ):
         """
         Parameters:
          - catalogName
@@ -95,7 +98,9 @@ class Iface(object):
         """
         pass
 
-    def getTablePartitions(self, catalogName, dbName, tableName, connectionMetadata, requestContext):
+    def getTablePartitions(
+        self, catalogName, dbName, tableName, connectionMetadata, requestContext
+    ):
         """
         Parameters:
          - catalogName
@@ -107,7 +112,9 @@ class Iface(object):
         """
         pass
 
-    def getTableFilePaths(self, catalogName, dbName, tableName, partitions, connectionMetadata, requestContext):
+    def getTableFilePaths(
+        self, catalogName, dbName, tableName, partitions, connectionMetadata, requestContext
+    ):
         """
         Parameters:
          - catalogName
@@ -130,7 +137,16 @@ class Iface(object):
         """
         pass
 
-    def getAdditionalData(self, catalogName, dbName, tableName, partitions, connectionMetadata, snopShotVersion, requestContext):
+    def getAdditionalData(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        partitions,
+        connectionMetadata,
+        snopShotVersion,
+        requestContext,
+    ):
         """
         Parameters:
          - catalogName
@@ -144,7 +160,16 @@ class Iface(object):
         """
         pass
 
-    def calculateStats(self, catalogName, dbName, tableName, columnNames, partFilesToAnalyze, connectionMetadata, requestContext):
+    def calculateStats(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        columnNames,
+        partFilesToAnalyze,
+        connectionMetadata,
+        requestContext,
+    ):
         """
         Parameters:
          - catalogName
@@ -158,7 +183,16 @@ class Iface(object):
         """
         pass
 
-    def getTablePartitionsForDelta(self, catalogName, dbName, tableName, deltaTablePartitionInfo, tableVersionInfo, connectionMetadata, requestContext):
+    def getTablePartitionsForDelta(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        deltaTablePartitionInfo,
+        tableVersionInfo,
+        connectionMetadata,
+        requestContext,
+    ):
         """
         Parameters:
          - catalogName
@@ -211,7 +245,9 @@ class Iface(object):
         """
         pass
 
-    def getMetastorePermissions_table(self, connectionMetadata, requestContext, catalog, schema, table):
+    def getMetastorePermissions_table(
+        self, connectionMetadata, requestContext, catalog, schema, table
+    ):
         """
         Parameters:
          - connectionMetadata
@@ -236,7 +272,9 @@ class Iface(object):
         """
         pass
 
-    def updateView(self, connectionMetadata, catalogName, databaseName, tableName, bytes, requestContext):
+    def updateView(
+        self, connectionMetadata, catalogName, databaseName, tableName, bytes, requestContext
+    ):
         """
         Parameters:
          - connectionMetadata
@@ -280,7 +318,7 @@ class Client(Iface):
         return self.recv_getDBNamesForCatalog()
 
     def send_getDBNamesForCatalog(self, catalogName, connectionMetadata):
-        self._oprot.writeMessageBegin('getDBNamesForCatalog', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("getDBNamesForCatalog", TMessageType.CALL, self._seqid)
         args = getDBNamesForCatalog_args()
         args.catalogName = catalogName
         args.connectionMetadata = connectionMetadata
@@ -303,7 +341,9 @@ class Client(Iface):
             return result.success
         if result.error1 is not None:
             raise result.error1
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "getDBNamesForCatalog failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT, "getDBNamesForCatalog failed: unknown result"
+        )
 
     def getTableNamesForDB(self, catalogName, dbName, connectionMetadata):
         """
@@ -317,7 +357,7 @@ class Client(Iface):
         return self.recv_getTableNamesForDB()
 
     def send_getTableNamesForDB(self, catalogName, dbName, connectionMetadata):
-        self._oprot.writeMessageBegin('getTableNamesForDB', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("getTableNamesForDB", TMessageType.CALL, self._seqid)
         args = getTableNamesForDB_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -341,7 +381,9 @@ class Client(Iface):
             return result.success
         if result.error1 is not None:
             raise result.error1
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "getTableNamesForDB failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT, "getTableNamesForDB failed: unknown result"
+        )
 
     def getTableMetadataForTables(self, catalogName, dbName, tableNames, connectionMetadata):
         """
@@ -356,7 +398,7 @@ class Client(Iface):
         return self.recv_getTableMetadataForTables()
 
     def send_getTableMetadataForTables(self, catalogName, dbName, tableNames, connectionMetadata):
-        self._oprot.writeMessageBegin('getTableMetadataForTables', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("getTableMetadataForTables", TMessageType.CALL, self._seqid)
         args = getTableMetadataForTables_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -381,7 +423,9 @@ class Client(Iface):
             return result.success
         if result.error1 is not None:
             raise result.error1
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "getTableMetadataForTables failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT, "getTableMetadataForTables failed: unknown result"
+        )
 
     def getDBNames(self, catalogName, connectionMetadata, requestContext):
         """
@@ -395,7 +439,7 @@ class Client(Iface):
         self.recv_getDBNames()
 
     def send_getDBNames(self, catalogName, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getDBNames', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("getDBNames", TMessageType.CALL, self._seqid)
         args = getDBNames_args()
         args.catalogName = catalogName
         args.connectionMetadata = connectionMetadata
@@ -432,7 +476,7 @@ class Client(Iface):
         self.recv_getTableNames()
 
     def send_getTableNames(self, catalogName, dbName, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getTableNames', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("getTableNames", TMessageType.CALL, self._seqid)
         args = getTableNames_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -467,11 +511,15 @@ class Client(Iface):
          - requestContext
 
         """
-        self.send_getTableMetadata(catalogName, dbName, tableNames, connectionMetadata, requestContext)
+        self.send_getTableMetadata(
+            catalogName, dbName, tableNames, connectionMetadata, requestContext
+        )
         self.recv_getTableMetadata()
 
-    def send_getTableMetadata(self, catalogName, dbName, tableNames, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getTableMetadata', TMessageType.CALL, self._seqid)
+    def send_getTableMetadata(
+        self, catalogName, dbName, tableNames, connectionMetadata, requestContext
+    ):
+        self._oprot.writeMessageBegin("getTableMetadata", TMessageType.CALL, self._seqid)
         args = getTableMetadata_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -497,7 +545,9 @@ class Client(Iface):
             raise result.error1
         return
 
-    def getTableStatistics(self, catalogName, dbName, tableName, connectionMetadata, requestContext):
+    def getTableStatistics(
+        self, catalogName, dbName, tableName, connectionMetadata, requestContext
+    ):
         """
         Parameters:
          - catalogName
@@ -507,11 +557,15 @@ class Client(Iface):
          - requestContext
 
         """
-        self.send_getTableStatistics(catalogName, dbName, tableName, connectionMetadata, requestContext)
+        self.send_getTableStatistics(
+            catalogName, dbName, tableName, connectionMetadata, requestContext
+        )
         self.recv_getTableStatistics()
 
-    def send_getTableStatistics(self, catalogName, dbName, tableName, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getTableStatistics', TMessageType.CALL, self._seqid)
+    def send_getTableStatistics(
+        self, catalogName, dbName, tableName, connectionMetadata, requestContext
+    ):
+        self._oprot.writeMessageBegin("getTableStatistics", TMessageType.CALL, self._seqid)
         args = getTableStatistics_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -537,7 +591,9 @@ class Client(Iface):
             raise result.error1
         return
 
-    def getTablePartitions(self, catalogName, dbName, tableName, connectionMetadata, requestContext):
+    def getTablePartitions(
+        self, catalogName, dbName, tableName, connectionMetadata, requestContext
+    ):
         """
         Parameters:
          - catalogName
@@ -547,11 +603,15 @@ class Client(Iface):
          - requestContext
 
         """
-        self.send_getTablePartitions(catalogName, dbName, tableName, connectionMetadata, requestContext)
+        self.send_getTablePartitions(
+            catalogName, dbName, tableName, connectionMetadata, requestContext
+        )
         self.recv_getTablePartitions()
 
-    def send_getTablePartitions(self, catalogName, dbName, tableName, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getTablePartitions', TMessageType.CALL, self._seqid)
+    def send_getTablePartitions(
+        self, catalogName, dbName, tableName, connectionMetadata, requestContext
+    ):
+        self._oprot.writeMessageBegin("getTablePartitions", TMessageType.CALL, self._seqid)
         args = getTablePartitions_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -577,7 +637,9 @@ class Client(Iface):
             raise result.error1
         return
 
-    def getTableFilePaths(self, catalogName, dbName, tableName, partitions, connectionMetadata, requestContext):
+    def getTableFilePaths(
+        self, catalogName, dbName, tableName, partitions, connectionMetadata, requestContext
+    ):
         """
         Parameters:
          - catalogName
@@ -588,11 +650,15 @@ class Client(Iface):
          - requestContext
 
         """
-        self.send_getTableFilePaths(catalogName, dbName, tableName, partitions, connectionMetadata, requestContext)
+        self.send_getTableFilePaths(
+            catalogName, dbName, tableName, partitions, connectionMetadata, requestContext
+        )
         self.recv_getTableFilePaths()
 
-    def send_getTableFilePaths(self, catalogName, dbName, tableName, partitions, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getTableFilePaths', TMessageType.CALL, self._seqid)
+    def send_getTableFilePaths(
+        self, catalogName, dbName, tableName, partitions, connectionMetadata, requestContext
+    ):
+        self._oprot.writeMessageBegin("getTableFilePaths", TMessageType.CALL, self._seqid)
         args = getTableFilePaths_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -631,7 +697,7 @@ class Client(Iface):
         self.recv_getFileMetadata()
 
     def send_getFileMetadata(self, fileStatus, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getFileMetadata', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("getFileMetadata", TMessageType.CALL, self._seqid)
         args = getFileMetadata_args()
         args.fileStatus = fileStatus
         args.connectionMetadata = connectionMetadata
@@ -655,7 +721,16 @@ class Client(Iface):
             raise result.error1
         return
 
-    def getAdditionalData(self, catalogName, dbName, tableName, partitions, connectionMetadata, snopShotVersion, requestContext):
+    def getAdditionalData(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        partitions,
+        connectionMetadata,
+        snopShotVersion,
+        requestContext,
+    ):
         """
         Parameters:
          - catalogName
@@ -667,11 +742,28 @@ class Client(Iface):
          - requestContext
 
         """
-        self.send_getAdditionalData(catalogName, dbName, tableName, partitions, connectionMetadata, snopShotVersion, requestContext)
+        self.send_getAdditionalData(
+            catalogName,
+            dbName,
+            tableName,
+            partitions,
+            connectionMetadata,
+            snopShotVersion,
+            requestContext,
+        )
         self.recv_getAdditionalData()
 
-    def send_getAdditionalData(self, catalogName, dbName, tableName, partitions, connectionMetadata, snopShotVersion, requestContext):
-        self._oprot.writeMessageBegin('getAdditionalData', TMessageType.CALL, self._seqid)
+    def send_getAdditionalData(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        partitions,
+        connectionMetadata,
+        snopShotVersion,
+        requestContext,
+    ):
+        self._oprot.writeMessageBegin("getAdditionalData", TMessageType.CALL, self._seqid)
         args = getAdditionalData_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -699,7 +791,16 @@ class Client(Iface):
             raise result.error1
         return
 
-    def calculateStats(self, catalogName, dbName, tableName, columnNames, partFilesToAnalyze, connectionMetadata, requestContext):
+    def calculateStats(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        columnNames,
+        partFilesToAnalyze,
+        connectionMetadata,
+        requestContext,
+    ):
         """
         Parameters:
          - catalogName
@@ -711,11 +812,28 @@ class Client(Iface):
          - requestContext
 
         """
-        self.send_calculateStats(catalogName, dbName, tableName, columnNames, partFilesToAnalyze, connectionMetadata, requestContext)
+        self.send_calculateStats(
+            catalogName,
+            dbName,
+            tableName,
+            columnNames,
+            partFilesToAnalyze,
+            connectionMetadata,
+            requestContext,
+        )
         return self.recv_calculateStats()
 
-    def send_calculateStats(self, catalogName, dbName, tableName, columnNames, partFilesToAnalyze, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('calculateStats', TMessageType.CALL, self._seqid)
+    def send_calculateStats(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        columnNames,
+        partFilesToAnalyze,
+        connectionMetadata,
+        requestContext,
+    ):
+        self._oprot.writeMessageBegin("calculateStats", TMessageType.CALL, self._seqid)
         args = calculateStats_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -741,9 +859,20 @@ class Client(Iface):
         iprot.readMessageEnd()
         if result.success is not None:
             return result.success
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "calculateStats failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT, "calculateStats failed: unknown result"
+        )
 
-    def getTablePartitionsForDelta(self, catalogName, dbName, tableName, deltaTablePartitionInfo, tableVersionInfo, connectionMetadata, requestContext):
+    def getTablePartitionsForDelta(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        deltaTablePartitionInfo,
+        tableVersionInfo,
+        connectionMetadata,
+        requestContext,
+    ):
         """
         Parameters:
          - catalogName
@@ -755,11 +884,28 @@ class Client(Iface):
          - requestContext
 
         """
-        self.send_getTablePartitionsForDelta(catalogName, dbName, tableName, deltaTablePartitionInfo, tableVersionInfo, connectionMetadata, requestContext)
+        self.send_getTablePartitionsForDelta(
+            catalogName,
+            dbName,
+            tableName,
+            deltaTablePartitionInfo,
+            tableVersionInfo,
+            connectionMetadata,
+            requestContext,
+        )
         self.recv_getTablePartitionsForDelta()
 
-    def send_getTablePartitionsForDelta(self, catalogName, dbName, tableName, deltaTablePartitionInfo, tableVersionInfo, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getTablePartitionsForDelta', TMessageType.CALL, self._seqid)
+    def send_getTablePartitionsForDelta(
+        self,
+        catalogName,
+        dbName,
+        tableName,
+        deltaTablePartitionInfo,
+        tableVersionInfo,
+        connectionMetadata,
+        requestContext,
+    ):
+        self._oprot.writeMessageBegin("getTablePartitionsForDelta", TMessageType.CALL, self._seqid)
         args = getTablePartitionsForDelta_args()
         args.catalogName = catalogName
         args.dbName = dbName
@@ -798,7 +944,7 @@ class Client(Iface):
         return self.recv_getMetastoreUsers()
 
     def send_getMetastoreUsers(self, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getMetastoreUsers', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("getMetastoreUsers", TMessageType.CALL, self._seqid)
         args = getMetastoreUsers_args()
         args.connectionMetadata = connectionMetadata
         args.requestContext = requestContext
@@ -819,7 +965,9 @@ class Client(Iface):
         iprot.readMessageEnd()
         if result.success is not None:
             return result.success
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "getMetastoreUsers failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT, "getMetastoreUsers failed: unknown result"
+        )
 
     def getMetastoreGroups(self, connectionMetadata, requestContext):
         """
@@ -832,7 +980,7 @@ class Client(Iface):
         return self.recv_getMetastoreGroups()
 
     def send_getMetastoreGroups(self, connectionMetadata, requestContext):
-        self._oprot.writeMessageBegin('getMetastoreGroups', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("getMetastoreGroups", TMessageType.CALL, self._seqid)
         args = getMetastoreGroups_args()
         args.connectionMetadata = connectionMetadata
         args.requestContext = requestContext
@@ -853,7 +1001,9 @@ class Client(Iface):
         iprot.readMessageEnd()
         if result.success is not None:
             return result.success
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "getMetastoreGroups failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT, "getMetastoreGroups failed: unknown result"
+        )
 
     def getMetastorePermissions_catalog(self, connectionMetadata, requestContext, catalog):
         """
@@ -867,7 +1017,9 @@ class Client(Iface):
         return self.recv_getMetastorePermissions_catalog()
 
     def send_getMetastorePermissions_catalog(self, connectionMetadata, requestContext, catalog):
-        self._oprot.writeMessageBegin('getMetastorePermissions_catalog', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin(
+            "getMetastorePermissions_catalog", TMessageType.CALL, self._seqid
+        )
         args = getMetastorePermissions_catalog_args()
         args.connectionMetadata = connectionMetadata
         args.requestContext = requestContext
@@ -889,7 +1041,10 @@ class Client(Iface):
         iprot.readMessageEnd()
         if result.success is not None:
             return result.success
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "getMetastorePermissions_catalog failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT,
+            "getMetastorePermissions_catalog failed: unknown result",
+        )
 
     def getMetastorePermissions_schema(self, connectionMetadata, requestContext, catalog, schema):
         """
@@ -900,11 +1055,17 @@ class Client(Iface):
          - schema
 
         """
-        self.send_getMetastorePermissions_schema(connectionMetadata, requestContext, catalog, schema)
+        self.send_getMetastorePermissions_schema(
+            connectionMetadata, requestContext, catalog, schema
+        )
         return self.recv_getMetastorePermissions_schema()
 
-    def send_getMetastorePermissions_schema(self, connectionMetadata, requestContext, catalog, schema):
-        self._oprot.writeMessageBegin('getMetastorePermissions_schema', TMessageType.CALL, self._seqid)
+    def send_getMetastorePermissions_schema(
+        self, connectionMetadata, requestContext, catalog, schema
+    ):
+        self._oprot.writeMessageBegin(
+            "getMetastorePermissions_schema", TMessageType.CALL, self._seqid
+        )
         args = getMetastorePermissions_schema_args()
         args.connectionMetadata = connectionMetadata
         args.requestContext = requestContext
@@ -927,9 +1088,14 @@ class Client(Iface):
         iprot.readMessageEnd()
         if result.success is not None:
             return result.success
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "getMetastorePermissions_schema failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT,
+            "getMetastorePermissions_schema failed: unknown result",
+        )
 
-    def getMetastorePermissions_table(self, connectionMetadata, requestContext, catalog, schema, table):
+    def getMetastorePermissions_table(
+        self, connectionMetadata, requestContext, catalog, schema, table
+    ):
         """
         Parameters:
          - connectionMetadata
@@ -939,11 +1105,17 @@ class Client(Iface):
          - table
 
         """
-        self.send_getMetastorePermissions_table(connectionMetadata, requestContext, catalog, schema, table)
+        self.send_getMetastorePermissions_table(
+            connectionMetadata, requestContext, catalog, schema, table
+        )
         return self.recv_getMetastorePermissions_table()
 
-    def send_getMetastorePermissions_table(self, connectionMetadata, requestContext, catalog, schema, table):
-        self._oprot.writeMessageBegin('getMetastorePermissions_table', TMessageType.CALL, self._seqid)
+    def send_getMetastorePermissions_table(
+        self, connectionMetadata, requestContext, catalog, schema, table
+    ):
+        self._oprot.writeMessageBegin(
+            "getMetastorePermissions_table", TMessageType.CALL, self._seqid
+        )
         args = getMetastorePermissions_table_args()
         args.connectionMetadata = connectionMetadata
         args.requestContext = requestContext
@@ -967,7 +1139,10 @@ class Client(Iface):
         iprot.readMessageEnd()
         if result.success is not None:
             return result.success
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "getMetastorePermissions_table failed: unknown result")
+        raise TApplicationException(
+            TApplicationException.MISSING_RESULT,
+            "getMetastorePermissions_table failed: unknown result",
+        )
 
     def createView(self, connectionMetadata, catalogName, dbName, tableName, requestContext, bytes):
         """
@@ -980,11 +1155,15 @@ class Client(Iface):
          - bytes
 
         """
-        self.send_createView(connectionMetadata, catalogName, dbName, tableName, requestContext, bytes)
+        self.send_createView(
+            connectionMetadata, catalogName, dbName, tableName, requestContext, bytes
+        )
         self.recv_createView()
 
-    def send_createView(self, connectionMetadata, catalogName, dbName, tableName, requestContext, bytes):
-        self._oprot.writeMessageBegin('createView', TMessageType.CALL, self._seqid)
+    def send_createView(
+        self, connectionMetadata, catalogName, dbName, tableName, requestContext, bytes
+    ):
+        self._oprot.writeMessageBegin("createView", TMessageType.CALL, self._seqid)
         args = createView_args()
         args.connectionMetadata = connectionMetadata
         args.catalogName = catalogName
@@ -1011,7 +1190,9 @@ class Client(Iface):
             raise result.error1
         return
 
-    def updateView(self, connectionMetadata, catalogName, databaseName, tableName, bytes, requestContext):
+    def updateView(
+        self, connectionMetadata, catalogName, databaseName, tableName, bytes, requestContext
+    ):
         """
         Parameters:
          - connectionMetadata
@@ -1022,11 +1203,15 @@ class Client(Iface):
          - requestContext
 
         """
-        self.send_updateView(connectionMetadata, catalogName, databaseName, tableName, bytes, requestContext)
+        self.send_updateView(
+            connectionMetadata, catalogName, databaseName, tableName, bytes, requestContext
+        )
         self.recv_updateView()
 
-    def send_updateView(self, connectionMetadata, catalogName, databaseName, tableName, bytes, requestContext):
-        self._oprot.writeMessageBegin('updateView', TMessageType.CALL, self._seqid)
+    def send_updateView(
+        self, connectionMetadata, catalogName, databaseName, tableName, bytes, requestContext
+    ):
+        self._oprot.writeMessageBegin("updateView", TMessageType.CALL, self._seqid)
         args = updateView_args()
         args.connectionMetadata = connectionMetadata
         args.catalogName = catalogName
@@ -1067,7 +1252,7 @@ class Client(Iface):
         self.recv_dropView()
 
     def send_dropView(self, connectionMetadata, catalogName, dbName, tableName, requestContext):
-        self._oprot.writeMessageBegin('dropView', TMessageType.CALL, self._seqid)
+        self._oprot.writeMessageBegin("dropView", TMessageType.CALL, self._seqid)
         args = dropView_args()
         args.connectionMetadata = connectionMetadata
         args.catalogName = catalogName
@@ -1110,12 +1295,20 @@ class Processor(Iface, TProcessor):
         self._processMap["getFileMetadata"] = Processor.process_getFileMetadata
         self._processMap["getAdditionalData"] = Processor.process_getAdditionalData
         self._processMap["calculateStats"] = Processor.process_calculateStats
-        self._processMap["getTablePartitionsForDelta"] = Processor.process_getTablePartitionsForDelta
+        self._processMap["getTablePartitionsForDelta"] = (
+            Processor.process_getTablePartitionsForDelta
+        )
         self._processMap["getMetastoreUsers"] = Processor.process_getMetastoreUsers
         self._processMap["getMetastoreGroups"] = Processor.process_getMetastoreGroups
-        self._processMap["getMetastorePermissions_catalog"] = Processor.process_getMetastorePermissions_catalog
-        self._processMap["getMetastorePermissions_schema"] = Processor.process_getMetastorePermissions_schema
-        self._processMap["getMetastorePermissions_table"] = Processor.process_getMetastorePermissions_table
+        self._processMap["getMetastorePermissions_catalog"] = (
+            Processor.process_getMetastorePermissions_catalog
+        )
+        self._processMap["getMetastorePermissions_schema"] = (
+            Processor.process_getMetastorePermissions_schema
+        )
+        self._processMap["getMetastorePermissions_table"] = (
+            Processor.process_getMetastorePermissions_table
+        )
         self._processMap["createView"] = Processor.process_createView
         self._processMap["updateView"] = Processor.process_updateView
         self._processMap["dropView"] = Processor.process_dropView
@@ -1131,7 +1324,9 @@ class Processor(Iface, TProcessor):
         if name not in self._processMap:
             iprot.skip(TType.STRUCT)
             iprot.readMessageEnd()
-            x = TApplicationException(TApplicationException.UNKNOWN_METHOD, 'Unknown function %s' % (name))
+            x = TApplicationException(
+                TApplicationException.UNKNOWN_METHOD, "Unknown function %s" % (name)
+            )
             oprot.writeMessageBegin(name, TMessageType.EXCEPTION, seqid)
             x.write(oprot)
             oprot.writeMessageEnd()
@@ -1147,7 +1342,9 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getDBNamesForCatalog_result()
         try:
-            result.success = self._handler.getDBNamesForCatalog(args.catalogName, args.connectionMetadata)
+            result.success = self._handler.getDBNamesForCatalog(
+                args.catalogName, args.connectionMetadata
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1155,13 +1352,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getDBNamesForCatalog", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1173,7 +1370,9 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getTableNamesForDB_result()
         try:
-            result.success = self._handler.getTableNamesForDB(args.catalogName, args.dbName, args.connectionMetadata)
+            result.success = self._handler.getTableNamesForDB(
+                args.catalogName, args.dbName, args.connectionMetadata
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1181,13 +1380,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getTableNamesForDB", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1199,7 +1398,9 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getTableMetadataForTables_result()
         try:
-            result.success = self._handler.getTableMetadataForTables(args.catalogName, args.dbName, args.tableNames, args.connectionMetadata)
+            result.success = self._handler.getTableMetadataForTables(
+                args.catalogName, args.dbName, args.tableNames, args.connectionMetadata
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1207,13 +1408,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getTableMetadataForTables", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1233,13 +1434,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getDBNames", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1251,7 +1452,9 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getTableNames_result()
         try:
-            self._handler.getTableNames(args.catalogName, args.dbName, args.connectionMetadata, args.requestContext)
+            self._handler.getTableNames(
+                args.catalogName, args.dbName, args.connectionMetadata, args.requestContext
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1259,13 +1462,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getTableNames", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1277,7 +1480,13 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getTableMetadata_result()
         try:
-            self._handler.getTableMetadata(args.catalogName, args.dbName, args.tableNames, args.connectionMetadata, args.requestContext)
+            self._handler.getTableMetadata(
+                args.catalogName,
+                args.dbName,
+                args.tableNames,
+                args.connectionMetadata,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1285,13 +1494,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getTableMetadata", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1303,7 +1512,13 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getTableStatistics_result()
         try:
-            self._handler.getTableStatistics(args.catalogName, args.dbName, args.tableName, args.connectionMetadata, args.requestContext)
+            self._handler.getTableStatistics(
+                args.catalogName,
+                args.dbName,
+                args.tableName,
+                args.connectionMetadata,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1311,13 +1526,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getTableStatistics", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1329,7 +1544,13 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getTablePartitions_result()
         try:
-            self._handler.getTablePartitions(args.catalogName, args.dbName, args.tableName, args.connectionMetadata, args.requestContext)
+            self._handler.getTablePartitions(
+                args.catalogName,
+                args.dbName,
+                args.tableName,
+                args.connectionMetadata,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1337,13 +1558,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getTablePartitions", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1355,7 +1576,14 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getTableFilePaths_result()
         try:
-            self._handler.getTableFilePaths(args.catalogName, args.dbName, args.tableName, args.partitions, args.connectionMetadata, args.requestContext)
+            self._handler.getTableFilePaths(
+                args.catalogName,
+                args.dbName,
+                args.tableName,
+                args.partitions,
+                args.connectionMetadata,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1363,13 +1591,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getTableFilePaths", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1381,7 +1609,9 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getFileMetadata_result()
         try:
-            self._handler.getFileMetadata(args.fileStatus, args.connectionMetadata, args.requestContext)
+            self._handler.getFileMetadata(
+                args.fileStatus, args.connectionMetadata, args.requestContext
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1389,13 +1619,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getFileMetadata", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1407,7 +1637,15 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getAdditionalData_result()
         try:
-            self._handler.getAdditionalData(args.catalogName, args.dbName, args.tableName, args.partitions, args.connectionMetadata, args.snopShotVersion, args.requestContext)
+            self._handler.getAdditionalData(
+                args.catalogName,
+                args.dbName,
+                args.tableName,
+                args.partitions,
+                args.connectionMetadata,
+                args.snopShotVersion,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1415,13 +1653,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getAdditionalData", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1433,18 +1671,26 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = calculateStats_result()
         try:
-            result.success = self._handler.calculateStats(args.catalogName, args.dbName, args.tableName, args.columnNames, args.partFilesToAnalyze, args.connectionMetadata, args.requestContext)
+            result.success = self._handler.calculateStats(
+                args.catalogName,
+                args.dbName,
+                args.tableName,
+                args.columnNames,
+                args.partFilesToAnalyze,
+                args.connectionMetadata,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("calculateStats", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1456,7 +1702,15 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getTablePartitionsForDelta_result()
         try:
-            self._handler.getTablePartitionsForDelta(args.catalogName, args.dbName, args.tableName, args.deltaTablePartitionInfo, args.tableVersionInfo, args.connectionMetadata, args.requestContext)
+            self._handler.getTablePartitionsForDelta(
+                args.catalogName,
+                args.dbName,
+                args.tableName,
+                args.deltaTablePartitionInfo,
+                args.tableVersionInfo,
+                args.connectionMetadata,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1464,13 +1718,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getTablePartitionsForDelta", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1482,18 +1736,20 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getMetastoreUsers_result()
         try:
-            result.success = self._handler.getMetastoreUsers(args.connectionMetadata, args.requestContext)
+            result.success = self._handler.getMetastoreUsers(
+                args.connectionMetadata, args.requestContext
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getMetastoreUsers", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1505,18 +1761,20 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getMetastoreGroups_result()
         try:
-            result.success = self._handler.getMetastoreGroups(args.connectionMetadata, args.requestContext)
+            result.success = self._handler.getMetastoreGroups(
+                args.connectionMetadata, args.requestContext
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getMetastoreGroups", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1528,18 +1786,20 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getMetastorePermissions_catalog_result()
         try:
-            result.success = self._handler.getMetastorePermissions_catalog(args.connectionMetadata, args.requestContext, args.catalog)
+            result.success = self._handler.getMetastorePermissions_catalog(
+                args.connectionMetadata, args.requestContext, args.catalog
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getMetastorePermissions_catalog", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1551,18 +1811,20 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getMetastorePermissions_schema_result()
         try:
-            result.success = self._handler.getMetastorePermissions_schema(args.connectionMetadata, args.requestContext, args.catalog, args.schema)
+            result.success = self._handler.getMetastorePermissions_schema(
+                args.connectionMetadata, args.requestContext, args.catalog, args.schema
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getMetastorePermissions_schema", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1574,18 +1836,20 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = getMetastorePermissions_table_result()
         try:
-            result.success = self._handler.getMetastorePermissions_table(args.connectionMetadata, args.requestContext, args.catalog, args.schema, args.table)
+            result.success = self._handler.getMetastorePermissions_table(
+                args.connectionMetadata, args.requestContext, args.catalog, args.schema, args.table
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("getMetastorePermissions_table", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1597,7 +1861,14 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = createView_result()
         try:
-            self._handler.createView(args.connectionMetadata, args.catalogName, args.dbName, args.tableName, args.requestContext, args.bytes)
+            self._handler.createView(
+                args.connectionMetadata,
+                args.catalogName,
+                args.dbName,
+                args.tableName,
+                args.requestContext,
+                args.bytes,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1605,13 +1876,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("createView", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1623,7 +1894,14 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = updateView_result()
         try:
-            self._handler.updateView(args.connectionMetadata, args.catalogName, args.databaseName, args.tableName, args.bytes, args.requestContext)
+            self._handler.updateView(
+                args.connectionMetadata,
+                args.catalogName,
+                args.databaseName,
+                args.tableName,
+                args.bytes,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1631,13 +1909,13 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("updateView", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
@@ -1649,7 +1927,13 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = dropView_result()
         try:
-            self._handler.dropView(args.connectionMetadata, args.catalogName, args.dbName, args.tableName, args.requestContext)
+            self._handler.dropView(
+                args.connectionMetadata,
+                args.catalogName,
+                args.dbName,
+                args.tableName,
+                args.requestContext,
+            )
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -1657,17 +1941,18 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
             result.error1 = error1
         except TApplicationException as ex:
-            logging.exception('TApplication exception in handler')
+            logging.exception("TApplication exception in handler")
             msg_type = TMessageType.EXCEPTION
             result = ex
         except Exception:
-            logging.exception('Unexpected exception in handler')
+            logging.exception("Unexpected exception in handler")
             msg_type = TMessageType.EXCEPTION
-            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, "Internal error")
         oprot.writeMessageBegin("dropView", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
+
 
 # HELPER FUNCTIONS AND STRUCTURES
 
@@ -1679,15 +1964,23 @@ class getDBNamesForCatalog_args(object):
      - connectionMetadata
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, connectionMetadata = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        connectionMetadata=None,
+    ):
         self.catalogName = catalogName
         self.connectionMetadata = connectionMetadata
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1697,7 +1990,11 @@ class getDBNamesForCatalog_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -1716,13 +2013,15 @@ class getDBNamesForCatalog_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getDBNamesForCatalog_args')
+        oprot.writeStructBegin("getDBNamesForCatalog_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 2)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 2)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1732,20 +2031,33 @@ class getDBNamesForCatalog_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getDBNamesForCatalog_args)
 getDBNamesForCatalog_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 2
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 2
 )
 
 
@@ -1756,15 +2068,23 @@ class getDBNamesForCatalog_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None, error1 = None,):
+    def __init__(
+        self,
+        success=None,
+        error1=None,
+    ):
         self.success = success
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1777,7 +2097,11 @@ class getDBNamesForCatalog_result(object):
                     self.success = []
                     (_etype77, _size74) = iprot.readListBegin()
                     for _i78 in range(_size74):
-                        _elem79 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem79 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.success.append(_elem79)
                     iprot.readListEnd()
                 else:
@@ -1797,16 +2121,16 @@ class getDBNamesForCatalog_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getDBNamesForCatalog_result')
+        oprot.writeStructBegin("getDBNamesForCatalog_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeFieldBegin("success", TType.LIST, 0)
             oprot.writeListBegin(TType.STRING, len(self.success))
             for iter80 in self.success:
-                oprot.writeString(iter80.encode('utf-8') if sys.version_info[0] == 2 else iter80)
+                oprot.writeString(iter80.encode("utf-8") if sys.version_info[0] == 2 else iter80)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1816,19 +2140,32 @@ class getDBNamesForCatalog_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getDBNamesForCatalog_result)
 getDBNamesForCatalog_result.thrift_spec = (
-    (0, TType.LIST, 'success', (TType.STRING, 'UTF8', False), None, ),  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        0,
+        TType.LIST,
+        "success",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 0
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -1840,16 +2177,25 @@ class getTableNamesForDB_args(object):
      - connectionMetadata
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, connectionMetadata = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        connectionMetadata=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.connectionMetadata = connectionMetadata
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1859,12 +2205,20 @@ class getTableNamesForDB_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
@@ -1883,17 +2237,21 @@ class getTableNamesForDB_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableNamesForDB_args')
+        oprot.writeStructBegin("getTableNamesForDB_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 3)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 3)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1903,21 +2261,40 @@ class getTableNamesForDB_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableNamesForDB_args)
 getTableNamesForDB_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 3
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 3
 )
 
 
@@ -1928,15 +2305,23 @@ class getTableNamesForDB_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None, error1 = None,):
+    def __init__(
+        self,
+        success=None,
+        error1=None,
+    ):
         self.success = success
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -1949,7 +2334,11 @@ class getTableNamesForDB_result(object):
                     self.success = []
                     (_etype84, _size81) = iprot.readListBegin()
                     for _i85 in range(_size81):
-                        _elem86 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem86 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.success.append(_elem86)
                     iprot.readListEnd()
                 else:
@@ -1969,16 +2358,16 @@ class getTableNamesForDB_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableNamesForDB_result')
+        oprot.writeStructBegin("getTableNamesForDB_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeFieldBegin("success", TType.LIST, 0)
             oprot.writeListBegin(TType.STRING, len(self.success))
             for iter87 in self.success:
-                oprot.writeString(iter87.encode('utf-8') if sys.version_info[0] == 2 else iter87)
+                oprot.writeString(iter87.encode("utf-8") if sys.version_info[0] == 2 else iter87)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1988,19 +2377,32 @@ class getTableNamesForDB_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableNamesForDB_result)
 getTableNamesForDB_result.thrift_spec = (
-    (0, TType.LIST, 'success', (TType.STRING, 'UTF8', False), None, ),  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        0,
+        TType.LIST,
+        "success",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 0
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -2013,17 +2415,27 @@ class getTableMetadataForTables_args(object):
      - connectionMetadata
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, tableNames = None, connectionMetadata = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        tableNames=None,
+        connectionMetadata=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.tableNames = tableNames
         self.connectionMetadata = connectionMetadata
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2033,12 +2445,20 @@ class getTableMetadataForTables_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
@@ -2046,7 +2466,11 @@ class getTableMetadataForTables_args(object):
                     self.tableNames = []
                     (_etype91, _size88) = iprot.readListBegin()
                     for _i92 in range(_size88):
-                        _elem93 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem93 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.tableNames.append(_elem93)
                     iprot.readListEnd()
                 else:
@@ -2067,24 +2491,28 @@ class getTableMetadataForTables_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableMetadataForTables_args')
+        oprot.writeStructBegin("getTableMetadataForTables_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableNames is not None:
-            oprot.writeFieldBegin('tableNames', TType.LIST, 3)
+            oprot.writeFieldBegin("tableNames", TType.LIST, 3)
             oprot.writeListBegin(TType.STRING, len(self.tableNames))
             for iter94 in self.tableNames:
-                oprot.writeString(iter94.encode('utf-8') if sys.version_info[0] == 2 else iter94)
+                oprot.writeString(iter94.encode("utf-8") if sys.version_info[0] == 2 else iter94)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 4)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 4)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2094,22 +2522,47 @@ class getTableMetadataForTables_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableMetadataForTables_args)
 getTableMetadataForTables_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.LIST, 'tableNames', (TType.STRING, 'UTF8', False), None, ),  # 3
-    (4, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 4
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.LIST,
+        "tableNames",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 4
 )
 
 
@@ -2120,15 +2573,23 @@ class getTableMetadataForTables_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None, error1 = None,):
+    def __init__(
+        self,
+        success=None,
+        error1=None,
+    ):
         self.success = success
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2162,16 +2623,16 @@ class getTableMetadataForTables_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableMetadataForTables_result')
+        oprot.writeStructBegin("getTableMetadataForTables_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeFieldBegin("success", TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
             for iter101 in self.success:
                 iter101.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2181,19 +2642,32 @@ class getTableMetadataForTables_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableMetadataForTables_result)
 getTableMetadataForTables_result.thrift_spec = (
-    (0, TType.LIST, 'success', (TType.STRUCT, [TableMetadataResponse, None], False), None, ),  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        0,
+        TType.LIST,
+        "success",
+        (TType.STRUCT, [TableMetadataResponse, None], False),
+        None,
+    ),  # 0
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -2205,16 +2679,25 @@ class getDBNames_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.connectionMetadata = connectionMetadata
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2224,7 +2707,11 @@ class getDBNames_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
@@ -2249,17 +2736,19 @@ class getDBNames_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getDBNames_args')
+        oprot.writeStructBegin("getDBNames_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 2)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 2)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 3)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 3)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2269,21 +2758,40 @@ class getDBNames_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getDBNames_args)
 getDBNames_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 2
-    (3, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 3
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 3
 )
 
 
@@ -2293,14 +2801,21 @@ class getDBNames_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2323,9 +2838,9 @@ class getDBNames_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getDBNames_result')
+        oprot.writeStructBegin("getDBNames_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2335,19 +2850,26 @@ class getDBNames_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getDBNames_result)
 getDBNames_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -2360,17 +2882,27 @@ class getTableNames_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.connectionMetadata = connectionMetadata
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2380,12 +2912,20 @@ class getTableNames_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
@@ -2410,21 +2950,25 @@ class getTableNames_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableNames_args')
+        oprot.writeStructBegin("getTableNames_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 3)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 3)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 4)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 4)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2434,22 +2978,47 @@ class getTableNames_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableNames_args)
 getTableNames_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 3
-    (4, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 4
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 4
 )
 
 
@@ -2459,14 +3028,21 @@ class getTableNames_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2489,9 +3065,9 @@ class getTableNames_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableNames_result')
+        oprot.writeStructBegin("getTableNames_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2501,19 +3077,26 @@ class getTableNames_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableNames_result)
 getTableNames_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -2527,10 +3110,17 @@ class getTableMetadata_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, tableNames = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        tableNames=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.tableNames = tableNames
@@ -2538,7 +3128,11 @@ class getTableMetadata_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2548,12 +3142,20 @@ class getTableMetadata_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
@@ -2561,7 +3163,11 @@ class getTableMetadata_args(object):
                     self.tableNames = []
                     (_etype105, _size102) = iprot.readListBegin()
                     for _i106 in range(_size102):
-                        _elem107 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem107 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.tableNames.append(_elem107)
                     iprot.readListEnd()
                 else:
@@ -2588,28 +3194,32 @@ class getTableMetadata_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableMetadata_args')
+        oprot.writeStructBegin("getTableMetadata_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableNames is not None:
-            oprot.writeFieldBegin('tableNames', TType.LIST, 3)
+            oprot.writeFieldBegin("tableNames", TType.LIST, 3)
             oprot.writeListBegin(TType.STRING, len(self.tableNames))
             for iter108 in self.tableNames:
-                oprot.writeString(iter108.encode('utf-8') if sys.version_info[0] == 2 else iter108)
+                oprot.writeString(iter108.encode("utf-8") if sys.version_info[0] == 2 else iter108)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 4)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 4)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 5)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 5)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2619,23 +3229,54 @@ class getTableMetadata_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableMetadata_args)
 getTableMetadata_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.LIST, 'tableNames', (TType.STRING, 'UTF8', False), None, ),  # 3
-    (4, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 4
-    (5, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 5
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.LIST,
+        "tableNames",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 5
 )
 
 
@@ -2645,14 +3286,21 @@ class getTableMetadata_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2675,9 +3323,9 @@ class getTableMetadata_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableMetadata_result')
+        oprot.writeStructBegin("getTableMetadata_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2687,19 +3335,26 @@ class getTableMetadata_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableMetadata_result)
 getTableMetadata_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -2713,10 +3368,17 @@ class getTableStatistics_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, tableName = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        tableName=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.tableName = tableName
@@ -2724,7 +3386,11 @@ class getTableStatistics_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2734,17 +3400,29 @@ class getTableStatistics_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -2769,25 +3447,31 @@ class getTableStatistics_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableStatistics_args')
+        oprot.writeStructBegin("getTableStatistics_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 3)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 3)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 4)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 4)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 5)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 5)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2797,23 +3481,54 @@ class getTableStatistics_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableStatistics_args)
 getTableStatistics_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'tableName', 'UTF8', None, ),  # 3
-    (4, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 4
-    (5, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 5
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 5
 )
 
 
@@ -2823,14 +3538,21 @@ class getTableStatistics_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2853,9 +3575,9 @@ class getTableStatistics_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableStatistics_result')
+        oprot.writeStructBegin("getTableStatistics_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2865,19 +3587,26 @@ class getTableStatistics_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableStatistics_result)
 getTableStatistics_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -2891,10 +3620,17 @@ class getTablePartitions_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, tableName = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        tableName=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.tableName = tableName
@@ -2902,7 +3638,11 @@ class getTablePartitions_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -2912,17 +3652,29 @@ class getTablePartitions_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -2947,25 +3699,31 @@ class getTablePartitions_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTablePartitions_args')
+        oprot.writeStructBegin("getTablePartitions_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 3)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 3)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 4)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 4)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 5)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 5)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2975,23 +3733,54 @@ class getTablePartitions_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTablePartitions_args)
 getTablePartitions_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'tableName', 'UTF8', None, ),  # 3
-    (4, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 4
-    (5, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 5
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 5
 )
 
 
@@ -3001,14 +3790,21 @@ class getTablePartitions_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3031,9 +3827,9 @@ class getTablePartitions_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTablePartitions_result')
+        oprot.writeStructBegin("getTablePartitions_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3043,19 +3839,26 @@ class getTablePartitions_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTablePartitions_result)
 getTablePartitions_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -3070,10 +3873,18 @@ class getTableFilePaths_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, tableName = None, partitions = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        tableName=None,
+        partitions=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.tableName = tableName
@@ -3082,7 +3893,11 @@ class getTableFilePaths_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3092,17 +3907,29 @@ class getTableFilePaths_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -3138,32 +3965,38 @@ class getTableFilePaths_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableFilePaths_args')
+        oprot.writeStructBegin("getTableFilePaths_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 3)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 3)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.partitions is not None:
-            oprot.writeFieldBegin('partitions', TType.LIST, 4)
+            oprot.writeFieldBegin("partitions", TType.LIST, 4)
             oprot.writeListBegin(TType.STRUCT, len(self.partitions))
             for iter115 in self.partitions:
                 iter115.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 5)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 5)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 6)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 6)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3173,24 +4006,61 @@ class getTableFilePaths_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableFilePaths_args)
 getTableFilePaths_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'tableName', 'UTF8', None, ),  # 3
-    (4, TType.LIST, 'partitions', (TType.STRUCT, [e6_metadata_common.ttypes.E6Partition, None], False), None, ),  # 4
-    (5, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 5
-    (6, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 6
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.LIST,
+        "partitions",
+        (TType.STRUCT, [e6_metadata_common.ttypes.E6Partition, None], False),
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 5
+    (
+        6,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 6
 )
 
 
@@ -3200,14 +4070,21 @@ class getTableFilePaths_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3230,9 +4107,9 @@ class getTableFilePaths_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTableFilePaths_result')
+        oprot.writeStructBegin("getTableFilePaths_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3242,19 +4119,26 @@ class getTableFilePaths_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTableFilePaths_result)
 getTableFilePaths_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -3266,16 +4150,25 @@ class getFileMetadata_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, fileStatus = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        fileStatus=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.fileStatus = fileStatus
         self.connectionMetadata = connectionMetadata
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3316,20 +4209,20 @@ class getFileMetadata_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getFileMetadata_args')
+        oprot.writeStructBegin("getFileMetadata_args")
         if self.fileStatus is not None:
-            oprot.writeFieldBegin('fileStatus', TType.LIST, 1)
+            oprot.writeFieldBegin("fileStatus", TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.fileStatus))
             for iter122 in self.fileStatus:
                 iter122.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 3)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 3)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 4)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 4)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3339,22 +4232,41 @@ class getFileMetadata_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getFileMetadata_args)
 getFileMetadata_args.thrift_spec = (
     None,  # 0
-    (1, TType.LIST, 'fileStatus', (TType.STRUCT, [FileStatus, None], False), None, ),  # 1
+    (
+        1,
+        TType.LIST,
+        "fileStatus",
+        (TType.STRUCT, [FileStatus, None], False),
+        None,
+    ),  # 1
     None,  # 2
-    (3, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 3
-    (4, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 4
+    (
+        3,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 4
 )
 
 
@@ -3364,14 +4276,21 @@ class getFileMetadata_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3394,9 +4313,9 @@ class getFileMetadata_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getFileMetadata_result')
+        oprot.writeStructBegin("getFileMetadata_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3406,19 +4325,26 @@ class getFileMetadata_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getFileMetadata_result)
 getFileMetadata_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -3434,10 +4360,19 @@ class getAdditionalData_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, tableName = None, partitions = None, connectionMetadata = None, snopShotVersion = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        tableName=None,
+        partitions=None,
+        connectionMetadata=None,
+        snopShotVersion=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.tableName = tableName
@@ -3447,7 +4382,11 @@ class getAdditionalData_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3457,17 +4396,29 @@ class getAdditionalData_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -3508,36 +4459,42 @@ class getAdditionalData_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getAdditionalData_args')
+        oprot.writeStructBegin("getAdditionalData_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 3)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 3)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.partitions is not None:
-            oprot.writeFieldBegin('partitions', TType.LIST, 4)
+            oprot.writeFieldBegin("partitions", TType.LIST, 4)
             oprot.writeListBegin(TType.STRUCT, len(self.partitions))
             for iter129 in self.partitions:
                 iter129.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 5)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 5)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.snopShotVersion is not None:
-            oprot.writeFieldBegin('snopShotVersion', TType.I64, 6)
+            oprot.writeFieldBegin("snopShotVersion", TType.I64, 6)
             oprot.writeI64(self.snopShotVersion)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 7)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 7)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3547,25 +4504,68 @@ class getAdditionalData_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getAdditionalData_args)
 getAdditionalData_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'tableName', 'UTF8', None, ),  # 3
-    (4, TType.LIST, 'partitions', (TType.STRUCT, [e6_metadata_common.ttypes.E6PartitionInfo, None], False), None, ),  # 4
-    (5, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 5
-    (6, TType.I64, 'snopShotVersion', None, None, ),  # 6
-    (7, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 7
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.LIST,
+        "partitions",
+        (TType.STRUCT, [e6_metadata_common.ttypes.E6PartitionInfo, None], False),
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 5
+    (
+        6,
+        TType.I64,
+        "snopShotVersion",
+        None,
+        None,
+    ),  # 6
+    (
+        7,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 7
 )
 
 
@@ -3575,14 +4575,21 @@ class getAdditionalData_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3605,9 +4612,9 @@ class getAdditionalData_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getAdditionalData_result')
+        oprot.writeStructBegin("getAdditionalData_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3617,19 +4624,26 @@ class getAdditionalData_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getAdditionalData_result)
 getAdditionalData_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -3645,10 +4659,19 @@ class calculateStats_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, tableName = None, columnNames = None, partFilesToAnalyze = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        tableName=None,
+        columnNames=None,
+        partFilesToAnalyze=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.tableName = tableName
@@ -3658,7 +4681,11 @@ class calculateStats_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3668,17 +4695,29 @@ class calculateStats_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -3686,7 +4725,11 @@ class calculateStats_args(object):
                     self.columnNames = []
                     (_etype133, _size130) = iprot.readListBegin()
                     for _i134 in range(_size130):
-                        _elem135 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _elem135 = (
+                            iprot.readString().decode("utf-8", errors="replace")
+                            if sys.version_info[0] == 2
+                            else iprot.readString()
+                        )
                         self.columnNames.append(_elem135)
                     iprot.readListEnd()
                 else:
@@ -3699,13 +4742,21 @@ class calculateStats_args(object):
                         _key141 = []
                         (_etype146, _size143) = iprot.readListBegin()
                         for _i147 in range(_size143):
-                            _elem148 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                            _elem148 = (
+                                iprot.readString().decode("utf-8", errors="replace")
+                                if sys.version_info[0] == 2
+                                else iprot.readString()
+                            )
                             _key141.append(_elem148)
                         iprot.readListEnd()
                         _val142 = []
                         (_etype152, _size149) = iprot.readListBegin()
                         for _i153 in range(_size149):
-                            _elem154 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                            _elem154 = (
+                                iprot.readString().decode("utf-8", errors="replace")
+                                if sys.version_info[0] == 2
+                                else iprot.readString()
+                            )
                             _val142.append(_elem154)
                         iprot.readListEnd()
                         self.partFilesToAnalyze[_key141] = _val142
@@ -3734,46 +4785,56 @@ class calculateStats_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('calculateStats_args')
+        oprot.writeStructBegin("calculateStats_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 3)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 3)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.columnNames is not None:
-            oprot.writeFieldBegin('columnNames', TType.LIST, 4)
+            oprot.writeFieldBegin("columnNames", TType.LIST, 4)
             oprot.writeListBegin(TType.STRING, len(self.columnNames))
             for iter155 in self.columnNames:
-                oprot.writeString(iter155.encode('utf-8') if sys.version_info[0] == 2 else iter155)
+                oprot.writeString(iter155.encode("utf-8") if sys.version_info[0] == 2 else iter155)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.partFilesToAnalyze is not None:
-            oprot.writeFieldBegin('partFilesToAnalyze', TType.MAP, 5)
+            oprot.writeFieldBegin("partFilesToAnalyze", TType.MAP, 5)
             oprot.writeMapBegin(TType.LIST, TType.LIST, len(self.partFilesToAnalyze))
             for kiter156, viter157 in self.partFilesToAnalyze.items():
                 oprot.writeListBegin(TType.STRING, len(kiter156))
                 for iter158 in kiter156:
-                    oprot.writeString(iter158.encode('utf-8') if sys.version_info[0] == 2 else iter158)
+                    oprot.writeString(
+                        iter158.encode("utf-8") if sys.version_info[0] == 2 else iter158
+                    )
                 oprot.writeListEnd()
                 oprot.writeListBegin(TType.STRING, len(viter157))
                 for iter159 in viter157:
-                    oprot.writeString(iter159.encode('utf-8') if sys.version_info[0] == 2 else iter159)
+                    oprot.writeString(
+                        iter159.encode("utf-8") if sys.version_info[0] == 2 else iter159
+                    )
                 oprot.writeListEnd()
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 6)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 6)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 7)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 7)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3783,25 +4844,74 @@ class calculateStats_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(calculateStats_args)
 calculateStats_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'tableName', 'UTF8', None, ),  # 3
-    (4, TType.LIST, 'columnNames', (TType.STRING, 'UTF8', False), None, ),  # 4
-    (5, TType.MAP, 'partFilesToAnalyze', (TType.LIST, (TType.STRING, 'UTF8', False), TType.LIST, (TType.STRING, 'UTF8', False), False), None, ),  # 5
-    (6, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 6
-    (7, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 7
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.LIST,
+        "columnNames",
+        (TType.STRING, "UTF8", False),
+        None,
+    ),  # 4
+    (
+        5,
+        TType.MAP,
+        "partFilesToAnalyze",
+        (
+            TType.LIST,
+            (TType.STRING, "UTF8", False),
+            TType.LIST,
+            (TType.STRING, "UTF8", False),
+            False,
+        ),
+        None,
+    ),  # 5
+    (
+        6,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 6
+    (
+        7,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 7
 )
 
 
@@ -3811,14 +4921,21 @@ class calculateStats_result(object):
      - success
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None,):
+    def __init__(
+        self,
+        success=None,
+    ):
         self.success = success
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3842,9 +4959,9 @@ class calculateStats_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('calculateStats_result')
+        oprot.writeStructBegin("calculateStats_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            oprot.writeFieldBegin("success", TType.STRUCT, 0)
             self.success.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3854,18 +4971,25 @@ class calculateStats_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(calculateStats_result)
 calculateStats_result.thrift_spec = (
-    (0, TType.STRUCT, 'success', [CalculatedStats, None], None, ),  # 0
+    (
+        0,
+        TType.STRUCT,
+        "success",
+        [CalculatedStats, None],
+        None,
+    ),  # 0
 )
 
 
@@ -3881,10 +5005,19 @@ class getTablePartitionsForDelta_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, catalogName = None, dbName = None, tableName = None, deltaTablePartitionInfo = None, tableVersionInfo = None, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        catalogName=None,
+        dbName=None,
+        tableName=None,
+        deltaTablePartitionInfo=None,
+        tableVersionInfo=None,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.catalogName = catalogName
         self.dbName = dbName
         self.tableName = tableName
@@ -3894,7 +5027,11 @@ class getTablePartitionsForDelta_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -3904,17 +5041,29 @@ class getTablePartitionsForDelta_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
@@ -3951,33 +5100,39 @@ class getTablePartitionsForDelta_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTablePartitionsForDelta_args')
+        oprot.writeStructBegin("getTablePartitionsForDelta_args")
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 1)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 1)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 2)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 2)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 3)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 3)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.deltaTablePartitionInfo is not None:
-            oprot.writeFieldBegin('deltaTablePartitionInfo', TType.STRUCT, 4)
+            oprot.writeFieldBegin("deltaTablePartitionInfo", TType.STRUCT, 4)
             self.deltaTablePartitionInfo.write(oprot)
             oprot.writeFieldEnd()
         if self.tableVersionInfo is not None:
-            oprot.writeFieldBegin('tableVersionInfo', TType.STRUCT, 5)
+            oprot.writeFieldBegin("tableVersionInfo", TType.STRUCT, 5)
             self.tableVersionInfo.write(oprot)
             oprot.writeFieldEnd()
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 6)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 6)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 7)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 7)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3987,25 +5142,68 @@ class getTablePartitionsForDelta_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTablePartitionsForDelta_args)
 getTablePartitionsForDelta_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRING, 'catalogName', 'UTF8', None, ),  # 1
-    (2, TType.STRING, 'dbName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'tableName', 'UTF8', None, ),  # 3
-    (4, TType.STRUCT, 'deltaTablePartitionInfo', [DeltaTablePartitionInfo, None], None, ),  # 4
-    (5, TType.STRUCT, 'tableVersionInfo', [e6_metadata_common.ttypes.TableVersionInfo, None], None, ),  # 5
-    (6, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 6
-    (7, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 7
+    (
+        1,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRUCT,
+        "deltaTablePartitionInfo",
+        [DeltaTablePartitionInfo, None],
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRUCT,
+        "tableVersionInfo",
+        [e6_metadata_common.ttypes.TableVersionInfo, None],
+        None,
+    ),  # 5
+    (
+        6,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 6
+    (
+        7,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 7
 )
 
 
@@ -4015,14 +5213,21 @@ class getTablePartitionsForDelta_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4045,9 +5250,9 @@ class getTablePartitionsForDelta_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getTablePartitionsForDelta_result')
+        oprot.writeStructBegin("getTablePartitionsForDelta_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -4057,19 +5262,26 @@ class getTablePartitionsForDelta_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getTablePartitionsForDelta_result)
 getTablePartitionsForDelta_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -4080,15 +5292,23 @@ class getMetastoreUsers_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.connectionMetadata = connectionMetadata
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4118,13 +5338,13 @@ class getMetastoreUsers_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastoreUsers_args')
+        oprot.writeStructBegin("getMetastoreUsers_args")
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 1)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 1)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 2)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 2)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -4134,20 +5354,33 @@ class getMetastoreUsers_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastoreUsers_args)
 getMetastoreUsers_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 2
+    (
+        1,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 2
 )
 
 
@@ -4157,14 +5390,21 @@ class getMetastoreUsers_result(object):
      - success
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None,):
+    def __init__(
+        self,
+        success=None,
+    ):
         self.success = success
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4193,9 +5433,9 @@ class getMetastoreUsers_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastoreUsers_result')
+        oprot.writeStructBegin("getMetastoreUsers_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeFieldBegin("success", TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
             for iter166 in self.success:
                 iter166.write(oprot)
@@ -4208,18 +5448,25 @@ class getMetastoreUsers_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastoreUsers_result)
 getMetastoreUsers_result.thrift_spec = (
-    (0, TType.LIST, 'success', (TType.STRUCT, [MetastoreUser, None], False), None, ),  # 0
+    (
+        0,
+        TType.LIST,
+        "success",
+        (TType.STRUCT, [MetastoreUser, None], False),
+        None,
+    ),  # 0
 )
 
 
@@ -4230,15 +5477,23 @@ class getMetastoreGroups_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, connectionMetadata = None, requestContext = None,):
+    def __init__(
+        self,
+        connectionMetadata=None,
+        requestContext=None,
+    ):
         self.connectionMetadata = connectionMetadata
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4268,13 +5523,13 @@ class getMetastoreGroups_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastoreGroups_args')
+        oprot.writeStructBegin("getMetastoreGroups_args")
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 1)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 1)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 2)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 2)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -4284,20 +5539,33 @@ class getMetastoreGroups_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastoreGroups_args)
 getMetastoreGroups_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 2
+    (
+        1,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 2
 )
 
 
@@ -4307,14 +5575,21 @@ class getMetastoreGroups_result(object):
      - success
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None,):
+    def __init__(
+        self,
+        success=None,
+    ):
         self.success = success
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4343,9 +5618,9 @@ class getMetastoreGroups_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastoreGroups_result')
+        oprot.writeStructBegin("getMetastoreGroups_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeFieldBegin("success", TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
             for iter173 in self.success:
                 iter173.write(oprot)
@@ -4358,18 +5633,25 @@ class getMetastoreGroups_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastoreGroups_result)
 getMetastoreGroups_result.thrift_spec = (
-    (0, TType.LIST, 'success', (TType.STRUCT, [MetastoreGroup, None], False), None, ),  # 0
+    (
+        0,
+        TType.LIST,
+        "success",
+        (TType.STRUCT, [MetastoreGroup, None], False),
+        None,
+    ),  # 0
 )
 
 
@@ -4381,16 +5663,25 @@ class getMetastorePermissions_catalog_args(object):
      - catalog
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, connectionMetadata = None, requestContext = None, catalog = None,):
+    def __init__(
+        self,
+        connectionMetadata=None,
+        requestContext=None,
+        catalog=None,
+    ):
         self.connectionMetadata = connectionMetadata
         self.requestContext = requestContext
         self.catalog = catalog
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4412,7 +5703,11 @@ class getMetastorePermissions_catalog_args(object):
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.catalog = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalog = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -4425,18 +5720,20 @@ class getMetastorePermissions_catalog_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastorePermissions_catalog_args')
+        oprot.writeStructBegin("getMetastorePermissions_catalog_args")
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 1)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 1)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 2)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 2)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         if self.catalog is not None:
-            oprot.writeFieldBegin('catalog', TType.STRING, 3)
-            oprot.writeString(self.catalog.encode('utf-8') if sys.version_info[0] == 2 else self.catalog)
+            oprot.writeFieldBegin("catalog", TType.STRING, 3)
+            oprot.writeString(
+                self.catalog.encode("utf-8") if sys.version_info[0] == 2 else self.catalog
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -4445,21 +5742,40 @@ class getMetastorePermissions_catalog_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastorePermissions_catalog_args)
 getMetastorePermissions_catalog_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 2
-    (3, TType.STRING, 'catalog', 'UTF8', None, ),  # 3
+    (
+        1,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "catalog",
+        "UTF8",
+        None,
+    ),  # 3
 )
 
 
@@ -4469,14 +5785,21 @@ class getMetastorePermissions_catalog_result(object):
      - success
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None,):
+    def __init__(
+        self,
+        success=None,
+    ):
         self.success = success
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4505,9 +5828,9 @@ class getMetastorePermissions_catalog_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastorePermissions_catalog_result')
+        oprot.writeStructBegin("getMetastorePermissions_catalog_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeFieldBegin("success", TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
             for iter180 in self.success:
                 iter180.write(oprot)
@@ -4520,18 +5843,25 @@ class getMetastorePermissions_catalog_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastorePermissions_catalog_result)
 getMetastorePermissions_catalog_result.thrift_spec = (
-    (0, TType.LIST, 'success', (TType.STRUCT, [MetastorePermission, None], False), None, ),  # 0
+    (
+        0,
+        TType.LIST,
+        "success",
+        (TType.STRUCT, [MetastorePermission, None], False),
+        None,
+    ),  # 0
 )
 
 
@@ -4544,17 +5874,27 @@ class getMetastorePermissions_schema_args(object):
      - schema
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, connectionMetadata = None, requestContext = None, catalog = None, schema = None,):
+    def __init__(
+        self,
+        connectionMetadata=None,
+        requestContext=None,
+        catalog=None,
+        schema=None,
+    ):
         self.connectionMetadata = connectionMetadata
         self.requestContext = requestContext
         self.catalog = catalog
         self.schema = schema
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4576,12 +5916,20 @@ class getMetastorePermissions_schema_args(object):
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.catalog = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalog = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRING:
-                    self.schema = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.schema = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -4594,22 +5942,26 @@ class getMetastorePermissions_schema_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastorePermissions_schema_args')
+        oprot.writeStructBegin("getMetastorePermissions_schema_args")
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 1)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 1)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 2)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 2)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         if self.catalog is not None:
-            oprot.writeFieldBegin('catalog', TType.STRING, 3)
-            oprot.writeString(self.catalog.encode('utf-8') if sys.version_info[0] == 2 else self.catalog)
+            oprot.writeFieldBegin("catalog", TType.STRING, 3)
+            oprot.writeString(
+                self.catalog.encode("utf-8") if sys.version_info[0] == 2 else self.catalog
+            )
             oprot.writeFieldEnd()
         if self.schema is not None:
-            oprot.writeFieldBegin('schema', TType.STRING, 4)
-            oprot.writeString(self.schema.encode('utf-8') if sys.version_info[0] == 2 else self.schema)
+            oprot.writeFieldBegin("schema", TType.STRING, 4)
+            oprot.writeString(
+                self.schema.encode("utf-8") if sys.version_info[0] == 2 else self.schema
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -4618,22 +5970,47 @@ class getMetastorePermissions_schema_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastorePermissions_schema_args)
 getMetastorePermissions_schema_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 2
-    (3, TType.STRING, 'catalog', 'UTF8', None, ),  # 3
-    (4, TType.STRING, 'schema', 'UTF8', None, ),  # 4
+    (
+        1,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "catalog",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "schema",
+        "UTF8",
+        None,
+    ),  # 4
 )
 
 
@@ -4643,14 +6020,21 @@ class getMetastorePermissions_schema_result(object):
      - success
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None,):
+    def __init__(
+        self,
+        success=None,
+    ):
         self.success = success
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4679,9 +6063,9 @@ class getMetastorePermissions_schema_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastorePermissions_schema_result')
+        oprot.writeStructBegin("getMetastorePermissions_schema_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeFieldBegin("success", TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
             for iter187 in self.success:
                 iter187.write(oprot)
@@ -4694,18 +6078,25 @@ class getMetastorePermissions_schema_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastorePermissions_schema_result)
 getMetastorePermissions_schema_result.thrift_spec = (
-    (0, TType.LIST, 'success', (TType.STRUCT, [MetastorePermission, None], False), None, ),  # 0
+    (
+        0,
+        TType.LIST,
+        "success",
+        (TType.STRUCT, [MetastorePermission, None], False),
+        None,
+    ),  # 0
 )
 
 
@@ -4719,10 +6110,17 @@ class getMetastorePermissions_table_args(object):
      - table
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, connectionMetadata = None, requestContext = None, catalog = None, schema = None, table = None,):
+    def __init__(
+        self,
+        connectionMetadata=None,
+        requestContext=None,
+        catalog=None,
+        schema=None,
+        table=None,
+    ):
         self.connectionMetadata = connectionMetadata
         self.requestContext = requestContext
         self.catalog = catalog
@@ -4730,7 +6128,11 @@ class getMetastorePermissions_table_args(object):
         self.table = table
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4752,17 +6154,29 @@ class getMetastorePermissions_table_args(object):
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.catalog = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalog = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRING:
-                    self.schema = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.schema = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 5:
                 if ftype == TType.STRING:
-                    self.table = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.table = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             else:
@@ -4775,26 +6189,32 @@ class getMetastorePermissions_table_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastorePermissions_table_args')
+        oprot.writeStructBegin("getMetastorePermissions_table_args")
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 1)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 1)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 2)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 2)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         if self.catalog is not None:
-            oprot.writeFieldBegin('catalog', TType.STRING, 3)
-            oprot.writeString(self.catalog.encode('utf-8') if sys.version_info[0] == 2 else self.catalog)
+            oprot.writeFieldBegin("catalog", TType.STRING, 3)
+            oprot.writeString(
+                self.catalog.encode("utf-8") if sys.version_info[0] == 2 else self.catalog
+            )
             oprot.writeFieldEnd()
         if self.schema is not None:
-            oprot.writeFieldBegin('schema', TType.STRING, 4)
-            oprot.writeString(self.schema.encode('utf-8') if sys.version_info[0] == 2 else self.schema)
+            oprot.writeFieldBegin("schema", TType.STRING, 4)
+            oprot.writeString(
+                self.schema.encode("utf-8") if sys.version_info[0] == 2 else self.schema
+            )
             oprot.writeFieldEnd()
         if self.table is not None:
-            oprot.writeFieldBegin('table', TType.STRING, 5)
-            oprot.writeString(self.table.encode('utf-8') if sys.version_info[0] == 2 else self.table)
+            oprot.writeFieldBegin("table", TType.STRING, 5)
+            oprot.writeString(
+                self.table.encode("utf-8") if sys.version_info[0] == 2 else self.table
+            )
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -4803,23 +6223,54 @@ class getMetastorePermissions_table_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastorePermissions_table_args)
 getMetastorePermissions_table_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 2
-    (3, TType.STRING, 'catalog', 'UTF8', None, ),  # 3
-    (4, TType.STRING, 'schema', 'UTF8', None, ),  # 4
-    (5, TType.STRING, 'table', 'UTF8', None, ),  # 5
+    (
+        1,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "catalog",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "schema",
+        "UTF8",
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRING,
+        "table",
+        "UTF8",
+        None,
+    ),  # 5
 )
 
 
@@ -4829,14 +6280,21 @@ class getMetastorePermissions_table_result(object):
      - success
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, success = None,):
+    def __init__(
+        self,
+        success=None,
+    ):
         self.success = success
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4865,9 +6323,9 @@ class getMetastorePermissions_table_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('getMetastorePermissions_table_result')
+        oprot.writeStructBegin("getMetastorePermissions_table_result")
         if self.success is not None:
-            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeFieldBegin("success", TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
             for iter194 in self.success:
                 iter194.write(oprot)
@@ -4880,18 +6338,25 @@ class getMetastorePermissions_table_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(getMetastorePermissions_table_result)
 getMetastorePermissions_table_result.thrift_spec = (
-    (0, TType.LIST, 'success', (TType.STRUCT, [MetastorePermission, None], False), None, ),  # 0
+    (
+        0,
+        TType.LIST,
+        "success",
+        (TType.STRUCT, [MetastorePermission, None], False),
+        None,
+    ),  # 0
 )
 
 
@@ -4906,10 +6371,18 @@ class createView_args(object):
      - bytes
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, connectionMetadata = None, catalogName = None, dbName = None, tableName = None, requestContext = None, bytes = None,):
+    def __init__(
+        self,
+        connectionMetadata=None,
+        catalogName=None,
+        dbName=None,
+        tableName=None,
+        requestContext=None,
+        bytes=None,
+    ):
         self.connectionMetadata = connectionMetadata
         self.catalogName = catalogName
         self.dbName = dbName
@@ -4918,7 +6391,11 @@ class createView_args(object):
         self.bytes = bytes
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -4934,17 +6411,29 @@ class createView_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 5:
@@ -4968,29 +6457,35 @@ class createView_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('createView_args')
+        oprot.writeStructBegin("createView_args")
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 1)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 1)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 2)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 2)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 3)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 3)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 4)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 4)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 5)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 5)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         if self.bytes is not None:
-            oprot.writeFieldBegin('bytes', TType.STRING, 6)
+            oprot.writeFieldBegin("bytes", TType.STRING, 6)
             oprot.writeBinary(self.bytes)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -5000,24 +6495,61 @@ class createView_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(createView_args)
 createView_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRING, 'catalogName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'dbName', 'UTF8', None, ),  # 3
-    (4, TType.STRING, 'tableName', 'UTF8', None, ),  # 4
-    (5, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 5
-    (6, TType.STRING, 'bytes', 'BINARY', None, ),  # 6
+    (
+        1,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 5
+    (
+        6,
+        TType.STRING,
+        "bytes",
+        "BINARY",
+        None,
+    ),  # 6
 )
 
 
@@ -5027,14 +6559,21 @@ class createView_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -5057,9 +6596,9 @@ class createView_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('createView_result')
+        oprot.writeStructBegin("createView_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -5069,19 +6608,26 @@ class createView_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(createView_result)
 createView_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -5096,10 +6642,18 @@ class updateView_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, connectionMetadata = None, catalogName = None, databaseName = None, tableName = None, bytes = None, requestContext = None,):
+    def __init__(
+        self,
+        connectionMetadata=None,
+        catalogName=None,
+        databaseName=None,
+        tableName=None,
+        bytes=None,
+        requestContext=None,
+    ):
         self.connectionMetadata = connectionMetadata
         self.catalogName = catalogName
         self.databaseName = databaseName
@@ -5108,7 +6662,11 @@ class updateView_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -5124,17 +6682,29 @@ class updateView_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.databaseName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.databaseName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 5:
@@ -5158,29 +6728,35 @@ class updateView_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('updateView_args')
+        oprot.writeStructBegin("updateView_args")
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 1)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 1)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 2)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 2)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.databaseName is not None:
-            oprot.writeFieldBegin('databaseName', TType.STRING, 3)
-            oprot.writeString(self.databaseName.encode('utf-8') if sys.version_info[0] == 2 else self.databaseName)
+            oprot.writeFieldBegin("databaseName", TType.STRING, 3)
+            oprot.writeString(
+                self.databaseName.encode("utf-8") if sys.version_info[0] == 2 else self.databaseName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 4)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 4)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.bytes is not None:
-            oprot.writeFieldBegin('bytes', TType.STRING, 5)
+            oprot.writeFieldBegin("bytes", TType.STRING, 5)
             oprot.writeBinary(self.bytes)
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 6)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 6)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -5190,24 +6766,61 @@ class updateView_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(updateView_args)
 updateView_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRING, 'catalogName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'databaseName', 'UTF8', None, ),  # 3
-    (4, TType.STRING, 'tableName', 'UTF8', None, ),  # 4
-    (5, TType.STRING, 'bytes', 'BINARY', None, ),  # 5
-    (6, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 6
+    (
+        1,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "databaseName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRING,
+        "bytes",
+        "BINARY",
+        None,
+    ),  # 5
+    (
+        6,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 6
 )
 
 
@@ -5217,14 +6830,21 @@ class updateView_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -5247,9 +6867,9 @@ class updateView_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('updateView_result')
+        oprot.writeStructBegin("updateView_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -5259,19 +6879,26 @@ class updateView_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(updateView_result)
 updateView_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 
 
@@ -5285,10 +6912,17 @@ class dropView_args(object):
      - requestContext
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, connectionMetadata = None, catalogName = None, dbName = None, tableName = None, requestContext = None,):
+    def __init__(
+        self,
+        connectionMetadata=None,
+        catalogName=None,
+        dbName=None,
+        tableName=None,
+        requestContext=None,
+    ):
         self.connectionMetadata = connectionMetadata
         self.catalogName = catalogName
         self.dbName = dbName
@@ -5296,7 +6930,11 @@ class dropView_args(object):
         self.requestContext = requestContext
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -5312,17 +6950,29 @@ class dropView_args(object):
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.STRING:
-                    self.catalogName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.catalogName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.STRING:
-                    self.dbName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.dbName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.STRING:
-                    self.tableName = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                    self.tableName = (
+                        iprot.readString().decode("utf-8", errors="replace")
+                        if sys.version_info[0] == 2
+                        else iprot.readString()
+                    )
                 else:
                     iprot.skip(ftype)
             elif fid == 5:
@@ -5341,25 +6991,31 @@ class dropView_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('dropView_args')
+        oprot.writeStructBegin("dropView_args")
         if self.connectionMetadata is not None:
-            oprot.writeFieldBegin('connectionMetadata', TType.STRUCT, 1)
+            oprot.writeFieldBegin("connectionMetadata", TType.STRUCT, 1)
             self.connectionMetadata.write(oprot)
             oprot.writeFieldEnd()
         if self.catalogName is not None:
-            oprot.writeFieldBegin('catalogName', TType.STRING, 2)
-            oprot.writeString(self.catalogName.encode('utf-8') if sys.version_info[0] == 2 else self.catalogName)
+            oprot.writeFieldBegin("catalogName", TType.STRING, 2)
+            oprot.writeString(
+                self.catalogName.encode("utf-8") if sys.version_info[0] == 2 else self.catalogName
+            )
             oprot.writeFieldEnd()
         if self.dbName is not None:
-            oprot.writeFieldBegin('dbName', TType.STRING, 3)
-            oprot.writeString(self.dbName.encode('utf-8') if sys.version_info[0] == 2 else self.dbName)
+            oprot.writeFieldBegin("dbName", TType.STRING, 3)
+            oprot.writeString(
+                self.dbName.encode("utf-8") if sys.version_info[0] == 2 else self.dbName
+            )
             oprot.writeFieldEnd()
         if self.tableName is not None:
-            oprot.writeFieldBegin('tableName', TType.STRING, 4)
-            oprot.writeString(self.tableName.encode('utf-8') if sys.version_info[0] == 2 else self.tableName)
+            oprot.writeFieldBegin("tableName", TType.STRING, 4)
+            oprot.writeString(
+                self.tableName.encode("utf-8") if sys.version_info[0] == 2 else self.tableName
+            )
             oprot.writeFieldEnd()
         if self.requestContext is not None:
-            oprot.writeFieldBegin('requestContext', TType.STRUCT, 5)
+            oprot.writeFieldBegin("requestContext", TType.STRUCT, 5)
             self.requestContext.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -5369,23 +7025,54 @@ class dropView_args(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(dropView_args)
 dropView_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'connectionMetadata', [ConnectionMetadata, None], None, ),  # 1
-    (2, TType.STRING, 'catalogName', 'UTF8', None, ),  # 2
-    (3, TType.STRING, 'dbName', 'UTF8', None, ),  # 3
-    (4, TType.STRING, 'tableName', 'UTF8', None, ),  # 4
-    (5, TType.STRUCT, 'requestContext', [RequestContext, None], None, ),  # 5
+    (
+        1,
+        TType.STRUCT,
+        "connectionMetadata",
+        [ConnectionMetadata, None],
+        None,
+    ),  # 1
+    (
+        2,
+        TType.STRING,
+        "catalogName",
+        "UTF8",
+        None,
+    ),  # 2
+    (
+        3,
+        TType.STRING,
+        "dbName",
+        "UTF8",
+        None,
+    ),  # 3
+    (
+        4,
+        TType.STRING,
+        "tableName",
+        "UTF8",
+        None,
+    ),  # 4
+    (
+        5,
+        TType.STRUCT,
+        "requestContext",
+        [RequestContext, None],
+        None,
+    ),  # 5
 )
 
 
@@ -5395,14 +7082,21 @@ class dropView_result(object):
      - error1
 
     """
+
     thrift_spec = None
 
-
-    def __init__(self, error1 = None,):
+    def __init__(
+        self,
+        error1=None,
+    ):
         self.error1 = error1
 
     def read(self, iprot):
-        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+        if (
+            iprot._fast_decode is not None
+            and isinstance(iprot.trans, TTransport.CReadableTransport)
+            and self.thrift_spec is not None
+        ):
             iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
             return
         iprot.readStructBegin()
@@ -5425,9 +7119,9 @@ class dropView_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('dropView_result')
+        oprot.writeStructBegin("dropView_result")
         if self.error1 is not None:
-            oprot.writeFieldBegin('error1', TType.STRUCT, 1)
+            oprot.writeFieldBegin("error1", TType.STRUCT, 1)
             self.error1.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -5437,19 +7131,26 @@ class dropView_result(object):
         return
 
     def __repr__(self):
-        L = ['%s=%r' % (key, value)
-             for key, value in self.__dict__.items()]
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = ["%s=%r" % (key, value) for key, value in self.__dict__.items()]
+        return "%s(%s)" % (self.__class__.__name__, ", ".join(L))
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not (self == other)
+
+
 all_structs.append(dropView_result)
 dropView_result.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'error1', [SchemaServiceException, None], None, ),  # 1
+    (
+        1,
+        TType.STRUCT,
+        "error1",
+        [SchemaServiceException, None],
+        None,
+    ),  # 1
 )
 fix_spec(all_structs)
 del all_structs

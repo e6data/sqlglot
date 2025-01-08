@@ -12,26 +12,26 @@ from guardrail.rules_validator import validate_queries
 
 
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
-STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "cops-beta1-storage-storage-blue") #cops-beta1-storage-storage-blue
+STORAGE_ENGINE_URL = os.getenv(
+    "STORAGE_ENGINE_URL", "cops-beta1-storage-storage-blue"
+)  # cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", "9006")
 
-storage_service_client=None
+storage_service_client = None
 
 if ENABLE_GUARDRAIL.lower() == "true":
     print("Storage Engine URL: ", STORAGE_ENGINE_URL)
     print("Storage Engine Port: ", STORAGE_ENGINE_PORT)
 
-    storage_service_client = StorageServiceClient(
-        host=STORAGE_ENGINE_URL,
-        port=STORAGE_ENGINE_PORT
-    )
+    storage_service_client = StorageServiceClient(host=STORAGE_ENGINE_URL, port=STORAGE_ENGINE_PORT)
 
 print("Storage Service Client is created")
 app = FastAPI()
 
+
 def replace_struct_in_query(query):
     """
-    
+
     Replace struct in query with struct in query.
     # TODO:: Document this functions.
     #       STRUCT(STRUCT()) --> {{}}
@@ -81,6 +81,7 @@ async def convert_query(
 def health_check():
     return Response(status_code=200)
 
+
 @app.post("/guardrail")
 async def gaurd(
     query: str = Form(...),
@@ -91,20 +92,22 @@ async def gaurd(
         if storage_service_client is not None:
             parsed = sqlglot.parse(query, error_level=None)
 
-            queries , tables = extract_sql_components_per_table_with_alias(parsed) 
+            queries, tables = extract_sql_components_per_table_with_alias(parsed)
 
             # tables = client.get_table_names(catalog_name="hive", db_name="tpcds_1000")
-            table_map = get_table_infos(tables,storage_service_client, catalog, schema)    
-            print("table info is ",table_map)
-            
+            table_map = get_table_infos(tables, storage_service_client, catalog, schema)
+            print("table info is ", table_map)
+
             violations_found = validate_queries(queries, table_map)
-            
+
             if violations_found:
                 return {"action": "deny", "violations": violations_found}
             else:
-                return {"action": "allow","violations":[]}
+                return {"action": "allow", "violations": []}
         else:
-            detail = "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+            detail = (
+                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+            )
             raise HTTPException(status_code=500, detail=detail)
 
     except Exception as e:
@@ -121,36 +124,39 @@ async def Transgaurd(
 ):
     try:
         if storage_service_client is not None:
-
             # This is the main method will which help in transpiling to our e6data SQL dialects from other dialects
-            converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
+            converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[
+                0
+            ]
 
             # This is additional steps to replace the STRUCT(STRUCT()) --> {{}}
             converted_query = replace_struct_in_query(converted_query)
 
             converted_query_ast = parse_one(converted_query, read=to_sql)
-            
+
             double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
                 dialect=to_sql
             )
 
-            #------------------------#
-            #GuardRail Application
+            # ------------------------#
+            # GuardRail Application
             parsed = sqlglot.parse(double_quotes_added_query, error_level=None)
 
             # now lets validate the query
-            queries , tables = extract_sql_components_per_table_with_alias(parsed) 
+            queries, tables = extract_sql_components_per_table_with_alias(parsed)
 
-            table_map = get_table_infos(tables,storage_service_client, catalog, schema)    
+            table_map = get_table_infos(tables, storage_service_client, catalog, schema)
 
             violations_found = validate_queries(queries, table_map)
-            
+
             if violations_found:
                 return {"action": "deny", "violations": violations_found}
             else:
-                return {"action": "allow","violations":[]}
+                return {"action": "allow", "violations": []}
         else:
-            detail = "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+            detail = (
+                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+            )
             raise HTTPException(status_code=500, detail=detail)
 
     except Exception as e:
