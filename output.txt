@@ -1,0 +1,1098 @@
+[Select(
+  expressions=[
+    Column(
+      this=Identifier(this=hierarchy_path, quoted=False),
+      table=Identifier(this=eh, quoted=False)),
+    Alias(
+      this=Column(
+        this=Identifier(this=level, quoted=False),
+        table=Identifier(this=eh, quoted=False)),
+      alias=Identifier(this=organization_depth, quoted=False)),
+    Column(
+      this=Identifier(this=department_name, quoted=False),
+      table=Identifier(this=dm, quoted=False)),
+    Column(
+      this=Identifier(this=employee_count, quoted=False),
+      table=Identifier(this=dm, quoted=False)),
+    Alias(
+      this=Round(
+        this=Column(
+          this=Identifier(this=avg_salary, quoted=False),
+          table=Identifier(this=dm, quoted=False)),
+        decimals=Literal(this=2, is_string=False)),
+      alias=Identifier(this=average_salary, quoted=False)),
+    Alias(
+      this=Column(
+        this=Identifier(this=salary_rank, quoted=False),
+        table=Identifier(this=dm, quoted=False)),
+      alias=Identifier(this=department_salary_rank, quoted=False)),
+    Column(
+      this=Identifier(this=project_name, quoted=False),
+      table=Identifier(this=pp, quoted=False)),
+    Column(
+      this=Identifier(this=team_size, quoted=False),
+      table=Identifier(this=pp, quoted=False)),
+    Column(
+      this=Identifier(this=project_status, quoted=False),
+      table=Identifier(this=pp, quoted=False)),
+    Alias(
+      this=Round(
+        this=Column(
+          this=Identifier(this=project_cost, quoted=False),
+          table=Identifier(this=pp, quoted=False)),
+        decimals=Literal(this=2, is_string=False)),
+      alias=Identifier(this=current_project_cost, quoted=False)),
+    Alias(
+      this=Round(
+        this=Column(
+          this=Identifier(this=previous_project_cost, quoted=False),
+          table=Identifier(this=pp, quoted=False)),
+        decimals=Literal(this=2, is_string=False)),
+      alias=Identifier(this=previous_project_cost, quoted=False)),
+    Alias(
+      this=Round(
+        this=Mul(
+          this=Div(
+            this=Paren(
+              this=Sub(
+                this=Column(
+                  this=Identifier(this=project_cost, quoted=False),
+                  table=Identifier(this=pp, quoted=False)),
+                expression=Coalesce(
+                  this=Column(
+                    this=Identifier(this=previous_project_cost, quoted=False),
+                    table=Identifier(this=pp, quoted=False)),
+                  expressions=[
+                    Literal(this=0, is_string=False)]))),
+            expression=Nullif(
+              this=Column(
+                this=Identifier(this=previous_project_cost, quoted=False),
+                table=Identifier(this=pp, quoted=False)),
+              expression=Literal(this=0, is_string=False)),
+            typed=False,
+            safe=False),
+          expression=Literal(this=100, is_string=False)),
+        decimals=Literal(this=2, is_string=False)),
+      alias=Identifier(this=cost_change_percentage, quoted=False)),
+    Alias(
+      this=Window(
+        this=FirstValue(
+          this=Column(
+            this=Identifier(this=project_name, quoted=False),
+            table=Identifier(this=pp, quoted=False))),
+        partition_by=[
+          Column(
+            this=Identifier(this=department_id, quoted=False),
+            table=Identifier(this=dm, quoted=False))],
+        order=Order(
+          expressions=[
+            Ordered(
+              this=Column(
+                this=Identifier(this=project_cost, quoted=False),
+                table=Identifier(this=pp, quoted=False)),
+              desc=True,
+              nulls_first=True)]),
+        over=OVER),
+      alias=Identifier(this=most_expensive_project, quoted=False)),
+    Alias(
+      this=Window(
+        this=Count(
+          this=Star(),
+          big_int=True),
+        partition_by=[
+          Column(
+            this=Identifier(this=department_id, quoted=False),
+            table=Identifier(this=eh, quoted=False))],
+        over=OVER),
+      alias=Identifier(this=total_department_projects, quoted=False))],
+  limit=Limit(
+    expression=Literal(this=100, is_string=False)),
+  from=From(
+    this=Table(
+      this=Identifier(this=EmployeeHierarchy, quoted=False),
+      alias=TableAlias(
+        this=Identifier(this=eh, quoted=False)))),
+  joins=[
+    Join(
+      this=Table(
+        this=Identifier(this=DepartmentMetrics, quoted=False),
+        alias=TableAlias(
+          this=Identifier(this=dm, quoted=False))),
+      kind=INNER,
+      on=EQ(
+        this=Column(
+          this=Identifier(this=department_id, quoted=False),
+          table=Identifier(this=eh, quoted=False)),
+        expression=Column(
+          this=Identifier(this=department_id, quoted=False),
+          table=Identifier(this=dm, quoted=False)))),
+    Join(
+      this=Table(
+        this=Identifier(this=ProjectPerformance, quoted=False),
+        alias=TableAlias(
+          this=Identifier(this=pp, quoted=False))),
+      side=LEFT,
+      on=EQ(
+        this=Column(
+          this=Identifier(this=department_id, quoted=False),
+          table=Identifier(this=eh, quoted=False)),
+        expression=Column(
+          this=Identifier(this=department_id, quoted=False),
+          table=Identifier(this=pp, quoted=False))))],
+  where=Where(
+    this=And(
+      this=And(
+        this=And(
+          this=LTE(
+            this=Column(
+              this=Identifier(this=level, quoted=False),
+              table=Identifier(this=eh, quoted=False)),
+            expression=Literal(this=3, is_string=False)),
+          expression=GTE(
+            this=Column(
+              this=Identifier(this=employee_count, quoted=False),
+              table=Identifier(this=dm, quoted=False)),
+            expression=Literal(this=5, is_string=False))),
+        expression=GT(
+          this=Column(
+            this=Identifier(this=total_project_cost, quoted=False),
+            table=Identifier(this=dm, quoted=False)),
+          expression=Subquery(
+            this=Select(
+              expressions=[
+                Mul(
+                  this=Avg(
+                    this=Column(
+                      this=Identifier(this=total_project_cost, quoted=False))),
+                  expression=Literal(this=1.2, is_string=False))],
+              from=From(
+                this=Table(
+                  this=Identifier(this=DepartmentMetrics, quoted=False))))))),
+      expression=Exists(
+        this=Select(
+          expressions=[
+            Literal(this=1, is_string=False)],
+          from=From(
+            this=Table(
+              this=Identifier(this=project_assignments, quoted=False),
+              alias=TableAlias(
+                this=Identifier(this=pa, quoted=False)))),
+          where=Where(
+            this=And(
+              this=EQ(
+                this=Column(
+                  this=Identifier(this=employee_id, quoted=False),
+                  table=Identifier(this=pa, quoted=False)),
+                expression=Column(
+                  this=Identifier(this=employee_id, quoted=False),
+                  table=Identifier(this=eh, quoted=False))),
+              expression=GT(
+                this=Column(
+                  this=Identifier(this=end_date, quoted=False),
+                  table=Identifier(this=pa, quoted=False)),
+                expression=CurrentDate()))))))),
+  order=Order(
+    expressions=[
+      Ordered(
+        this=Column(
+          this=Identifier(this=hierarchy_path, quoted=False),
+          table=Identifier(this=eh, quoted=False)),
+        nulls_first=False),
+      Ordered(
+        this=Column(
+          this=Identifier(this=salary_rank, quoted=False),
+          table=Identifier(this=dm, quoted=False)),
+        nulls_first=False),
+      Ordered(
+        this=Column(
+          this=Identifier(this=project_cost, quoted=False),
+          table=Identifier(this=pp, quoted=False)),
+        desc=True,
+        nulls_first=True)]),
+  with=With(
+    expressions=[
+      CTE(
+        this=Union(
+          this=Union(
+            this=Select(
+              expressions=[
+                Column(
+                  this=Identifier(this=employee_id, quoted=False),
+                  table=Identifier(this=e, quoted=False)),
+                Column(
+                  this=Identifier(this=full_name, quoted=False),
+                  table=Identifier(this=e, quoted=False)),
+                Column(
+                  this=Identifier(this=manager_id, quoted=False),
+                  table=Identifier(this=e, quoted=False)),
+                Column(
+                  this=Identifier(this=department_id, quoted=False),
+                  table=Identifier(this=e, quoted=False)),
+                Alias(
+                  this=Literal(this=1, is_string=False),
+                  alias=Identifier(this=level, quoted=False)),
+                Alias(
+                  this=Cast(
+                    this=Column(
+                      this=Identifier(this=full_name, quoted=False),
+                      table=Identifier(this=e, quoted=False)),
+                    to=DataType(
+                      this=Type.VARCHAR,
+                      expressions=[
+                        DataTypeParam(
+                          this=Literal(this=1000, is_string=False))],
+                      nested=False)),
+                  alias=Identifier(this=hierarchy_path, quoted=False))],
+              from=From(
+                this=Table(
+                  this=Identifier(this=employees, quoted=False),
+                  alias=TableAlias(
+                    this=Identifier(this=e, quoted=False)))),
+              where=Where(
+                this=Is(
+                  this=Column(
+                    this=Identifier(this=manager_id, quoted=False),
+                    table=Identifier(this=e, quoted=False)),
+                  expression=Null())),
+              _comments=[
+                Base case: top-level managers]),
+            distinct=False,
+            expression=Select(
+              expressions=[
+                Star()],
+              from=From(
+                this=Table(
+                  this=Identifier(this=diddy, quoted=False))),
+              where=Where(
+                this=EQ(
+                  this=Column(
+                    this=Identifier(this=id, quoted=False),
+                    table=Identifier(this=diddy, quoted=False)),
+                  expression=Literal(this=1, is_string=False))))),
+          distinct=False,
+          expression=Select(
+            expressions=[
+              Column(
+                this=Identifier(this=employee_id, quoted=False),
+                table=Identifier(this=e, quoted=False)),
+              Column(
+                this=Identifier(this=full_name, quoted=False),
+                table=Identifier(this=e, quoted=False)),
+              Column(
+                this=Identifier(this=manager_id, quoted=False),
+                table=Identifier(this=e, quoted=False)),
+              Column(
+                this=Identifier(this=department_id, quoted=False),
+                table=Identifier(this=e, quoted=False)),
+              Add(
+                this=Column(
+                  this=Identifier(this=level, quoted=False),
+                  table=Identifier(this=eh, quoted=False)),
+                expression=Literal(this=1, is_string=False)),
+              Cast(
+                this=DPipe(
+                  this=DPipe(
+                    this=Column(
+                      this=Identifier(this=hierarchy_path, quoted=False),
+                      table=Identifier(this=eh, quoted=False)),
+                    expression=Literal(this=-> , is_string=True),
+                    safe=True),
+                  expression=Column(
+                    this=Identifier(this=full_name, quoted=False),
+                    table=Identifier(this=e, quoted=False)),
+                  safe=True),
+                to=DataType(
+                  this=Type.VARCHAR,
+                  expressions=[
+                    DataTypeParam(
+                      this=Literal(this=1000, is_string=False))],
+                  nested=False))],
+            from=From(
+              this=Table(
+                this=Identifier(this=employees, quoted=False),
+                alias=TableAlias(
+                  this=Identifier(this=e, quoted=False)))),
+            joins=[
+              Join(
+                this=Table(
+                  this=Identifier(this=EmployeeHierarchy, quoted=False),
+                  alias=TableAlias(
+                    this=Identifier(this=eh, quoted=False))),
+                kind=INNER,
+                on=EQ(
+                  this=Column(
+                    this=Identifier(this=manager_id, quoted=False),
+                    table=Identifier(this=e, quoted=False)),
+                  expression=Column(
+                    this=Identifier(this=employee_id, quoted=False),
+                    table=Identifier(this=eh, quoted=False))))],
+            _comments=[
+              Recursive case: employees with managers])),
+        alias=TableAlias(
+          this=Identifier(this=EmployeeHierarchy, quoted=False))),
+      CTE(
+        this=Select(
+          expressions=[
+            Column(
+              this=Identifier(this=department_id, quoted=False),
+              table=Identifier(this=d, quoted=False)),
+            Column(
+              this=Identifier(this=department_name, quoted=False),
+              table=Identifier(this=d, quoted=False)),
+            Alias(
+              this=Count(
+                this=Distinct(
+                  expressions=[
+                    Column(
+                      this=Identifier(this=employee_id, quoted=False),
+                      table=Identifier(this=e, quoted=False))]),
+                big_int=True),
+              alias=Identifier(this=employee_count, quoted=False)),
+            Alias(
+              this=Avg(
+                this=Column(
+                  this=Identifier(this=salary, quoted=False),
+                  table=Identifier(this=e, quoted=False))),
+              alias=Identifier(this=avg_salary, quoted=False)),
+            Alias(
+              this=Sum(
+                this=Column(
+                  this=Identifier(this=total_cost, quoted=False),
+                  table=Identifier(this=p, quoted=False))),
+              alias=Identifier(this=total_project_cost, quoted=False)),
+            Alias(
+              this=Window(
+                this=Anonymous(
+                  this=DENSE_RANK),
+                order=Order(
+                  expressions=[
+                    Ordered(
+                      this=Avg(
+                        this=Column(
+                          this=Identifier(this=salary, quoted=False),
+                          table=Identifier(this=e, quoted=False))),
+                      desc=True,
+                      nulls_first=True)]),
+                over=OVER),
+              alias=Identifier(this=salary_rank, quoted=False))],
+          from=From(
+            this=Table(
+              this=Identifier(this=departments, quoted=False),
+              alias=TableAlias(
+                this=Identifier(this=d, quoted=False)))),
+          joins=[
+            Join(
+              this=Table(
+                this=Identifier(this=employees, quoted=False),
+                alias=TableAlias(
+                  this=Identifier(this=e, quoted=False))),
+              side=LEFT,
+              on=EQ(
+                this=Column(
+                  this=Identifier(this=department_id, quoted=False),
+                  table=Identifier(this=d, quoted=False)),
+                expression=Column(
+                  this=Identifier(this=department_id, quoted=False),
+                  table=Identifier(this=e, quoted=False)))),
+            Join(
+              this=Table(
+                this=Identifier(this=project_assignments, quoted=False),
+                alias=TableAlias(
+                  this=Identifier(this=pa, quoted=False))),
+              side=LEFT,
+              on=EQ(
+                this=Column(
+                  this=Identifier(this=employee_id, quoted=False),
+                  table=Identifier(this=e, quoted=False)),
+                expression=Column(
+                  this=Identifier(this=employee_id, quoted=False),
+                  table=Identifier(this=pa, quoted=False)))),
+            Join(
+              this=Table(
+                this=Identifier(this=projects, quoted=False),
+                alias=TableAlias(
+                  this=Identifier(this=p, quoted=False))),
+              side=LEFT,
+              on=EQ(
+                this=Column(
+                  this=Identifier(this=project_id, quoted=False),
+                  table=Identifier(this=pa, quoted=False)),
+                expression=Column(
+                  this=Identifier(this=project_id, quoted=False),
+                  table=Identifier(this=p, quoted=False))))],
+          where=Where(
+            this=EQ(
+              this=Column(
+                this=Identifier(this=active_status, quoted=False),
+                table=Identifier(this=d, quoted=False)),
+              expression=Literal(this=1, is_string=False))),
+          group=Group(
+            expressions=[
+              Column(
+                this=Identifier(this=department_id, quoted=False),
+                table=Identifier(this=d, quoted=False)),
+              Column(
+                this=Identifier(this=department_name, quoted=False),
+                table=Identifier(this=d, quoted=False))])),
+        alias=TableAlias(
+          this=Identifier(this=DepartmentMetrics, quoted=False))),
+      CTE(
+        this=Select(
+          expressions=[
+            Column(
+              this=Identifier(this=project_id, quoted=False),
+              table=Identifier(this=p, quoted=False)),
+            Column(
+              this=Identifier(this=project_name, quoted=False),
+              table=Identifier(this=p, quoted=False)),
+            Column(
+              this=Identifier(this=start_date, quoted=False),
+              table=Identifier(this=p, quoted=False)),
+            Column(
+              this=Identifier(this=end_date, quoted=False),
+              table=Identifier(this=p, quoted=False)),
+            Alias(
+              this=Count(
+                this=Distinct(
+                  expressions=[
+                    Column(
+                      this=Identifier(this=employee_id, quoted=False),
+                      table=Identifier(this=pa, quoted=False))]),
+                big_int=True),
+              alias=Identifier(this=team_size, quoted=False)),
+            Alias(
+              this=Sum(
+                this=Column(
+                  this=Identifier(this=total_cost, quoted=False),
+                  table=Identifier(this=p, quoted=False))),
+              alias=Identifier(this=project_cost, quoted=False)),
+            Alias(
+              this=Case(
+                ifs=[
+                  If(
+                    this=LT(
+                      this=Column(
+                        this=Identifier(this=end_date, quoted=False),
+                        table=Identifier(this=p, quoted=False)),
+                      expression=CurrentDate()),
+                    true=Literal(this=Completed, is_string=True)),
+                  If(
+                    this=GT(
+                      this=Column(
+                        this=Identifier(this=start_date, quoted=False),
+                        table=Identifier(this=p, quoted=False)),
+                      expression=CurrentDate()),
+                    true=Literal(this=Not Started, is_string=True))],
+                default=Literal(this=In Progress, is_string=True)),
+              alias=Identifier(this=project_status, quoted=False)),
+            Alias(
+              this=Window(
+                this=Lag(
+                  this=Column(
+                    this=Identifier(this=total_cost, quoted=False),
+                    table=Identifier(this=p, quoted=False))),
+                partition_by=[
+                  Column(
+                    this=Identifier(this=department_id, quoted=False),
+                    table=Identifier(this=p, quoted=False))],
+                order=Order(
+                  expressions=[
+                    Ordered(
+                      this=Column(
+                        this=Identifier(this=start_date, quoted=False),
+                        table=Identifier(this=p, quoted=False)),
+                      nulls_first=False)]),
+                over=OVER),
+              alias=Identifier(this=previous_project_cost, quoted=False))],
+          from=From(
+            this=Table(
+              this=Identifier(this=projects, quoted=False),
+              alias=TableAlias(
+                this=Identifier(this=p, quoted=False)))),
+          joins=[
+            Join(
+              this=Table(
+                this=Identifier(this=project_assignments, quoted=False),
+                alias=TableAlias(
+                  this=Identifier(this=pa, quoted=False))),
+              side=LEFT,
+              on=EQ(
+                this=Column(
+                  this=Identifier(this=project_id, quoted=False),
+                  table=Identifier(this=p, quoted=False)),
+                expression=Column(
+                  this=Identifier(this=project_id, quoted=False),
+                  table=Identifier(this=pa, quoted=False))))],
+          group=Group(
+            expressions=[
+              Column(
+                this=Identifier(this=project_id, quoted=False),
+                table=Identifier(this=p, quoted=False)),
+              Column(
+                this=Identifier(this=project_name, quoted=False),
+                table=Identifier(this=p, quoted=False)),
+              Column(
+                this=Identifier(this=start_date, quoted=False),
+                table=Identifier(this=p, quoted=False)),
+              Column(
+                this=Identifier(this=end_date, quoted=False),
+                table=Identifier(this=p, quoted=False)),
+              Column(
+                this=Identifier(this=department_id, quoted=False),
+                table=Identifier(this=p, quoted=False))])),
+        alias=TableAlias(
+          this=Identifier(this=ProjectPerformance, quoted=False)))],
+    recursive=True))]
+cte_names:  {'employeehierarchy', 'departmentmetrics', 'projectperformance'}
+i->:  1 expression is  WITH RECURSIVE EmployeeHierarchy AS (/* Base case: top-level managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, 1 AS level, CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path FROM employees AS e WHERE e.manager_id IS NULL UNION ALL SELECT * FROM diddy WHERE diddy.id = 1 UNION ALL /* Recursive case: employees with managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, eh.level + 1, CAST(eh.hierarchy_path || ' -> ' || e.full_name AS VARCHAR(1000)) FROM employees AS e INNER JOIN EmployeeHierarchy AS eh ON e.manager_id = eh.employee_id), DepartmentMetrics AS (SELECT d.department_id, d.department_name, COUNT(DISTINCT e.employee_id) AS employee_count, AVG(e.salary) AS avg_salary, SUM(p.total_cost) AS total_project_cost, DENSE_RANK() OVER (ORDER BY AVG(e.salary) DESC NULLS FIRST) AS salary_rank FROM departments AS d LEFT JOIN employees AS e ON d.department_id = e.department_id LEFT JOIN project_assignments AS pa ON e.employee_id = pa.employee_id LEFT JOIN projects AS p ON pa.project_id = p.project_id WHERE d.active_status = 1 GROUP BY d.department_id, d.department_name), ProjectPerformance AS (SELECT p.project_id, p.project_name, p.start_date, p.end_date, COUNT(DISTINCT pa.employee_id) AS team_size, SUM(p.total_cost) AS project_cost, CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' WHEN p.start_date > CURRENT_DATE THEN 'Not Started' ELSE 'In Progress' END AS project_status, LAG(p.total_cost) OVER (PARTITION BY p.department_id ORDER BY p.start_date NULLS LAST) AS previous_project_cost FROM projects AS p LEFT JOIN project_assignments AS pa ON p.project_id = pa.project_id GROUP BY p.project_id, p.project_name, p.start_date, p.end_date, p.department_id) SELECT eh.hierarchy_path, eh.level AS organization_depth, dm.department_name, dm.employee_count, ROUND(dm.avg_salary, 2) AS average_salary, dm.salary_rank AS department_salary_rank, pp.project_name, pp.team_size, pp.project_status, ROUND(pp.project_cost, 2) AS current_project_cost, ROUND(pp.previous_project_cost, 2) AS previous_project_cost, ROUND((pp.project_cost - COALESCE(pp.previous_project_cost, 0)) / NULLIF(pp.previous_project_cost, 0) * 100, 2) AS cost_change_percentage, FIRST_VALUE(pp.project_name) OVER (PARTITION BY dm.department_id ORDER BY pp.project_cost DESC NULLS FIRST) AS most_expensive_project, COUNT(*) OVER (PARTITION BY eh.department_id) AS total_department_projects FROM EmployeeHierarchy AS eh INNER JOIN DepartmentMetrics AS dm ON eh.department_id = dm.department_id LEFT JOIN ProjectPerformance AS pp ON eh.department_id = pp.department_id WHERE eh.level <= 3 AND dm.employee_count >= 5 AND dm.total_project_cost > (SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics) AND EXISTS(SELECT 1 FROM project_assignments AS pa WHERE pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE) ORDER BY eh.hierarchy_path NULLS LAST, dm.salary_rank NULLS LAST, pp.project_cost DESC NULLS FIRST LIMIT 100
+i2->:  1
+Node: ->  WITH RECURSIVE EmployeeHierarchy AS (/* Base case: top-level managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, 1 AS level, CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path FROM employees AS e WHERE e.manager_id IS NULL UNION ALL SELECT * FROM diddy WHERE diddy.id = 1 UNION ALL /* Recursive case: employees with managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, eh.level + 1, CAST(eh.hierarchy_path || ' -> ' || e.full_name AS VARCHAR(1000)) FROM employees AS e INNER JOIN EmployeeHierarchy AS eh ON e.manager_id = eh.employee_id), DepartmentMetrics AS (SELECT d.department_id, d.department_name, COUNT(DISTINCT e.employee_id) AS employee_count, AVG(e.salary) AS avg_salary, SUM(p.total_cost) AS total_project_cost, DENSE_RANK() OVER (ORDER BY AVG(e.salary) DESC NULLS FIRST) AS salary_rank FROM departments AS d LEFT JOIN employees AS e ON d.department_id = e.department_id LEFT JOIN project_assignments AS pa ON e.employee_id = pa.employee_id LEFT JOIN projects AS p ON pa.project_id = p.project_id WHERE d.active_status = 1 GROUP BY d.department_id, d.department_name), ProjectPerformance AS (SELECT p.project_id, p.project_name, p.start_date, p.end_date, COUNT(DISTINCT pa.employee_id) AS team_size, SUM(p.total_cost) AS project_cost, CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' WHEN p.start_date > CURRENT_DATE THEN 'Not Started' ELSE 'In Progress' END AS project_status, LAG(p.total_cost) OVER (PARTITION BY p.department_id ORDER BY p.start_date NULLS LAST) AS previous_project_cost FROM projects AS p LEFT JOIN project_assignments AS pa ON p.project_id = pa.project_id GROUP BY p.project_id, p.project_name, p.start_date, p.end_date, p.department_id) SELECT eh.hierarchy_path, eh.level AS organization_depth, dm.department_name, dm.employee_count, ROUND(dm.avg_salary, 2) AS average_salary, dm.salary_rank AS department_salary_rank, pp.project_name, pp.team_size, pp.project_status, ROUND(pp.project_cost, 2) AS current_project_cost, ROUND(pp.previous_project_cost, 2) AS previous_project_cost, ROUND((pp.project_cost - COALESCE(pp.previous_project_cost, 0)) / NULLIF(pp.previous_project_cost, 0) * 100, 2) AS cost_change_percentage, FIRST_VALUE(pp.project_name) OVER (PARTITION BY dm.department_id ORDER BY pp.project_cost DESC NULLS FIRST) AS most_expensive_project, COUNT(*) OVER (PARTITION BY eh.department_id) AS total_department_projects FROM EmployeeHierarchy AS eh INNER JOIN DepartmentMetrics AS dm ON eh.department_id = dm.department_id LEFT JOIN ProjectPerformance AS pp ON eh.department_id = pp.department_id WHERE eh.level <= 3 AND dm.employee_count >= 5 AND dm.total_project_cost > (SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics) AND EXISTS(SELECT 1 FROM project_assignments AS pa WHERE pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE) ORDER BY eh.hierarchy_path NULLS LAST, dm.salary_rank NULLS LAST, pp.project_cost DESC NULLS FIRST LIMIT 100
+Table entry is ->:  {'table': 'EmployeeHierarchy', 'columns': ['hierarchy_path'], 'where_columns': [], 'limits': []} actual_table is ->:  EmployeeHierarchy table_alias is ->:  eh column_name is ->:  level
+values is  ['hierarchy_path', 'level']
+Table entry is ->:  {'table': 'DepartmentMetrics', 'columns': ['department_name', 'employee_count'], 'where_columns': [], 'limits': []} actual_table is ->:  DepartmentMetrics table_alias is ->:  dm column_name is ->:  salary_rank
+values is  ['department_name', 'employee_count', 'salary_rank']
+i->:  2 expression is  eh.hierarchy_path
+i->:  3 expression is  eh.level AS organization_depth
+i->:  4 expression is  dm.department_name
+i->:  5 expression is  dm.employee_count
+i->:  6 expression is  ROUND(dm.avg_salary, 2) AS average_salary
+i->:  7 expression is  dm.salary_rank AS department_salary_rank
+i->:  8 expression is  pp.project_name
+i->:  9 expression is  pp.team_size
+i->:  10 expression is  pp.project_status
+i->:  11 expression is  ROUND(pp.project_cost, 2) AS current_project_cost
+i->:  12 expression is  ROUND(pp.previous_project_cost, 2) AS previous_project_cost
+i->:  13 expression is  ROUND((pp.project_cost - COALESCE(pp.previous_project_cost, 0)) / NULLIF(pp.previous_project_cost, 0) * 100, 2) AS cost_change_percentage
+i->:  14 expression is  FIRST_VALUE(pp.project_name) OVER (PARTITION BY dm.department_id ORDER BY pp.project_cost DESC NULLS FIRST) AS most_expensive_project
+i->:  15 expression is  COUNT(*) OVER (PARTITION BY eh.department_id) AS total_department_projects
+i->:  16 expression is  LIMIT 100
+i->:  17 expression is  FROM EmployeeHierarchy AS eh
+i->:  18 expression is  INNER JOIN DepartmentMetrics AS dm ON eh.department_id = dm.department_id
+i->:  19 expression is  LEFT JOIN ProjectPerformance AS pp ON eh.department_id = pp.department_id
+i->:  20 expression is  WHERE eh.level <= 3 AND dm.employee_count >= 5 AND dm.total_project_cost > (SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics) AND EXISTS(SELECT 1 FROM project_assignments AS pa WHERE pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE)
+i->:  21 expression is  ORDER BY eh.hierarchy_path NULLS LAST, dm.salary_rank NULLS LAST, pp.project_cost DESC NULLS FIRST
+i->:  22 expression is  WITH RECURSIVE EmployeeHierarchy AS (/* Base case: top-level managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, 1 AS level, CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path FROM employees AS e WHERE e.manager_id IS NULL UNION ALL SELECT * FROM diddy WHERE diddy.id = 1 UNION ALL /* Recursive case: employees with managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, eh.level + 1, CAST(eh.hierarchy_path || ' -> ' || e.full_name AS VARCHAR(1000)) FROM employees AS e INNER JOIN EmployeeHierarchy AS eh ON e.manager_id = eh.employee_id), DepartmentMetrics AS (SELECT d.department_id, d.department_name, COUNT(DISTINCT e.employee_id) AS employee_count, AVG(e.salary) AS avg_salary, SUM(p.total_cost) AS total_project_cost, DENSE_RANK() OVER (ORDER BY AVG(e.salary) DESC NULLS FIRST) AS salary_rank FROM departments AS d LEFT JOIN employees AS e ON d.department_id = e.department_id LEFT JOIN project_assignments AS pa ON e.employee_id = pa.employee_id LEFT JOIN projects AS p ON pa.project_id = p.project_id WHERE d.active_status = 1 GROUP BY d.department_id, d.department_name), ProjectPerformance AS (SELECT p.project_id, p.project_name, p.start_date, p.end_date, COUNT(DISTINCT pa.employee_id) AS team_size, SUM(p.total_cost) AS project_cost, CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' WHEN p.start_date > CURRENT_DATE THEN 'Not Started' ELSE 'In Progress' END AS project_status, LAG(p.total_cost) OVER (PARTITION BY p.department_id ORDER BY p.start_date NULLS LAST) AS previous_project_cost FROM projects AS p LEFT JOIN project_assignments AS pa ON p.project_id = pa.project_id GROUP BY p.project_id, p.project_name, p.start_date, p.end_date, p.department_id)
+i->:  23 expression is  hierarchy_path
+i->:  24 expression is  eh
+i->:  25 expression is  eh.level
+i->:  26 expression is  organization_depth
+i->:  27 expression is  department_name
+i->:  28 expression is  dm
+i->:  29 expression is  employee_count
+i->:  30 expression is  dm
+i->:  31 expression is  ROUND(dm.avg_salary, 2)
+i->:  32 expression is  average_salary
+i->:  33 expression is  dm.salary_rank
+i->:  34 expression is  department_salary_rank
+i->:  35 expression is  project_name
+i->:  36 expression is  pp
+i->:  37 expression is  team_size
+i->:  38 expression is  pp
+i->:  39 expression is  project_status
+i->:  40 expression is  pp
+i->:  41 expression is  ROUND(pp.project_cost, 2)
+i->:  42 expression is  current_project_cost
+i->:  43 expression is  ROUND(pp.previous_project_cost, 2)
+i->:  44 expression is  previous_project_cost
+i->:  45 expression is  ROUND((pp.project_cost - COALESCE(pp.previous_project_cost, 0)) / NULLIF(pp.previous_project_cost, 0) * 100, 2)
+i->:  46 expression is  cost_change_percentage
+i->:  47 expression is  FIRST_VALUE(pp.project_name) OVER (PARTITION BY dm.department_id ORDER BY pp.project_cost DESC NULLS FIRST)
+i->:  48 expression is  most_expensive_project
+i->:  49 expression is  COUNT(*) OVER (PARTITION BY eh.department_id)
+i->:  50 expression is  total_department_projects
+i->:  51 expression is  100
+i->:  52 expression is  EmployeeHierarchy AS eh
+i->:  53 expression is  DepartmentMetrics AS dm
+i->:  54 expression is  eh.department_id = dm.department_id
+i->:  55 expression is  ProjectPerformance AS pp
+i->:  56 expression is  eh.department_id = pp.department_id
+i->:  57 expression is  eh.level <= 3 AND dm.employee_count >= 5 AND dm.total_project_cost > (SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics) AND EXISTS(SELECT 1 FROM project_assignments AS pa WHERE pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE)
+i->:  58 expression is  eh.hierarchy_path NULLS LAST
+i->:  59 expression is  dm.salary_rank NULLS LAST
+i->:  60 expression is  pp.project_cost DESC NULLS FIRST
+i->:  61 expression is  EmployeeHierarchy AS (/* Base case: top-level managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, 1 AS level, CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path FROM employees AS e WHERE e.manager_id IS NULL UNION ALL SELECT * FROM diddy WHERE diddy.id = 1 UNION ALL /* Recursive case: employees with managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, eh.level + 1, CAST(eh.hierarchy_path || ' -> ' || e.full_name AS VARCHAR(1000)) FROM employees AS e INNER JOIN EmployeeHierarchy AS eh ON e.manager_id = eh.employee_id)
+i->:  62 expression is  DepartmentMetrics AS (SELECT d.department_id, d.department_name, COUNT(DISTINCT e.employee_id) AS employee_count, AVG(e.salary) AS avg_salary, SUM(p.total_cost) AS total_project_cost, DENSE_RANK() OVER (ORDER BY AVG(e.salary) DESC NULLS FIRST) AS salary_rank FROM departments AS d LEFT JOIN employees AS e ON d.department_id = e.department_id LEFT JOIN project_assignments AS pa ON e.employee_id = pa.employee_id LEFT JOIN projects AS p ON pa.project_id = p.project_id WHERE d.active_status = 1 GROUP BY d.department_id, d.department_name)
+i->:  63 expression is  ProjectPerformance AS (SELECT p.project_id, p.project_name, p.start_date, p.end_date, COUNT(DISTINCT pa.employee_id) AS team_size, SUM(p.total_cost) AS project_cost, CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' WHEN p.start_date > CURRENT_DATE THEN 'Not Started' ELSE 'In Progress' END AS project_status, LAG(p.total_cost) OVER (PARTITION BY p.department_id ORDER BY p.start_date NULLS LAST) AS previous_project_cost FROM projects AS p LEFT JOIN project_assignments AS pa ON p.project_id = pa.project_id GROUP BY p.project_id, p.project_name, p.start_date, p.end_date, p.department_id)
+i->:  64 expression is  level
+i->:  65 expression is  eh
+i->:  66 expression is  dm.avg_salary
+i->:  67 expression is  2
+i->:  68 expression is  salary_rank
+i->:  69 expression is  dm
+i->:  70 expression is  pp.project_cost
+i->:  71 expression is  2
+i->:  72 expression is  pp.previous_project_cost
+i->:  73 expression is  2
+i->:  74 expression is  (pp.project_cost - COALESCE(pp.previous_project_cost, 0)) / NULLIF(pp.previous_project_cost, 0) * 100
+i->:  75 expression is  2
+i->:  76 expression is  FIRST_VALUE(pp.project_name)
+i->:  77 expression is  dm.department_id
+i->:  78 expression is  ORDER BY pp.project_cost DESC NULLS FIRST
+i->:  79 expression is  COUNT(*)
+i->:  80 expression is  eh.department_id
+i->:  81 expression is  EmployeeHierarchy
+i->:  82 expression is  eh
+i->:  83 expression is  DepartmentMetrics
+i->:  84 expression is  dm
+i->:  85 expression is  eh.department_id
+i->:  86 expression is  dm.department_id
+i->:  87 expression is  ProjectPerformance
+i->:  88 expression is  pp
+i->:  89 expression is  eh.department_id
+i->:  90 expression is  pp.department_id
+i->:  91 expression is  eh.level <= 3 AND dm.employee_count >= 5 AND dm.total_project_cost > (SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics)
+i->:  92 expression is  EXISTS(SELECT 1 FROM project_assignments AS pa WHERE pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE)
+i->:  93 expression is  eh.hierarchy_path
+i->:  94 expression is  dm.salary_rank
+i->:  95 expression is  pp.project_cost
+i->:  96 expression is  /* Base case: top-level managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, 1 AS level, CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path FROM employees AS e WHERE e.manager_id IS NULL UNION ALL SELECT * FROM diddy WHERE diddy.id = 1 UNION ALL /* Recursive case: employees with managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, eh.level + 1, CAST(eh.hierarchy_path || ' -> ' || e.full_name AS VARCHAR(1000)) FROM employees AS e INNER JOIN EmployeeHierarchy AS eh ON e.manager_id = eh.employee_id
+i->:  97 expression is  EmployeeHierarchy
+i->:  98 expression is  SELECT d.department_id, d.department_name, COUNT(DISTINCT e.employee_id) AS employee_count, AVG(e.salary) AS avg_salary, SUM(p.total_cost) AS total_project_cost, DENSE_RANK() OVER (ORDER BY AVG(e.salary) DESC NULLS FIRST) AS salary_rank FROM departments AS d LEFT JOIN employees AS e ON d.department_id = e.department_id LEFT JOIN project_assignments AS pa ON e.employee_id = pa.employee_id LEFT JOIN projects AS p ON pa.project_id = p.project_id WHERE d.active_status = 1 GROUP BY d.department_id, d.department_name
+i2->:  98
+Node: ->  SELECT d.department_id, d.department_name, COUNT(DISTINCT e.employee_id) AS employee_count, AVG(e.salary) AS avg_salary, SUM(p.total_cost) AS total_project_cost, DENSE_RANK() OVER (ORDER BY AVG(e.salary) DESC NULLS FIRST) AS salary_rank FROM departments AS d LEFT JOIN employees AS e ON d.department_id = e.department_id LEFT JOIN project_assignments AS pa ON e.employee_id = pa.employee_id LEFT JOIN projects AS p ON pa.project_id = p.project_id WHERE d.active_status = 1 GROUP BY d.department_id, d.department_name
+i->:  99 expression is  DepartmentMetrics
+i->:  100 expression is  SELECT p.project_id, p.project_name, p.start_date, p.end_date, COUNT(DISTINCT pa.employee_id) AS team_size, SUM(p.total_cost) AS project_cost, CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' WHEN p.start_date > CURRENT_DATE THEN 'Not Started' ELSE 'In Progress' END AS project_status, LAG(p.total_cost) OVER (PARTITION BY p.department_id ORDER BY p.start_date NULLS LAST) AS previous_project_cost FROM projects AS p LEFT JOIN project_assignments AS pa ON p.project_id = pa.project_id GROUP BY p.project_id, p.project_name, p.start_date, p.end_date, p.department_id
+i2->:  100
+Node: ->  SELECT p.project_id, p.project_name, p.start_date, p.end_date, COUNT(DISTINCT pa.employee_id) AS team_size, SUM(p.total_cost) AS project_cost, CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' WHEN p.start_date > CURRENT_DATE THEN 'Not Started' ELSE 'In Progress' END AS project_status, LAG(p.total_cost) OVER (PARTITION BY p.department_id ORDER BY p.start_date NULLS LAST) AS previous_project_cost FROM projects AS p LEFT JOIN project_assignments AS pa ON p.project_id = pa.project_id GROUP BY p.project_id, p.project_name, p.start_date, p.end_date, p.department_id
+i->:  101 expression is  ProjectPerformance
+i->:  102 expression is  avg_salary
+i->:  103 expression is  dm
+i->:  104 expression is  project_cost
+i->:  105 expression is  pp
+i->:  106 expression is  previous_project_cost
+i->:  107 expression is  pp
+i->:  108 expression is  (pp.project_cost - COALESCE(pp.previous_project_cost, 0)) / NULLIF(pp.previous_project_cost, 0)
+i->:  109 expression is  100
+i->:  110 expression is  pp.project_name
+i->:  111 expression is  department_id
+i->:  112 expression is  dm
+i->:  113 expression is  pp.project_cost DESC NULLS FIRST
+i->:  114 expression is  *
+i->:  115 expression is  department_id
+i->:  116 expression is  eh
+i->:  117 expression is  eh
+i->:  118 expression is  dm
+i->:  119 expression is  department_id
+i->:  120 expression is  eh
+i->:  121 expression is  department_id
+i->:  122 expression is  dm
+i->:  123 expression is  pp
+i->:  124 expression is  department_id
+i->:  125 expression is  eh
+i->:  126 expression is  department_id
+i->:  127 expression is  pp
+i->:  128 expression is  eh.level <= 3 AND dm.employee_count >= 5
+i->:  129 expression is  dm.total_project_cost > (SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics)
+i->:  130 expression is  SELECT 1 FROM project_assignments AS pa WHERE pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE
+i2->:  130
+Node: ->  SELECT 1 FROM project_assignments AS pa WHERE pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE
+i->:  131 expression is  hierarchy_path
+i->:  132 expression is  eh
+i->:  133 expression is  salary_rank
+i->:  134 expression is  dm
+i->:  135 expression is  project_cost
+i->:  136 expression is  pp
+i->:  137 expression is  /* Base case: top-level managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, 1 AS level, CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path FROM employees AS e WHERE e.manager_id IS NULL UNION ALL SELECT * FROM diddy WHERE diddy.id = 1
+i->:  138 expression is  /* Recursive case: employees with managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, eh.level + 1, CAST(eh.hierarchy_path || ' -> ' || e.full_name AS VARCHAR(1000)) FROM employees AS e INNER JOIN EmployeeHierarchy AS eh ON e.manager_id = eh.employee_id
+i2->:  138
+Node: ->  /* Recursive case: employees with managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, eh.level + 1, CAST(eh.hierarchy_path || ' -> ' || e.full_name AS VARCHAR(1000)) FROM employees AS e INNER JOIN EmployeeHierarchy AS eh ON e.manager_id = eh.employee_id
+i->:  139 expression is  EmployeeHierarchy
+i->:  140 expression is  d.department_id
+i->:  141 expression is  d.department_name
+i->:  142 expression is  COUNT(DISTINCT e.employee_id) AS employee_count
+i->:  143 expression is  AVG(e.salary) AS avg_salary
+i->:  144 expression is  SUM(p.total_cost) AS total_project_cost
+i->:  145 expression is  DENSE_RANK() OVER (ORDER BY AVG(e.salary) DESC NULLS FIRST) AS salary_rank
+i->:  146 expression is  FROM departments AS d
+i->:  147 expression is  LEFT JOIN employees AS e ON d.department_id = e.department_id
+i->:  148 expression is  LEFT JOIN project_assignments AS pa ON e.employee_id = pa.employee_id
+i->:  149 expression is  LEFT JOIN projects AS p ON pa.project_id = p.project_id
+i->:  150 expression is  WHERE d.active_status = 1
+i->:  151 expression is  GROUP BY d.department_id, d.department_name
+i->:  152 expression is  DepartmentMetrics
+i->:  153 expression is  p.project_id
+i->:  154 expression is  p.project_name
+i->:  155 expression is  p.start_date
+i->:  156 expression is  p.end_date
+i->:  157 expression is  COUNT(DISTINCT pa.employee_id) AS team_size
+i->:  158 expression is  SUM(p.total_cost) AS project_cost
+i->:  159 expression is  CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' WHEN p.start_date > CURRENT_DATE THEN 'Not Started' ELSE 'In Progress' END AS project_status
+i->:  160 expression is  LAG(p.total_cost) OVER (PARTITION BY p.department_id ORDER BY p.start_date NULLS LAST) AS previous_project_cost
+i->:  161 expression is  FROM projects AS p
+i->:  162 expression is  LEFT JOIN project_assignments AS pa ON p.project_id = pa.project_id
+i->:  163 expression is  GROUP BY p.project_id, p.project_name, p.start_date, p.end_date, p.department_id
+i->:  164 expression is  ProjectPerformance
+i->:  165 expression is  (pp.project_cost - COALESCE(pp.previous_project_cost, 0))
+i->:  166 expression is  NULLIF(pp.previous_project_cost, 0)
+i->:  167 expression is  project_name
+i->:  168 expression is  pp
+i->:  169 expression is  pp.project_cost
+i->:  170 expression is  eh.level <= 3
+i->:  171 expression is  dm.employee_count >= 5
+i->:  172 expression is  dm.total_project_cost
+i->:  173 expression is  (SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics)
+i->:  174 expression is  1
+i->:  175 expression is  FROM project_assignments AS pa
+i->:  176 expression is  WHERE pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE
+i->:  177 expression is  /* Base case: top-level managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, 1 AS level, CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path FROM employees AS e WHERE e.manager_id IS NULL
+i2->:  177
+Node: ->  /* Base case: top-level managers */ SELECT e.employee_id, e.full_name, e.manager_id, e.department_id, 1 AS level, CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path FROM employees AS e WHERE e.manager_id IS NULL
+i->:  178 expression is  SELECT * FROM diddy WHERE diddy.id = 1
+i2->:  178
+Node: ->  SELECT * FROM diddy WHERE diddy.id = 1
+i->:  179 expression is  e.employee_id
+i->:  180 expression is  e.full_name
+i->:  181 expression is  e.manager_id
+i->:  182 expression is  e.department_id
+i->:  183 expression is  eh.level + 1
+i->:  184 expression is  CAST(eh.hierarchy_path || ' -> ' || e.full_name AS VARCHAR(1000))
+i->:  185 expression is  FROM employees AS e
+i->:  186 expression is  INNER JOIN EmployeeHierarchy AS eh ON e.manager_id = eh.employee_id
+i->:  187 expression is  department_id
+i->:  188 expression is  d
+i->:  189 expression is  department_name
+i->:  190 expression is  d
+i->:  191 expression is  COUNT(DISTINCT e.employee_id)
+i->:  192 expression is  employee_count
+i->:  193 expression is  AVG(e.salary)
+i->:  194 expression is  avg_salary
+i->:  195 expression is  SUM(p.total_cost)
+i->:  196 expression is  total_project_cost
+i->:  197 expression is  DENSE_RANK() OVER (ORDER BY AVG(e.salary) DESC NULLS FIRST)
+i->:  198 expression is  salary_rank
+i->:  199 expression is  departments AS d
+i->:  200 expression is  employees AS e
+i->:  201 expression is  d.department_id = e.department_id
+i->:  202 expression is  project_assignments AS pa
+i->:  203 expression is  e.employee_id = pa.employee_id
+i->:  204 expression is  projects AS p
+i->:  205 expression is  pa.project_id = p.project_id
+i->:  206 expression is  d.active_status = 1
+i->:  207 expression is  d.department_id
+i->:  208 expression is  d.department_name
+i->:  209 expression is  project_id
+i->:  210 expression is  p
+i->:  211 expression is  project_name
+i->:  212 expression is  p
+i->:  213 expression is  start_date
+i->:  214 expression is  p
+i->:  215 expression is  end_date
+i->:  216 expression is  p
+i->:  217 expression is  COUNT(DISTINCT pa.employee_id)
+i->:  218 expression is  team_size
+i->:  219 expression is  SUM(p.total_cost)
+i->:  220 expression is  project_cost
+i->:  221 expression is  CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' WHEN p.start_date > CURRENT_DATE THEN 'Not Started' ELSE 'In Progress' END
+i->:  222 expression is  project_status
+i->:  223 expression is  LAG(p.total_cost) OVER (PARTITION BY p.department_id ORDER BY p.start_date NULLS LAST)
+i->:  224 expression is  previous_project_cost
+i->:  225 expression is  projects AS p
+i->:  226 expression is  project_assignments AS pa
+i->:  227 expression is  p.project_id = pa.project_id
+i->:  228 expression is  p.project_id
+i->:  229 expression is  p.project_name
+i->:  230 expression is  p.start_date
+i->:  231 expression is  p.end_date
+i->:  232 expression is  p.department_id
+i->:  233 expression is  pp.project_cost - COALESCE(pp.previous_project_cost, 0)
+i->:  234 expression is  pp.previous_project_cost
+i->:  235 expression is  0
+i->:  236 expression is  project_cost
+i->:  237 expression is  pp
+i->:  238 expression is  eh.level
+i->:  239 expression is  3
+i->:  240 expression is  dm.employee_count
+i->:  241 expression is  5
+i->:  242 expression is  total_project_cost
+i->:  243 expression is  dm
+i->:  244 expression is  SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics
+i2->:  244
+Node: ->  SELECT AVG(total_project_cost) * 1.2 FROM DepartmentMetrics
+i->:  245 expression is  project_assignments AS pa
+i->:  246 expression is  pa.employee_id = eh.employee_id AND pa.end_date > CURRENT_DATE
+i->:  247 expression is  e.employee_id
+i->:  248 expression is  e.full_name
+i->:  249 expression is  e.manager_id
+i->:  250 expression is  e.department_id
+i->:  251 expression is  1 AS level
+i->:  252 expression is  CAST(e.full_name AS VARCHAR(1000)) AS hierarchy_path
+i->:  253 expression is  FROM employees AS e
+i->:  254 expression is  WHERE e.manager_id IS NULL
+i->:  255 expression is  *
+i->:  256 expression is  FROM diddy
+i->:  257 expression is  WHERE diddy.id = 1
+i->:  258 expression is  employee_id
+i->:  259 expression is  e
+i->:  260 expression is  full_name
+i->:  261 expression is  e
+i->:  262 expression is  manager_id
+i->:  263 expression is  e
+i->:  264 expression is  department_id
+i->:  265 expression is  e
+i->:  266 expression is  eh.level
+i->:  267 expression is  1
+i->:  268 expression is  eh.hierarchy_path || ' -> ' || e.full_name
+i->:  269 expression is  VARCHAR(1000)
+i->:  270 expression is  employees AS e
+i->:  271 expression is  EmployeeHierarchy AS eh
+i->:  272 expression is  e.manager_id = eh.employee_id
+i->:  273 expression is  DISTINCT e.employee_id
+i->:  274 expression is  e.salary
+i->:  275 expression is  p.total_cost
+i->:  276 expression is  DENSE_RANK()
+i->:  277 expression is  ORDER BY AVG(e.salary) DESC NULLS FIRST
+i->:  278 expression is  departments
+i->:  279 expression is  d
+i->:  280 expression is  employees
+i->:  281 expression is  e
+i->:  282 expression is  d.department_id
+i->:  283 expression is  e.department_id
+i->:  284 expression is  project_assignments
+i->:  285 expression is  pa
+i->:  286 expression is  e.employee_id
+i->:  287 expression is  pa.employee_id
+i->:  288 expression is  projects
+i->:  289 expression is  p
+i->:  290 expression is  pa.project_id
+i->:  291 expression is  p.project_id
+i->:  292 expression is  d.active_status
+i->:  293 expression is  1
+i->:  294 expression is  department_id
+i->:  295 expression is  d
+i->:  296 expression is  department_name
+i->:  297 expression is  d
+i->:  298 expression is  DISTINCT pa.employee_id
+i->:  299 expression is  p.total_cost
+i->:  300 expression is  CASE WHEN p.end_date < CURRENT_DATE THEN 'Completed' END
+i->:  301 expression is  CASE WHEN p.start_date > CURRENT_DATE THEN 'Not Started' END
+i->:  302 expression is  'In Progress'
+i->:  303 expression is  LAG(p.total_cost)
+i->:  304 expression is  p.department_id
+i->:  305 expression is  ORDER BY p.start_date NULLS LAST
+i->:  306 expression is  projects
+i->:  307 expression is  p
+i->:  308 expression is  project_assignments
+i->:  309 expression is  pa
+i->:  310 expression is  p.project_id
+i->:  311 expression is  pa.project_id
+i->:  312 expression is  project_id
+i->:  313 expression is  p
+i->:  314 expression is  project_name
+i->:  315 expression is  p
+i->:  316 expression is  start_date
+i->:  317 expression is  p
+i->:  318 expression is  end_date
+i->:  319 expression is  p
+i->:  320 expression is  department_id
+i->:  321 expression is  p
+i->:  322 expression is  pp.project_cost
+i->:  323 expression is  COALESCE(pp.previous_project_cost, 0)
+i->:  324 expression is  previous_project_cost
+i->:  325 expression is  pp
+i->:  326 expression is  level
+i->:  327 expression is  eh
+i->:  328 expression is  employee_count
+i->:  329 expression is  dm
+i->:  330 expression is  AVG(total_project_cost) * 1.2
+i->:  331 expression is  FROM DepartmentMetrics
+i->:  332 expression is  project_assignments
+i->:  333 expression is  pa
+i->:  334 expression is  pa.employee_id = eh.employee_id
+i->:  335 expression is  pa.end_date > CURRENT_DATE
+i->:  336 expression is  employee_id
+i->:  337 expression is  e
+i->:  338 expression is  full_name
+i->:  339 expression is  e
+i->:  340 expression is  manager_id
+i->:  341 expression is  e
+i->:  342 expression is  department_id
+i->:  343 expression is  e
+i->:  344 expression is  1
+i->:  345 expression is  level
+i->:  346 expression is  CAST(e.full_name AS VARCHAR(1000))
+i->:  347 expression is  hierarchy_path
+i->:  348 expression is  employees AS e
+i->:  349 expression is  e.manager_id IS NULL
+i->:  350 expression is  diddy
+i->:  351 expression is  diddy.id = 1
+i->:  352 expression is  level
+i->:  353 expression is  eh
+i->:  354 expression is  eh.hierarchy_path || ' -> '
+i->:  355 expression is  e.full_name
+i->:  356 expression is  1000
+i->:  357 expression is  employees
+i->:  358 expression is  e
+i->:  359 expression is  EmployeeHierarchy
+i->:  360 expression is  eh
+i->:  361 expression is  e.manager_id
+i->:  362 expression is  eh.employee_id
+i->:  363 expression is  e.employee_id
+i->:  364 expression is  salary
+i->:  365 expression is  e
+i->:  366 expression is  total_cost
+i->:  367 expression is  p
+i->:  368 expression is  AVG(e.salary) DESC NULLS FIRST
+i->:  369 expression is  d
+i->:  370 expression is  e
+i->:  371 expression is  department_id
+i->:  372 expression is  d
+i->:  373 expression is  department_id
+i->:  374 expression is  e
+i->:  375 expression is  pa
+i->:  376 expression is  employee_id
+i->:  377 expression is  e
+i->:  378 expression is  employee_id
+i->:  379 expression is  pa
+i->:  380 expression is  p
+i->:  381 expression is  project_id
+i->:  382 expression is  pa
+i->:  383 expression is  project_id
+i->:  384 expression is  p
+i->:  385 expression is  active_status
+i->:  386 expression is  d
+i->:  387 expression is  pa.employee_id
+i->:  388 expression is  total_cost
+i->:  389 expression is  p
+i->:  390 expression is  p.end_date < CURRENT_DATE
+i->:  391 expression is  'Completed'
+i->:  392 expression is  p.start_date > CURRENT_DATE
+i->:  393 expression is  'Not Started'
+i->:  394 expression is  p.total_cost
+i->:  395 expression is  department_id
+i->:  396 expression is  p
+i->:  397 expression is  p.start_date NULLS LAST
+i->:  398 expression is  p
+i->:  399 expression is  pa
+i->:  400 expression is  project_id
+i->:  401 expression is  p
+i->:  402 expression is  project_id
+i->:  403 expression is  pa
+i->:  404 expression is  project_cost
+i->:  405 expression is  pp
+i->:  406 expression is  pp.previous_project_cost
+i->:  407 expression is  0
+i->:  408 expression is  AVG(total_project_cost)
+i->:  409 expression is  1.2
+i->:  410 expression is  DepartmentMetrics
+i->:  411 expression is  pa
+i->:  412 expression is  pa.employee_id
+i->:  413 expression is  eh.employee_id
+i->:  414 expression is  pa.end_date
+i->:  415 expression is  CURRENT_DATE
+i->:  416 expression is  e.full_name
+i->:  417 expression is  VARCHAR(1000)
+i->:  418 expression is  employees
+i->:  419 expression is  e
+i->:  420 expression is  e.manager_id
+i->:  421 expression is  NULL
+i->:  422 expression is  diddy
+i->:  423 expression is  diddy.id
+i->:  424 expression is  1
+i->:  425 expression is  eh.hierarchy_path
+i->:  426 expression is  ' -> '
+i->:  427 expression is  full_name
+i->:  428 expression is  e
+i->:  429 expression is  1000
+i->:  430 expression is  e
+i->:  431 expression is  eh
+i->:  432 expression is  manager_id
+i->:  433 expression is  e
+i->:  434 expression is  employee_id
+i->:  435 expression is  eh
+i->:  436 expression is  employee_id
+i->:  437 expression is  e
+i->:  438 expression is  AVG(e.salary)
+i->:  439 expression is  employee_id
+i->:  440 expression is  pa
+i->:  441 expression is  p.end_date
+i->:  442 expression is  CURRENT_DATE
+i->:  443 expression is  p.start_date
+i->:  444 expression is  CURRENT_DATE
+i->:  445 expression is  total_cost
+i->:  446 expression is  p
+i->:  447 expression is  p.start_date
+i->:  448 expression is  previous_project_cost
+i->:  449 expression is  pp
+i->:  450 expression is  total_project_cost
+i->:  451 expression is  DepartmentMetrics
+i->:  452 expression is  employee_id
+i->:  453 expression is  pa
+i->:  454 expression is  employee_id
+i->:  455 expression is  eh
+i->:  456 expression is  end_date
+i->:  457 expression is  pa
+i->:  458 expression is  full_name
+i->:  459 expression is  e
+i->:  460 expression is  1000
+i->:  461 expression is  e
+i->:  462 expression is  manager_id
+i->:  463 expression is  e
+i->:  464 expression is  id
+i->:  465 expression is  diddy
+i->:  466 expression is  hierarchy_path
+i->:  467 expression is  eh
+i->:  468 expression is  e.salary
+i->:  469 expression is  end_date
+i->:  470 expression is  p
+i->:  471 expression is  start_date
+i->:  472 expression is  p
+i->:  473 expression is  start_date
+i->:  474 expression is  p
+i->:  475 expression is  total_project_cost
+i->:  476 expression is  1000
+i->:  477 expression is  salary
+i->:  478 expression is  e
+{'columns': ['hierarchy_path', 'level'],
+ 'limits': [],
+ 'table': 'EmployeeHierarchy',
+ 'where_columns': ['employee_id', 'level', 'total_project_cost']}
+
+
+{'columns': ['department_name', 'employee_count', 'salary_rank'],
+ 'limits': [],
+ 'table': 'DepartmentMetrics',
+ 'where_columns': ['employee_count', 'total_project_cost']}
+
+
+{'columns': ['project_name', 'project_status', 'team_size'],
+ 'limits': [],
+ 'table': 'ProjectPerformance',
+ 'where_columns': ['total_project_cost']}
+
+
+{'columns': ['department_id', 'employee_id', 'full_name', 'manager_id'],
+ 'limits': [],
+ 'table': 'employees',
+ 'where_columns': ['manager_id', 'total_project_cost']}
+
+
+{'columns': [],
+ 'limits': [],
+ 'table': 'project_assignments',
+ 'where_columns': ['employee_id', 'end_date', 'total_project_cost']}
+
+
+{'columns': ['end_date', 'project_id', 'project_name', 'start_date'],
+ 'limits': [],
+ 'table': 'projects',
+ 'where_columns': ['total_project_cost']}
+
+
+{'columns': ['department_id', 'department_name'],
+ 'limits': [],
+ 'table': 'departments',
+ 'where_columns': ['active_status']}
+
+
+{'columns': [], 'limits': [], 'table': 'diddy', 'where_columns': ['id']}
+
+
+
+
+
+
+curl -X POST "http://localhost:8100/guardrail" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "query=SELECT *, d.d_year, d.d_month_seq, SUM(ws.ws_net_paid) as total_net_sales, COUNT(DISTINCT ws.ws_order_number) as number_of_orders, AVG(ws.ws_net_profit) as avg_profit_per_sale FROM web_sales ws JOIN date_dim d ON ws.ws_sold_date_sk = d.d_date_sk WHERE d.d_year = 2023 AND d.d_holiday = 'N' AND ws.ws_net_paid > 0 AND ws.ws_quantity > 0 GROUP BY d.d_year, d.d_month_seq HAVING SUM(ws.ws_net_paid) > 1000 ORDER BY d.d_month_seq;" \
+     -d "schema=hive" \
+     -d "catalog=tpcds_1000"

@@ -765,6 +765,9 @@ class Generator(metaclass=_Generator):
             from sqlglot.transforms import move_ctes_to_top_level
 
             expression = move_ctes_to_top_level(expression)
+        # print(expression)
+        # print("\n\n")
+
         return expression
 
     def unsupported(self, message: str) -> None:
