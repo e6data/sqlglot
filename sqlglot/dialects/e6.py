@@ -1937,7 +1937,7 @@ class E6(Dialect):
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: array_sql,
-            exp.ArrayAgg: rename_func("COLLECT_LIST"),
+            exp.ArrayAgg: rename_func("ARRAY_AGG"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
             exp.ArrayContains: rename_func("ARRAY_CONTAINS"),
             exp.ArrayFilter: filter_array_sql,
