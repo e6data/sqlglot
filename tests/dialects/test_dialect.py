@@ -2335,6 +2335,8 @@ SELECT
                 "bigquery": "SUBSTRING('123456', 2, 3)",
                 "oracle": "SUBSTR('123456', 2, 3)",
                 "postgres": "SUBSTRING('123456' FROM 2 FOR 3)",
+                "databricks": "SUBSTRING('123456', 2, 3)",
+                "snowflake": "SUBSTRING('123456', 2, 3)",
             },
         )
         self.validate_all(
@@ -2343,6 +2345,19 @@ SELECT
                 "bigquery": "SUBSTRING('123456', 2, 3)",
                 "oracle": "SUBSTR('123456', 2, 3)",
                 "postgres": "SUBSTRING('123456' FROM 2 FOR 3)",
+                "databricks": "SUBSTRING('123456', 2, 3)",
+                "snowflake": "SUBSTRING('123456', 2, 3)",
+            },
+        )
+
+        self.validate_all(
+            "SUBSTR('123456' FROM 2 FOR 3)",
+            write={
+                "bigquery": "SUBSTRING('123456', 2, 3)",
+                "oracle": "SUBSTR('123456', 2, 3)",
+                "postgres": "SUBSTRING('123456' FROM 2 FOR 3)",
+                "databricks": "SUBSTRING('123456', 2, 3)",
+                "snowflake": "SUBSTRING('123456', 2, 3)",
             },
         )
 
