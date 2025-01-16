@@ -415,6 +415,7 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x > 3)",
+                "databricks": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
             },
         )
 
@@ -424,6 +425,7 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(-5, -4, -3, -2, -1), x -> x <= -3)",
+                "databricks": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
             },
         )
 
@@ -433,6 +435,7 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(NULL, 1, NULL, 2), x -> x IS NOT NULL)",
+                "databricks": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
             },
         )
 
@@ -442,6 +445,7 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x % 2 = 0)",
+                "databricks": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)",
             },
         )
 
@@ -451,6 +455,20 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4)), x -> ARRAY_SIZE(x) = 2)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FILTER_ARRAY(the_array, (e, i) -> MOD(i, 2) = 0 AND e > 0)",
+            read={
+                "databricks": "select filter(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+                "snowflake": "select filter(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+                "trino": "select filter(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+            },
+            write={
+                "databricks": "SELECT FILTER(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+                "snowflake": "SELECT FILTER(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+                "trino": "SELECT FILTER(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
             },
         )
 

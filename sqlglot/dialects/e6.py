@@ -1759,11 +1759,12 @@ class E6(Dialect):
 
         def filter_array_sql(self: E6.Generator, expression: exp.ArrayFilter) -> str:
             cond = expression.expression
-            if isinstance(cond, exp.Lambda) and len(cond.expressions) == 1:
-                alias = cond.expressions[0]
+            if isinstance(cond, exp.Lambda):
+                aliases = cond.expressions
                 cond = cond.this
             elif isinstance(cond, exp.Predicate):
-                alias = "_u"
+                aliases = [exp.Identifier(this="_u")]
+                cond = cond
             else:
                 self.unsupported("Unsupported filter condition")
                 return ""
@@ -1775,7 +1776,12 @@ class E6(Dialect):
                 )
                 return ""
 
-            lambda_expr = f"{alias} -> {self.sql(cond)}"
+            if len(aliases) == 1:
+                aliases_str = aliases[0]
+            else:
+                aliases_str = ", ".join(self.sql(alias) for alias in aliases)
+                aliases_str = f"({aliases_str})"
+            lambda_expr = f"{aliases_str} -> {self.sql(cond)}"
             return f"FILTER_ARRAY({self.sql(expression.this)}, {lambda_expr})"
 
         def explode_sql(self, expression: exp.Explode) -> str:
