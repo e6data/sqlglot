@@ -99,6 +99,16 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "POSITION(needle in haystack from c)",
+            write={
+                "spark": "LOCATE(needle, haystack, c)",
+                "clickhouse": "position(haystack, needle, c)",
+                "snowflake": "POSITION(needle, haystack, c)",
+                "mysql": "LOCATE(needle, haystack, c)",
+            },
+        )
+
+        self.validate_all(
             "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
             read={"trino": "SELECT format_datetime('2024-11-09 09:08:07', '%d-%m-%y')"},
         )

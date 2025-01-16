@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typing as t
 
-
 from sqlglot import exp, generator, parser, tokens
 from sqlglot.dialects.dialect import (
     Dialect,
@@ -21,6 +20,7 @@ from sqlglot.dialects.dialect import (
     var_map_sql,
 )
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
+from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -1323,6 +1323,25 @@ class E6(Dialect):
                     self.raise_error(f"Unsupported cast type: {target_type}")
 
             return cast_expression
+
+        def _parse_position(self, haystack_first: bool = False) -> exp.StrPosition:
+            args = self._parse_csv(self._parse_bitwise)
+
+            if self._match(TokenType.IN):
+                haystack = self._parse_bitwise()
+                position = None
+
+                # Check for `FROM` keyword and parse the starting position
+                if self._match(TokenType.FROM):
+                    position = self._parse_bitwise()
+
+                return self.expression(
+                    exp.StrPosition,
+                    this=haystack,
+                    substr=seq_get(args, 0),
+                    position=position,
+                )
+            return super()._parse_position()
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
