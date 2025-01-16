@@ -1464,7 +1464,9 @@ class E6(Dialect):
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
             "TO_UNIX_TIMESTAMP": _build_to_unix_timestamp,
-            "TO_VARCHAR": build_formatted_time(exp.TimeToStr, "E6"),
+            "TO_VARCHAR": lambda args: exp.ToChar(
+                this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
+            ),
             "TRUNC": date_trunc_to_time,
             "TRIM": lambda self: self._parse_trim(),
             "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),
@@ -1832,6 +1834,8 @@ class E6(Dialect):
 
         def tochar_sql(self, expression: exp.ToChar) -> str:
             date_expr = expression.this
+            if len(expression.args) < 2:
+                return self.func("TO_CHAR", expression.this)
             if (
                 isinstance(date_expr, exp.Cast) and not (date_expr.to.this.name == "TIMESTAMP")
             ) or (
