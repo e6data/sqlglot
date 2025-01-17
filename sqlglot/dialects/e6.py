@@ -240,11 +240,17 @@ def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
 
 
 def _build_trim(args: t.List, is_left: bool = True):
-    return exp.Trim(
-        this=seq_get(args, 1),
-        expression=seq_get(args, 0),
-        position="LEADING" if is_left else "TRAILING",
-    )
+    if len(args)<2:
+        return exp.Trim(
+            this=seq_get(args, 0),
+            position="LEADING" if is_left else "TRAILING",
+        )
+    else:
+        return exp.Trim(
+            this=seq_get(args, 1),
+            expression=seq_get(args, 0),
+            position="LEADING" if is_left else "TRAILING",
+        )
 
 
 def _build_convert_timezone(args: t.List) -> exp.Anonymous | exp.AtTimeZone:

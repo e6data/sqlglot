@@ -597,7 +597,7 @@ class TestE6(Validator):
                 "oracle": "LTRIM('Hello World', 'H')",
                 "snowflake": "LTRIM('Hello World', 'H')",
                 "bigquery": "LTRIM('Hello World', 'H')",
-                "databricks": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "databricks": "LTRIM('H', 'Hello World')",
             },
         )
 
@@ -612,9 +612,41 @@ class TestE6(Validator):
             },
             write={
                 "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "databricks": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "databricks": "RTRIM('d', 'Hello World')",
                 "oracle": "RTRIM('Hello World', 'd')",
                 "snowflake": "RTRIM('Hello World', 'd')",
                 "bigquery": "RTRIM('Hello World', 'd')",
             },
+        )
+
+        self.validate_all(
+            "TRIM('abcSpark')",
+            read={
+                "databricks": "TRIM(BOTH from 'abcSpark')",
+                "snowflake": "TRIM('abcSpark')",
+                "oracle": "TRIM(BOTH from 'abcSpark')",
+                "bigquery": "TRIM('abcSpark')",
+                "clickhouse": "TRIM(BOTH from 'abcSpark')",
+            },
+            write={
+                "databricks": "TRIM('abcSpark')",
+                "snowflake": "TRIM('abcSpark')",
+                "oracle": "TRIM('abcSpark')",
+                "bigquery": "TRIM('abcSpark')",
+                "clickhouse": "TRIM('abcSpark')",
+            }
+        )
+
+        self.validate_all(
+            "TRIM(BOTH trimstr FROM 'abcSpark')",
+            read={
+                "databricks": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
+            },
+            write={
+                "databricks": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
+            }
         )

@@ -300,3 +300,86 @@ class TestDatabricks(Validator):
         self.validate_identity(
             "SELECT DATE_PART(fieldStr, Str)", "SELECT EXTRACT(fieldStr FROM Str)"
         )
+
+    def test_trim(self):
+        self.validate_all(
+            "TRIM('a' FROM 'abc')",
+            read={
+                "bigquery": "TRIM('abc', 'a')",
+                "snowflake": "TRIM('abc', 'a')",
+                "E6": "TRIM('a' FROM 'abc')",
+            },
+            write={
+                "bigquery": "TRIM('abc', 'a')",
+                "snowflake": "TRIM('abc', 'a')",
+                "E6": "TRIM('a' FROM 'abc')",
+            },
+        )
+
+        self.validate_all(
+            "LTRIM('H', 'Hello World')",
+            read={
+                "oracle": "LTRIM('Hello World', 'H')",
+                "clickhouse": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "E6": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "snowflake": "LTRIM('Hello World', 'H')",
+                "bigquery": "LTRIM('Hello World', 'H')",
+            },
+            write={
+                "clickhouse": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "oracle": "LTRIM('Hello World', 'H')",
+                "snowflake": "LTRIM('Hello World', 'H')",
+                "bigquery": "LTRIM('Hello World', 'H')",
+                "E6": "LTRIM('H', 'Hello World')",
+            },
+        )
+
+        self.validate_all(
+            "RTRIM('d', 'Hello World')",
+            read={
+                "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "E6": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "oracle": "RTRIM('Hello World', 'd')",
+                "snowflake": "RTRIM('Hello World', 'd')",
+                "bigquery": "RTRIM('Hello World', 'd')",
+            },
+            write={
+                "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "E6": "RTRIM('d', 'Hello World')",
+                "oracle": "RTRIM('Hello World', 'd')",
+                "snowflake": "RTRIM('Hello World', 'd')",
+                "bigquery": "RTRIM('Hello World', 'd')",
+            },
+        )
+
+        self.validate_all(
+            "TRIM('abcSpark')",
+            read={
+                "E6": "TRIM(BOTH from 'abcSpark')",
+                "snowflake": "TRIM('abcSpark')",
+                "oracle": "TRIM(BOTH from 'abcSpark')",
+                "bigquery": "TRIM('abcSpark')",
+                "clickhouse": "TRIM(BOTH from 'abcSpark')",
+            },
+            write={
+                "E6": "TRIM('abcSpark')",
+                "snowflake": "TRIM('abcSpark')",
+                "oracle": "TRIM('abcSpark')",
+                "bigquery": "TRIM('abcSpark')",
+                "clickhouse": "TRIM('abcSpark')",
+            }
+        )
+
+        self.validate_all(
+            "TRIM(BOTH trimstr FROM 'abcSpark')",
+            read={
+                "E6": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
+            },
+            write={
+                "E6": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
+            }
+        )
