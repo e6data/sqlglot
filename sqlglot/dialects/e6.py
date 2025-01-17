@@ -240,7 +240,7 @@ def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
 
 
 def _build_trim(args: t.List, is_left: bool = True):
-    if len(args)<2:
+    if len(args) < 2:
         return exp.Trim(
             this=seq_get(args, 0),
             position="LEADING" if is_left else "TRAILING",
@@ -1947,7 +1947,9 @@ class E6(Dialect):
             # If no separator was found, check if it's embedded in DISTINCT
             if separator is None and isinstance(expr_1, exp.Distinct):
                 # If DISTINCT has two expressions, the second may represent the separator
-                if len(expr_1.expressions) == 2 and isinstance(expr_1.expressions[1], (exp.Literal, exp.Column, exp.Identifier)):
+                if len(expr_1.expressions) == 2 and isinstance(
+                    expr_1.expressions[1], (exp.Literal, exp.Column, exp.Identifier)
+                ):
                     separator = expr_1.expressions[1]  # Use second expression as separator
 
                     # Clone DISTINCT to keep it unchanged, then apply the first expression for aggregation

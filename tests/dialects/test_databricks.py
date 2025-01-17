@@ -367,7 +367,7 @@ class TestDatabricks(Validator):
                 "oracle": "TRIM('abcSpark')",
                 "bigquery": "TRIM('abcSpark')",
                 "clickhouse": "TRIM('abcSpark')",
-            }
+            },
         )
 
         self.validate_all(
@@ -381,5 +381,5 @@ class TestDatabricks(Validator):
                 "E6": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
-            }
+            },
         )
