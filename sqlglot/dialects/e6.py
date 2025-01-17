@@ -1941,7 +1941,7 @@ class E6(Dialect):
             # If no separator was found, check if it's embedded in DISTINCT
             if separator is None and isinstance(expr_1, exp.Distinct):
                 # If DISTINCT has two expressions, the second may represent the separator
-                if len(expr_1.expressions) == 2 and isinstance(expr_1.expressions[1], exp.Literal):
+                if len(expr_1.expressions) == 2 and isinstance(expr_1.expressions[1], (exp.Literal, exp.Column, exp.Identifier)):
                     separator = expr_1.expressions[1]  # Use second expression as separator
 
                     # Clone DISTINCT to keep it unchanged, then apply the first expression for aggregation
