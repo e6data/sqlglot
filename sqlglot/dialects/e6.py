@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typing as t
 
-
 from sqlglot import exp, generator, parser, tokens
 from sqlglot.dialects.dialect import (
     Dialect,
@@ -21,6 +20,7 @@ from sqlglot.dialects.dialect import (
     var_map_sql,
 )
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
+from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -240,11 +240,17 @@ def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
 
 
 def _build_trim(args: t.List, is_left: bool = True):
-    return exp.Trim(
-        this=seq_get(args, 1),
-        expression=seq_get(args, 0),
-        position="LEADING" if is_left else "TRAILING",
-    )
+    if len(args) < 2:
+        return exp.Trim(
+            this=seq_get(args, 0),
+            position="LEADING" if is_left else "TRAILING",
+        )
+    else:
+        return exp.Trim(
+            this=seq_get(args, 1),
+            expression=seq_get(args, 0),
+            position="LEADING" if is_left else "TRAILING",
+        )
 
 
 def _build_convert_timezone(args: t.List) -> exp.Anonymous | exp.AtTimeZone:
@@ -1324,6 +1330,25 @@ class E6(Dialect):
 
             return cast_expression
 
+        def _parse_position(self, haystack_first: bool = False) -> exp.StrPosition:
+            args = self._parse_csv(self._parse_bitwise)
+
+            if self._match(TokenType.IN):
+                haystack = self._parse_bitwise()
+                position = None
+
+                # Check for `FROM` keyword and parse the starting position
+                if self._match(TokenType.FROM):
+                    position = self._parse_bitwise()
+
+                return self.expression(
+                    exp.StrPosition,
+                    this=haystack,
+                    substr=seq_get(args, 0),
+                    position=position,
+                )
+            return super()._parse_position()
+
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list,
@@ -1445,7 +1470,9 @@ class E6(Dialect):
                 this=seq_get(args, 0), charset=exp.Literal.string("utf-8")
             ),
             "TO_UNIX_TIMESTAMP": _build_to_unix_timestamp,
-            "TO_VARCHAR": build_formatted_time(exp.TimeToStr, "E6"),
+            "TO_VARCHAR": lambda args: exp.ToChar(
+                this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
+            ),
             "TRUNC": date_trunc_to_time,
             "TRIM": lambda self: self._parse_trim(),
             "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),
@@ -1740,11 +1767,12 @@ class E6(Dialect):
 
         def filter_array_sql(self: E6.Generator, expression: exp.ArrayFilter) -> str:
             cond = expression.expression
-            if isinstance(cond, exp.Lambda) and len(cond.expressions) == 1:
-                alias = cond.expressions[0]
+            if isinstance(cond, exp.Lambda):
+                aliases = cond.expressions
                 cond = cond.this
             elif isinstance(cond, exp.Predicate):
-                alias = "_u"
+                aliases = [exp.Identifier(this="_u")]
+                cond = cond
             else:
                 self.unsupported("Unsupported filter condition")
                 return ""
@@ -1756,7 +1784,12 @@ class E6(Dialect):
                 )
                 return ""
 
-            lambda_expr = f"{alias} -> {self.sql(cond)}"
+            if len(aliases) == 1:
+                aliases_str = aliases[0]
+            else:
+                aliases_str = ", ".join(self.sql(alias) for alias in aliases)
+                aliases_str = f"({aliases_str})"
+            lambda_expr = f"{aliases_str} -> {self.sql(cond)}"
             return f"FILTER_ARRAY({self.sql(expression.this)}, {lambda_expr})"
 
         def explode_sql(self, expression: exp.Explode) -> str:
@@ -1807,6 +1840,8 @@ class E6(Dialect):
 
         def tochar_sql(self, expression: exp.ToChar) -> str:
             date_expr = expression.this
+            if len(expression.args) < 2:
+                return self.func("TO_CHAR", expression.this)
             if (
                 isinstance(date_expr, exp.Cast) and not (date_expr.to.this.name == "TIMESTAMP")
             ) or (
@@ -1912,7 +1947,9 @@ class E6(Dialect):
             # If no separator was found, check if it's embedded in DISTINCT
             if separator is None and isinstance(expr_1, exp.Distinct):
                 # If DISTINCT has two expressions, the second may represent the separator
-                if len(expr_1.expressions) == 2 and isinstance(expr_1.expressions[1], exp.Literal):
+                if len(expr_1.expressions) == 2 and isinstance(
+                    expr_1.expressions[1], (exp.Literal, exp.Column, exp.Identifier)
+                ):
                     separator = expr_1.expressions[1]  # Use second expression as separator
 
                     # Clone DISTINCT to keep it unchanged, then apply the first expression for aggregation
@@ -1937,7 +1974,7 @@ class E6(Dialect):
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: array_sql,
-            exp.ArrayAgg: rename_func("COLLECT_LIST"),
+            exp.ArrayAgg: rename_func("ARRAY_AGG"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
             exp.ArrayContains: rename_func("ARRAY_CONTAINS"),
             exp.ArrayFilter: filter_array_sql,

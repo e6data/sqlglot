@@ -99,6 +99,16 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "POSITION(needle in haystack from c)",
+            write={
+                "spark": "LOCATE(needle, haystack, c)",
+                "clickhouse": "position(haystack, needle, c)",
+                "snowflake": "POSITION(needle, haystack, c)",
+                "mysql": "LOCATE(needle, haystack, c)",
+            },
+        )
+
+        self.validate_all(
             "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
             read={"trino": "SELECT format_datetime('2024-11-09 09:08:07', '%d-%m-%y')"},
         )
@@ -405,6 +415,7 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x > 3)",
+                "databricks": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x > 3)",
             },
         )
 
@@ -414,6 +425,7 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(-5, -4, -3, -2, -1), x -> x <= -3)",
+                "databricks": "SELECT filter(ARRAY[-5, -4, -3, -2, -1], x -> x <= -3)",
             },
         )
 
@@ -423,6 +435,7 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(NULL, 1, NULL, 2), x -> x IS NOT NULL)",
+                "databricks": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
             },
         )
 
@@ -432,6 +445,7 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(1, 2, 3, 4, 5), x -> x % 2 = 0)",
+                "databricks": "SELECT filter(ARRAY[1, 2, 3, 4, 5], x -> x % 2 = 0)",
             },
         )
 
@@ -441,6 +455,20 @@ class TestE6(Validator):
             read={
                 "trino": "SELECT filter(ARRAY[ARRAY[1, 2], ARRAY[3, 4]], x -> cardinality(x) = 2)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4)), x -> ARRAY_SIZE(x) = 2)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FILTER_ARRAY(the_array, (e, i) -> MOD(i, 2) = 0 AND e > 0)",
+            read={
+                "databricks": "select filter(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+                "snowflake": "select filter(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+                "trino": "select filter(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+            },
+            write={
+                "databricks": "SELECT FILTER(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+                "snowflake": "SELECT FILTER(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
+                "trino": "SELECT FILTER(the_array, (e, i) -> i % 2 = 0 AND e > 0)",
             },
         )
 
@@ -569,7 +597,7 @@ class TestE6(Validator):
                 "oracle": "LTRIM('Hello World', 'H')",
                 "snowflake": "LTRIM('Hello World', 'H')",
                 "bigquery": "LTRIM('Hello World', 'H')",
-                "databricks": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "databricks": "LTRIM('H', 'Hello World')",
             },
         )
 
@@ -584,9 +612,41 @@ class TestE6(Validator):
             },
             write={
                 "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "databricks": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "databricks": "RTRIM('d', 'Hello World')",
                 "oracle": "RTRIM('Hello World', 'd')",
                 "snowflake": "RTRIM('Hello World', 'd')",
                 "bigquery": "RTRIM('Hello World', 'd')",
+            },
+        )
+
+        self.validate_all(
+            "TRIM('abcSpark')",
+            read={
+                "databricks": "TRIM(BOTH from 'abcSpark')",
+                "snowflake": "TRIM('abcSpark')",
+                "oracle": "TRIM(BOTH from 'abcSpark')",
+                "bigquery": "TRIM('abcSpark')",
+                "clickhouse": "TRIM(BOTH from 'abcSpark')",
+            },
+            write={
+                "databricks": "TRIM('abcSpark')",
+                "snowflake": "TRIM('abcSpark')",
+                "oracle": "TRIM('abcSpark')",
+                "bigquery": "TRIM('abcSpark')",
+                "clickhouse": "TRIM('abcSpark')",
+            },
+        )
+
+        self.validate_all(
+            "TRIM(BOTH trimstr FROM 'abcSpark')",
+            read={
+                "databricks": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
+            },
+            write={
+                "databricks": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
             },
         )

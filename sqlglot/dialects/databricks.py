@@ -8,9 +8,11 @@ from sqlglot.dialects.dialect import (
     build_date_delta,
     timestamptrunc_sql,
     rename_func,
+    trim_sql,
 )
 from sqlglot.dialects.spark import Spark
 from sqlglot.tokens import TokenType
+from sqlglot.helper import seq_get
 
 
 def _build_json_extract(args: t.List) -> exp.JSONExtract:
@@ -26,6 +28,41 @@ def _jsonextract_sql(
     this = self.sql(expression, "this")
     expr = self.sql(expression, "expression")
     return f"{this}:{expr}"
+
+
+def build_trim(args: t.List, is_left: bool = True):
+    if len(args) < 2:
+        return exp.Trim(
+            this=seq_get(args, 0),
+            position="LEADING" if is_left else "TRAILING",
+        )
+
+    else:
+        return exp.Trim(
+            this=seq_get(args, 1),
+            expression=seq_get(args, 0),
+            position="LEADING" if is_left else "TRAILING",
+        )
+
+
+def _trim_sql(self: Databricks.Generator, expression: exp.Trim) -> str:
+    target = self.sql(expression, "this")
+    trim_type = self.sql(expression, "position")
+    remove_chars = self.sql(expression, "expression")
+
+    if trim_type.upper() == "LEADING":
+        if remove_chars:
+            return self.func("LTRIM", remove_chars, target)
+        else:
+            return self.func("LTRIM", target)
+    elif trim_type.upper() == "TRAILING":
+        if remove_chars:
+            return self.func("RTRIM", remove_chars, target)
+        else:
+            return self.func("RTRIM", target)
+
+    else:
+        return trim_sql(self, expression)
 
 
 class Databricks(Spark):
@@ -47,6 +84,8 @@ class Databricks(Spark):
             "DATEDIFF": build_date_delta(exp.DateDiff),
             "DATE_DIFF": build_date_delta(exp.DateDiff),
             "GET_JSON_OBJECT": _build_json_extract,
+            "LTRIM": lambda args: build_trim(args),
+            "RTRIM": lambda args: build_trim(args, is_left=False),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
         }
 
@@ -88,6 +127,7 @@ class Databricks(Spark):
             exp.JSONPathRoot: lambda *_: "",
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
             exp.SplitPart: rename_func("SPLIT_PART"),
+            exp.Trim: _trim_sql,
         }
 
         TRANSFORMS.pop(exp.TryCast)
