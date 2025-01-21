@@ -2380,3 +2380,23 @@ SINGLE = TRUE""",
 
     def test_bit_and_function(self):
         self.validate_identity("SELECT BIT_AND(a, b) FROM table", "SELECT BITAND(a, b) FROM table")
+
+    def test_array_position(self):
+        self.validate_all(
+            "SELECT ARRAY_POSITION(a, the_array)",
+            read={
+                "trino": "SELECT ARRAY_POSITION(the_array, a)",
+                "E6": "SELECT ARRAY_POSITION(a, the_array)",
+                "databricks": "SELECT ARRAY_POSITION(the_array, a)",
+                "postgres": "SELECT ARRAY_POSITION(the_array, a)",
+                "starrocks": "SELECT ARRAY_POSITION(the_array, a)",
+            },
+            write={
+                "trino": "SELECT ARRAY_POSITION(the_array, a)",
+                "snowflake": "SELECT ARRAY_POSITION(a, the_array)",
+                "databricks": "SELECT ARRAY_POSITION(the_array, a)",
+                "postgres": "SELECT ARRAY_POSITION(the_array, a)",
+                "starrocks": "SELECT ARRAY_POSITION(the_array, a)",
+                "E6": "SELECT ARRAY_POSITION(a, the_array)",
+            },
+        )
