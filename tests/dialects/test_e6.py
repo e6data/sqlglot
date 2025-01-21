@@ -117,7 +117,20 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT ARRAY_POSITION(1.9, ARRAY[1, 2, 3, 1.9])",
-            read={"trino": "SELECT ARRAY_position(ARRAY[1, 2, 3, 1.9],1.9)"},
+            read={
+                "trino": "SELECT ARRAY_position(ARRAY[1, 2, 3, 1.9],1.9)",
+                "snowflake": "SELECT ARRAY_position(1.9, ARRAY[1, 2, 3, 1.9])",
+                "databricks": "SELECT ARRAY_position(ARRAY[1, 2, 3, 1.9],1.9)",
+                "postgres": "SELECT ARRAY_position(ARRAY[1, 2, 3, 1.9],1.9)",
+                "starrocks": "SELECT ARRAY_position(ARRAY[1, 2, 3, 1.9],1.9)",
+            },
+            write={
+                "trino": "SELECT ARRAY_POSITION(ARRAY[1, 2, 3, 1.9], 1.9)",
+                "snowflake": "SELECT ARRAY_POSITION(1.9, [1, 2, 3, 1.9])",
+                "databricks": "SELECT ARRAY_POSITION(ARRAY(1, 2, 3, 1.9), 1.9)",
+                "postgres": "SELECT ARRAY_POSITION(ARRAY[1, 2, 3, 1.9], 1.9)",
+                "starrocks": "SELECT ARRAY_POSITION([1, 2, 3, 1.9], 1.9)",
+            },
         )
 
         self.validate_all(
