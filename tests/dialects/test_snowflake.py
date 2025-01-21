@@ -2400,3 +2400,14 @@ SINGLE = TRUE""",
                 "E6": "SELECT ARRAY_POSITION(a, the_array)",
             },
         )
+
+    def test_md5(self):
+        self.validate_all(
+            "MD5(x)",
+            read={
+                "clickhouse": "MD5(x)",
+                "presto": "MD5(x)",
+                "trino": "MD5(x)",
+                "snowflake": "MD5_HEX(x)",
+            },
+        )
