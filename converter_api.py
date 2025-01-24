@@ -9,7 +9,7 @@ from sqlglot import parse_one
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
-
+from sqlglot.expressions import EQ, Column, Table, Identifier, Join
 
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv(
@@ -163,5 +163,88 @@ async def Transgaurd(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/parse-query")
+async def parse_query(
+    queries: str = Form(...),  # Accept multiple queries as a single string
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("E6"),
+):
+    """
+    Accepts multiple SQL queries as input, processes each one, and returns their components and transpiled versions.
+    Queries should be separated by a semicolon (;).
+    """
+    try:
+        # Split the input into individual queries by semicolon
+        query_list = [q.strip() for q in queries.split(";") if q.strip()]
+        if not query_list:
+            raise HTTPException(status_code=400, detail="No valid queries provided.")
+
+        results = []
+
+        for query in query_list:
+            # Transpile the query to the target SQL dialect
+            converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
+            converted_query = replace_struct_in_query(converted_query)
+
+            # Parse the converted query
+            parsed = sqlglot.parse(converted_query, error_level=None)
+
+            # Extract details (tables, columns, joins, etc.)
+            extracted_components, tables = extract_sql_components_per_table_with_alias(parsed)
+
+            # Build the alias mapping for joins
+            alias_mapping = {}
+            for expression in parsed:
+                for table in expression.find_all(Table):
+                    if table.alias:
+                        alias_mapping[table.alias] = table.name
+
+            # Handle joins explicitly
+            for expression in parsed:
+                for join in expression.find_all(Join):
+                    on_expression = join.args.get("on")
+                    if on_expression:
+                        if isinstance(on_expression, EQ):
+                            left = on_expression.this
+                            right = on_expression.expression
+
+                            left_table = ""
+                            right_table = ""
+
+                            if isinstance(left, Column):
+                                left_table_alias = left.table
+                                left_column = left.name
+                                left_table = alias_mapping.get(left_table_alias, left_table_alias)
+                            else:
+                                left_column = None
+
+                            # Extract right column
+                            if isinstance(right, Column):
+                                right_table_alias = right.table
+                                right_column = right.name
+                                right_table = alias_mapping.get(right_table_alias, right_table_alias)
+                            else:
+                                right_column = None
+
+                            # Append join details to results
+                            results.append(
+                                {
+                                    "alias": alias_mapping,
+                                    "left_name": left_table_alias,
+                                    "left_table": left_table,
+                                    "right_name": right_table_alias,
+                                    "right_table": right_table,
+                                    "left_column": left_column,
+                                    "right_column": right_column,
+                                }
+                            )
+
+        return results
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     uvicorn.run("converter_api:app", host="localhost", port=8100, proxy_headers=True, workers=5)
+
