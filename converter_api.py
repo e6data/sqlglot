@@ -62,8 +62,6 @@ async def convert_query(
         # This is the main method will which help in transpiling to our e6data SQL dialects from other dialects
         converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
 
-        # SELECT "COL1", sum("COL2"), "ABS()" from table1 group by col2.
-
         # This is additional steps to replace the STRUCT(STRUCT()) --> {{}}
         converted_query = replace_struct_in_query(converted_query)
 
@@ -163,8 +161,12 @@ async def Transgaurd(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/extract-functions")
-async def extract_functions_api(query: str = Form(...)):
+@app.post("/statistics")
+async def extract_functions_api(
+        query: str = Form(...),
+        from_sql: str = Form(...),
+        to_sql: Optional[str] = Form("E6"),
+):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
     """
@@ -400,9 +402,19 @@ async def extract_functions_api(query: str = Form(...)):
         all_functions = extract_functions(query)
         supported, unsupported = categorize_functions(all_functions)
 
+        converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
+
+        converted_query = replace_struct_in_query(converted_query)
+
+        converted_query_ast = parse_one(converted_query, read=to_sql)
+        double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
+            dialect=to_sql
+        )
+
         return {
             "supported_functions": supported,
             "unsupported_functions": unsupported,
+            "converted-query": double_quotes_added_query,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
