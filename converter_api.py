@@ -163,9 +163,9 @@ async def Transgaurd(
 
 @app.post("/statistics")
 async def extract_functions_api(
-        query: str = Form(...),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("E6"),
+    query: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("E6"),
 ):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
