@@ -350,6 +350,7 @@ async def extract_functions_api(
             "NOT",
             "BETWEEN",
             "UNION",
+            "SELECT",
         ]
 
         # Regex patterns
