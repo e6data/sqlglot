@@ -407,6 +407,9 @@ class Snowflake(Dialect):
                 end=exp.Sub(this=seq_get(args, 1), expression=exp.Literal.number(1)),
                 step=seq_get(args, 2),
             ),
+            "ARRAY_POSITION": lambda args: exp.ArrayPosition(
+                this=seq_get(args, 1), expression=seq_get(args, 0)
+            ),
             "BITNOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BIT_NOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BITAND": _build_bitwise(exp.BitwiseAnd, "BITAND"),
@@ -446,6 +449,7 @@ class Snowflake(Dialect):
             ),
             "LEN": lambda args: exp.Length(this=seq_get(args, 0), binary=True),
             "LENGTH": lambda args: exp.Length(this=seq_get(args, 0), binary=True),
+            "MD5_HEX": exp.MD5Digest.from_arg_list,
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "NULLIFZERO": _build_if_from_nullifzero,
             "OBJECT_CONSTRUCT": _build_object_construct,
@@ -922,6 +926,7 @@ class Snowflake(Dialect):
             exp.Array: inline_array_sql,
             exp.ArrayConcat: lambda self, e: self.arrayconcat_sql(e, name="ARRAY_CAT"),
             exp.ArrayContains: lambda self, e: self.func("ARRAY_CONTAINS", e.expression, e.this),
+            exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
             exp.ArraySlice: rename_func("ARRAY_SLICE"),
             exp.AtTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), e.this
@@ -964,6 +969,7 @@ class Snowflake(Dialect):
             exp.LogicalAnd: rename_func("BOOLAND_AGG"),
             exp.LogicalOr: rename_func("BOOLOR_AGG"),
             exp.Map: lambda self, e: var_map_sql(self, e, "OBJECT_CONSTRUCT"),
+            exp.MD5Digest: rename_func("MD5"),
             exp.MakeInterval: no_make_interval_sql,
             exp.Max: max_or_greatest,
             exp.Min: min_or_least,

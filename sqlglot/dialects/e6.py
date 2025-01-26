@@ -1407,7 +1407,7 @@ class E6(Dialect):
             "GREATEST": exp.Max.from_arg_list,
             "JSON_EXTRACT": parser.build_extract_json_with_path(exp.JSONExtractScalar),
             "JSON_VALUE": parser.build_extract_json_with_path(exp.JSONExtractScalar),
-            "LAST_DAY": lambda args: exp.LastDay(this=seq_get(args, 0)),
+            "LAST_DAY": exp.LastDay.from_arg_list,
             "LAST_VALUE": exp.LastValue,
             "LEFT": _build_with_arg_as_text(exp.Left),
             "LEN": exp.Length.from_arg_list,
@@ -1756,6 +1756,9 @@ class E6(Dialect):
             date_expr = date_expr
             if isinstance(date_expr, exp.Literal):
                 date_expr = f"CAST({date_expr} AS DATE)"
+            unit = expression.args.get("unit")
+            if unit:
+                return self.func("LAST_DAY", date_expr, unit)
             return self.func("LAST_DAY", date_expr)
 
         def extract_sql(self: E6.Generator, expression: exp.Extract) -> str:

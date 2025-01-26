@@ -5384,7 +5384,7 @@ class ArrayAny(Func):
 
 
 class ArrayPosition(Func):
-    arg_types = {"this": True, "expression": True}
+    arg_types = {"this": True, "expression": True, "instance": False}
 
 
 class ArraySlice(Func):
