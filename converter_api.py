@@ -402,6 +402,7 @@ async def extract_functions_api(
         all_functions = extract_functions(query)
         supported, unsupported = categorize_functions(all_functions)
         double_quotes_added_query = ""
+        executable_or_not = "YES"
 
         if unsupported:
             converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[
@@ -413,11 +414,18 @@ async def extract_functions_api(
             double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
                 dialect=to_sql
             )
+            all_functions_converted_query = extract_functions(double_quotes_added_query)
+            supported_converted_query, unsupported_converted_query = categorize_functions(
+                all_functions_converted_query
+            )
+            if unsupported_converted_query:
+                executable_or_not = "NO"
 
         return {
             "supported_functions": supported,
             "unsupported_functions": unsupported,
             "converted-query": double_quotes_added_query,
+            "executable_or_not": executable_or_not,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
