@@ -10,7 +10,6 @@ from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
 
-
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv(
     "STORAGE_ENGINE_URL", "cops-beta1-storage-storage-blue"
@@ -402,20 +401,31 @@ async def extract_functions_api(
         # Extract functions
         all_functions = extract_functions(query)
         supported, unsupported = categorize_functions(all_functions)
+        double_quotes_added_query = ""
+        executable = "YES"
 
-        converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
+        if unsupported:
+            converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[
+                0
+            ]
+            converted_query = replace_struct_in_query(converted_query)
 
-        converted_query = replace_struct_in_query(converted_query)
-
-        converted_query_ast = parse_one(converted_query, read=to_sql)
-        double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
-            dialect=to_sql
-        )
+            converted_query_ast = parse_one(converted_query, read=to_sql)
+            double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
+                dialect=to_sql
+            )
+            all_functions_converted_query = extract_functions(double_quotes_added_query)
+            supported_converted_query, unsupported_converted_query = categorize_functions(
+                all_functions_converted_query
+            )
+            if unsupported_converted_query:
+                executable = "NO"
 
         return {
             "supported_functions": supported,
             "unsupported_functions": unsupported,
             "converted-query": double_quotes_added_query,
+            "executable": executable,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
