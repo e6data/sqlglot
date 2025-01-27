@@ -402,7 +402,7 @@ async def extract_functions_api(
         all_functions = extract_functions(query)
         supported, unsupported = categorize_functions(all_functions)
         double_quotes_added_query = ""
-        executable_or_not = "YES"
+        executable = "YES"
 
         if unsupported:
             converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[
@@ -419,13 +419,13 @@ async def extract_functions_api(
                 all_functions_converted_query
             )
             if unsupported_converted_query:
-                executable_or_not = "NO"
+                executable = "NO"
 
         return {
             "supported_functions": supported,
             "unsupported_functions": unsupported,
             "converted-query": double_quotes_added_query,
-            "executable_or_not": executable_or_not,
+            "executable": executable,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
