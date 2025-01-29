@@ -98,7 +98,11 @@ async def gaurd(
             violations_found = validate_queries(queries, table_map)
 
             if violations_found:
-                return {"action": "deny", "violations": violations_found}
+                list_of_actions = [violation.get("action", "") for violation in violations_found]
+                if "deny" in list_of_actions:
+                    return {"action": "deny", "violations": violations_found}
+                else:
+                    return {"action": "warn", "violations": violations_found}
             else:
                 return {"action": "allow", "violations": []}
         else:
