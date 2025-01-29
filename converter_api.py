@@ -10,6 +10,51 @@ from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
 
+import os
+
+def load_guardrail_configs_from_env():
+    """
+    This is a temporary Function to load env variables for dynamic loading of guardrail configs 
+    """
+    guardrail_configs = {}
+
+    limit_number_of_rows = int(os.getenv('LIMIT_NUMBER_OF_ROWS', '1000'))
+    
+    limit_action = os.getenv('LIMIT_ACTION', 'disabled').lower()
+    # making sure the action is one of these 
+    if limit_action not in {'warn', 'deny','disabled'}:
+        raise ValueError("LIMIT_ACTION must be either 'warn' or 'deny' or 'disabled'.")
+
+    guardrail_configs['limit'] = {
+        'number_of_rows': limit_number_of_rows,
+        'limit_action': limit_action
+    }
+
+    # Load Select Star Guardrail Configurations
+    select_star_number_of_columns = int(os.getenv('SELECT_STAR_NUMBER_OF_COLUMNS', '10'))
+    
+    select_star_action = os.getenv('SELECT_STAR_ACTION', 'disabled').lower()
+    if select_star_action not in {'warn', 'deny','disabled'}:
+        raise ValueError("SELECT_STAR_ACTION must be either 'warn' or 'deny' or 'disabled'.")
+
+    guardrail_configs['select_star'] = {
+        'number_of_columns': select_star_number_of_columns,
+        'select_star_action': select_star_action
+    }
+
+    # Load Partition Columns Guardrail Configurations
+    partition_columns_action = os.getenv('PARTITION_COLUMNS_ACTION', 'disabled').lower()
+    if partition_columns_action not in {'warn', 'deny','disabled'}:
+        raise ValueError("PARTITION_COLUMNS_ACTION must be either 'warn' or 'deny' or 'disabled'.")
+
+    guardrail_configs['partition_columns'] = {
+        'partition_columns_action': partition_columns_action
+    }
+
+    return guardrail_configs
+
+
+
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv(
     "STORAGE_ENGINE_URL", "cops-beta1-storage-storage-blue"
@@ -23,8 +68,13 @@ if ENABLE_GUARDRAIL.lower() == "true":
     print("Storage Engine Port: ", STORAGE_ENGINE_PORT)
 
     storage_service_client = StorageServiceClient(host=STORAGE_ENGINE_URL, port=STORAGE_ENGINE_PORT)
+    print("Storage Service Client is created")
 
-print("Storage Service Client is created")
+
+guardrail_configs = load_guardrail_configs_from_env()
+print("GuardRail config is ",guardrail_configs)
+
+
 app = FastAPI()
 
 
@@ -79,6 +129,7 @@ def health_check():
     return Response(status_code=200)
 
 
+
 @app.post("/guardrail")
 async def gaurd(
     query: str = Form(...),
@@ -87,15 +138,21 @@ async def gaurd(
 ):
     try:
         if storage_service_client is not None:
+            print("Input query : ",query)
+            print("Input schema : ",schema)
+            print("Input catalog : ",catalog)
+
             parsed = sqlglot.parse(query, error_level=None)
 
             queries, tables = extract_sql_components_per_table_with_alias(parsed)
+            print("Table extracted from query : ",tables)
 
             # tables = client.get_table_names(catalog_name="hive", db_name="tpcds_1000")
             table_map = get_table_infos(tables, storage_service_client, catalog, schema)
-            print("table info is ", table_map)
+            # table_map = {}
+            print("table info from storage service : ", table_map)
 
-            violations_found = validate_queries(queries, table_map)
+            violations_found = validate_queries(queries, table_map,guardrail_configs)
 
             if violations_found:
                 list_of_actions = [violation.get("action", "") for violation in violations_found]
@@ -112,6 +169,7 @@ async def gaurd(
             raise HTTPException(status_code=500, detail=detail)
 
     except Exception as e:
+        print("exception is ",e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -148,7 +206,7 @@ async def Transgaurd(
 
             table_map = get_table_infos(tables, storage_service_client, catalog, schema)
 
-            violations_found = validate_queries(queries, table_map)
+            violations_found = validate_queries(queries, table_map,guardrail_configs)
 
             if violations_found:
                 return {"action": "deny", "violations": violations_found}

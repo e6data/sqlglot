@@ -149,6 +149,9 @@ def validate_queries(queries, table_map, guardrail_configs):
         limits = query["limits"]
         where_columns = query["where_columns"]
 
+
+        # TODO: Find a better way to load configs (this is temps)
+
         # TODO:: Need to cross check the configurations. Cross check it,
         #  it will depend upon the data-structure which will be passed by platform team
         limit_guardrail = guardrail_configs.get("limit", {})
@@ -171,16 +174,15 @@ def validate_queries(queries, table_map, guardrail_configs):
                     "violation": f"Table '{table}' not found in table_map.",
                 }
             )
-            continue
+            continue 
 
         table_info = table_map[table]
         column_count = table_info["column_count"]
         partition_values = table_info["partition_values"]
 
-        if limit_guardrail:
+        if limit_action in {"warn","deny"}:
             # Rule 1: Check for LIMIT violation
             if not limits:
-                # TODO @Shreyas/@adithya: Use the `number_of_rows` information and then call the violation.
                 violations.append(
                     {
                         "query_index": idx,
@@ -189,12 +191,23 @@ def validate_queries(queries, table_map, guardrail_configs):
                         "action": limit_action,
                     }
                 )
-        if select_star:
+            elif len(limits) > 0:
+                for l in limits:
+                    if int(l) > number_of_rows:
+                        print("found limit error")
+                        violations.append(
+                        {
+                            "query_index": idx,
+                            "table": table,
+                            "violation": "Limit applied on table "+table+" greater than "+ str(number_of_rows),
+                            "action": limit_action,
+                        })
+    
+                
+        if select_star_action in {"warn","deny"}:
             # Rule 2: Check for wildcard (*) usage violation
             if "*" in columns:
-                # Assuming columns list is empty when '*' is used
-                # TODO @Shreyas/@adithya: Use the `number_of_columns` information and then call the violation.
-                if column_count > 10:
+                if column_count > number_of_columns:
                     violations.append(
                         {
                             "query_index": idx,
@@ -203,8 +216,8 @@ def validate_queries(queries, table_map, guardrail_configs):
                             "action": select_star_action,
                         }
                     )
-        if partition_columns:
-            # Rule 3: Check for WHERE clause on non-partition columns
+
+        if partition_columns_action in {"warn","deny"}:
             non_partition_columns = [col for col in where_columns if col not in partition_values]
             if non_partition_columns:
                 violations.append(
