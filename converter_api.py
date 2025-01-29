@@ -57,9 +57,9 @@ def replace_struct_in_query(query):
 
 @app.post("/convert-query")
 async def convert_query(
-        query: str = Form(...),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("E6"),
+    query: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("E6"),
 ):
     try:
         # This is the main method will which help in transpiling to our e6data SQL dialects from other dialects
@@ -85,9 +85,9 @@ def health_check():
 
 @app.post("/guardrail")
 async def gaurd(
-        query: str = Form(...),
-        schema: str = Form(...),
-        catalog: str = Form(...),
+    query: str = Form(...),
+    schema: str = Form(...),
+    catalog: str = Form(...),
 ):
     try:
         if storage_service_client is not None:
@@ -107,7 +107,7 @@ async def gaurd(
                 return {"action": "allow", "violations": []}
         else:
             detail = (
-                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
@@ -117,11 +117,11 @@ async def gaurd(
 
 @app.post("/transpile-guardrail")
 async def Transgaurd(
-        query: str = Form(...),
-        schema: str = Form(...),
-        catalog: str = Form(...),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("E6"),
+    query: str = Form(...),
+    schema: str = Form(...),
+    catalog: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("E6"),
 ):
     try:
         if storage_service_client is not None:
@@ -156,7 +156,7 @@ async def Transgaurd(
                 return {"action": "allow", "violations": []}
         else:
             detail = (
-                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
@@ -166,9 +166,9 @@ async def Transgaurd(
 
 @app.post("/statistics")
 async def stats_api(
-        query: str = Form(...),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("E6"),
+    query: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("E6"),
 ):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
@@ -358,7 +358,7 @@ async def stats_api(
         # Regex patterns
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
         keyword_pattern = (
-                r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
+            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
         def find_double_pipe(query: str) -> list:
@@ -419,7 +419,9 @@ async def stats_api(
 
             return "".join(sanitized_query)
 
-        def extract_functions_from_query(query: str, function_pattern: str, exclusion_list: list) -> set:
+        def extract_functions_from_query(
+            query: str, function_pattern: str, exclusion_list: list
+        ) -> set:
             """
             Extract function names from the sanitized query.
             """
@@ -450,26 +452,20 @@ async def stats_api(
             return all_functions
 
         def unsupported_functionality_identifiers(expression, unsupported_list: t.List):
-
             for sub in expression.find_all(exp.Sub):
-                if isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp)) and sub.expression.is_int:
+                if (
+                    isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
+                    and sub.expression.is_int
+                ):
                     unsupported_list.append("current_date-1")
-                    interval_expr = exp.Interval(
-                        this=sub.expression,
-                        unit=exp.Var(this="DAY")
-                    )
-                    sub.replace(
-                        exp.Sub(
-                            this=sub.args.get("this"),
-                            expression=interval_expr
-                        )
-                    )
+                    interval_expr = exp.Interval(this=sub.expression, unit=exp.Var(this="DAY"))
+                    sub.replace(exp.Sub(this=sub.args.get("this"), expression=interval_expr))
 
-            for cte in expression.find_all(exp.CTE,exp.Subquery):
+            for cte in expression.find_all(exp.CTE, exp.Subquery):
                 cte_name = cte.alias.upper()
                 if cte_name in unsupported_list:
                     unsupported_list.remove(cte_name)
-            return expression,unsupported_list
+            return expression, unsupported_list
 
         def processing_comments(query: str) -> str:
             """
@@ -525,7 +521,9 @@ async def stats_api(
         converted_query = replace_struct_in_query(converted_query)
 
         converted_query_ast = parse_one(converted_query, read=to_sql)
-        converted_query_ast, unsupported = unsupported_functionality_identifiers(converted_query_ast, unsupported)
+        converted_query_ast, unsupported = unsupported_functionality_identifiers(
+            converted_query_ast, unsupported
+        )
 
         double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
             dialect=to_sql
@@ -533,8 +531,8 @@ async def stats_api(
         all_functions_converted_query = extract_functions_from_query(
             double_quotes_added_query, function_pattern, exclusion_list
         )
-        supported_functions_in_converted_query, unsupported_functions_in_converted_query = categorize_functions(
-            all_functions_converted_query
+        supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
+            categorize_functions(all_functions_converted_query)
         )
         if unsupported_functions_in_converted_query:
             executable = "NO"
