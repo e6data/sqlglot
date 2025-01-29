@@ -140,7 +140,7 @@ def validate_queries_dynamic(
 
 
 ## OLD SHIT USE THE NEW RULE VALIDATOR
-def validate_queries(queries, table_map):
+def validate_queries(queries, table_map, guardrail_configs):
     violations = []
 
     for idx, query in enumerate(queries, start=1):
@@ -148,6 +148,22 @@ def validate_queries(queries, table_map):
         columns = query["columns"]
         limits = query["limits"]
         where_columns = query["where_columns"]
+
+
+        # TODO: Find a better way to load configs (this is temps)
+
+        # TODO:: Need to cross check the configurations. Cross check it,
+        #  it will depend upon the data-structure which will be passed by platform team
+        limit_guardrail = guardrail_configs.get("limit", {})
+        number_of_rows = limit_guardrail.get("number_of_rows")
+        limit_action = limit_guardrail.get("limit_action", "warn")
+
+        select_star = guardrail_configs.get("select_star", {})
+        number_of_columns = select_star.get("number_of_columns")
+        select_star_action = select_star.get("select_star_action", "warn")
+
+        partition_columns = guardrail_configs.get("partition_columns", {})
+        partition_columns_action = partition_columns.get("partition_columns_action", "warn")
 
         # Retrieve table metadata
         if table not in table_map:
@@ -158,40 +174,60 @@ def validate_queries(queries, table_map):
                     "violation": f"Table '{table}' not found in table_map.",
                 }
             )
-            continue
+            continue 
 
         table_info = table_map[table]
         column_count = table_info["column_count"]
         partition_values = table_info["partition_values"]
 
-        # Rule 1: Check for LIMIT violation
-        if not limits:
-            violations.append(
-                {"query_index": idx, "table": table, "violation": "No LIMIT applied."}
-            )
-
-        # Rule 2: Check for wildcard (*) usage violation
-        if "*" in columns:
-            # Assuming columns list is empty when '*' is used
-            if column_count > 10:
+        if limit_action in {"warn","deny"}:
+            # Rule 1: Check for LIMIT violation
+            if not limits:
                 violations.append(
                     {
                         "query_index": idx,
                         "table": table,
-                        "violation": f"Wildcard '*' used on table with {column_count} columns.",
+                        "violation": "No LIMIT applied.",
+                        "action": limit_action,
                     }
                 )
+            elif len(limits) > 0:
+                for l in limits:
+                    if int(l) > number_of_rows:
+                        print("found limit error")
+                        violations.append(
+                        {
+                            "query_index": idx,
+                            "table": table,
+                            "violation": "Limit applied on table "+table+" greater than "+ str(number_of_rows),
+                            "action": limit_action,
+                        })
+    
+                
+        if select_star_action in {"warn","deny"}:
+            # Rule 2: Check for wildcard (*) usage violation
+            if "*" in columns:
+                if column_count > number_of_columns:
+                    violations.append(
+                        {
+                            "query_index": idx,
+                            "table": table,
+                            "violation": f"Wildcard '*' used on table with {column_count} columns.",
+                            "action": select_star_action,
+                        }
+                    )
 
-        # Rule 3: Check for WHERE clause on non-partition columns
-        non_partition_columns = [col for col in where_columns if col not in partition_values]
-        if non_partition_columns:
-            violations.append(
-                {
-                    "query_index": idx,
-                    "table": table,
-                    "violation": f"WHERE clause contains non-partition columns: {', '.join(non_partition_columns)}.",
-                }
-            )
+        if partition_columns_action in {"warn","deny"}:
+            non_partition_columns = [col for col in where_columns if col not in partition_values]
+            if non_partition_columns:
+                violations.append(
+                    {
+                        "query_index": idx,
+                        "table": table,
+                        "violation": f"WHERE clause contains non-partition columns: {', '.join(non_partition_columns)}.",
+                        "action": partition_columns_action,
+                    }
+                )
 
     return violations
 
