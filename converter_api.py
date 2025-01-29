@@ -353,6 +353,7 @@ async def stats_api(
             "BETWEEN",
             "UNION",
             "SELECT",
+            "BY",
         ]
 
         # Regex patterns
