@@ -464,6 +464,11 @@ async def stats_api(
                             expression=interval_expr
                         )
                     )
+
+            for cte in expression.find_all(exp.CTE,exp.Subquery):
+                cte_name = cte.alias.upper()
+                if cte_name in unsupported_list:
+                    unsupported_list.remove(cte_name)
             return expression,unsupported_list
 
         def processing_comments(query: str) -> str:
