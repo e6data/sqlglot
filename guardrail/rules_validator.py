@@ -94,7 +94,7 @@ def load_rules(rules_service) -> List[Any]:
 
 
 def validate_queries_dynamic(
-        queries: List[Dict[str, Any]], table_map: Dict[str, Any], rules: List[Any]
+    queries: List[Dict[str, Any]], table_map: Dict[str, Any], rules: List[Any]
 ) -> List[Dict[str, Any]]:
     violations = []
 
@@ -186,7 +186,7 @@ def validate_queries(queries, table_map, guardrail_configs):
                         "query_index": idx,
                         "table": table,
                         "violation": "No LIMIT applied.",
-                        "action": limit_action
+                        "action": limit_action,
                     }
                 )
         if select_star:
@@ -200,7 +200,7 @@ def validate_queries(queries, table_map, guardrail_configs):
                             "query_index": idx,
                             "table": table,
                             "violation": f"Wildcard '*' used on table with {column_count} columns.",
-                            "action": select_star_action
+                            "action": select_star_action,
                         }
                     )
         if partition_columns:
@@ -212,10 +212,11 @@ def validate_queries(queries, table_map, guardrail_configs):
                         "query_index": idx,
                         "table": table,
                         "violation": f"WHERE clause contains non-partition columns: {', '.join(non_partition_columns)}.",
-                        "action": partition_columns_action
+                        "action": partition_columns_action,
                     }
                 )
 
     return violations
+
 
 # Run validation
