@@ -457,15 +457,13 @@ async def stats_api(
                     isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
                     and sub.expression.is_int
                 ):
-                    unsupported_list.append("current_date-1")
-                    interval_expr = exp.Interval(this=sub.expression, unit=exp.Var(this="DAY"))
-                    sub.replace(exp.Sub(this=sub.args.get("this"), expression=interval_expr))
+                    unsupported_list.append(sub.sql())
 
             for cte in expression.find_all(exp.CTE, exp.Subquery):
                 cte_name = cte.alias.upper()
                 if cte_name in unsupported_list:
                     unsupported_list.remove(cte_name)
-            return expression, unsupported_list
+            return unsupported_list
 
         def processing_comments(query: str) -> str:
             """
@@ -517,13 +515,15 @@ async def stats_api(
 
         executable = "YES"
 
+        original_ast = parse_one(query, read=to_sql)
+        unsupported = unsupported_functionality_identifiers(
+            original_ast, unsupported
+        )
+
         converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
         converted_query = replace_struct_in_query(converted_query)
 
         converted_query_ast = parse_one(converted_query, read=to_sql)
-        converted_query_ast, unsupported = unsupported_functionality_identifiers(
-            converted_query_ast, unsupported
-        )
 
         double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
             dialect=to_sql

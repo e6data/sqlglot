@@ -1649,6 +1649,17 @@ class E6(Dialect):
             # Construct and return the final ORDER BY clause
             return f"{main_expression}{sort_order}{nulls_sort_change}"
 
+        def sub_sql(self, expr: exp.Sub) -> str:
+            if (
+                    isinstance(expr.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
+                    and expr.expression.is_int
+            ):
+                interval_expr = exp.Interval(this=expr.expression, unit=exp.Var(this="DAY"))
+                expr = expr.replace(exp.Sub(this=expr.args.get("this"), expression=interval_expr))
+
+            expr_new = super().sub_sql(expr)
+            return expr_new
+
         def convert_format_time(self, expression, **kwargs):
             """
             Transforms a time format string from one convention to another using the TIME_MAPPING dictionary.
