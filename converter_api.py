@@ -538,6 +538,7 @@ async def stats_api(
             "supported_functions": supported,
             "unsupported_functions": unsupported,
             "converted-query": double_quotes_added_query,
+            "unsupported_functions_after_transpilation": unsupported_functions_in_converted_query,
             "executable": executable,
         }
     except Exception as e:
