@@ -369,24 +369,53 @@ async def stats_api(
 
         def process_query(query: str) -> str:
             """
-            Process the query to handle string literals (' or ") and return a sanitized version
-            where content within literals is stripped for function parsing.
+            Process the query to handle string literals (' or ") while correctly handling escaped quotes.
             """
             sanitized_query = []
             inside_single_quote = False
             inside_double_quote = False
+            i = 0
 
-            for char in query:
+            while i < len(query):
+                char = query[i]
+
+                # Check for escaped single quote (\')
                 if char == "'" and not inside_double_quote:
-                    inside_single_quote = not inside_single_quote
-                    sanitized_query.append(" ")  # Replace with space
+                    # Check if it is escaped (i.e., preceded by an odd number of backslashes)
+                    backslash_count = 0
+                    j = i - 1
+                    while j >= 0 and query[j] == "\\":
+                        backslash_count += 1
+                        j -= 1
+
+                    if backslash_count % 2 == 0:  # Even backslashes mean it's not escaped
+                        inside_single_quote = not inside_single_quote
+                        sanitized_query.append(" ")  # Replace with space
+                    else:
+                        sanitized_query.append(char)  # Keep escaped quote as is
+
+                # Check for escaped double quote (\")
                 elif char == '"' and not inside_single_quote:
-                    inside_double_quote = not inside_double_quote
-                    sanitized_query.append(" ")  # Replace with space
+                    backslash_count = 0
+                    j = i - 1
+                    while j >= 0 and query[j] == "\\":
+                        backslash_count += 1
+                        j -= 1
+
+                    if backslash_count % 2 == 0:  # Even backslashes mean it's not escaped
+                        inside_double_quote = not inside_double_quote
+                        sanitized_query.append(" ")  # Replace with space
+                    else:
+                        sanitized_query.append(char)  # Keep escaped quote as is
+
+                # Replace characters inside string literals with spaces
                 elif inside_single_quote or inside_double_quote:
                     sanitized_query.append(" ")  # Replace content inside literals with spaces
+
                 else:
-                    sanitized_query.append(char)
+                    sanitized_query.append(char)  # Keep other characters
+
+                i += 1  # Move to the next character
 
             return "".join(sanitized_query)
 
