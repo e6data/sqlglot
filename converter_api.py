@@ -476,6 +476,8 @@ async def stats_api(
             Returns:
                 str: The SQL query with single-line comments removed.
             """
+            # Remove block comments (multi-line `/* ... */`)
+            query = re.sub(r"/\*.*?\*/", "", query, flags=re.DOTALL)
             processed_lines = []
 
             for line in query.splitlines():
