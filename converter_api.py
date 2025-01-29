@@ -1,14 +1,18 @@
 from fastapi import FastAPI, Form, HTTPException, Response
 from typing import Optional
+import typing as t
 import uvicorn
 import re
 import os
 import sqlglot
 from sqlglot.optimizer.qualify_columns import quote_identifiers
-from sqlglot import parse_one
+from sqlglot import exp, parse_one
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
+
+if t.TYPE_CHECKING:
+    from sqlglot._typing import E
 
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv(
@@ -53,9 +57,9 @@ def replace_struct_in_query(query):
 
 @app.post("/convert-query")
 async def convert_query(
-    query: str = Form(...),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("E6"),
+        query: str = Form(...),
+        from_sql: str = Form(...),
+        to_sql: Optional[str] = Form("E6"),
 ):
     try:
         # This is the main method will which help in transpiling to our e6data SQL dialects from other dialects
@@ -81,9 +85,9 @@ def health_check():
 
 @app.post("/guardrail")
 async def gaurd(
-    query: str = Form(...),
-    schema: str = Form(...),
-    catalog: str = Form(...),
+        query: str = Form(...),
+        schema: str = Form(...),
+        catalog: str = Form(...),
 ):
     try:
         if storage_service_client is not None:
@@ -103,7 +107,7 @@ async def gaurd(
                 return {"action": "allow", "violations": []}
         else:
             detail = (
-                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
@@ -113,11 +117,11 @@ async def gaurd(
 
 @app.post("/transpile-guardrail")
 async def Transgaurd(
-    query: str = Form(...),
-    schema: str = Form(...),
-    catalog: str = Form(...),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("E6"),
+        query: str = Form(...),
+        schema: str = Form(...),
+        catalog: str = Form(...),
+        from_sql: str = Form(...),
+        to_sql: Optional[str] = Form("E6"),
 ):
     try:
         if storage_service_client is not None:
@@ -152,7 +156,7 @@ async def Transgaurd(
                 return {"action": "allow", "violations": []}
         else:
             detail = (
-                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
@@ -161,16 +165,15 @@ async def Transgaurd(
 
 
 @app.post("/statistics")
-async def extract_functions_api(
-    query: str = Form(...),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("E6"),
+async def stats_api(
+        query: str = Form(...),
+        from_sql: str = Form(...),
+        to_sql: Optional[str] = Form("E6"),
 ):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
     """
     try:
-        # List of SQL functions (requiring parentheses) that you support
         supported_functions_in_e6 = [
             "AVG",
             "COUNT",
@@ -355,38 +358,115 @@ async def extract_functions_api(
         # Regex patterns
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
         keyword_pattern = (
-            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
+                r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
-        def find_double_pipe(query):
-            """Find '||' used as a string concatenation operator."""
-            return re.findall(r"\|\|", query)
+        def find_double_pipe(query: str) -> list:
+            """
+            Find '||' used as a string concatenation operator.
+            """
+            return [(match.start(), match.end()) for match in re.finditer(r"\|\|", query)]
 
-        def extract_functions(query):
-            """Extract all function names from a query."""
+        def process_query(query: str) -> str:
+            """
+            Process the query to handle string literals (' or ") and return a sanitized version
+            where content within literals is stripped for function parsing.
+            """
+            sanitized_query = []
+            inside_single_quote = False
+            inside_double_quote = False
+
+            for char in query:
+                if char == "'" and not inside_double_quote:
+                    inside_single_quote = not inside_single_quote
+                    sanitized_query.append(" ")  # Replace with space
+                elif char == '"' and not inside_single_quote:
+                    inside_double_quote = not inside_double_quote
+                    sanitized_query.append(" ")  # Replace with space
+                elif inside_single_quote or inside_double_quote:
+                    sanitized_query.append(" ")  # Replace content inside literals with spaces
+                else:
+                    sanitized_query.append(char)
+
+            return "".join(sanitized_query)
+
+        def extract_functions_from_query(query: str, function_pattern: str, exclusion_list: list) -> set:
+            """
+            Extract function names from the sanitized query.
+            """
+            sanitized_query = processing_comments(query)
+            sanitized_query = process_query(sanitized_query)
+            print(f"sanitized query:\n{sanitized_query}\n")
+
             all_functions = set()
 
-            # Step 1: Find all occurrences of '||'
-            pipe_matches = find_double_pipe(query)
-            if pipe_matches:
-                for match in pipe_matches:
-                    all_functions.add("||")
-
-            # Step 2: Match functions requiring parentheses
-            matches = re.findall(function_pattern, query.upper())
+            # Match functions requiring parentheses
+            matches = re.findall(function_pattern, sanitized_query.upper())
             for match in matches:
-                if match not in exclusion_list:
+                if match not in exclusion_list:  # Exclude unwanted tokens
                     all_functions.add(match)
 
-            # Step 3: Match keywords treated as functions
-            keyword_matches = re.findall(keyword_pattern, query.upper())
+            # Match keywords treated as functions
+            keyword_matches = re.findall(keyword_pattern, sanitized_query.upper())
             for match in keyword_matches:
                 all_functions.add(match)
 
+            # Handle '||' as a function-like operator
+            pipe_matches = find_double_pipe(query)
+            if pipe_matches:
+                all_functions.add("||")
+
+            print(f"all functions: {all_functions}")
+
             return all_functions
 
+        def unsupported_functionality_identifiers(expression, unsupported_list: t.List):
+
+            for sub in expression.find_all(exp.Sub):
+                if isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp)) and sub.expression.is_int:
+                    unsupported_list.append("current_date-1")
+                    interval_expr = exp.Interval(
+                        this=sub.expression,
+                        unit=exp.Var(this="DAY")
+                    )
+                    sub.replace(
+                        exp.Sub(
+                            this=sub.args.get("this"),
+                            expression=interval_expr
+                        )
+                    )
+            return expression,unsupported_list
+
+        def processing_comments(query: str) -> str:
+            """
+            Process a SQL query to remove single-line comments starting with '--'.
+
+            Args:
+                query (str): The input SQL query.
+
+            Returns:
+                str: The SQL query with single-line comments removed.
+            """
+            processed_lines = []
+
+            for line in query.splitlines():
+                # print(f"{line}\n\n")
+                if "--" in line:  # Check if the line contains a comment
+                    # Split the line at the first occurrence of '--' and take the part before it
+                    non_comment_part = line.split("--", 1)[0].rstrip()
+                    if non_comment_part:  # If the non-comment part is not empty, add it
+                        processed_lines.append(non_comment_part)
+                else:
+                    # If no comment, keep the entire line
+                    processed_lines.append(line)
+
+            # Join all processed lines back into a single string
+            return "\n".join(processed_lines)
+
         def categorize_functions(extracted_functions):
-            """Categorize functions into supported and unsupported."""
+            """
+            Categorize functions into supported and unsupported.
+            """
             supported_functions = set()
             unsupported_functions = set()
 
@@ -398,28 +478,30 @@ async def extract_functions_api(
 
             return list(supported_functions), list(unsupported_functions)
 
-        # Extract functions
-        all_functions = extract_functions(query)
+        # Extract functions from the query
+        all_functions = extract_functions_from_query(query, function_pattern, exclusion_list)
         supported, unsupported = categorize_functions(all_functions)
-        double_quotes_added_query = ""
+        print(f"supported: {supported}\n\nunsupported: {unsupported}")
+
         executable = "YES"
 
-        if unsupported:
-            converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[
-                0
-            ]
-            converted_query = replace_struct_in_query(converted_query)
+        converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
+        converted_query = replace_struct_in_query(converted_query)
 
-            converted_query_ast = parse_one(converted_query, read=to_sql)
-            double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
-                dialect=to_sql
-            )
-            all_functions_converted_query = extract_functions(double_quotes_added_query)
-            supported_converted_query, unsupported_converted_query = categorize_functions(
-                all_functions_converted_query
-            )
-            if unsupported_converted_query:
-                executable = "NO"
+        converted_query_ast = parse_one(converted_query, read=to_sql)
+        converted_query_ast, unsupported = unsupported_functionality_identifiers(converted_query_ast, unsupported)
+
+        double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
+            dialect=to_sql
+        )
+        all_functions_converted_query = extract_functions_from_query(
+            double_quotes_added_query, function_pattern, exclusion_list
+        )
+        supported_functions_in_converted_query, unsupported_functions_in_converted_query = categorize_functions(
+            all_functions_converted_query
+        )
+        if unsupported_functions_in_converted_query:
+            executable = "NO"
 
         return {
             "supported_functions": supported,
