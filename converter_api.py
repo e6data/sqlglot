@@ -516,9 +516,7 @@ async def stats_api(
         executable = "YES"
 
         original_ast = parse_one(query, read=to_sql)
-        unsupported = unsupported_functionality_identifiers(
-            original_ast, unsupported
-        )
+        unsupported = unsupported_functionality_identifiers(original_ast, unsupported)
 
         converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
         converted_query = replace_struct_in_query(converted_query)

@@ -1651,8 +1651,8 @@ class E6(Dialect):
 
         def sub_sql(self, expr: exp.Sub) -> str:
             if (
-                    isinstance(expr.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
-                    and expr.expression.is_int
+                isinstance(expr.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
+                and expr.expression.is_int
             ):
                 interval_expr = exp.Interval(this=expr.expression, unit=exp.Var(this="DAY"))
                 expr = expr.replace(exp.Sub(this=expr.args.get("this"), expression=interval_expr))

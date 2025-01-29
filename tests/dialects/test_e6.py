@@ -99,10 +99,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT CURRENT_DATE - INTERVAL 2 DAY",
-            read={
-                "databricks": "SELECT CURRENT_DATE - 2"
-            }
+            "SELECT CURRENT_DATE - INTERVAL 2 DAY", read={"databricks": "SELECT CURRENT_DATE - 2"}
         )
 
         self.validate_all(
