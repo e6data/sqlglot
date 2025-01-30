@@ -5,6 +5,8 @@ from apis.utils.helpers import (
     categorize_functions,
     unsupported_functionality_identifiers,
     transpile_query,
+    strip_comment,
+    add_comment_to_query,
 )
 from sqlglot import parse_one
 import re
@@ -220,6 +222,9 @@ async def stats_api(
             r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
+        item = "condenast"
+        query, comment = strip_comment(query, item)
+
         # Extract functions from the query
         all_functions = extract_functions_from_query(
             query, function_pattern, keyword_pattern, exclusion_list
@@ -236,6 +241,7 @@ async def stats_api(
 
         # Transpile the query to target SQL dialect
         converted_query = transpile_query(query, from_sql, to_sql)
+        converted_query = add_comment_to_query(converted_query, comment)
         all_functions_converted_query = extract_functions_from_query(
             converted_query, function_pattern, keyword_pattern, exclusion_list
         )

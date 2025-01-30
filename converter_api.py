@@ -534,6 +534,60 @@ async def stats_api(
 
             return list(supported_functions), list(unsupported_functions)
 
+        def add_comment_to_query(query: str, comment: str) -> str:
+            """
+            Add a comment to the first SELECT statement in the query.
+
+            Args:
+                query (str): The SQL query to process.
+                comment (str): The comment to add.
+
+            Returns:
+                str: The modified query with the comment added.
+            """
+            if comment:
+                # Regex to find the first SELECT
+                select_pattern = r"\bSELECT\b"
+                match = re.search(select_pattern, query, re.IGNORECASE)
+
+                if match:
+                    # Insert the comment immediately after the first SELECT
+                    insert_position = match.end()  # Get the position after "SELECT"
+                    modified_query = (
+                        query[:insert_position] + f" {comment} " + query[insert_position:]
+                    )
+                    return modified_query
+                return query
+            else:
+                return query
+
+        def strip_comment(query: str, item: str) -> tuple:
+            """
+            Strip a comment pattern like `/* item::UUID */` from the query.
+
+            Args:
+                query (str): The SQL query to process.
+                item (str): The dynamic keyword to search for (e.g., "condanest").
+
+            Returns:
+                tuple: (stripped_query, extracted_comment)
+            """
+            # Use a regex pattern to find comments like /* item::UUID */
+            comment_pattern = rf"/\*\s*{item}::[a-zA-Z0-9]+\s*\*/"
+
+            # Search for the comment in the query
+            match = re.search(comment_pattern, query)
+            if match:
+                extracted_comment = match.group(0)  # Capture the entire comment
+                stripped_query = query.replace(
+                    extracted_comment, ""
+                ).strip()  # Remove it from the query
+                return stripped_query, extracted_comment
+            return query, None
+
+        item = "condenast"
+        query, comment = strip_comment(query, item)
+
         # Extract functions from the query
         all_functions = extract_functions_from_query(
             query, function_pattern, keyword_pattern, exclusion_list
@@ -553,6 +607,7 @@ async def stats_api(
         double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
             dialect=to_sql
         )
+        double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
         all_functions_converted_query = extract_functions_from_query(
             double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
