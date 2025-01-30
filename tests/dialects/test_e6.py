@@ -103,6 +103,11 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CURRENT_TIMESTAMP - INTERVAL 2 DAY",
+            read={"databricks": "SELECT CURRENT_TIMESTAMP - 2"},
+        )
+
+        self.validate_all(
             "POSITION(needle in haystack from c)",
             write={
                 "spark": "LOCATE(needle, haystack, c)",
