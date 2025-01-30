@@ -43,6 +43,8 @@ setup(
             "typing_extensions",
             "maturin>=1.4,<2.0",
             "thrift==0.21.0",
+            "fastapi==0.115.6",
+            "python-multipart",
         ],
         "rs": [f"sqlglotrs=={sqlglotrs_version()}"],
     },
