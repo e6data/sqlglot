@@ -26,4 +26,4 @@ USER e6
 HEALTHCHECK none
 
 # Run the FastAPI app using Uvicorn
-CMD ["uvicorn", "apis.app:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "5"]
+CMD ["uvicorn", "converter_api:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "5"]

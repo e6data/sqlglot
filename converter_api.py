@@ -335,10 +335,11 @@ async def stats_api(
             "USING",
             "EXISTS",
             "CARDINALITY",
-            "FILTER",
             "IF",
             "IFNULL",
             "ISNULL",
+            "TRY_DIVIDE",
+            "TRY_ELEMENT_AT",
         ]
 
         # Functions treated as keywords (no parentheses required)
@@ -430,7 +431,7 @@ async def stats_api(
             return "".join(sanitized_query)
 
         def extract_functions_from_query(
-            query: str, function_pattern: str, exclusion_list: list
+            query: str, function_pattern: str, kw_pattern: str, exclusion_list: list
         ) -> set:
             """
             Extract function names from the sanitized query.
@@ -448,7 +449,7 @@ async def stats_api(
                     all_functions.add(match)
 
             # Match keywords treated as functions
-            keyword_matches = re.findall(keyword_pattern, sanitized_query.upper())
+            keyword_matches = re.findall(kw_pattern, sanitized_query.upper())
             for match in keyword_matches:
                 all_functions.add(match)
 
@@ -461,7 +462,9 @@ async def stats_api(
 
             return all_functions
 
-        def unsupported_functionality_identifiers(expression, unsupported_list: t.List):
+        def unsupported_functionality_identifiers(
+            expression, unsupported_list: t.List, supported_list: t.List
+        ):
             for sub in expression.find_all(exp.Sub):
                 if (
                     isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
@@ -473,7 +476,20 @@ async def stats_api(
                 cte_name = cte.alias.upper()
                 if cte_name in unsupported_list:
                     unsupported_list.remove(cte_name)
-            return unsupported_list
+
+            for filter_expr in expression.find_all(exp.Filter, exp.ArrayFilter):
+                if isinstance(filter_expr, exp.Filter) and unsupported_list.count("FILTER") > 0:
+                    unsupported_list.remove("FILTER")
+                    supported_list.append("FILTER as projection")
+
+                elif (
+                    isinstance(filter_expr, exp.ArrayFilter)
+                    and unsupported_list.count("FILTER") > 0
+                ):
+                    unsupported_list.remove("FILTER")
+                    unsupported_list.append("FILTER as filter_array")
+
+            return supported_list, unsupported_list
 
         def processing_comments(query: str) -> str:
             """
@@ -519,37 +535,45 @@ async def stats_api(
             return list(supported_functions), list(unsupported_functions)
 
         # Extract functions from the query
-        all_functions = extract_functions_from_query(query, function_pattern, exclusion_list)
+        all_functions = extract_functions_from_query(
+            query, function_pattern, keyword_pattern, exclusion_list
+        )
         supported, unsupported = categorize_functions(all_functions)
         print(f"supported: {supported}\n\nunsupported: {unsupported}")
 
-        executable = "YES"
-
         original_ast = parse_one(query, read=from_sql)
-        unsupported = unsupported_functionality_identifiers(original_ast, unsupported)
+        supported, unsupported = unsupported_functionality_identifiers(
+            original_ast, unsupported, supported
+        )
 
         converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
         converted_query = replace_struct_in_query(converted_query)
 
         converted_query_ast = parse_one(converted_query, read=to_sql)
-
         double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
             dialect=to_sql
         )
+
         all_functions_converted_query = extract_functions_from_query(
-            double_quotes_added_query, function_pattern, exclusion_list
+            double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
         )
         supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
             categorize_functions(all_functions_converted_query)
         )
-        if unsupported_functions_in_converted_query:
-            executable = "NO"
+
+        double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
+        supported_in_converted, unsupported_in_converted = unsupported_functionality_identifiers(
+            double_quote_ast,
+            unsupported_functions_in_converted_query,
+            supported_functions_in_converted_query,
+        )
+        executable = "NO" if unsupported_in_converted else "YES"
 
         return {
             "supported_functions": supported,
             "unsupported_functions": unsupported,
             "converted-query": double_quotes_added_query,
-            "unsupported_functions_after_transpilation": unsupported_functions_in_converted_query,
+            "unsupported_functions_after_transpilation": unsupported_in_converted,
             "executable": executable,
         }
     except Exception as e:

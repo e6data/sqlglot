@@ -12,7 +12,7 @@ import re
 router = APIRouter()
 
 
-@router.post("/")
+@router.post("/stats")
 async def stats_api(
     query: str = Form(...),
     from_sql: str = Form(...),
@@ -183,10 +183,11 @@ async def stats_api(
             "USING",
             "EXISTS",
             "CARDINALITY",
-            "FILTER",
             "IF",
             "IFNULL",
             "ISNULL",
+            "TRY_DIVIDE",
+            "TRY_ELEMENT_AT",
         ]
 
         # Functions treated as keywords (no parentheses required)
@@ -229,7 +230,9 @@ async def stats_api(
 
         # Transpile the query and analyze unsupported functions post-transpilation
         original_ast = parse_one(query, read=from_sql)
-        unsupported = unsupported_functionality_identifiers(original_ast, unsupported)
+        supported, unsupported = unsupported_functionality_identifiers(
+            original_ast, unsupported, supported
+        )
 
         # Transpile the query to target SQL dialect
         converted_query = transpile_query(query, from_sql, to_sql)
@@ -238,6 +241,11 @@ async def stats_api(
         )
         supported_in_converted, unsupported_in_converted = categorize_functions(
             all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
+        )
+
+        converted_query_ast = parse_one(converted_query, read=to_sql)
+        supported_in_converted, unsupported_in_converted = unsupported_functionality_identifiers(
+            converted_query_ast, unsupported_in_converted, supported_in_converted
         )
 
         executable = "NO" if unsupported_in_converted else "YES"

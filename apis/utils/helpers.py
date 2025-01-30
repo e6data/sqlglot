@@ -145,7 +145,9 @@ def extract_functions_from_query(
     return all_functions
 
 
-def unsupported_functionality_identifiers(expression, unsupported_list: t.List):
+def unsupported_functionality_identifiers(
+    expression, unsupported_list: t.List, supported_list: t.List
+):
     for sub in expression.find_all(exp.Sub):
         if (
             isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
@@ -157,7 +159,17 @@ def unsupported_functionality_identifiers(expression, unsupported_list: t.List):
         cte_name = cte.alias.upper()
         if cte_name in unsupported_list:
             unsupported_list.remove(cte_name)
-    return unsupported_list
+
+    for filter_expr in expression.find_all(exp.Filter, exp.ArrayFilter):
+        if isinstance(filter_expr, exp.Filter) and unsupported_list.count("FILTER") > 0:
+            unsupported_list.remove("FILTER")
+            supported_list.append("FILTER as projection")
+
+        elif isinstance(filter_expr, exp.ArrayFilter) and unsupported_list.count("FILTER") > 0:
+            unsupported_list.remove("FILTER")
+            unsupported_list.append("FILTER as filter_array")
+
+    return supported_list, unsupported_list
 
 
 def processing_comments(query: str) -> str:
