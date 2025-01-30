@@ -330,6 +330,15 @@ async def stats_api(
             "TO_JSON",
             "MD5",
             "NAMED_STRUCT",
+            "HAVING",
+            "APPROX_PERCENTILE",
+            "USING",
+            "EXISTS",
+            "CARDINALITY",
+            "FILTER",
+            "IF",
+            "IFNULL",
+            "ISNULL",
         ]
 
         # Functions treated as keywords (no parentheses required)
@@ -516,7 +525,7 @@ async def stats_api(
 
         executable = "YES"
 
-        original_ast = parse_one(query, read=to_sql)
+        original_ast = parse_one(query, read=from_sql)
         unsupported = unsupported_functionality_identifiers(original_ast, unsupported)
 
         converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]

@@ -19,9 +19,9 @@ if ENABLE_GUARDRAIL.lower() == "true":
 
 @router.post("/guard")
 async def guard(
-        query: str = Form(...),
-        schema: str = Form(...),
-        catalog: str = Form(...),
+    query: str = Form(...),
+    schema: str = Form(...),
+    catalog: str = Form(...),
 ):
     """Validate SQL queries against guardrails."""
     try:
@@ -36,11 +36,11 @@ async def guard(
 
 @router.post("/transguard")
 async def transguard(
-        query: str = Form(...),
-        schema: str = Form(...),
-        catalog: str = Form(...),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("E6"),
+    query: str = Form(...),
+    schema: str = Form(...),
+    catalog: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("E6"),
 ):
     """
     Transpile SQL queries from one dialect to another, then validate them against guardrails.

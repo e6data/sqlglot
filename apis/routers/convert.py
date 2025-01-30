@@ -10,9 +10,9 @@ router = APIRouter()
 
 @router.post("/convert-query")
 async def convert_query(
-        query: str = Form(...),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("E6"),
+    query: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("E6"),
 ):
     try:
         double_quotes_added_query = transpile_query(query, from_sql, to_sql)

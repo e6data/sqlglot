@@ -8,7 +8,9 @@ from apis.utils.helpers import (
 )
 from sqlglot import parse_one
 import re
+
 router = APIRouter()
+
 
 @router.post("/")
 async def stats_api(
@@ -214,12 +216,16 @@ async def stats_api(
         # Regex patterns
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
         keyword_pattern = (
-                r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
+            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
         # Extract functions from the query
-        all_functions = extract_functions_from_query(query, function_pattern, keyword_pattern, exclusion_list)
-        supported, unsupported = categorize_functions(all_functions, supported_functions_in_e6, functions_as_keywords)
+        all_functions = extract_functions_from_query(
+            query, function_pattern, keyword_pattern, exclusion_list
+        )
+        supported, unsupported = categorize_functions(
+            all_functions, supported_functions_in_e6, functions_as_keywords
+        )
 
         # Transpile the query and analyze unsupported functions post-transpilation
         original_ast = parse_one(query, read=from_sql)
@@ -227,7 +233,9 @@ async def stats_api(
 
         # Transpile the query to target SQL dialect
         converted_query = transpile_query(query, from_sql, to_sql)
-        all_functions_converted_query = extract_functions_from_query(converted_query, function_pattern, keyword_pattern, exclusion_list)
+        all_functions_converted_query = extract_functions_from_query(
+            converted_query, function_pattern, keyword_pattern, exclusion_list
+        )
         supported_in_converted, unsupported_in_converted = categorize_functions(
             all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
         )
