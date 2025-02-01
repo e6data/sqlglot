@@ -84,6 +84,12 @@ class TestE6(Validator):
             read={"trino": "SELECT date_parse('2024-11-09', '%d-%m-%y')"},
         )
 
+        self.validate_all(
+            "SELECT LATERAL VIEW EXPLODE(a)", read={"databricks": "SELECT LATERAL VIEW EXPLODE(a)"}
+        )
+
+        self.validate_identity("SELECT a FROM tab WHERE a != 5")
+
         self.validate_all("SELECT DAYS('2024-11-09')", read={"trino": "SELECT DAYS('2024-11-09')"})
 
         self.validate_all(
