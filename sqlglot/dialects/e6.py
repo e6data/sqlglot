@@ -1810,7 +1810,7 @@ class E6(Dialect):
             # Extract array expressions
             array_expr = expression.args.get("expressions")
             if expression.this:
-                return self.func("UNNEST", expression.this)
+                return self.func("EXPLODE", expression.this)
 
             # Format array expressions to SQL
             if isinstance(array_expr, list):
@@ -1834,7 +1834,7 @@ class E6(Dialect):
             alias_sql = f" AS {alias}{alias_columns}" if alias else ""
 
             # Generate the final UNNEST SQL
-            return f"UNNEST({array_expr_sql}){alias_sql}"
+            return f"EXPLODE({array_expr_sql}){alias_sql}"
 
         def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
             date_expr = expression.this
@@ -1851,6 +1851,9 @@ class E6(Dialect):
             ):
                 date_expr = f"CAST({date_expr} AS DATE)"
             return self.func("FORMAT_DATE", date_expr, format_expr_quoted)
+
+        def neq_sql(self, expression: exp.NEQ) -> str:
+            return self.binary(expression, "!=")
 
         def tochar_sql(self, expression: exp.ToChar) -> str:
             date_expr = expression.this
