@@ -340,6 +340,7 @@ async def stats_api(
             "ISNULL",
             "TRY_DIVIDE",
             "TRY_ELEMENT_AT",
+            "VALUES",
         ]
 
         # Functions treated as keywords (no parentheses required)
