@@ -50,7 +50,6 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT ARRAY_CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
             read={
-                "trino": "SELECT CONCAT(ARRAY[1,2], ARRAY[3,4])",
                 "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))",
             },
         )

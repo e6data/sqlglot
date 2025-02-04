@@ -2006,7 +2006,7 @@ class E6(Dialect):
             exp.Bracket: bracket_sql,
             # We mapped this believing that for most of the cases,
             # CONCAT function in other dialects would mostly use for ARRAY concatenation
-            exp.Concat: rename_func("ARRAY_CONCAT"),
+            exp.Concat: rename_func("CONCAT"),
             exp.Contains: rename_func("CONTAINS_SUBSTR"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
