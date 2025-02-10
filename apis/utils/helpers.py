@@ -11,6 +11,9 @@ def transpile_query(query: str, from_sql: str, to_sql: str) -> str:
     Transpile a SQL query from one dialect to another.
     """
     try:
+        # original_ast = parse_one(query, read=from_sql)
+        # values_ensured_ast = ensure_select_from_values(original_ast)
+        # query = values_ensured_ast.sql(dialect=from_sql)
         transpiled_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
 
         # Parse and reformat the query to add proper quoting
@@ -264,3 +267,22 @@ def strip_comment(query: str, item: str) -> tuple:
         stripped_query = query.replace(extracted_comment, "").strip()  # Remove it from the query
         return stripped_query, extracted_comment
     return query, None
+
+
+def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
+    """
+    Ensures that any CTE using VALUES directly is modified to SELECT * FROM VALUES(...).
+    """
+    for cte in expression.find_all(exp.CTE):
+        cte_query = cte.this
+        # Check if the CTE contains only a VALUES clause
+        if isinstance(cte_query, exp.Values):
+            # Transform VALUES() into SELECT * FROM VALUES()
+            if cte_query.alias is "":
+                cte_query.set("alias", '"values_subq"')
+
+            new_query = exp.Select(expressions=[exp.Star()])
+            new_query.set("from", exp.From(this=cte_query))
+
+            cte.set("this", new_query)
+    return expression

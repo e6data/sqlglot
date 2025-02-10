@@ -593,13 +593,17 @@ async def stats_api(
         all_functions = extract_functions_from_query(
             query, function_pattern, keyword_pattern, exclusion_list
         )
-        supported, unsupported = categorize_functions(all_functions)
+        supported, unsupported = categorize_functions(
+            all_functions, supported_functions_in_e6, functions_as_keywords
+        )
         print(f"supported: {supported}\n\nunsupported: {unsupported}")
 
         original_ast = parse_one(query, read=from_sql)
         supported, unsupported = unsupported_functionality_identifiers(
             original_ast, unsupported, supported
         )
+        values_ensured_ast = ensure_select_from_values(original_ast)
+        query = values_ensured_ast.sql(dialect=from_sql)
 
         converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
         converted_query = replace_struct_in_query(converted_query)
@@ -614,7 +618,9 @@ async def stats_api(
             double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
         )
         supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
-            categorize_functions(all_functions_converted_query)
+            categorize_functions(
+                all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
+            )
         )
 
         double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
