@@ -278,7 +278,7 @@ def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
         # Check if the CTE contains only a VALUES clause
         if isinstance(cte_query, exp.Values):
             # Transform VALUES() into SELECT * FROM VALUES()
-            if cte_query.alias is "":
+            if cte_query.alias == "":
                 cte_query.set("alias", '"values_subq"')
 
             new_query = exp.Select(expressions=[exp.Star()])

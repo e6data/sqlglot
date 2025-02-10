@@ -1489,7 +1489,7 @@ class E6(Dialect):
             "NAMED_STRUCT": lambda self: self._parse_json_object(),
         }
 
-        NO_PAREN_FUNCTIONS = parser.Parser.NO_PAREN_FUNCTIONS
+        NO_PAREN_FUNCTIONS = parser.Parser.NO_PAREN_FUNCTIONS.copy()
         NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_USER)
         NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_TIME)
 
