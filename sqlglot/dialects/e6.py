@@ -1489,6 +1489,10 @@ class E6(Dialect):
             "NAMED_STRUCT": lambda self: self._parse_json_object(),
         }
 
+        NO_PAREN_FUNCTIONS = parser.Parser.NO_PAREN_FUNCTIONS
+        NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_USER)
+        NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_TIME)
+
     class Generator(generator.Generator):
         """
         The Generator class is responsible for converting an abstract syntax tree (AST) back into a SQL string
@@ -1502,7 +1506,7 @@ class E6(Dialect):
         LAST_DAY_SUPPORTS_DATE_PART = False
         INTERVAL_ALLOWS_PLURAL_FORM = False
         NULL_ORDERING_SUPPORTED = None
-        SUPPORTS_TABLE_ALIAS_COLUMNS = False
+        SUPPORTS_TABLE_ALIAS_COLUMNS = True
 
         CAST_SUPPORTED_TYPE_MAPPING = {
             exp.DataType.Type.NCHAR: "CHAR",
