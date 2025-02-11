@@ -90,7 +90,7 @@ def _build_datetime(
         # Handle cases where the target type is DATE and the value is not an integer.
         if kind == exp.DataType.Type.DATE and not int_value:
             # Format the expression using a helper function to create a TsOrDsToDate expression.
-            formatted_exp = build_formatted_time(exp.TsOrDsToDate, "e6")(args)
+            formatted_exp = build_formatted_time(exp.TsOrDsToDate, "E6")(args)
 
             # Set the "safe" flag on the resulting expression if specified.
             formatted_exp.set("safe", safe)
@@ -265,6 +265,14 @@ def _build_datetime_for_DT(args: t.List) -> exp.AtTimeZone:
     return exp.AtTimeZone(this=seq_get(args, 0), zone=seq_get(args, 1))
 
 
+def _parse_to_date(args: t.List) -> exp.TsOrDsToDate:
+    date_expr = seq_get(args, 0)
+    format_expr = seq_get(args, 1)
+    if not format_expr:
+        format_expr = exp.Literal(this="yyyy-MM-dd", is_string=True)
+    return exp.TsOrDsToDate(this=date_expr, format=E6().convert_format_time(expression=format_expr))
+
+
 def _parse_filter_array(args: t.List) -> exp.ArrayFilter:
     """
     Parses the FILTER_ARRAY function, ensuring that the lambda expression
@@ -414,6 +422,8 @@ class E6(Dialect):
         "ss": "%S",  # Two-digit second
         "s": "%-S",  # Single-digit second
         "E": "%a",  # Abbreviated weekday name
+        "D": "%-j",
+        "DD": "%D",
     }
 
     # Time mapping specific to parsing functions. This maps time format tokens from E6 to standard Python time formats.
@@ -515,7 +525,7 @@ class E6(Dialect):
             return None
 
         # Initialize the format string to be transformed
-        transformed_format = format_str
+        transformed_format = format_str.replace("%%", "%")
 
         # Iterate over the TIME_MAPPING to replace source formats with target formats
         for source_format, target_format in self.TIME_MAPPING.items():
@@ -1459,9 +1469,8 @@ class E6(Dialect):
             "TO_CHAR": lambda args: exp.ToChar(
                 this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
             ),
-            "TO_DATE": lambda args: exp.TimeToStr(
-                this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
-            ),
+            "TO_DATE": _parse_to_date,
+            # "TO_DATE":  _build_datetime("TO_DATE", exp.DataType.Type.DATE),
             "TO_HEX": exp.Hex.from_arg_list,
             "TO_JSON": exp.JSONFormat.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
@@ -1693,7 +1702,7 @@ class E6(Dialect):
                 return None
 
             # Initialize the format string to be transformed
-            format_string = format_str
+            format_string = format_str.replace("%%", "%")
 
             # Iterate over the TIME_MAPPING dictionary to replace each value with its corresponding key
             for key, value in E6().TIME_MAPPING.items():
@@ -2115,6 +2124,9 @@ class E6(Dialect):
                 unit_to_str(e),
                 e.expression,
                 e.this,
+            ),
+            exp.TsOrDsToDate: lambda self, e: self.func(
+                "TO_DATE", e.this, add_single_quotes(self.convert_format_time(e))
             ),
             exp.UnixToTime: _from_unixtime_withunit_sql,
             exp.UnixToStr: _from_unixtime_withunit_sql,
