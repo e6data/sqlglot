@@ -202,7 +202,7 @@ class TestE6(Validator):
                 "trino": "SELECT date_diff('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
                 "snowflake": "SELECT DATEDIFF(DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
                 "presto": "SELECT date_diff('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
-                "spark": "SELECT DATEDIFF(DAY, '2024-11-11', '2024-11-09')",
+                "databricks": "SELECT DATEDIFF(DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             },
             write={
                 "E6": "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))"
@@ -292,6 +292,17 @@ class TestE6(Validator):
                 "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
                 "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
                 "duckdb": "SELECT X[4]",
+            },
+        )
+
+        self.validate_all(
+            "SELECT X['B']",
+            read={
+                "snowflake": "SELECT X['B']",
+                "trino": "SELECT X['B']",
+                "databricks": "SELECT X['B']",
+                "spark": "SELECT X['B']",
+                "duckdb": "SELECT X['B']",
             },
         )
 
