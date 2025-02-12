@@ -23,13 +23,17 @@ router = APIRouter()
 
 # Environment variables for Guardrail service
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
-STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "cops-beta1-storage-storage-blue")
-STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9006)
+STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")
+STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
 
 # Initialize the storage service client if guardrail is enabled
 storage_service_client = None
 if ENABLE_GUARDRAIL.lower() == "true":
+    print("Storage Engine URL: ", STORAGE_ENGINE_URL)
+    print("Storage Engine Port: ", STORAGE_ENGINE_PORT)
+
     storage_service_client = StorageServiceClient(host=STORAGE_ENGINE_URL, port=STORAGE_ENGINE_PORT)
+print("Storage Service Client is created")
 
 
 @router.post("/guard")

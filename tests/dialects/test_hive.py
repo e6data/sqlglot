@@ -387,12 +387,13 @@ class TestHive(Validator):
         )
         self.validate_all(
             "UNIX_TIMESTAMP(x)",
+            # changed these due to default is set to true in unix_time part of hive's parser
             write={
-                "duckdb": "EPOCH(STRPTIME(x, '%Y-%m-%d %H:%M:%S'))",
-                "presto": "TO_UNIXTIME(COALESCE(TRY(DATE_PARSE(CAST(x AS VARCHAR), '%Y-%m-%d %T')), PARSE_DATETIME(DATE_FORMAT(x, '%Y-%m-%d %T'), 'yyyy-MM-dd HH:mm:ss')))",
+                "duckdb": "EPOCH(STRPTIME(x))",
+                "presto": "TO_UNIXTIME(COALESCE(TRY(DATE_PARSE(CAST(x AS VARCHAR))), PARSE_DATETIME(DATE_FORMAT(x))))",
                 "hive": "UNIX_TIMESTAMP(x)",
-                "spark": "TO_UNIX_TIMESTAMP(x, '%Y-%m-%d %H:%M:%S')",
-                "": "STR_TO_UNIX(x, '%Y-%m-%d %H:%M:%S')",
+                "spark": "TO_UNIX_TIMESTAMP(x)",
+                "": "STR_TO_UNIX(x)",
             },
         )
 
