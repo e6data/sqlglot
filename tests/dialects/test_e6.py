@@ -307,9 +307,9 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(A)",
+            "SELECT TO_UNIX_TIMESTAMP(A / 1000)",
             read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
-            write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
+            write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A / 1000)"},
         )
 
         self.validate_all(

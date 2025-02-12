@@ -1994,6 +1994,29 @@ class E6(Dialect):
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
 
+        def to_unix_timestamp_sql(
+            self: E6.Generator, expression: exp.TimeToUnix | exp.StrToUnix
+        ) -> str:
+            time_expr = expression.this
+            format_expr = expression.args.get("format")
+
+            # Case 1: If `time_expr` is already `x / 1000`, do nothing
+            if isinstance(time_expr, exp.Div) and time_expr.expression.this == "1000":
+                transformed_expr = time_expr
+            else:
+                # Case 2: If not a division, transform `x` into `x / 1000`
+                transformed_expr = exp.Div(
+                    this=time_expr, expression=exp.Literal(this="1000", is_string=False)
+                )
+
+            # Generate final function with or without format argument
+            if format_expr:
+                return self.func(
+                    "TO_UNIX_TIMESTAMP", self.sql(transformed_expr), self.sql(format_expr)
+                )
+            else:
+                return self.func("TO_UNIX_TIMESTAMP", self.sql(transformed_expr))
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2089,13 +2112,13 @@ class E6(Dialect):
                 "TO_DATE", e.this, add_single_quotes(self.convert_format_time(e))
             ),
             exp.StrToTime: to_timestamp_sql,
-            exp.StrToUnix: rename_func("TO_UNIX_TIMESTAMP"),
+            exp.StrToUnix: to_unix_timestamp_sql,
             exp.StartsWith: rename_func("STARTS_WITH"),
             # exp.Struct: struct_sql,
             exp.TimeToStr: format_date_sql,
             exp.TimeStrToTime: timestrtotime_sql,
             exp.TimeStrToDate: datestrtodate_sql,
-            exp.TimeToUnix: rename_func("TO_UNIX_TIMESTAMP"),
+            exp.TimeToUnix: to_unix_timestamp_sql,
             exp.Timestamp: lambda self, e: self.func("TIMESTAMP", e.this),
             exp.TimestampAdd: lambda self, e: self.func(
                 "TIMESTAMP_ADD", unit_to_str(e), e.expression, e.this

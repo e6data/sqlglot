@@ -326,7 +326,8 @@ class Hive(Dialect):
             "TO_JSON": exp.JSONFormat.from_arg_list,
             "TRUNC": exp.TimestampTrunc.from_arg_list,
             "UNBASE64": exp.FromBase64.from_arg_list,
-            "UNIX_TIMESTAMP": lambda args: build_formatted_time(exp.StrToUnix, "hive", True)(
+            # dafault is set to false due to the fact that during transpilation dbr's default time format is showing up in second arg, which e6 does not support
+            "UNIX_TIMESTAMP": lambda args: build_formatted_time(exp.StrToUnix, "hive", False)(
                 args or [exp.CurrentTimestamp()]
             ),
             "YEAR": lambda args: exp.Year(this=exp.TsOrDsToDate.from_arg_list(args)),
