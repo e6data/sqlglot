@@ -296,7 +296,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT X['B']",
+            'SELECT X."B"',
             read={
                 "snowflake": "SELECT X['B']",
                 "trino": "SELECT X['B']",

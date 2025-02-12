@@ -1882,7 +1882,8 @@ class E6(Dialect):
 
         def bracket_sql(self, expression: exp.Bracket) -> str:
             if expression.expressions.__len__() == 1 and expression.expressions[0].is_string:
-                return f"{self.sql(expression.this)}[{self.sql(expression.expressions[0])}]"
+                text_expr = expression.expressions[0].this
+                return f'{self.sql(expression.this)}."{text_expr}"'
             return self.func(
                 "ELEMENT_AT",
                 expression.this,
