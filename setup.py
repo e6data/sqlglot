@@ -30,7 +30,7 @@ setup(
     extras_require={
         "dev": [
             "duckdb>=0.6",
-            "mypy",
+            "mypy==1.14.1",
             "pandas",
             "pandas-stubs",
             "python-dateutil",
