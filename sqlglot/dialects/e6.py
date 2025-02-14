@@ -90,7 +90,7 @@ def _build_datetime(
         # Handle cases where the target type is DATE and the value is not an integer.
         if kind == exp.DataType.Type.DATE and not int_value:
             # Format the expression using a helper function to create a TsOrDsToDate expression.
-            formatted_exp = build_formatted_time(exp.TsOrDsToDate, "e6")(args)
+            formatted_exp = build_formatted_time(exp.TsOrDsToDate, "E6")(args)
 
             # Set the "safe" flag on the resulting expression if specified.
             formatted_exp.set("safe", safe)
@@ -265,6 +265,14 @@ def _build_datetime_for_DT(args: t.List) -> exp.AtTimeZone:
     return exp.AtTimeZone(this=seq_get(args, 0), zone=seq_get(args, 1))
 
 
+def _parse_to_date(args: t.List) -> exp.TsOrDsToDate:
+    date_expr = seq_get(args, 0)
+    format_expr = seq_get(args, 1)
+    if not format_expr:
+        format_expr = exp.Literal(this="yyyy-MM-dd", is_string=True)
+    return exp.TsOrDsToDate(this=date_expr, format=E6().convert_format_time(expression=format_expr))
+
+
 def _parse_filter_array(args: t.List) -> exp.ArrayFilter:
     """
     Parses the FILTER_ARRAY function, ensuring that the lambda expression
@@ -414,6 +422,8 @@ class E6(Dialect):
         "ss": "%S",  # Two-digit second
         "s": "%-S",  # Single-digit second
         "E": "%a",  # Abbreviated weekday name
+        "D": "%-j",
+        "DD": "%D",
     }
 
     # Time mapping specific to parsing functions. This maps time format tokens from E6 to standard Python time formats.
@@ -515,7 +525,7 @@ class E6(Dialect):
             return None
 
         # Initialize the format string to be transformed
-        transformed_format = format_str
+        transformed_format = format_str.replace("%%", "%")
 
         # Iterate over the TIME_MAPPING to replace source formats with target formats
         for source_format, target_format in self.TIME_MAPPING.items():
@@ -1459,9 +1469,8 @@ class E6(Dialect):
             "TO_CHAR": lambda args: exp.ToChar(
                 this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
             ),
-            "TO_DATE": lambda args: exp.TimeToStr(
-                this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
-            ),
+            "TO_DATE": _parse_to_date,
+            # "TO_DATE":  _build_datetime("TO_DATE", exp.DataType.Type.DATE),
             "TO_HEX": exp.Hex.from_arg_list,
             "TO_JSON": exp.JSONFormat.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
@@ -1489,6 +1498,10 @@ class E6(Dialect):
             "NAMED_STRUCT": lambda self: self._parse_json_object(),
         }
 
+        NO_PAREN_FUNCTIONS = parser.Parser.NO_PAREN_FUNCTIONS.copy()
+        NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_USER)
+        NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_TIME)
+
     class Generator(generator.Generator):
         """
         The Generator class is responsible for converting an abstract syntax tree (AST) back into a SQL string
@@ -1502,7 +1515,7 @@ class E6(Dialect):
         LAST_DAY_SUPPORTS_DATE_PART = False
         INTERVAL_ALLOWS_PLURAL_FORM = False
         NULL_ORDERING_SUPPORTED = None
-        SUPPORTS_TABLE_ALIAS_COLUMNS = False
+        SUPPORTS_TABLE_ALIAS_COLUMNS = True
 
         CAST_SUPPORTED_TYPE_MAPPING = {
             exp.DataType.Type.NCHAR: "CHAR",
@@ -1689,7 +1702,7 @@ class E6(Dialect):
                 return None
 
             # Initialize the format string to be transformed
-            format_string = format_str
+            format_string = format_str.replace("%%", "%")
 
             # Iterate over the TIME_MAPPING dictionary to replace each value with its corresponding key
             for key, value in E6().TIME_MAPPING.items():
@@ -1871,6 +1884,9 @@ class E6(Dialect):
             return f"TO_CHAR({date_expr},'{format_expr}')"
 
         def bracket_sql(self, expression: exp.Bracket) -> str:
+            if expression.expressions.__len__() == 1 and expression.expressions[0].is_string:
+                text_expr = expression.expressions[0].this
+                return f'{self.sql(expression.this)}."{text_expr}"'
             return self.func(
                 "ELEMENT_AT",
                 expression.this,
@@ -1981,6 +1997,29 @@ class E6(Dialect):
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
 
+        def to_unix_timestamp_sql(
+            self: E6.Generator, expression: exp.TimeToUnix | exp.StrToUnix
+        ) -> str:
+            time_expr = expression.this
+            format_expr = expression.args.get("format")
+
+            # Case 1: If `time_expr` is already `x / 1000`, do nothing
+            if isinstance(time_expr, exp.Div) and time_expr.expression.this == "1000":
+                transformed_expr = time_expr
+            else:
+                # Case 2: If not a division, transform `x` into `x / 1000`
+                transformed_expr = exp.Div(
+                    this=time_expr, expression=exp.Literal(this="1000", is_string=False)
+                )
+
+            # Generate final function with or without format argument
+            if format_expr:
+                return self.func(
+                    "TO_UNIX_TIMESTAMP", self.sql(transformed_expr), self.sql(format_expr)
+                )
+            else:
+                return self.func("TO_UNIX_TIMESTAMP", self.sql(transformed_expr))
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2076,13 +2115,13 @@ class E6(Dialect):
                 "TO_DATE", e.this, add_single_quotes(self.convert_format_time(e))
             ),
             exp.StrToTime: to_timestamp_sql,
-            exp.StrToUnix: rename_func("TO_UNIX_TIMESTAMP"),
+            exp.StrToUnix: to_unix_timestamp_sql,
             exp.StartsWith: rename_func("STARTS_WITH"),
             # exp.Struct: struct_sql,
             exp.TimeToStr: format_date_sql,
             exp.TimeStrToTime: timestrtotime_sql,
             exp.TimeStrToDate: datestrtodate_sql,
-            exp.TimeToUnix: rename_func("TO_UNIX_TIMESTAMP"),
+            exp.TimeToUnix: to_unix_timestamp_sql,
             exp.Timestamp: lambda self, e: self.func("TIMESTAMP", e.this),
             exp.TimestampAdd: lambda self, e: self.func(
                 "TIMESTAMP_ADD", unit_to_str(e), e.expression, e.this
@@ -2114,6 +2153,9 @@ class E6(Dialect):
                 unit_to_str(e),
                 e.expression,
                 e.this,
+            ),
+            exp.TsOrDsToDate: lambda self, e: self.func(
+                "TO_DATE", e.this, add_single_quotes(self.convert_format_time(e))
             ),
             exp.UnixToTime: _from_unixtime_withunit_sql,
             exp.UnixToStr: _from_unixtime_withunit_sql,
