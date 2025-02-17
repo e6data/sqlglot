@@ -269,7 +269,7 @@ def _parse_to_date(args: t.List) -> exp.TsOrDsToDate:
     date_expr = seq_get(args, 0)
     format_expr = seq_get(args, 1)
     if not format_expr:
-        format_expr = exp.Literal(this="yyyy-MM-dd", is_string=True)
+        return exp.TsOrDsToDate(this=date_expr)
     return exp.TsOrDsToDate(this=date_expr, format=E6().convert_format_time(expression=format_expr))
 
 
@@ -1408,10 +1408,10 @@ class E6(Dialect):
             "FILTER_ARRAY": _parse_filter_array,
             "FIRST_VALUE": exp.FirstValue.from_arg_list,
             "FORMAT_DATE": lambda args: exp.TimeToStr(
-                this=exp.TsOrDsToDate(this=seq_get(args, 0)), format=seq_get(args, 1)
+                this=seq_get(args, 0), format=seq_get(args, 1)
             ),
             "FORMAT_TIMESTAMP": lambda args: exp.TimeToStr(
-                this=exp.TsOrDsToTimestamp(this=seq_get(args, 0)), format=seq_get(args, 1)
+                this=seq_get(args, 0), format=seq_get(args, 1)
             ),
             "FROM_UNIXTIME_WITHUNIT": _build_from_unixtime_withunit,
             "GREATEST": exp.Max.from_arg_list,
@@ -1994,6 +1994,13 @@ class E6(Dialect):
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
 
+        def TsOrDsToDate_sql(self: E6.Generator, expression: exp.TsOrDsToDate) -> str:
+            format_str = self.convert_format_time(expression)
+            if format_str is None:
+                return self.func("TO_DATE", expression.this)
+            else:
+                return self.func("TO_DATE", expression.this, add_single_quotes(format_str))
+
         def to_unix_timestamp_sql(
             self: E6.Generator, expression: exp.TimeToUnix | exp.StrToUnix
         ) -> str:
@@ -2151,9 +2158,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
-            exp.TsOrDsToDate: lambda self, e: self.func(
-                "TO_DATE", e.this, add_single_quotes(self.convert_format_time(e))
-            ),
+            exp.TsOrDsToDate: TsOrDsToDate_sql,
             exp.UnixToTime: _from_unixtime_withunit_sql,
             exp.UnixToStr: _from_unixtime_withunit_sql,
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
