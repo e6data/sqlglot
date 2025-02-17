@@ -325,6 +325,12 @@ async def stats_api(
             "TRY_DIVIDE",
             "TRY_ELEMENT_AT",
             "VALUES",
+            "GREATEST",
+            "LEAST",
+            "NVL",
+            "NVL2",
+            "CASE",
+            "DECODE",
         ]
 
         # Functions treated as keywords (no parentheses required)
@@ -589,6 +595,12 @@ async def guardstats(
             "TRY_DIVIDE",
             "TRY_ELEMENT_AT",
             "VALUES",
+            "GREATEST",
+            "LEAST",
+            "NVL",
+            "NVL2",
+            "CASE",
+            "DECODE",
         ]
 
         # Functions treated as keywords (no parentheses required)

@@ -130,8 +130,9 @@ def extract_functions_from_query(
     # Match functions requiring parentheses
     matches = re.findall(function_pattern, sanitized_query.upper())
     for match in matches:
-        if match not in exclusion_list:  # Exclude unwanted tokens
-            all_functions.add(match)
+        if not re.search(r'\bAS\s+' + re.escape(match), sanitized_query.upper()):
+            if match not in exclusion_list:  # Exclude unwanted tokens
+                all_functions.add(match)
 
     # Match keywords treated as functions
     keyword_matches = re.findall(keyword_pattern, sanitized_query.upper())
