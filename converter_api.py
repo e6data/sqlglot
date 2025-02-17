@@ -238,9 +238,7 @@ async def stats_api(
 
         from_dialect_function_list = load_supported_functions(from_sql)
 
-        udf_list, unsupported = extract_udfs(
-            unsupported, from_dialect_function_list
-        )
+        udf_list, unsupported = extract_udfs(unsupported, from_dialect_function_list)
 
         executable = "NO" if unsupported_in_converted else "YES"
 
@@ -343,9 +341,7 @@ async def guardstats(
 
         from_dialect_func_list = load_supported_functions(from_sql)
 
-        udf_list, unsupported = extract_udfs(
-            unsupported, from_dialect_func_list
-        )
+        udf_list, unsupported = extract_udfs(unsupported, from_dialect_func_list)
 
         executable = "NO" if unsupported_in_converted else "YES"
 

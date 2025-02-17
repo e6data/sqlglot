@@ -169,9 +169,7 @@ async def guardstats(
 
         from_dialect_func_list = load_supported_functions(from_sql)
 
-        udf_list, unsupported = extract_udfs(
-            unsupported, from_dialect_func_list
-        )
+        udf_list, unsupported = extract_udfs(unsupported, from_dialect_func_list)
 
         executable = "NO" if unsupported_in_converted else "YES"
 
