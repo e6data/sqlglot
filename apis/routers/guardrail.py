@@ -169,11 +169,11 @@ async def guardstats(
 
         from_dialect_func_list = load_supported_functions(from_sql)
 
-        udf_list, unsupported_in_converted = extract_udfs(
-            unsupported_in_converted, from_dialect_func_list
+        udf_list, unsupported = extract_udfs(
+            unsupported, from_dialect_func_list
         )
 
-        executable = "NO" if unsupported_in_converted or udf_list else "YES"
+        executable = "NO" if unsupported_in_converted else "YES"
 
         if storage_service_client is None:
             raise HTTPException(status_code=500, detail="Storage Service Not Initialized.")
@@ -182,9 +182,9 @@ async def guardstats(
         return {
             "supported_functions": supported,
             "unsupported_functions": unsupported,
+            "udf_list": udf_list,
             "converted-query": double_quotes_added_query,
             "unsupported_functions_after_transpilation": unsupported_in_converted,
-            "udf_list": udf_list,
             "executable": executable,
             "action": "deny" if violations else "allow",
             "violations": violations,

@@ -238,18 +238,18 @@ async def stats_api(
 
         from_dialect_function_list = load_supported_functions(from_sql)
 
-        udf_list, unsupported_in_converted = extract_udfs(
-            unsupported_in_converted, from_dialect_function_list
+        udf_list, unsupported = extract_udfs(
+            unsupported, from_dialect_function_list
         )
 
-        executable = "NO" if unsupported_in_converted or udf_list else "YES"
+        executable = "NO" if unsupported_in_converted else "YES"
 
         return {
             "supported_functions": supported,
             "unsupported_functions": unsupported,
+            "udf_list": udf_list,
             "converted-query": double_quotes_added_query,
             "unsupported_functions_after_transpilation": unsupported_in_converted,
-            "udf_list": udf_list,
             "executable": executable,
         }
     except Exception as e:
@@ -343,11 +343,11 @@ async def guardstats(
 
         from_dialect_func_list = load_supported_functions(from_sql)
 
-        udf_list, unsupported_in_converted = extract_udfs(
-            unsupported_in_converted, from_dialect_func_list
+        udf_list, unsupported = extract_udfs(
+            unsupported, from_dialect_func_list
         )
 
-        executable = "NO" if unsupported_in_converted or udf_list else "YES"
+        executable = "NO" if unsupported_in_converted else "YES"
 
         if storage_service_client is not None:
             parsed = sqlglot.parse(double_quotes_added_query, error_level=None)
@@ -364,9 +364,9 @@ async def guardstats(
                 return {
                     "supported_functions": supported,
                     "unsupported_functions": unsupported,
+                    "udf_list": udf_list,
                     "converted-query": double_quotes_added_query,
                     "unsupported_functions_after_transpilation": unsupported_in_converted,
-                    "udf_list": udf_list,
                     "executable": executable,
                     "action": "deny",
                     "violations": violations_found,
