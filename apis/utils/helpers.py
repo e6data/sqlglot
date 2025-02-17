@@ -1,9 +1,13 @@
 import re
+import json
+import os
 
 import sqlglot
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import exp, parse_one
 import typing as t
+
+FUNCTIONS_FILE = "./apis/utils/supported_functions_in_all_dialects.json"
 
 
 def transpile_query(query: str, from_sql: str, to_sql: str) -> str:
@@ -130,8 +134,9 @@ def extract_functions_from_query(
     # Match functions requiring parentheses
     matches = re.findall(function_pattern, sanitized_query.upper())
     for match in matches:
-        if match not in exclusion_list:  # Exclude unwanted tokens
-            all_functions.add(match)
+        if not re.search(r"\bAS\s+" + re.escape(match), sanitized_query.upper()):
+            if match not in exclusion_list:  # Exclude unwanted tokens
+                all_functions.add(match)
 
     # Match keywords treated as functions
     keyword_matches = re.findall(keyword_pattern, sanitized_query.upper())
@@ -286,3 +291,51 @@ def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
 
             cte.set("this", new_query)
     return expression
+
+
+def extract_udfs(unsupported_list, from_dialect_func_list):
+    udf_list = set()
+    remaining_unsupported = []
+    for unsupported_function in unsupported_list:
+        if unsupported_function not in from_dialect_func_list:
+            udf_list.add(unsupported_function)
+        else:
+            remaining_unsupported.append(unsupported_function)
+    return list(udf_list), remaining_unsupported
+
+
+def load_supported_functions(dialect: str):
+    """
+    Load the supported SQL functions from a JSON file for a given dialect.
+    The output will be a list or set of function names for that dialect.
+
+    Args:
+        dialect (str): The name of the SQL dialect (e.g., 'snowflake', 'databricks').
+
+    Returns:
+        set or list: A set or list of supported functions for the given dialect.
+                      Returns an empty set/list if the dialect is not found.
+    """
+    if not os.path.exists(FUNCTIONS_FILE):
+        print(f"Warning: {FUNCTIONS_FILE} not found. Returning an empty list/set.")
+        return set()  # Return an empty set for non-existent file.
+
+    try:
+        with open(FUNCTIONS_FILE, "r") as file:
+            json_data = json.load(file)
+
+        # Check if the dialect exists in the data and return the corresponding functions
+        if dialect in json_data:
+            # If the dialect is present, return a set of functions for O(1) lookup
+            return set(json_data[dialect])  # Convert the list to set if required.
+        else:
+            print(f"Warning: Dialect '{dialect}' not found in the function mapping.")
+            return set()  # Return an empty set if dialect is not found.
+
+    except json.JSONDecodeError:
+        print(f"Error: {FUNCTIONS_FILE} contains invalid JSON.")
+        return set()
+
+    except Exception as e:
+        print(f"Unexpected error while loading functions: {e}")
+        return set()
