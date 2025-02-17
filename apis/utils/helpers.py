@@ -293,6 +293,17 @@ def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
     return expression
 
 
+def extract_udfs(unsupported_list, from_dialect_func_list):
+    udf_list = set()
+    remaining_unsupported = []
+    for unsupported_function in unsupported_list:
+        if unsupported_function not in from_dialect_func_list:
+            udf_list.add(unsupported_function)
+        else:
+            remaining_unsupported.append(unsupported_function)
+    return list(udf_list), remaining_unsupported
+
+
 def load_supported_functions(dialect: str):
     """
     Load the supported SQL functions from a JSON file for a given dialect.
