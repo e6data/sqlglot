@@ -192,6 +192,17 @@ async def stats_api(
             r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
+        if not query.strip():
+            return {
+                "supported_functions": [],
+                "unsupported_functions": [],
+                "udf_list": [],
+                "converted-query": "Query is empty or only contains comments.",
+                "unsupported_functions_after_transpilation": [],
+                "executable": "NO",
+                "error": True,
+            }
+
         item = "condenast"
         query, comment = strip_comment(query, item)
 
@@ -202,56 +213,90 @@ async def stats_api(
         supported, unsupported = categorize_functions(
             all_functions, supported_functions_in_e6, functions_as_keywords
         )
-        print(f"supported: {supported}\n\nunsupported: {unsupported}")
-
-        original_ast = parse_one(query, read=from_sql)
-        supported, unsupported = unsupported_functionality_identifiers(
-            original_ast, unsupported, supported
-        )
-        values_ensured_ast = ensure_select_from_values(original_ast)
-        query = values_ensured_ast.sql(from_sql)
-
-        converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
-        converted_query = replace_struct_in_query(converted_query)
-
-        converted_query_ast = parse_one(converted_query, read=to_sql)
-        double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
-            dialect=to_sql
-        )
-        double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
-
-        all_functions_converted_query = extract_functions_from_query(
-            double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
-        )
-        supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
-            categorize_functions(
-                all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
-            )
-        )
-
-        double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
-        supported_in_converted, unsupported_in_converted = unsupported_functionality_identifiers(
-            double_quote_ast,
-            unsupported_functions_in_converted_query,
-            supported_functions_in_converted_query,
-        )
 
         from_dialect_function_list = load_supported_functions(from_sql)
-
         udf_list, unsupported = extract_udfs(unsupported, from_dialect_function_list)
 
-        executable = "NO" if unsupported_in_converted else "YES"
+        # --------------------------
+        # HANDLING PARSING ERRORS
+        # --------------------------
+        executable = "YES"
+        error_flag = False
+
+        try:
+            # ------------------------------
+            # Step 1: Parse the Original Query
+            # ------------------------------
+            original_ast = parse_one(query, read=from_sql)
+            supported, unsupported = unsupported_functionality_identifiers(
+                original_ast, unsupported, supported
+            )
+            values_ensured_ast = ensure_select_from_values(original_ast)
+            query = values_ensured_ast.sql(from_sql)
+
+            # ------------------------------
+            # Step 2: Transpile the Query
+            # ------------------------------
+            converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[
+                0
+            ]
+            converted_query = replace_struct_in_query(converted_query)
+
+            converted_query_ast = parse_one(converted_query, read=to_sql)
+            double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
+                dialect=to_sql
+            )
+            double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
+
+            all_functions_converted_query = extract_functions_from_query(
+                double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
+            )
+            supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
+                categorize_functions(
+                    all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
+                )
+            )
+
+            double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
+            supported_in_converted, unsupported_in_converted = (
+                unsupported_functionality_identifiers(
+                    double_quote_ast,
+                    unsupported_functions_in_converted_query,
+                    supported_functions_in_converted_query,
+                )
+            )
+
+            if unsupported_in_converted:
+                executable = "NO"
+
+        except Exception as e:
+            error_message = f"{str(e)}"
+            print(error_message)
+            error_flag = True
+            double_quotes_added_query = error_message
+            unsupported_in_converted = []
+            executable = "NO"
 
         return {
             "supported_functions": supported,
             "unsupported_functions": unsupported,
             "udf_list": udf_list,
-            "converted-query": double_quotes_added_query,
+            "converted-query": double_quotes_added_query,  # Will contain error message if error_flag is True
             "unsupported_functions_after_transpilation": unsupported_in_converted,
             "executable": executable,
+            "error": error_flag,
         }
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "supported_functions": [],
+            "unsupported_functions": [],
+            "udf_list": [],
+            "converted-query": f"Internal Server Error: {str(e)}",
+            "unsupported_functions_after_transpilation": [],
+            "executable": "NO",
+            "error": True,
+        }
 
 
 @app.post("/guardstats")
