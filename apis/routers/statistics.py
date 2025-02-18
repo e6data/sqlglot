@@ -29,7 +29,15 @@ async def stats_api(
         supported_functions_in_e6 = load_supported_functions("E6")
 
         # Functions treated as keywords (no parentheses required)
-        functions_as_keywords = ["LIKE", "ILIKE", "RLIKE", "AT TIME ZONE", "||", "DISTINCT"]
+        functions_as_keywords = [
+            "LIKE",
+            "ILIKE",
+            "RLIKE",
+            "AT TIME ZONE",
+            "||",
+            "DISTINCT",
+            "QUALIFY",
+        ]
 
         # Exclusion list for words that are followed by '(' but are not functions
         exclusion_list = [
