@@ -206,7 +206,8 @@ pipeline {
         sh 'skopeo login -u oauth2accesstoken -p ${GCP_DOCKER_TOKEN} https://us-docker.pkg.dev'
         sh 'skopeo login --username AWS --password ${ECR_TOKEN} 670514002493.dkr.ecr.us-east-1.amazonaws.com'
         sh 'skopeo login --username e6data-ci --password ${ACR_TOKEN} e6labs.azurecr.io'
-        sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${DEV_IMAGE}:${TAG_VALUE}'
+        sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${DEV_IMAGE}'
+        sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://670514002493.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}:${TAG_VALUE}'
         sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${AZURE_IMAGE}:${TAG_VALUE}'
   }
     }
