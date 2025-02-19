@@ -192,6 +192,7 @@ async def stats_api(
             "UNION",
             "SELECT",
             "BY",
+            "GROUP",
         ]
 
         # Regex patterns
@@ -348,6 +349,7 @@ async def guardstats(
             "UNION",
             "SELECT",
             "BY",
+            "GROUP"
         ]
 
         # Regex patterns

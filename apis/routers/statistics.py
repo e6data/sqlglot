@@ -58,6 +58,7 @@ async def stats_api(
             "UNION",
             "SELECT",
             "BY",
+            "GROUP"
         ]
 
         # Regex patterns

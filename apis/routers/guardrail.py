@@ -125,6 +125,7 @@ async def guardstats(
             "UNION",
             "SELECT",
             "BY",
+            "GROUP",
         ]
 
         # Regex patterns

@@ -759,7 +759,8 @@
         "WEEKOFYEAR",
         "WEEKISO",
         "DATE_ADD",
-        "POSITION"
+        "POSITION",
+        "OBJECT_CONSTRUCT"
     ],
     "databricks": [],
     "spark": [],
