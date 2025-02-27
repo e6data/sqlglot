@@ -19,7 +19,7 @@ from sqlglot.dialects.dialect import (
     trim_sql,
     var_map_sql,
 )
-from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
+from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset, flatten
 from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
@@ -423,7 +423,7 @@ class E6(Dialect):
         "s": "%-S",  # Single-digit second
         "E": "%a",  # Abbreviated weekday name
         "D": "%-j",
-        "DD": "%D",
+        "DD": "%j",
     }
 
     # Time mapping specific to parsing functions. This maps time format tokens from E6 to standard Python time formats.
@@ -1496,6 +1496,7 @@ class E6(Dialect):
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
             "NAMED_STRUCT": lambda self: self._parse_json_object(),
+            "OBJECT_CONSTRUCT": lambda self: self._parse_json_object(),
         }
 
         NO_PAREN_FUNCTIONS = parser.Parser.NO_PAREN_FUNCTIONS.copy()
@@ -1853,17 +1854,45 @@ class E6(Dialect):
             date_expr = expression.this
             format_expr = self.convert_format_time(expression)
             format_expr_quoted = f"'{format_expr}'"
+
+            time_format_tokens = {"h", "hh", "s", "ss", "H", "HH", "m", "mm", "S", "SS"}
+            requires_timestamp = any(token in format_expr for token in time_format_tokens)
+
             if (
                 isinstance(date_expr, exp.CurrentDate)
                 or isinstance(date_expr, exp.CurrentTimestamp)
                 or isinstance(date_expr, exp.TsOrDsToDate)
             ):
-                return self.func("FORMAT_DATE", date_expr, format_expr_quoted)
+                return self.func(
+                    "FORMAT_TIMESTAMP" if requires_timestamp else "FORMAT_DATE",
+                    date_expr,
+                    format_expr_quoted,
+                )
             if isinstance(date_expr, exp.Cast) and not (
                 date_expr.to.this.name == "TIMESTAMP" or date_expr.to.this.name == "DATE"
             ):
                 date_expr = f"CAST({date_expr} AS DATE)"
-            return self.func("FORMAT_DATE", date_expr, format_expr_quoted)
+            return self.func(
+                "FORMAT_TIMESTAMP" if requires_timestamp else "FORMAT_DATE",
+                date_expr,
+                format_expr_quoted,
+            )
+
+        def struct_sql(self, expression: exp.Struct) -> str:
+            keys = []
+            values = []
+
+            for i, e in enumerate(expression.expressions):
+                if isinstance(e, exp.PropertyEQ):
+                    keys.append(
+                        exp.Literal.string(e.name) if isinstance(e.this, exp.Identifier) else e.this
+                    )
+                    values.append(e.expression)
+                else:
+                    keys.append(exp.Literal.string(f"_{i}"))
+                    values.append(e)
+
+            return self.func("OBJECT_CONSTRUCT", *flatten(zip(keys, values)))
 
         def neq_sql(self, expression: exp.NEQ) -> str:
             return self.binary(expression, "!=")
