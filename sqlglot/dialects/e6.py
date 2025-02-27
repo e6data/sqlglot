@@ -19,7 +19,7 @@ from sqlglot.dialects.dialect import (
     trim_sql,
     var_map_sql,
 )
-from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
+from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset, flatten
 from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
@@ -1496,6 +1496,7 @@ class E6(Dialect):
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
             "NAMED_STRUCT": lambda self: self._parse_json_object(),
+            "OBJECT_CONSTRUCT": lambda self: self._parse_json_object(),
         }
 
         NO_PAREN_FUNCTIONS = parser.Parser.NO_PAREN_FUNCTIONS.copy()
@@ -1873,6 +1874,22 @@ class E6(Dialect):
                 date_expr,
                 format_expr_quoted,
             )
+
+        def struct_sql(self, expression: exp.Struct) -> str:
+            keys = []
+            values = []
+
+            for i, e in enumerate(expression.expressions):
+                if isinstance(e, exp.PropertyEQ):
+                    keys.append(
+                        exp.Literal.string(e.name) if isinstance(e.this, exp.Identifier) else e.this
+                    )
+                    values.append(e.expression)
+                else:
+                    keys.append(exp.Literal.string(f"_{i}"))
+                    values.append(e)
+
+            return self.func("OBJECT_CONSTRUCT", *flatten(zip(keys, values)))
 
         def neq_sql(self, expression: exp.NEQ) -> str:
             return self.binary(expression, "!=")
