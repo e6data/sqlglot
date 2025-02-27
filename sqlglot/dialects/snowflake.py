@@ -448,7 +448,8 @@ class Snowflake(Dialect):
             "LENGTH": lambda args: exp.Length(this=seq_get(args, 0), binary=True),
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "NULLIFZERO": _build_if_from_nullifzero,
-            "OBJECT_CONSTRUCT": _build_object_construct,
+            # object_construct is mapped to starmap/varmap but should be mapped to JsonObject
+            # "OBJECT_CONSTRUCT": _build_object_construct,
             "REGEXP_EXTRACT_ALL": _build_regexp_extract(exp.RegexpExtractAll),
             "REGEXP_REPLACE": _build_regexp_replace,
             "REGEXP_SUBSTR": _build_regexp_extract(exp.RegexpExtract),
@@ -491,6 +492,7 @@ class Snowflake(Dialect):
             **parser.Parser.FUNCTION_PARSERS,
             "DATE_PART": lambda self: self._parse_date_part(),
             "OBJECT_CONSTRUCT_KEEP_NULL": lambda self: self._parse_json_object(),
+            "OBJECT_CONSTRUCT": lambda self: self._parse_json_object(),
         }
         FUNCTION_PARSERS.pop("TRIM")
 

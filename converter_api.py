@@ -349,7 +349,7 @@ async def guardstats(
             "UNION",
             "SELECT",
             "BY",
-            "GROUP"
+            "GROUP",
         ]
 
         # Regex patterns
