@@ -661,6 +661,7 @@ class Generator(metaclass=_Generator):
         "_identifier_start",
         "_identifier_end",
         "_quote_json_path_key_using_brackets",
+        "from_dialect"
     )
 
     def __init__(
@@ -677,6 +678,7 @@ class Generator(metaclass=_Generator):
         max_text_width: int = 80,
         comments: bool = True,
         dialect: DialectType = None,
+        from_dialect: t.Optional[str] = None,
     ):
         import sqlglot
         from sqlglot.dialects import Dialect
@@ -692,6 +694,7 @@ class Generator(metaclass=_Generator):
         self.max_text_width = max_text_width
         self.comments = comments
         self.dialect = Dialect.get_or_raise(dialect)
+        self.from_dialect = from_dialect
 
         # This is both a Dialect property and a Generator argument, so we prioritize the latter
         self.normalize_functions = (
