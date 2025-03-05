@@ -246,15 +246,14 @@ async def stats_api(
             # ------------------------------
             # Step 2: Transpile the Query
             # ------------------------------
-            converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[
-                0
-            ]
-            converted_query = replace_struct_in_query(converted_query)
+            tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
-            converted_query_ast = parse_one(converted_query, read=to_sql)
-            double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
-                dialect=to_sql
-            )
+            tree2 = quote_identifiers(tree, dialect=to_sql)
+
+            double_quotes_added_query = tree2.sql(dialect=to_sql, from_dialect=from_sql)
+
+            double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
             double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
             all_functions_converted_query = extract_functions_from_query(
