@@ -20,6 +20,7 @@ from apis.utils.helpers import (
     ensure_select_from_values,
     extract_udfs,
     load_supported_functions,
+    extract_db_and_Table_names,
 )
 
 if t.TYPE_CHECKING:
@@ -237,6 +238,7 @@ async def stats_api(
             # Step 1: Parse the Original Query
             # ------------------------------
             original_ast = parse_one(query, read=from_sql)
+            tables_list = extract_db_and_Table_names(original_ast)
             supported, unsupported = unsupported_functionality_identifiers(
                 original_ast, unsupported, supported
             )
@@ -282,6 +284,7 @@ async def stats_api(
             print(error_message)
             error_flag = True
             double_quotes_added_query = error_message
+            tables_list = []
             unsupported_in_converted = []
             executable = "NO"
 
@@ -292,6 +295,7 @@ async def stats_api(
             "converted-query": double_quotes_added_query,  # Will contain error message if error_flag is True
             "unsupported_functions_after_transpilation": unsupported_in_converted,
             "executable": executable,
+            "tables_list": tables_list,
             "error": error_flag,
         }
 
@@ -303,6 +307,7 @@ async def stats_api(
             "converted-query": f"Internal Server Error: {str(e)}",
             "unsupported_functions_after_transpilation": [],
             "executable": "NO",
+            "tables_list": [],
             "error": True,
         }
 
@@ -370,6 +375,7 @@ async def guardstats(
         print(f"supported: {supported}\n\nunsupported: {unsupported}")
 
         original_ast = parse_one(query, read=from_sql)
+        tables_list = extract_db_and_Table_names(original_ast)
         supported, unsupported = unsupported_functionality_identifiers(
             original_ast, unsupported, supported
         )
@@ -427,6 +433,7 @@ async def guardstats(
                     "converted-query": double_quotes_added_query,
                     "unsupported_functions_after_transpilation": unsupported_in_converted,
                     "executable": executable,
+                    "tables_list": tables_list,
                     "action": "deny",
                     "violations": violations_found,
                 }
@@ -438,6 +445,7 @@ async def guardstats(
                     "unsupported_functions_after_transpilation": unsupported_in_converted,
                     "udf_list": udf_list,
                     "executable": executable,
+                    "tables_list": tables_list,
                     "action": "allow",
                     "violations": [],
                 }

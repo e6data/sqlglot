@@ -339,3 +339,18 @@ def load_supported_functions(dialect: str):
     except Exception as e:
         print(f"Unexpected error while loading functions: {e}")
         return set()
+
+
+def extract_db_and_Table_names(sql_query_ast):
+    tables_list = []
+    if sql_query_ast:
+        for table in sql_query_ast.find_all(exp.Table):
+            if table.db:
+                tables_list.append(f"{table.db}.{table.name}")
+            else:
+                tables_list.append(table.name)
+        tables_list = list(set(tables_list))
+        for alias in sql_query_ast.find_all(exp.TableAlias):
+            if isinstance(alias.parent, exp.CTE) and alias.name in tables_list:
+                tables_list.remove(alias.name)
+    return tables_list
