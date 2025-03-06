@@ -120,7 +120,7 @@ def process_query(query: str) -> str:
 
 
 def extract_functions_from_query(
-    query: str, function_pattern: str, keyword_pattern: str, exclusion_list: list
+        query: str, function_pattern: str, keyword_pattern: str, exclusion_list: list
 ) -> set:
     """
     Extract function names from the sanitized query.
@@ -154,12 +154,12 @@ def extract_functions_from_query(
 
 
 def unsupported_functionality_identifiers(
-    expression, unsupported_list: t.List, supported_list: t.List
+        expression, unsupported_list: t.List, supported_list: t.List
 ):
     for sub in expression.find_all(exp.Sub):
         if (
-            isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
-            and sub.expression.is_int
+                isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
+                and sub.expression.is_int
         ):
             unsupported_list.append(sub.sql())
 
@@ -339,3 +339,18 @@ def load_supported_functions(dialect: str):
     except Exception as e:
         print(f"Unexpected error while loading functions: {e}")
         return set()
+
+
+def extract_db_and_Table_names(sql_query_ast):
+    tables_list = []
+    if sql_query_ast:
+        for table in sql_query_ast.find_all(exp.Table):
+            if table.db:
+                tables_list.append(f"{table.db}.{table.name}")
+            else:
+                tables_list.append(table.name)
+        tables_list = list(set(tables_list))
+        for alias in sql_query_ast.find_all(exp.TableAlias):
+            if isinstance(alias.parent, exp.CTE) and alias.name in tables_list:
+                tables_list.remove(alias.name)
+    return tables_list
