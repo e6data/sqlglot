@@ -661,7 +661,7 @@ class Generator(metaclass=_Generator):
         "_identifier_start",
         "_identifier_end",
         "_quote_json_path_key_using_brackets",
-        "from_dialect"
+        "from_dialect",
     )
 
     def __init__(
