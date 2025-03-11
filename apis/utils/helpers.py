@@ -354,3 +354,40 @@ def extract_db_and_Table_names(sql_query_ast):
             if isinstance(alias.parent, exp.CTE) and alias.name in tables_list:
                 tables_list.remove(alias.name)
     return tables_list
+
+
+def extract_joins_from_query(sql_query_ast):
+    """
+    Extracts all join information from a SQL query AST.
+
+    Args:
+        sql_query_ast (exp.Expression): The parsed SQL AST.
+
+    Returns:
+        List[List]: A list of join structures in the format:
+            [
+                ["Base Table", ["Table1", "Join Type", "Side"], ["Table2", "Join Type", "Side"]],
+                ...
+            ]
+    """
+    join_info_list = []
+    joins_list = []
+
+    for select in sql_query_ast.find_all(exp.Select):
+        base_table = select.args.get('from').this
+        base_table = f"{base_table.db}.{base_table.name}" if base_table.db else base_table.name
+
+        if select.args.get('joins'):
+            joins_list.append([base_table])
+            for join in select.args.get('joins'):
+                join_table = f"{join.this.db}.{join.this.name}" if join.this.db else join.this.name
+                join_type = join.text("kind") or "NATURAL"  # If no explicit type, classify as NORMAL JOIN
+                join_side = join.text("side") or ""  # LEFT, RIGHT, FULL, etc.
+                if not join_side:
+                    joins_list.append([join_table, join_type])
+                else:
+                    joins_list.append([join_table, join_type, join_side])
+            join_info_list.append(joins_list)
+            joins_list = []
+
+    return join_info_list
