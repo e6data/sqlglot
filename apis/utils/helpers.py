@@ -374,14 +374,30 @@ def extract_joins_from_query(sql_query_ast):
     joins_list = []
 
     for select in sql_query_ast.find_all(exp.Select):
-        base_table = select.args.get('from').this
-        base_table = f"{base_table.db}.{base_table.name}" if base_table.db else base_table.name
+        if not select.args.get("from"):
+            continue
 
-        if select.args.get('joins'):
+        from_statement = select.args.get("from")
+
+        if isinstance(from_statement.this, (exp.Subquery, exp.CTE, exp.Values)):
+            alias_columns = ", ".join(from_statement.this.alias_column_names)
+            base_table = (
+                f"{from_statement.this.alias}({alias_columns})"
+                if alias_columns
+                else f"{from_statement.this.alias}"
+            )
+
+        else:
+            base_table = from_statement.this
+            base_table = f"{base_table.db}.{base_table.name}" if base_table.db else base_table.name
+
+        if select.args.get("joins"):
             joins_list.append([base_table])
-            for join in select.args.get('joins'):
+            for join in select.args.get("joins"):
                 join_table = f"{join.this.db}.{join.this.name}" if join.this.db else join.this.name
-                join_type = join.text("kind") or "NATURAL"  # If no explicit type, classify as NORMAL JOIN
+                join_type = (
+                    join.text("kind") or "NORMAL"
+                )  # If no explicit type, classify as NORMAL JOIN
                 join_side = join.text("side") or ""  # LEFT, RIGHT, FULL, etc.
                 if not join_side:
                     joins_list.append([join_table, join_type])
@@ -391,3 +407,24 @@ def extract_joins_from_query(sql_query_ast):
             joins_list = []
 
     return join_info_list
+
+
+def extract_cte_n_subquery_list(sql_query_ast):
+    cte_list = []
+    subquery_list = []
+    values_list = []
+    for node in sql_query_ast.find_all(exp.CTE, exp.Subquery, exp.Values):
+        if isinstance(node, exp.Values):
+            columns_list = node.alias_column_names
+            columns_alises_list = ", ".join(columns_list)
+            values_list.append(
+                f"{node.alias_or_name}({columns_alises_list})"
+                if len(columns_list) > 0
+                else f"{node.alias_or_name}"
+            )
+        elif isinstance(node, exp.Subquery):
+            subquery_list.append(node.alias)
+        else:
+            cte_list.append(node.alias)
+
+    return [cte_list, values_list, subquery_list]

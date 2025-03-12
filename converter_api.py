@@ -21,7 +21,8 @@ from apis.utils.helpers import (
     extract_udfs,
     load_supported_functions,
     extract_db_and_Table_names,
-    extract_joins_from_query
+    extract_joins_from_query,
+    extract_cte_n_subquery_list,
 )
 
 if t.TYPE_CHECKING:
@@ -233,7 +234,6 @@ async def stats_api(
         # --------------------------
         executable = "YES"
         error_flag = False
-        joins_list = []
         try:
             # ------------------------------
             # Step 1: Parse the Original Query
@@ -278,6 +278,7 @@ async def stats_api(
             )
 
             joins_list = extract_joins_from_query(original_ast)
+            cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
 
             if unsupported_in_converted:
                 executable = "NO"
@@ -289,6 +290,7 @@ async def stats_api(
             double_quotes_added_query = error_message
             tables_list = []
             joins_list = []
+            cte_values_subquery_list = []
             unsupported_in_converted = []
             executable = "NO"
 
@@ -301,6 +303,7 @@ async def stats_api(
             "executable": executable,
             "tables_list": tables_list,
             "joins_list": joins_list,
+            "cte_values_subquery_list": cte_values_subquery_list,
             "error": error_flag,
         }
 
@@ -314,6 +317,7 @@ async def stats_api(
             "executable": "NO",
             "tables_list": [],
             "joins_list": [],
+            "cte_values_subquery_list": [],
             "error": True,
         }
 
@@ -433,6 +437,8 @@ async def guardstats(
 
             joins_list = extract_joins_from_query(original_ast)
 
+            cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
+
             if violations_found:
                 return {
                     "supported_functions": supported,
@@ -443,6 +449,7 @@ async def guardstats(
                     "executable": executable,
                     "tables_list": tables_list,
                     "joins_list": joins_list,
+                    "cte_values_subquery_list": cte_values_subquery_list,
                     "action": "deny",
                     "violations": violations_found,
                 }
@@ -456,6 +463,7 @@ async def guardstats(
                     "executable": executable,
                     "tables_list": tables_list,
                     "joins_list": joins_list,
+                    "cte_values_subquery_list": cte_values_subquery_list,
                     "action": "allow",
                     "violations": [],
                 }
