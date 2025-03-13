@@ -177,6 +177,12 @@ def unsupported_functionality_identifiers(
             unsupported_list.remove("FILTER")
             unsupported_list.append("FILTER as filter_array")
 
+    for parametrised in expression.find_all(exp.Placeholder):
+        unsupported_list.append(f":{parametrised.this}")
+
+    if expression.find_all(exp.GroupingSets):
+        unsupported_list.append(f"GROUPING SETS")
+
     return supported_list, unsupported_list
 
 
