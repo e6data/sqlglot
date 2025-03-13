@@ -364,6 +364,7 @@ async def guardstats(
             "SELECT",
             "BY",
             "GROUP",
+            "EXCEPT",
         ]
 
         # Regex patterns

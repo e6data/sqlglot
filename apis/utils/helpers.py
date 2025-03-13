@@ -404,12 +404,16 @@ def extract_joins_from_query(sql_query_ast):
 
                 else:
                     join_table = from_statement.this
-                    join_table = f"{join_table.db}.{join_table.name}" if join_table.db else join_table.name
+                    join_table = (
+                        f"{join_table.db}.{join_table.name}" if join_table.db else join_table.name
+                    )
                 # join_table = f"{join.this.db}.{join.this.name}" if join.this.db else join.this.name
-                join_type = (
-                    join.text("kind") or "NORMAL"
-                )  # If no explicit type, classify as NORMAL JOIN
-                join_side = join.text("side") or ""  # LEFT, RIGHT, FULL, etc.
+                join_side = join.text("side") or ""
+                join_type = join.text("kind")
+
+                if not join_type:
+                    join_type = "OUTER" if join_side else "NORMAL"
+
                 if not join_side:
                     joins_list.append([join_table, join_type])
                 else:
