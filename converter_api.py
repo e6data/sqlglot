@@ -20,6 +20,9 @@ from apis.utils.helpers import (
     ensure_select_from_values,
     extract_udfs,
     load_supported_functions,
+    extract_db_and_Table_names,
+    extract_joins_from_query,
+    extract_cte_n_subquery_list,
 )
 
 if t.TYPE_CHECKING:
@@ -193,6 +196,8 @@ async def stats_api(
             "SELECT",
             "BY",
             "GROUP",
+            "EXCEPT",
+            "SETS",
         ]
 
         # Regex patterns
@@ -231,12 +236,12 @@ async def stats_api(
         # --------------------------
         executable = "YES"
         error_flag = False
-
         try:
             # ------------------------------
             # Step 1: Parse the Original Query
             # ------------------------------
             original_ast = parse_one(query, read=from_sql)
+            tables_list = extract_db_and_Table_names(original_ast)
             supported, unsupported = unsupported_functionality_identifiers(
                 original_ast, unsupported, supported
             )
@@ -274,6 +279,9 @@ async def stats_api(
                 )
             )
 
+            joins_list = extract_joins_from_query(original_ast)
+            cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
+
             if unsupported_in_converted:
                 executable = "NO"
 
@@ -282,6 +290,9 @@ async def stats_api(
             print(error_message)
             error_flag = True
             double_quotes_added_query = error_message
+            tables_list = []
+            joins_list = []
+            cte_values_subquery_list = []
             unsupported_in_converted = []
             executable = "NO"
 
@@ -292,6 +303,9 @@ async def stats_api(
             "converted-query": double_quotes_added_query,  # Will contain error message if error_flag is True
             "unsupported_functions_after_transpilation": unsupported_in_converted,
             "executable": executable,
+            "tables_list": tables_list,
+            "joins_list": joins_list,
+            "cte_values_subquery_list": cte_values_subquery_list,
             "error": error_flag,
         }
 
@@ -303,6 +317,9 @@ async def stats_api(
             "converted-query": f"Internal Server Error: {str(e)}",
             "unsupported_functions_after_transpilation": [],
             "executable": "NO",
+            "tables_list": [],
+            "joins_list": [],
+            "cte_values_subquery_list": [],
             "error": True,
         }
 
@@ -349,6 +366,7 @@ async def guardstats(
             "SELECT",
             "BY",
             "GROUP",
+            "EXCEPT",
         ]
 
         # Regex patterns
@@ -370,6 +388,7 @@ async def guardstats(
         print(f"supported: {supported}\n\nunsupported: {unsupported}")
 
         original_ast = parse_one(query, read=from_sql)
+        tables_list = extract_db_and_Table_names(original_ast)
         supported, unsupported = unsupported_functionality_identifiers(
             original_ast, unsupported, supported
         )
@@ -419,6 +438,10 @@ async def guardstats(
 
             violations_found = validate_queries(queries, table_map)
 
+            joins_list = extract_joins_from_query(original_ast)
+
+            cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
+
             if violations_found:
                 return {
                     "supported_functions": supported,
@@ -427,6 +450,9 @@ async def guardstats(
                     "converted-query": double_quotes_added_query,
                     "unsupported_functions_after_transpilation": unsupported_in_converted,
                     "executable": executable,
+                    "tables_list": tables_list,
+                    "joins_list": joins_list,
+                    "cte_values_subquery_list": cte_values_subquery_list,
                     "action": "deny",
                     "violations": violations_found,
                 }
@@ -438,6 +464,9 @@ async def guardstats(
                     "unsupported_functions_after_transpilation": unsupported_in_converted,
                     "udf_list": udf_list,
                     "executable": executable,
+                    "tables_list": tables_list,
+                    "joins_list": joins_list,
+                    "cte_values_subquery_list": cte_values_subquery_list,
                     "action": "allow",
                     "violations": [],
                 }
