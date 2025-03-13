@@ -180,7 +180,7 @@ def unsupported_functionality_identifiers(
     for parametrised in expression.find_all(exp.Placeholder):
         unsupported_list.append(f":{parametrised.this}")
 
-    if expression.find_all(exp.GroupingSets):
+    if expression.find(exp.GroupingSets):
         unsupported_list.append(f"GROUPING SETS")
 
     return supported_list, unsupported_list
