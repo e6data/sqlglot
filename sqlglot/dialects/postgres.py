@@ -27,16 +27,20 @@ from sqlglot.dialects.dialect import (
     build_timestamp_trunc,
     rename_func,
     sha256_sql,
-    str_position_sql,
     struct_extract_sql,
     timestamptrunc_sql,
     timestrtotime_sql,
     trim_sql,
     ts_or_ds_add_cast,
+    strposition_sql,
+    count_if_to_sum,
+    groupconcat_sql,
 )
+from sqlglot.generator import unsupported_args
 from sqlglot.helper import is_int, seq_get
 from sqlglot.parser import binary_range_parser
 from sqlglot.tokens import TokenType
+
 
 DATE_DIFF_FACTOR = {
     "MICROSECOND": " * 1000000",
@@ -104,19 +108,6 @@ def _substring_sql(self: Postgres.Generator, expression: exp.Substring) -> str:
     for_part = f" FOR {length}" if length else ""
 
     return f"SUBSTRING({this}{from_part}{for_part})"
-
-
-def _string_agg_sql(self: Postgres.Generator, expression: exp.GroupConcat) -> str:
-    separator = expression.args.get("separator") or exp.Literal.string(",")
-
-    order = ""
-    this = expression.this
-    if isinstance(this, exp.Order):
-        if this.this:
-            this = this.this.pop()
-        order = self.sql(expression.this)  # Order has a leading space
-
-    return f"STRING_AGG({self.format_args(this, separator)}{order})"
 
 
 def _auto_increment_to_serial(expression: exp.Expression) -> exp.Expression:
@@ -271,8 +262,11 @@ class Postgres(Dialect):
     TIME_MAPPING = {
         "AM": "%p",
         "PM": "%p",
+        "d": "%u",  # 1-based day of week
         "D": "%u",  # 1-based day of week
+        "dd": "%d",  # day of month
         "DD": "%d",  # day of month
+        "ddd": "%j",  # zero padded day of year
         "DDD": "%j",  # zero padded day of year
         "FMDD": "%-d",  # - is no leading zero for Python; same for FM in postgres
         "FMDDD": "%-j",  # day of year
@@ -283,9 +277,12 @@ class Postgres(Dialect):
         "FMSS": "%-S",  # Second
         "HH12": "%I",  # 09
         "HH24": "%H",  # 09
+        "mi": "%M",  # zero padded minute
         "MI": "%M",  # zero padded minute
+        "mm": "%m",  # 01
         "MM": "%m",  # 01
         "OF": "%z",  # utc offset
+        "ss": "%S",  # zero padded second
         "SS": "%S",  # zero padded second
         "TMDay": "%A",  # TM is locale dependent
         "TMDy": "%a",
@@ -293,8 +290,11 @@ class Postgres(Dialect):
         "TMMonth": "%B",  # September
         "TZ": "%Z",  # uppercase timezone name
         "US": "%f",  # zero padded microsecond
+        "ww": "%U",  # 1-based week of year
         "WW": "%U",  # 1-based week of year
+        "yy": "%y",  # 15
         "YY": "%y",  # 15
+        "yyyy": "%Y",  # 2015
         "YYYY": "%Y",  # 2015
     }
 
@@ -370,6 +370,7 @@ class Postgres(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            "ASCII": exp.Unicode.from_arg_list,
             "DATE_TRUNC": build_timestamp_trunc,
             "DIV": lambda args: exp.cast(
                 binary_from_function(exp.IntDiv)(args), exp.DataType.Type.DECIMAL
@@ -377,6 +378,7 @@ class Postgres(Dialect):
             "GENERATE_SERIES": _build_generate_series,
             "JSON_EXTRACT_PATH": build_json_extract_path(exp.JSONExtract),
             "JSON_EXTRACT_PATH_TEXT": build_json_extract_path(exp.JSONExtractScalar),
+            "LENGTH": lambda args: exp.Length(this=seq_get(args, 0), encoding=seq_get(args, 1)),
             "MAKE_TIME": exp.TimeFromParts.from_arg_list,
             "MAKE_TIMESTAMP": exp.TimestampFromParts.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
@@ -389,6 +391,13 @@ class Postgres(Dialect):
             "SHA384": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(384)),
             "SHA512": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(512)),
             "LEVENSHTEIN_LESS_EQUAL": _build_levenshtein_less_equal,
+            "JSON_OBJECT_AGG": lambda args: exp.JSONObjectAgg(expressions=args),
+            "JSONB_OBJECT_AGG": exp.JSONBObjectAgg.from_arg_list,
+        }
+
+        NO_PAREN_FUNCTIONS = {
+            **parser.Parser.NO_PAREN_FUNCTIONS,
+            TokenType.CURRENT_SCHEMA: exp.CurrentSchema,
         }
 
         FUNCTION_PARSERS = {
@@ -528,6 +537,7 @@ class Postgres(Dialect):
             exp.DataType.Type.VARBINARY: "BYTEA",
             exp.DataType.Type.ROWVERSION: "BYTEA",
             exp.DataType.Type.DATETIME: "TIMESTAMP",
+            exp.DataType.Type.BLOB: "BYTEA",
         }
 
         TRANSFORMS = {
@@ -546,7 +556,9 @@ class Postgres(Dialect):
             exp.DateSub: _date_add_sql("-"),
             exp.Explode: rename_func("UNNEST"),
             exp.ExplodingGenerateSeries: rename_func("GENERATE_SERIES"),
-            exp.GroupConcat: _string_agg_sql,
+            exp.GroupConcat: lambda self, e: groupconcat_sql(
+                self, e, func_name="STRING_AGG", within_group=False
+            ),
             exp.IntDiv: rename_func("DIV"),
             exp.JSONExtract: _json_extract_sql("JSON_EXTRACT_PATH", "->"),
             exp.JSONExtractScalar: _json_extract_sql("JSON_EXTRACT_PATH_TEXT", "->>"),
@@ -583,7 +595,7 @@ class Postgres(Dialect):
                 ]
             ),
             exp.SHA2: sha256_sql,
-            exp.StrPosition: str_position_sql,
+            exp.StrPosition: lambda self, e: strposition_sql(self, e, func_name="POSITION"),
             exp.StrToDate: lambda self, e: self.func("TO_DATE", e.this, self.format_time(e)),
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.StructExtract: struct_extract_sql,
@@ -606,9 +618,14 @@ class Postgres(Dialect):
             exp.VariancePop: rename_func("VAR_POP"),
             exp.Variance: rename_func("VAR_SAMP"),
             exp.Xor: bool_xor_sql,
+            exp.Unicode: rename_func("ASCII"),
             exp.UnixToTime: _unix_to_time_sql,
             exp.Levenshtein: _levenshtein_sql,
+            exp.JSONObjectAgg: rename_func("JSON_OBJECT_AGG"),
+            exp.JSONBObjectAgg: rename_func("JSONB_OBJECT_AGG"),
+            exp.CountIf: count_if_to_sum,
         }
+
         TRANSFORMS.pop(exp.CommentColumnConstraint)
 
         PROPERTIES_LOCATION = {
@@ -634,7 +651,7 @@ class Postgres(Dialect):
                     if isinstance(expression.parent, (exp.From, exp.Join)):
                         generate_series = (
                             exp.select("value::date")
-                            .from_(generate_series.as_("value"))
+                            .from_(exp.Table(this=generate_series).as_("_t", table=["value"]))
                             .subquery(expression.args.get("alias") or "_unnested_generate_series")
                         )
                     return self.sql(generate_series)
@@ -717,3 +734,10 @@ class Postgres(Dialect):
 
         def computedcolumnconstraint_sql(self, expression: exp.ComputedColumnConstraint) -> str:
             return f"GENERATED ALWAYS AS ({self.sql(expression, 'this')}) STORED"
+
+        def isascii_sql(self, expression: exp.IsAscii) -> str:
+            return f"({self.sql(expression.this)} ~ '^[[:ascii:]]*$')"
+
+        @unsupported_args("this")
+        def currentschema_sql(self, expression: exp.CurrentSchema) -> str:
+            return "CURRENT_SCHEMA"

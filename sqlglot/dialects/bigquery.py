@@ -26,7 +26,8 @@ from sqlglot.dialects.dialect import (
     timestrtotime_sql,
     ts_or_ds_add_cast,
     unit_to_var,
-    str_position_sql,
+    strposition_sql,
+    groupconcat_sql,
 )
 from sqlglot.helper import seq_get, split_num_words
 from sqlglot.tokens import TokenType
@@ -359,8 +360,8 @@ class BigQuery(Dialect):
     LOG_BASE_FIRST = False
     HEX_LOWERCASE = True
     FORCE_EARLY_ALIAS_REF_EXPANSION = True
-    EXPAND_ALIAS_REFS_EARLY_ONLY_IN_GROUP_BY = True
     PRESERVE_ORIGINAL_NAMES = True
+    HEX_STRING_IS_INTEGER_TYPE = True
 
     # https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#case_sensitivity
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
@@ -487,6 +488,7 @@ class BigQuery(Dialect):
             "DECLARE": TokenType.COMMAND,
             "ELSEIF": TokenType.COMMAND,
             "EXCEPTION": TokenType.COMMAND,
+            "EXPORT": TokenType.EXPORT,
             "FLOAT64": TokenType.DOUBLE,
             "FOR SYSTEM_TIME": TokenType.TIMESTAMP_SNAPSHOT,
             "MODEL": TokenType.MODEL,
@@ -613,6 +615,7 @@ class BigQuery(Dialect):
             TokenType.ELSE: lambda self: self._parse_as_command(self._prev),
             TokenType.END: lambda self: self._parse_as_command(self._prev),
             TokenType.FOR: lambda self: self._parse_for_in(),
+            TokenType.EXPORT: lambda self: self._parse_export_data(),
         }
 
         BRACKET_OFFSETS = {
@@ -849,6 +852,16 @@ class BigQuery(Dialect):
 
             return expr
 
+        def _parse_export_data(self) -> exp.Export:
+            self._match_text_seq("DATA")
+
+            return self.expression(
+                exp.Export,
+                connection=self._match_text_seq("WITH", "CONNECTION") and self._parse_table_parts(),
+                options=self._parse_properties(),
+                this=self._match_text_seq("AS") and self._parse_select(),
+            )
+
     class Generator(generator.Generator):
         INTERVAL_ALLOWS_PLURAL_FORM = False
         JOIN_HINTS = False
@@ -909,8 +922,11 @@ class BigQuery(Dialect):
                 "DATETIME", self.func("TIMESTAMP", e.this, e.args.get("zone")), "'UTC'"
             ),
             exp.GenerateSeries: rename_func("GENERATE_ARRAY"),
-            exp.GroupConcat: rename_func("STRING_AGG"),
+            exp.GroupConcat: lambda self, e: groupconcat_sql(
+                self, e, func_name="STRING_AGG", within_group=False
+            ),
             exp.Hex: lambda self, e: self.func("UPPER", self.func("TO_HEX", self.sql(e, "this"))),
+            exp.HexString: lambda self, e: self.hexstring_sql(e, binary_function_repr="FROM_HEX"),
             exp.If: if_sql(false_value="NULL"),
             exp.ILike: no_ilike_sql,
             exp.IntDiv: rename_func("DIV"),
@@ -954,7 +970,11 @@ class BigQuery(Dialect):
                 "DETERMINISTIC" if e.name == "IMMUTABLE" else "NOT DETERMINISTIC"
             ),
             exp.String: rename_func("STRING"),
-            exp.StrPosition: str_position_sql,
+            exp.StrPosition: lambda self, e: (
+                strposition_sql(
+                    self, e, func_name="INSTR", supports_position=True, supports_occurrence=True
+                )
+            ),
             exp.StrToDate: _str_to_datetime_sql,
             exp.StrToTime: _str_to_datetime_sql,
             exp.TimeAdd: date_add_interval_sql("TIME", "ADD"),
@@ -977,6 +997,7 @@ class BigQuery(Dialect):
             exp.Uuid: lambda *_: "GENERATE_UUID()",
             exp.Values: _derived_table_values_to_unnest,
             exp.VariancePop: rename_func("VAR_POP"),
+            exp.SafeDivide: rename_func("SAFE_DIVIDE"),
         }
 
         SUPPORTED_JSON_PATH_PARTS = {
@@ -990,6 +1011,7 @@ class BigQuery(Dialect):
             exp.DataType.Type.BIGDECIMAL: "BIGNUMERIC",
             exp.DataType.Type.BIGINT: "INT64",
             exp.DataType.Type.BINARY: "BYTES",
+            exp.DataType.Type.BLOB: "BYTES",
             exp.DataType.Type.BOOLEAN: "BOOL",
             exp.DataType.Type.CHAR: "STRING",
             exp.DataType.Type.DECIMAL: "NUMERIC",
@@ -1248,3 +1270,16 @@ class BigQuery(Dialect):
                 expr = expr.this
 
             return self.func("CONTAINS_SUBSTR", this, expr)
+
+        def cast_sql(self, expression: exp.Cast, safe_prefix: t.Optional[str] = None) -> str:
+            this = expression.this
+
+            # This ensures that inline type-annotated ARRAY literals like ARRAY<INT64>[1, 2, 3]
+            # are roundtripped unaffected. The inner check excludes ARRAY(SELECT ...) expressions,
+            # because they aren't literals and so the above syntax is invalid BigQuery.
+            if isinstance(this, exp.Array):
+                elem = seq_get(this.expressions, 0)
+                if not (elem and elem.find(exp.Query)):
+                    return f"{self.sql(expression, 'to')}{self.sql(this)}"
+
+            return super().cast_sql(expression, safe_prefix=safe_prefix)

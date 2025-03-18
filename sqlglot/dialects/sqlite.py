@@ -15,10 +15,10 @@ from sqlglot.dialects.dialect import (
     no_tablesample_sql,
     no_trycast_sql,
     rename_func,
-    str_position_sql,
+    strposition_sql,
 )
-from sqlglot.tokens import TokenType
 from sqlglot.generator import unsupported_args
+from sqlglot.tokens import TokenType
 
 
 def _date_add_sql(self: SQLite.Generator, expression: exp.DateAdd) -> str:
@@ -142,6 +142,7 @@ class SQLite(Dialect):
         SUPPORTS_TO_NUMBER = False
         EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
         SUPPORTS_MEDIAN = False
+        JSON_KEY_VALUE_PAIR_SEP = ","
 
         SUPPORTED_JSON_PATH_PARTS = {
             exp.JSONPathKey,
@@ -166,6 +167,7 @@ class SQLite(Dialect):
             exp.DataType.Type.BINARY: "BLOB",
             exp.DataType.Type.VARBINARY: "BLOB",
         }
+        TYPE_MAPPING.pop(exp.DataType.Type.BLOB)
 
         TOKEN_MAPPING = {
             TokenType.AUTO_INCREMENT: "AUTOINCREMENT",
@@ -174,6 +176,7 @@ class SQLite(Dialect):
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.AnyValue: any_value_to_max_sql,
+            exp.Chr: rename_func("CHAR"),
             exp.Concat: concat_to_dpipe_sql,
             exp.CountIf: count_if_to_sum,
             exp.Create: transforms.preprocess([_transform_create]),
@@ -201,9 +204,7 @@ class SQLite(Dialect):
                     transforms.eliminate_semi_and_anti_joins,
                 ]
             ),
-            exp.StrPosition: lambda self, e: str_position_sql(
-                self, e, str_position_func_name="INSTR"
-            ),
+            exp.StrPosition: lambda self, e: strposition_sql(self, e, func_name="INSTR"),
             exp.TableSample: no_tablesample_sql,
             exp.TimeStrToTime: lambda self, e: self.sql(e, "this"),
             exp.TimeToStr: lambda self, e: self.func("STRFTIME", e.args.get("format"), e.this),
@@ -302,3 +303,10 @@ class SQLite(Dialect):
             this = expression.this
             this = f" {this}" if this else ""
             return f"BEGIN{this} TRANSACTION"
+
+        def isascii_sql(self, expression: exp.IsAscii) -> str:
+            return f"(NOT {self.sql(expression.this)} GLOB CAST(x'2a5b5e012d7f5d2a' AS TEXT))"
+
+        @unsupported_args("this")
+        def currentschema_sql(self, expression: exp.CurrentSchema) -> str:
+            return "'main'"

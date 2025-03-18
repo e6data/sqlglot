@@ -104,7 +104,7 @@ class TestPresto(Validator):
         self.validate_all(
             "CAST(ARRAY[1, 2] AS ARRAY(BIGINT))",
             write={
-                "bigquery": "CAST([1, 2] AS ARRAY<INT64>)",
+                "bigquery": "ARRAY<INT64>[1, 2]",
                 "duckdb": "CAST([1, 2] AS BIGINT[])",
                 "presto": "CAST(ARRAY[1, 2] AS ARRAY(BIGINT))",
                 "spark": "CAST(ARRAY(1, 2) AS ARRAY<BIGINT>)",
@@ -204,14 +204,14 @@ class TestPresto(Validator):
             },
         )
         self.validate_all(
-            "STRPOS('ABC', 'A', 3)",
-            read={
-                "trino": "STRPOS('ABC', 'A', 3)",
-            },
+            "STRPOS(haystack, needle, occurrence)",
             write={
-                "presto": "STRPOS('ABC', 'A', 3)",
-                "trino": "STRPOS('ABC', 'A', 3)",
-                "snowflake": "POSITION('A', 'ABC')",
+                "bigquery": "INSTR(haystack, needle, 1, occurrence)",
+                "oracle": "INSTR(haystack, needle, 1, occurrence)",
+                "presto": "STRPOS(haystack, needle, occurrence)",
+                "tableau": "FINDNTH(haystack, needle, occurrence)",
+                "trino": "STRPOS(haystack, needle, occurrence)",
+                "teradata": "INSTR(haystack, needle, 1, occurrence)",
             },
         )
 
@@ -406,7 +406,7 @@ class TestPresto(Validator):
             },
         )
         self.validate_all(
-            "SELECT AT_TIMEZONE(CAST(CAST('2012-10-31 00:00' AS TIMESTAMP WITH TIME ZONE) AS TIMESTAMP), 'America/Sao_Paulo')",
+            "SELECT AT_TIMEZONE(CAST('2012-10-31 00:00' AS TIMESTAMP WITH TIME ZONE), 'America/Sao_Paulo')",
             read={
                 "spark": "SELECT FROM_UTC_TIMESTAMP(TIMESTAMP '2012-10-31 00:00', 'America/Sao_Paulo')",
             },
@@ -1087,6 +1087,9 @@ class TestPresto(Validator):
                 "snowflake": "CURRENT_USER()",
             },
         )
+        self.validate_identity(
+            "SELECT id, FIRST_VALUE(is_deleted) OVER (PARTITION BY id) AS first_is_deleted, NTH_VALUE(is_deleted, 2) OVER (PARTITION BY id) AS nth_is_deleted, LAST_VALUE(is_deleted) OVER (PARTITION BY id) AS last_is_deleted FROM my_table"
+        )
 
     def test_encode_decode(self):
         self.validate_identity("FROM_UTF8(x, y)")
@@ -1300,3 +1303,7 @@ MATCH_RECOGNIZE (
 
             # If the setting is overriden to False, then generate ROW access (dot notation)
             self.assertEqual(s.sql(dialect_row_access_setting), 'SELECT col.x.y."special string"')
+
+    def test_analyze(self):
+        self.validate_identity("ANALYZE tbl")
+        self.validate_identity("ANALYZE tbl WITH (prop1=val1, prop2=val2)")
