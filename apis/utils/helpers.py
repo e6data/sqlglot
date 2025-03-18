@@ -400,16 +400,16 @@ def extract_joins_from_query(sql_query_ast):
         if select.args.get("joins"):
             joins_list.append([base_table])
             for join in select.args.get("joins"):
-                if isinstance(from_statement.this, (exp.Subquery, exp.CTE, exp.Values)):
-                    alias_columns = ", ".join(from_statement.this.alias_column_names)
+                if isinstance(join.this, (exp.Subquery, exp.CTE, exp.Values)):
+                    alias_columns = ", ".join(join.this.alias_column_names)
                     join_table = (
-                        f"{from_statement.this.alias}({alias_columns})"
+                        f"{join.this.alias}({alias_columns})"
                         if alias_columns
-                        else f"{from_statement.this.alias}"
+                        else f"{join.this.alias}"
                     )
 
                 else:
-                    join_table = from_statement.this
+                    join_table = join.this
                     join_table = (
                         f"{join_table.db}.{join_table.name}" if join_table.db else join_table.name
                     )
