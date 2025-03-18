@@ -323,12 +323,12 @@ class TestDatabricks(Validator):
             read={
                 "bigquery": "TRIM('abc', 'a')",
                 "snowflake": "TRIM('abc', 'a')",
-                "E6": "TRIM('a' FROM 'abc')",
+                "e6": "TRIM('a' FROM 'abc')",
             },
             write={
                 "bigquery": "TRIM('abc', 'a')",
                 "snowflake": "TRIM('abc', 'a')",
-                "E6": "TRIM('a' FROM 'abc')",
+                "e6": "TRIM('a' FROM 'abc')",
             },
         )
 
@@ -337,7 +337,7 @@ class TestDatabricks(Validator):
             read={
                 "oracle": "LTRIM('Hello World', 'H')",
                 "clickhouse": "TRIM(LEADING 'H' FROM 'Hello World')",
-                "E6": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "e6": "TRIM(LEADING 'H' FROM 'Hello World')",
                 "snowflake": "LTRIM('Hello World', 'H')",
                 "bigquery": "LTRIM('Hello World', 'H')",
             },
@@ -346,7 +346,7 @@ class TestDatabricks(Validator):
                 "oracle": "LTRIM('Hello World', 'H')",
                 "snowflake": "LTRIM('Hello World', 'H')",
                 "bigquery": "LTRIM('Hello World', 'H')",
-                "E6": "LTRIM('H', 'Hello World')",
+                "e6": "LTRIM('H', 'Hello World')",
             },
         )
 
@@ -354,14 +354,14 @@ class TestDatabricks(Validator):
             "RTRIM('d', 'Hello World')",
             read={
                 "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "E6": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "e6": "TRIM(TRAILING 'd' FROM 'Hello World')",
                 "oracle": "RTRIM('Hello World', 'd')",
                 "snowflake": "RTRIM('Hello World', 'd')",
                 "bigquery": "RTRIM('Hello World', 'd')",
             },
             write={
                 "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "E6": "RTRIM('d', 'Hello World')",
+                "e6": "RTRIM('d', 'Hello World')",
                 "oracle": "RTRIM('Hello World', 'd')",
                 "snowflake": "RTRIM('Hello World', 'd')",
                 "bigquery": "RTRIM('Hello World', 'd')",
@@ -371,14 +371,14 @@ class TestDatabricks(Validator):
         self.validate_all(
             "TRIM('abcSpark')",
             read={
-                "E6": "TRIM(BOTH from 'abcSpark')",
+                "e6": "TRIM(BOTH from 'abcSpark')",
                 "snowflake": "TRIM('abcSpark')",
                 "oracle": "TRIM(BOTH from 'abcSpark')",
                 "bigquery": "TRIM('abcSpark')",
                 "clickhouse": "TRIM(BOTH from 'abcSpark')",
             },
             write={
-                "E6": "TRIM('abcSpark')",
+                "e6": "TRIM('abcSpark')",
                 "snowflake": "TRIM('abcSpark')",
                 "oracle": "TRIM('abcSpark')",
                 "bigquery": "TRIM('abcSpark')",
@@ -389,12 +389,12 @@ class TestDatabricks(Validator):
         self.validate_all(
             "TRIM(BOTH trimstr FROM 'abcSpark')",
             read={
-                "E6": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "e6": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
             },
             write={
-                "E6": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "e6": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
             },

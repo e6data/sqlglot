@@ -2549,7 +2549,7 @@ SINGLE = TRUE""",
             "SELECT ARRAY_POSITION(a, the_array)",
             read={
                 "trino": "SELECT ARRAY_POSITION(the_array, a)",
-                "E6": "SELECT ARRAY_POSITION(a, the_array)",
+                "e6": "SELECT ARRAY_POSITION(a, the_array)",
                 "databricks": "SELECT ARRAY_POSITION(the_array, a)",
                 "postgres": "SELECT ARRAY_POSITION(the_array, a)",
                 "starrocks": "SELECT ARRAY_POSITION(the_array, a)",
@@ -2560,7 +2560,7 @@ SINGLE = TRUE""",
                 "databricks": "SELECT ARRAY_POSITION(the_array, a)",
                 "postgres": "SELECT ARRAY_POSITION(the_array, a)",
                 "starrocks": "SELECT ARRAY_POSITION(the_array, a)",
-                "E6": "SELECT ARRAY_POSITION(a, the_array)",
+                "e6": "SELECT ARRAY_POSITION(a, the_array)",
             },
         )
 
