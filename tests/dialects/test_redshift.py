@@ -42,8 +42,8 @@ class TestRedshift(Validator):
                 "duckdb": "STRING_AGG(sellerid, ', ')",
             },
             write={
-                # GROUP_CONCAT and STRING_AGG are aliases in DuckDB
-                "duckdb": "GROUP_CONCAT(sellerid, ', ')",
+                # GROUP_CONCAT, LISTAGG and STRING_AGG are aliases in DuckDB
+                "duckdb": "LISTAGG(sellerid, ', ')",
                 "redshift": "LISTAGG(sellerid, ', ')",
             },
         )
@@ -320,6 +320,7 @@ class TestRedshift(Validator):
         )
 
     def test_identity(self):
+        self.validate_identity("ALTER TABLE table_name ALTER COLUMN bla TYPE VARCHAR")
         self.validate_identity("SELECT CAST(value AS FLOAT(8))")
         self.validate_identity("1 div", "1 AS div")
         self.validate_identity("LISTAGG(DISTINCT foo, ', ')")
@@ -668,3 +669,9 @@ FROM (
         self.validate_identity("GRANT USAGE ON DATABASE sales_db TO Bob")
         self.validate_identity("GRANT USAGE ON SCHEMA sales_schema TO ROLE Analyst_role")
         self.validate_identity("GRANT SELECT ON sales_db.sales_schema.tickit_sales_redshift TO Bob")
+
+    def test_analyze(self):
+        self.validate_identity("ANALYZE TBL(col1, col2)")
+        self.validate_identity("ANALYZE VERBOSE TBL")
+        self.validate_identity("ANALYZE TBL PREDICATE COLUMNS")
+        self.validate_identity("ANALYZE TBL ALL COLUMNS")

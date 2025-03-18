@@ -363,6 +363,9 @@ x * (1 - y);
 ANY(t.value);
 ANY(t.value);
 
+SELECT (ARRAY_AGG(foo))[1];
+SELECT (ARRAY_AGG(foo))[1];
+
 --------------------------------------
 -- Literals
 --------------------------------------
@@ -839,6 +842,10 @@ x;
 
 COALESCE(x, 1) = 2;
 NOT x IS NULL AND x = 2;
+
+# dialect: redshift
+COALESCE(x, 1) = 2;
+COALESCE(x, 1) = 2;
 
 2 = COALESCE(x, 1);
 NOT x IS NULL AND x = 2;

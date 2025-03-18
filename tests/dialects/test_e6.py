@@ -3,7 +3,7 @@ from tests.dialects.test_dialect import Validator
 
 class TestE6(Validator):
     maxDiff = None
-    dialect = "E6"
+    dialect = "e6"
 
     def test_E6(self):
         self.validate_all(
@@ -118,8 +118,8 @@ class TestE6(Validator):
             "POSITION(needle in haystack from c)",
             write={
                 "spark": "LOCATE(needle, haystack, c)",
-                "clickhouse": "position(haystack, needle, c)",
-                "snowflake": "POSITION(needle, haystack, c)",
+                "clickhouse": "POSITION(haystack, needle, c)",
+                "snowflake": "CHARINDEX(needle, haystack, c)",
                 "mysql": "LOCATE(needle, haystack, c)",
             },
         )
@@ -220,7 +220,7 @@ class TestE6(Validator):
                 "databricks": "SELECT DATEDIFF(DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             },
             write={
-                "E6": "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))"
+                "e6": "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))"
             },
         )
 
@@ -249,7 +249,7 @@ class TestE6(Validator):
                 "teradata": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
             },
             write={
-                "E6": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
+                "e6": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "bigquery": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "clickhouse": "SELECT argMax(a.id, a.timestamp) FROM a",
                 "duckdb": "SELECT ARG_MAX(a.id, a.timestamp) FROM a",
@@ -351,7 +351,7 @@ class TestE6(Validator):
             "SELECT EXTRACT(fieldStr FROM date_expr)",
             read={
                 "databricks": "SELECT DATE_PART(fieldStr, date_expr)",
-                "E6": "SELECT DATEPART(fieldStr, date_expr)",
+                "e6": "SELECT DATEPART(fieldStr, date_expr)",
             },
         )
 
@@ -573,7 +573,7 @@ class TestE6(Validator):
         self.validate_all(
             """SELECT JSON_VALUE('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array""",
             write={
-                "E6": """SELECT JSON_EXTRACT('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array"""
+                "e6": """SELECT JSON_EXTRACT('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array"""
             },
         )
 

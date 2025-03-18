@@ -1,12 +1,33 @@
 [package]
 name = "sqlglotrs"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 
 [lib]
 name = "sqlglotrs"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+bench = false
+
+[[bench]]
+name = "long"
+harness = false
+
+[features]
+# Enable this feature to use the serde and serde_json crates for profiling purposes
+default = []
+profiling = ["serde", "serde_json"]
 
 [dependencies]
-pyo3 = "0.22.6"
+pyo3 = {version ="0.22.6", features = ["auto-initialize"]}
+rustc-hash = { version = "2.1" }
+
+# Optional dependencies used for profiling
+serde = { version = "1", features = ["derive"] , optional = true }
+serde_json = { version = "1", optional = true }
+
+[dev-dependencies]
+criterion = "0.5"
+serde = { version = "1", features = ["derive"]  }
+serde_json = { version = "1" }
+sqlglotrs = { path = "." , features = ["profiling"] }

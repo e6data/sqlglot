@@ -23,6 +23,11 @@ class TestTranspile(unittest.TestCase):
 
     def test_weird_chars(self):
         self.assertEqual(transpile("0Êß")[0], "0 AS Êß")
+        self.assertEqual(
+            # Ideographic space after SELECT (\u3000)
+            transpile("SELECT　* FROM t WHERE c = 1")[0],
+            "SELECT * FROM t WHERE c = 1",
+        )
 
     def test_alias(self):
         self.assertEqual(transpile("SELECT SUM(y) KEEP")[0], "SELECT SUM(y) AS KEEP")
@@ -611,7 +616,7 @@ FROM tbl1""",
         self.validate("CAST(x AS INT)::BOOLEAN", "CAST(CAST(x AS INT) AS BOOLEAN)")
 
         with self.assertRaises(ParseError):
-            transpile("x::z", read="duckdb")
+            transpile("x::z", read="clickhouse")
 
     def test_not_range(self):
         self.validate("a NOT LIKE b", "NOT a LIKE b")
@@ -669,7 +674,7 @@ FROM tbl1""",
         )
         self.validate(
             "WITH A(filter) AS (VALUES 1, 2, 3) SELECT * FROM A WHERE filter >= 2",
-            "WITH A(filter) AS (VALUES (1), (2), (3)) SELECT * FROM A WHERE filter >= 2",
+            "WITH A(filter) AS (SELECT * FROM (VALUES (1), (2), (3)) AS _values) SELECT * FROM A WHERE filter >= 2",
             read="presto",
         )
         self.validate(
@@ -881,7 +886,6 @@ FROM tbl1""",
             "ALTER TABLE table1 RENAME COLUMN c1 c2",
             "ALTER TYPE electronic_mail RENAME TO email",
             "ALTER schema doo",
-            "ANALYZE a.y",
             "CALL catalog.system.iceberg_procedure_name(named_arg_1 => 'arg_1', named_arg_2 => 'arg_2')",
             "COMMENT ON ACCESS METHOD gin IS 'GIN index access method'",
             "CREATE OR REPLACE STAGE",

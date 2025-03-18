@@ -142,7 +142,6 @@ LANGUAGE js AS
         self.validate_identity("SELECT test.Unknown FROM test")
         self.validate_identity(r"SELECT '\n\r\a\v\f\t'")
         self.validate_identity("SELECT * FROM tbl FOR SYSTEM_TIME AS OF z")
-        self.validate_identity("STRING_AGG(DISTINCT a ORDER BY b DESC, c DESC LIMIT 10)")
         self.validate_identity("SELECT PARSE_TIMESTAMP('%c', 'Thu Dec 25 07:30:00 2008', 'UTC')")
         self.validate_identity("SELECT ANY_VALUE(fruit HAVING MAX sold) FROM fruits")
         self.validate_identity("SELECT ANY_VALUE(fruit HAVING MIN sold) FROM fruits")
@@ -150,10 +149,6 @@ LANGUAGE js AS
         self.validate_identity("SELECT CAST(CURRENT_DATE AS STRING FORMAT 'DAY') AS current_day")
         self.validate_identity("SAFE_CAST(encrypted_value AS STRING FORMAT 'BASE64')")
         self.validate_identity("CAST(encrypted_value AS STRING FORMAT 'BASE64')")
-        self.validate_identity("STRING_AGG(a)")
-        self.validate_identity("STRING_AGG(a, ' & ')")
-        self.validate_identity("STRING_AGG(DISTINCT a, ' & ')")
-        self.validate_identity("STRING_AGG(a, ' & ' ORDER BY LENGTH(a))")
         self.validate_identity("DATE(2016, 12, 25)")
         self.validate_identity("DATE(CAST('2016-12-25 23:59:59' AS DATETIME))")
         self.validate_identity("SELECT foo IN UNNEST(bar) AS bla")
@@ -202,6 +197,9 @@ LANGUAGE js AS
         self.validate_identity("CAST(x AS RECORD)", "CAST(x AS STRUCT)")
         self.validate_identity("SELECT * FROM x WHERE x.y >= (SELECT MAX(a) FROM b-c) - 20")
         self.validate_identity(
+            "SELECT cars, apples FROM some_table PIVOT(SUM(total_counts) FOR products IN ('general.cars' AS cars, 'food.apples' AS apples))"
+        )
+        self.validate_identity(
             "MERGE INTO dataset.NewArrivals USING (SELECT * FROM UNNEST([('microwave', 10, 'warehouse #1'), ('dryer', 30, 'warehouse #1'), ('oven', 20, 'warehouse #2')])) ON FALSE WHEN NOT MATCHED THEN INSERT ROW WHEN NOT MATCHED BY SOURCE THEN DELETE"
         )
         self.validate_identity(
@@ -233,6 +231,10 @@ LANGUAGE js AS
         )
         self.validate_identity(
             "CREATE OR REPLACE VIEW test (tenant_id OPTIONS (description='Test description on table creation')) AS SELECT 1 AS tenant_id, 1 AS customer_id",
+        )
+        self.validate_identity(
+            "ARRAY(SELECT AS STRUCT e.x AS y, e.z AS bla FROM UNNEST(bob))::ARRAY<STRUCT<y STRING, bro NUMERIC>>",
+            "CAST(ARRAY(SELECT AS STRUCT e.x AS y, e.z AS bla FROM UNNEST(bob)) AS ARRAY<STRUCT<y STRING, bro NUMERIC>>)",
         )
         self.validate_identity(
             "SELECT * FROM `proj.dataset.INFORMATION_SCHEMA.SOME_VIEW`",
@@ -861,6 +863,7 @@ LANGUAGE js AS
                 "presto": "SHA256(x)",
                 "trino": "SHA256(x)",
                 "postgres": "SHA256(x)",
+                "duckdb": "SHA256(x)",
             },
             write={
                 "bigquery": "SHA256(x)",
@@ -871,6 +874,7 @@ LANGUAGE js AS
                 "redshift": "SHA2(x, 256)",
                 "trino": "SHA256(x)",
                 "duckdb": "SHA256(x)",
+                "snowflake": "SHA2(x, 256)",
             },
         )
         self.validate_all(
@@ -1572,14 +1576,30 @@ WHERE
             "SAFE_DIVIDE(x, y)",
             write={
                 "bigquery": "SAFE_DIVIDE(x, y)",
-                "duckdb": "IF((y) <> 0, (x) / (y), NULL)",
-                "presto": "IF((y) <> 0, (x) / (y), NULL)",
-                "trino": "IF((y) <> 0, (x) / (y), NULL)",
-                "hive": "IF((y) <> 0, (x) / (y), NULL)",
-                "spark2": "IF((y) <> 0, (x) / (y), NULL)",
-                "spark": "IF((y) <> 0, (x) / (y), NULL)",
-                "databricks": "IF((y) <> 0, (x) / (y), NULL)",
-                "snowflake": "IFF((y) <> 0, (x) / (y), NULL)",
+                "duckdb": "CASE WHEN y <> 0 THEN x / y ELSE NULL END",
+                "presto": "IF(y <> 0, CAST(x AS DOUBLE) / y, NULL)",
+                "trino": "IF(y <> 0, CAST(x AS DOUBLE) / y, NULL)",
+                "hive": "IF(y <> 0, x / y, NULL)",
+                "spark2": "IF(y <> 0, x / y, NULL)",
+                "spark": "IF(y <> 0, x / y, NULL)",
+                "databricks": "IF(y <> 0, x / y, NULL)",
+                "snowflake": "IFF(y <> 0, x / y, NULL)",
+                "postgres": "CASE WHEN y <> 0 THEN CAST(x AS DOUBLE PRECISION) / y ELSE NULL END",
+            },
+        )
+        self.validate_all(
+            "SAFE_DIVIDE(x + 1, 2 * y)",
+            write={
+                "bigquery": "SAFE_DIVIDE(x + 1, 2 * y)",
+                "duckdb": "CASE WHEN (2 * y) <> 0 THEN (x + 1) / (2 * y) ELSE NULL END",
+                "presto": "IF((2 * y) <> 0, CAST((x + 1) AS DOUBLE) / (2 * y), NULL)",
+                "trino": "IF((2 * y) <> 0, CAST((x + 1) AS DOUBLE) / (2 * y), NULL)",
+                "hive": "IF((2 * y) <> 0, (x + 1) / (2 * y), NULL)",
+                "spark2": "IF((2 * y) <> 0, (x + 1) / (2 * y), NULL)",
+                "spark": "IF((2 * y) <> 0, (x + 1) / (2 * y), NULL)",
+                "databricks": "IF((2 * y) <> 0, (x + 1) / (2 * y), NULL)",
+                "snowflake": "IFF((2 * y) <> 0, (x + 1) / (2 * y), NULL)",
+                "postgres": "CASE WHEN (2 * y) <> 0 THEN CAST((x + 1) AS DOUBLE PRECISION) / (2 * y) ELSE NULL END",
             },
         )
         self.validate_all(
@@ -1591,11 +1611,11 @@ WHERE
             },
         )
         self.validate_all(
-            "SELECT STRPOS('foo@example.com', '@')",
+            "SELECT INSTR('foo@example.com', '@')",
             write={
-                "bigquery": "SELECT STRPOS('foo@example.com', '@')",
+                "bigquery": "SELECT INSTR('foo@example.com', '@')",
                 "duckdb": "SELECT STRPOS('foo@example.com', '@')",
-                "snowflake": "SELECT POSITION('@', 'foo@example.com')",
+                "snowflake": "SELECT CHARINDEX('@', 'foo@example.com')",
             },
         )
         self.validate_all(
@@ -1644,6 +1664,13 @@ WHERE
             "SELECT * FROM ML.FEATURES_AT_TIME(TABLE mydataset.feature_table, time => '2022-06-11 10:00:00+00', num_rows => 1, ignore_feature_nulls => TRUE)"
         )
         self.validate_identity("SELECT * FROM ML.FEATURES_AT_TIME((SELECT 1), num_rows => 1)")
+
+        self.validate_identity(
+            "EXPORT DATA OPTIONS (URI='gs://path*.csv.gz', FORMAT='CSV') AS SELECT * FROM all_rows"
+        )
+        self.validate_identity(
+            "EXPORT DATA WITH CONNECTION myproject.us.myconnection OPTIONS (URI='gs://path*.csv.gz', FORMAT='CSV') AS SELECT * FROM all_rows"
+        )
 
     def test_errors(self):
         with self.assertRaises(TokenError):
@@ -1821,12 +1848,6 @@ WHERE
         self.validate_identity(
             '''CREATE TEMPORARY FUNCTION string_length_0(strings ARRAY<STRING>) RETURNS FLOAT64 LANGUAGE js AS """'use strict'; function string_length(strings) { return _.sum(_.map(strings, ((x) => x.length))); } return string_length(strings);""" OPTIONS (library=['gs://ibis-testing-libraries/lodash.min.js'])''',
             "CREATE TEMPORARY FUNCTION string_length_0(strings ARRAY<STRING>) RETURNS FLOAT64 LANGUAGE js OPTIONS (library=['gs://ibis-testing-libraries/lodash.min.js']) AS '\\'use strict\\'; function string_length(strings) { return _.sum(_.map(strings, ((x) => x.length))); } return string_length(strings);'",
-        )
-
-    def test_group_concat(self):
-        self.validate_all(
-            "SELECT a, GROUP_CONCAT(b) FROM table GROUP BY a",
-            write={"bigquery": "SELECT a, STRING_AGG(b) FROM table GROUP BY a"},
         )
 
     def test_remove_precision_parameterized_types(self):
@@ -2027,10 +2048,10 @@ OPTIONS (
         )
 
         self.validate_all(
-            "SELECT ARRAY<INT>[1, 2, 3]",
+            "SELECT ARRAY<FLOAT64>[1, 2, 3]",
             write={
-                "bigquery": "SELECT CAST([1, 2, 3] AS ARRAY<INT64>)",
-                "duckdb": "SELECT CAST([1, 2, 3] AS INT[])",
+                "bigquery": "SELECT ARRAY<FLOAT64>[1, 2, 3]",
+                "duckdb": "SELECT CAST([1, 2, 3] AS DOUBLE[])",
             },
         )
         self.validate_all(
@@ -2043,14 +2064,14 @@ OPTIONS (
         self.validate_all(
             "SELECT * FROM UNNEST(ARRAY<STRUCT<x INT64>>[])",
             write={
-                "bigquery": "SELECT * FROM UNNEST(CAST([] AS ARRAY<STRUCT<x INT64>>))",
+                "bigquery": "SELECT * FROM UNNEST(ARRAY<STRUCT<x INT64>>[])",
                 "duckdb": "SELECT * FROM (SELECT UNNEST(CAST([] AS STRUCT(x BIGINT)[]), max_depth => 2))",
             },
         )
         self.validate_all(
             "SELECT * FROM UNNEST(ARRAY<STRUCT<device_id INT64, time DATETIME, signal INT64, state STRING>>[STRUCT(1, DATETIME '2023-11-01 09:34:01', 74, 'INACTIVE'),STRUCT(4, DATETIME '2023-11-01 09:38:01', 80, 'ACTIVE')])",
             write={
-                "bigquery": "SELECT * FROM UNNEST(CAST([STRUCT(1, CAST('2023-11-01 09:34:01' AS DATETIME), 74, 'INACTIVE'), STRUCT(4, CAST('2023-11-01 09:38:01' AS DATETIME), 80, 'ACTIVE')] AS ARRAY<STRUCT<device_id INT64, time DATETIME, signal INT64, state STRING>>))",
+                "bigquery": "SELECT * FROM UNNEST(ARRAY<STRUCT<device_id INT64, time DATETIME, signal INT64, state STRING>>[STRUCT(1, CAST('2023-11-01 09:34:01' AS DATETIME), 74, 'INACTIVE'), STRUCT(4, CAST('2023-11-01 09:38:01' AS DATETIME), 80, 'ACTIVE')])",
                 "duckdb": "SELECT * FROM (SELECT UNNEST(CAST([ROW(1, CAST('2023-11-01 09:34:01' AS TIMESTAMP), 74, 'INACTIVE'), ROW(4, CAST('2023-11-01 09:38:01' AS TIMESTAMP), 80, 'ACTIVE')] AS STRUCT(device_id BIGINT, time TIMESTAMP, signal BIGINT, state TEXT)[]), max_depth => 2))",
             },
         )
@@ -2252,8 +2273,8 @@ OPTIONS (
             r"REGEXP_EXTRACT(svc_plugin_output, '\\\\\\((.*)')",
         )
         self.validate_identity(
-            r"REGEXP_SUBSTR(value, pattern, position, occurence)",
-            r"REGEXP_EXTRACT(value, pattern, position, occurence)",
+            r"REGEXP_SUBSTR(value, pattern, position, occurrence)",
+            r"REGEXP_EXTRACT(value, pattern, position, occurrence)",
         )
 
         self.validate_all(
@@ -2330,4 +2351,21 @@ OPTIONS (
                 "duckdb": "SELECT STRFTIME(CAST(CAST('2050-12-25 15:30:55+00' AS TIMESTAMPTZ) AS TIMESTAMP), '%b-%d-%Y')",
                 "snowflake": "SELECT TO_CHAR(CAST(CAST('2050-12-25 15:30:55+00' AS TIMESTAMPTZ) AS TIMESTAMP), 'mon-DD-yyyy')",
             },
+        )
+
+    def test_string_agg(self):
+        self.validate_identity(
+            "SELECT a, GROUP_CONCAT(b) FROM table GROUP BY a",
+            "SELECT a, STRING_AGG(b, ',') FROM table GROUP BY a",
+        )
+
+        self.validate_identity("STRING_AGG(a, ' & ')")
+        self.validate_identity("STRING_AGG(DISTINCT a, ' & ')")
+        self.validate_identity("STRING_AGG(a, ' & ' ORDER BY LENGTH(a))")
+        self.validate_identity("STRING_AGG(foo, b'|' ORDER BY bar)")
+
+        self.validate_identity("STRING_AGG(a)", "STRING_AGG(a, ',')")
+        self.validate_identity(
+            "STRING_AGG(DISTINCT a ORDER BY b DESC, c DESC LIMIT 10)",
+            "STRING_AGG(DISTINCT a, ',' ORDER BY b DESC, c DESC LIMIT 10)",
         )
