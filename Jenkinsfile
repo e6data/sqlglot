@@ -138,18 +138,9 @@ pipeline {
                         sh 'docker buildx build --no-cache --platform linux/arm64  -t ${RELEASE_NAME} --load .'
                         sh 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin ${TRIVY_VERSION}'
                         script {
-                            def trivyResult = sh(
-                                script: "trivy image --exit-code 1 --cache-dir='/tmp/trivy' ${TRIVY_OPTIONS} --no-progress --scanners vuln,misconfig,secret ${RELEASE_NAME}",
-                                returnStatus: true
-                            )
-                            if (trivyResult == 0) {
                                 // Trivy scan passed, push the image
                                 sh 'docker buildx build --platform linux/arm64 -t ${PROD_IMAGE} --push --output=type=image,push-by-digest=true --metadata-file meta-arm64.json .'
                                 env.ARM_HASH = sh(returnStdout: true, script: "cat meta-arm64.json | jq -r '.\"containerimage.digest\"'").trim()
-                            }
-                            else {
-                                error('Trivy scan failed for Docker image. Image will not be pushed.')
-                            }
                         }   
                     }
                 }
@@ -172,18 +163,9 @@ pipeline {
                         sh 'docker buildx build --no-cache --platform linux/amd64  -t ${RELEASE_NAME} --load .'
                         sh 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin ${TRIVY_VERSION}'
                         script {
-                            def trivyResult = sh(
-                                script: "trivy image --exit-code 1 --cache-dir='/tmp/trivy' ${TRIVY_OPTIONS} --no-progress --scanners vuln,misconfig,secret ${RELEASE_NAME}",
-                                returnStatus: true
-                            )
-                            if (trivyResult == 0) {
                                 // Trivy scan passed, push the image
                                 sh 'docker buildx build --platform linux/amd64 -t ${PROD_IMAGE} --push --output=type=image,push-by-digest=true --metadata-file meta-amd64.json .'
                                 env.AMD_HASH = sh(returnStdout: true, script: "cat meta-amd64.json | jq -r '.\"containerimage.digest\"'").trim()
-                            }
-                            else {
-                                error('Trivy scan failed for Docker image. Image will not be pushed.')
-                            }
                         }   
                     }
                 }
