@@ -210,5 +210,6 @@ pipeline {
         sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${AZURE_IMAGE}:${TAG_VALUE}'
   }
     }
+    }
   }
 }
