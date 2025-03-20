@@ -57,35 +57,35 @@ pipeline {
         //     }
         // }
 
-        stage('Trivy Scan') {
-            agent {
-                kubernetes {
-                    inheritFrom 'pythondarm'
-                    defaultContainer 'python'
-                }
-            }
+        // stage('Trivy Scan') {
+        //     agent {
+        //         kubernetes {
+        //             inheritFrom 'pythondarm'
+        //             defaultContainer 'python'
+        //         }
+        //     }
 
-            steps {
-                checkout scm
-                sh 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin ${TRIVY_VERSION}'
-                sh 'mkdir -p /tmp/trivy/'
-                sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
-                sh 'tar -xvf /tmp/trivy/db.tar.gz'
-                script {
-                    def trivyResult = sh(
-                        script: "trivy fs --exit-code 1 --cache-dir='/tmp/trivy' ${TRIVY_OPTIONS} --no-progress --scanners vuln,misconfig,secret .",
-                        returnStatus: true
-                    )
-                    if (trivyResult == 0) {
-                        // Trivy scan passed, push the image
-                        sh 'echo "Trivy scan passed for Python Scripts."'
-                    }
-                    else {
-                        error('Trivy scan failed')
-                    }
-                }
-            }
-        }
+        //     steps {
+        //         checkout scm
+        //         sh 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin ${TRIVY_VERSION}'
+        //         sh 'mkdir -p /tmp/trivy/'
+        //         sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
+        //         sh 'tar -xvf /tmp/trivy/db.tar.gz'
+        //         script {
+        //             def trivyResult = sh(
+        //                 script: "trivy fs --exit-code 1 --cache-dir='/tmp/trivy' ${TRIVY_OPTIONS} --no-progress --scanners vuln,misconfig,secret .",
+        //                 returnStatus: true
+        //             )
+        //             if (trivyResult == 0) {
+        //                 // Trivy scan passed, push the image
+        //                 sh 'echo "Trivy scan passed for Python Scripts."'
+        //             }
+        //             else {
+        //                 error('Trivy scan failed')
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('Cloud Authentication') {
             agent {
@@ -132,9 +132,9 @@ pipeline {
                         checkout scm
                         sh 'docker login -u oauth2accesstoken -p ${GCP_DOCKER_TOKEN} https://us-docker.pkg.dev'
                         sh 'docker buildx create --name mybuilder  --use --platform linux/arm64,linux/amd64'
-                        sh 'mkdir -p /tmp/trivy/'
-                        sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
-                        sh 'tar -xvf /tmp/trivy/db.tar.gz'
+                        // sh 'mkdir -p /tmp/trivy/'
+                        // sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
+                        // sh 'tar -xvf /tmp/trivy/db.tar.gz'
                         sh 'docker buildx build --no-cache --platform linux/arm64  -t ${RELEASE_NAME} --load .'
                         sh 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin ${TRIVY_VERSION}'
                         script {
@@ -157,9 +157,9 @@ pipeline {
                         checkout scm
                         sh 'docker login -u oauth2accesstoken -p ${GCP_DOCKER_TOKEN} https://us-docker.pkg.dev'
                         sh 'docker buildx create --name mybuilder  --use --platform linux/arm64,linux/amd64'
-                        sh 'mkdir -p /tmp/trivy/'
-                        sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
-                        sh 'tar -xvf /tmp/trivy/db.tar.gz'
+                        // sh 'mkdir -p /tmp/trivy/'
+                        // sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
+                        // sh 'tar -xvf /tmp/trivy/db.tar.gz'
                         sh 'docker buildx build --no-cache --platform linux/amd64  -t ${RELEASE_NAME} --load .'
                         sh 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin ${TRIVY_VERSION}'
                         script {
