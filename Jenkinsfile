@@ -17,6 +17,7 @@ pipeline {
         DEV_IMAGE = "670514002493.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}:latest"
     
     }
+    
 
     options {
         skipDefaultCheckout()
