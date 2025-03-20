@@ -110,12 +110,11 @@ pipeline {
           env.GIT_COMMIT_HASH = sh (script: 'git rev-parse --short HEAD', returnStdout: true)
           env.TAG_VALUE = "${IMAGE_TAG_PREFIX}${GIT_COMMIT_HASH}"
           env.GCP_DOCKER_TOKEN=sh(returnStdout: true, script: "gcloud auth print-access-token").trim() 
-        }
-      env.TEMP_ROLE=sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${ASSUMED_ROLE_ARN} --role-session-name storage-service-${BUILD_NUMBER}').trim()
-      env.AWS_ACCESS_KEY_ID=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.AccessKeyId"').trim()
-      env.AWS_SECRET_ACCESS_KEY=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SecretAccessKey"').trim()
-      env.AWS_SESSION_TOKEN=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SessionToken"').trim()
-      env.ECR_TOKEN=sh(returnStdout: true, script: "aws ecr get-login-password --region ${AWS_REGION} --output text").trim()
+          env.TEMP_ROLE=sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${ASSUMED_ROLE_ARN} --role-session-name storage-service-${BUILD_NUMBER}').trim()
+          env.AWS_ACCESS_KEY_ID=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.AccessKeyId"').trim()
+          env.AWS_SECRET_ACCESS_KEY=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SecretAccessKey"').trim()
+          env.AWS_SESSION_TOKEN=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SessionToken"').trim()
+          env.ECR_TOKEN=sh(returnStdout: true, script: "aws ecr get-login-password --region ${AWS_REGION} --output text").trim()
       }    
     }
 
