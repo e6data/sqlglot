@@ -51,16 +51,13 @@ async def convert_query(
     to_sql: Optional[str] = Form("E6"),
 ):
     try:
-        # This is the main method will which help in transpiling to our e6data SQL dialects from other dialects
-        converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[0]
+        tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
-        # This is additional steps to replace the STRUCT(STRUCT()) --> {{}}
-        converted_query = replace_struct_in_query(converted_query)
+        tree2 = quote_identifiers(tree, dialect=to_sql)
 
-        converted_query_ast = parse_one(converted_query, read=to_sql)
-        double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
-            dialect=to_sql
-        )
+        double_quotes_added_query = tree2.sql(dialect=to_sql, from_dialect=from_sql)
+
+        double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
         return {"converted_query": double_quotes_added_query}
     except Exception as e:
