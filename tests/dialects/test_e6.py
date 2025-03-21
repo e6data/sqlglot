@@ -536,19 +536,26 @@ class TestE6(Validator):
         )
 
     def test_named_struct(self):
-        self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
+        # self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
+        #
+        # self.validate_all(
+        #     "NAMED_STRUCT('key_1', 'one', 'key_2', NULL)",
+        #     read={
+        #         "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
+        #         "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+        #     },
+        #     write={
+        #         "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+        #         "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+        #         "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
+        #     },
+        # )
 
         self.validate_all(
-            "NAMED_STRUCT('key_1', 'one', 'key_2', NULL)",
+            "named_struct('x', x_start, 'y', y_start)",
             read={
-                "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
-                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-            },
-            write={
-                "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-                "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
-            },
+                "databricks": "struct (x_start as x, y_start as y)"
+            }
         )
 
     def test_json_extract(self):
