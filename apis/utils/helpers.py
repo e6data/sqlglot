@@ -127,7 +127,6 @@ def extract_functions_from_query(
     """
     sanitized_query = processing_comments(query)
     sanitized_query = process_query(sanitized_query)
-    print(f"sanitized query:\n{sanitized_query}\n")
 
     all_functions = set()
 
@@ -412,7 +411,9 @@ def extract_joins_from_query(sql_query_ast):
                     join_table = join.this
                     if isinstance(join_table, exp.Table):
                         join_table = (
-                            f"{join_table.db}.{join_table.name}" if join_table.db else join_table.name
+                            f"{join_table.db}.{join_table.name}"
+                            if join_table.db
+                            else join_table.name
                         )
                 # join_table = f"{join.this.db}.{join.this.name}" if join.this.db else join.this.name
                 join_side = join.text("side").upper() or ""

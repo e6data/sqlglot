@@ -553,9 +553,7 @@ class TestE6(Validator):
 
         self.validate_all(
             "named_struct('x', x_start, 'y', y_start)",
-            read={
-                "databricks": "struct (x_start as x, y_start as y)"
-            }
+            read={"databricks": "struct (x_start as x, y_start as y)"},
         )
 
     def test_json_extract(self):
