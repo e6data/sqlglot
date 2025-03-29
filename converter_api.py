@@ -68,6 +68,10 @@ async def convert_query(
         logger.info(
             f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
             "-----------------------\n"
+            "--- Original query ---\n"
+            "-----------------------\n"
+            f"{query}"
+            "-----------------------\n"
             "--- Transpiled query ---\n"
             "-----------------------\n"
             f"{double_quotes_added_query}"
@@ -76,6 +80,10 @@ async def convert_query(
     except Exception as e:
         logger.info(
             f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+            "-----------------------\n"
+            "--- Original query ---\n"
+            "-----------------------\n"
+            f"{query}"
             "-----------------------\n"
             "-------- Error --------\n"
             "-----------------------\n"
@@ -307,6 +315,10 @@ async def stats_api(
             logger.info(
                 f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
                 "-----------------------\n"
+                "--- Original query ---\n"
+                "-----------------------\n"
+                f"{query}"
+                "-----------------------\n"
                 "--- Transpiled query ---\n"
                 "-----------------------\n"
                 f"{double_quotes_added_query}"
@@ -315,6 +327,10 @@ async def stats_api(
         except Exception as e:
             logger.info(
                 f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+                "-----------------------\n"
+                "--- Original query ---\n"
+                "-----------------------\n"
+                f"{query}"
                 "-----------------------\n"
                 "-------- Error --------\n"
                 "-----------------------\n"
@@ -346,6 +362,10 @@ async def stats_api(
     except Exception as e:
         logger.info(
             f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+            "-----------------------\n"
+            "--- Original query ---\n"
+            "-----------------------\n"
+            f"{query}"
             "-----------------------\n"
             "-------- Error --------\n"
             "-----------------------\n"
