@@ -5,6 +5,8 @@ import uvicorn
 import re
 import os
 import sqlglot
+import logging
+from datetime import datetime
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from guardrail.main import StorageServiceClient
@@ -28,6 +30,8 @@ from apis.utils.helpers import (
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
+logger = logging.getLogger("uvicorn.error")
+
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
@@ -47,9 +51,11 @@ app = FastAPI()
 @app.post("/convert-query")
 async def convert_query(
     query: str = Form(...),
+    query_id: Optional[str] = Form("NO_ID_MENTIONED"),
     from_sql: str = Form(...),
     to_sql: Optional[str] = Form("E6"),
 ):
+    timestamp = datetime.now().isoformat()
     try:
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
@@ -59,8 +65,30 @@ async def convert_query(
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
+        logger.info(
+            f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+            "-----------------------\n"
+            "--- Original query ---\n"
+            "-----------------------\n"
+            f"{query}"
+            "-----------------------\n"
+            "--- Transpiled query ---\n"
+            "-----------------------\n"
+            f"{double_quotes_added_query}"
+        )
         return {"converted_query": double_quotes_added_query}
     except Exception as e:
+        logger.info(
+            f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+            "-----------------------\n"
+            "--- Original query ---\n"
+            "-----------------------\n"
+            f"{query}"
+            "-----------------------\n"
+            "-------- Error --------\n"
+            "-----------------------\n"
+            f"{str(e)}"
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -153,12 +181,14 @@ async def Transgaurd(
 @app.post("/statistics")
 async def stats_api(
     query: str = Form(...),
+    query_id: Optional[str] = Form("NO_ID_MENTIONED"),
     from_sql: str = Form(...),
     to_sql: Optional[str] = Form("E6"),
 ):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
     """
+    timestamp = datetime.now().isoformat()
     try:
         supported_functions_in_e6 = load_supported_functions(to_sql)
 
@@ -282,7 +312,30 @@ async def stats_api(
             if unsupported_in_converted:
                 executable = "NO"
 
+            logger.info(
+                f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+                "-----------------------\n"
+                "--- Original query ---\n"
+                "-----------------------\n"
+                f"{query}"
+                "-----------------------\n"
+                "--- Transpiled query ---\n"
+                "-----------------------\n"
+                f"{double_quotes_added_query}"
+            )
+
         except Exception as e:
+            logger.info(
+                f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+                "-----------------------\n"
+                "--- Original query ---\n"
+                "-----------------------\n"
+                f"{query}"
+                "-----------------------\n"
+                "-------- Error --------\n"
+                "-----------------------\n"
+                f"{str(e)}"
+            )
             error_message = f"{str(e)}"
             print(error_message)
             error_flag = True
@@ -307,6 +360,17 @@ async def stats_api(
         }
 
     except Exception as e:
+        logger.info(
+            f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+            "-----------------------\n"
+            "--- Original query ---\n"
+            "-----------------------\n"
+            f"{query}"
+            "-----------------------\n"
+            "-------- Error --------\n"
+            "-----------------------\n"
+            f"{str(e)}"
+        )
         return {
             "supported_functions": [],
             "unsupported_functions": [],

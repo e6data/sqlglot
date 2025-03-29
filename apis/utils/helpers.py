@@ -127,7 +127,6 @@ def extract_functions_from_query(
     """
     sanitized_query = processing_comments(query)
     sanitized_query = process_query(sanitized_query)
-    print(f"sanitized query:\n{sanitized_query}\n")
 
     all_functions = set()
 
@@ -400,7 +399,7 @@ def extract_joins_from_query(sql_query_ast):
         if select.args.get("joins"):
             joins_list.append([base_table])
             for join in select.args.get("joins"):
-                if isinstance(join.this, (exp.Subquery, exp.CTE, exp.Values)):
+                if isinstance(join.this, (exp.Subquery, exp.CTE, exp.Values, exp.Lateral)):
                     alias_columns = ", ".join(join.this.alias_column_names)
                     join_table = (
                         f"{join.this.alias}({alias_columns})"
@@ -410,9 +409,12 @@ def extract_joins_from_query(sql_query_ast):
 
                 else:
                     join_table = join.this
-                    join_table = (
-                        f"{join_table.db}.{join_table.name}" if join_table.db else join_table.name
-                    )
+                    if isinstance(join_table, exp.Table):
+                        join_table = (
+                            f"{join_table.db}.{join_table.name}"
+                            if join_table.db
+                            else join_table.name
+                        )
                 # join_table = f"{join.this.db}.{join.this.name}" if join.this.db else join.this.name
                 join_side = join.text("side").upper() or ""
                 join_type = join.text("kind").upper()

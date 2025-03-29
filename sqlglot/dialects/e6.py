@@ -1892,7 +1892,7 @@ class E6(Dialect):
                     keys.append(exp.Literal.string(f"_{i}"))
                     values.append(e)
 
-            return self.func("named_struct", *flatten(zip(keys, values)))
+            return self.func("NAMED_STRUCT", *flatten(zip(keys, values)))
 
         def neq_sql(self, expression: exp.NEQ) -> str:
             return self.binary(expression, "!=")
