@@ -31,6 +31,18 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "NVL(x, y, z)",
+            read={
+                "spark": "NVL(x,y,z)",
+                "snowflake": "NVL(x,y,z)",
+            },
+            write={
+                "snowflake": "NVL(x, y, z)",
+                "spark": "NVL(x, y, z)",
+            },
+        )
+
+        self.validate_all(
             "SHIFTRIGHT(x, 1)",
             read={
                 "trino": "bitwise_right_shift(x, 1)",
