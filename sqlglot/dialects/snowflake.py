@@ -411,6 +411,9 @@ class Snowflake(Dialect):
             "ARRAY_POSITION": lambda args: exp.ArrayPosition(
                 this=seq_get(args, 1), expression=seq_get(args, 0)
             ),
+            "AS_VARCHAR": lambda args: exp.Cast(
+                this=seq_get(args, 0), to=exp.DataType.build(exp.DataType.Type.VARCHAR)
+            ),
             "BITNOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BIT_NOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BITAND": _build_bitwise(exp.BitwiseAnd, "BITAND"),
