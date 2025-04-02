@@ -110,6 +110,17 @@ class TestE6(Validator):
 
         self.validate_identity("SELECT LAST_DAY(CAST('2024-11-09' AS TIMESTAMP), UNIT)")
 
+        self.validate_identity("SELECT A IS NOT NULL")
+
+        self.validate_all(
+            "SELECT A IS NOT NULL",
+            read={
+                "trino": "SELECT A IS NOT NULL",
+                "snowflake": "SELECT A IS NOT NULL",
+                "databricks": "SELECT A IS NOT NULL",
+            },
+        )
+
         self.validate_all(
             "SELECT DAYOFWEEKISO('2024-11-09')",
             read={
