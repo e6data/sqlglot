@@ -2241,10 +2241,16 @@ class Generator(metaclass=_Generator):
         if expression.args.get("view"):
             alias = expression.args["alias"]
             columns = self.expressions(alias, key="columns", flat=True)
-            table = f" {alias.name}" if alias.name else ""
-            columns = f" AS {columns}" if columns else ""
+            table = f"{alias.name}" if alias.name else ""
+            columns_new = f" AS {columns}" if columns else ""
+            combined_alias = None
+            if table and columns:
+                combined_alias = f" AS {table}({columns})" if columns else ""
             op_sql = self.seg(f"LATERAL VIEW{' OUTER' if expression.args.get('outer') else ''}")
-            return f"{op_sql}{self.sep()}{this}{table}{columns}"
+            if combined_alias:
+                return f"{op_sql}{self.sep()}{this}{combined_alias}"
+            else:
+                return f"{op_sql}{self.sep()}{this}{table}{columns_new}"
 
         alias = self.sql(expression, "alias")
         alias = f" AS {alias}" if alias else ""
