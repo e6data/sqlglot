@@ -964,6 +964,16 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT BITSHIFTLEFT(a, 1)")
         self.validate_identity("SELECT BIT_SHIFTLEFT(a, 1)", "SELECT BITSHIFTLEFT(a, 1)")
         self.validate_identity("SELECT BIT_SHIFTRIGHT(a, 1)", "SELECT BITSHIFTRIGHT(a, 1)")
+        self.validate_all(
+            "AS_VARCHAR(Col1)",
+            write={
+                "bigquery": "CAST(Col1 AS STRING)",
+                "postgres": "CAST(Col1 AS VARCHAR)",
+                "snowflake": "CAST(Col1 AS VARCHAR)",
+                "databricks": "CAST(Col1 AS STRING)",
+                "E6": "CAST(Col1 AS VARCHAR)",
+            },
+        )
 
     def test_null_treatment(self):
         self.validate_all(

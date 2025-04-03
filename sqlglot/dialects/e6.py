@@ -21,6 +21,7 @@ from sqlglot.dialects.dialect import (
 )
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset, flatten
 from sqlglot.tokens import TokenType
+from sqlglot.parser import build_coalesce
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -1432,6 +1433,7 @@ class E6(Dialect):
             "MOD": lambda args: parser.build_mod(args),
             "NOW": exp.CurrentTimestamp.from_arg_list,
             "NULLIF": exp.Nullif.from_arg_list,
+            "NVL": lambda args: build_coalesce(args, is_nvl=True),
             "PARSE_DATE": _build_formatted_time_with_or_without_zone(exp.StrToDate, "E6"),
             "PARSE_DATETIME": _build_formatted_time_with_or_without_zone(exp.StrToTime, "E6"),
             "PARSE_TIMESTAMP": _build_formatted_time_with_or_without_zone(exp.StrToTime, "E6"),
@@ -1734,6 +1736,10 @@ class E6(Dialect):
 
             # Generate the SQL string for the CAST operation
             return f"CAST({self.sql(expression.this)} AS {e6_type})"
+
+        def coalesce_sql(self, expression: exp.Coalesce) -> str:
+            func_name = "NVL" if expression.args.get("is_nvl") else "COALESCE"
+            return rename_func(func_name)(self, expression)
 
         def interval_sql(self, expression: exp.Interval) -> str:
             """
@@ -2088,6 +2094,7 @@ class E6(Dialect):
             exp.Contains: rename_func("CONTAINS_SUBSTR"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
+            exp.Coalesce: coalesce_sql,
             exp.Date: lambda self, e: self.func("DATE", e.this),
             exp.DateAdd: lambda self, e: self.func(
                 "DATE_ADD",

@@ -22,6 +22,7 @@ from sqlglot.transforms import (
     ctas_with_tmp_tables_to_create_tmp_view,
     move_schema_columns_to_partitioned_by,
 )
+from sqlglot.parser import build_coalesce
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -253,6 +254,7 @@ class Spark2(Hive):
             "ISNULL": lambda args: _parse_is_null_functions(args, "isnull"),
             "ISNOTNULL": lambda args: _parse_is_null_functions(args, "isnotnull"),
             "MAP_FROM_ARRAYS": exp.Map.from_arg_list,
+            "NVL": lambda args: build_coalesce(args, is_nvl=True),
             "RLIKE": exp.RegexpLike.from_arg_list,
             "SHIFTLEFT": binary_from_function(exp.BitwiseLeftShift),
             "SHIFTRIGHT": binary_from_function(exp.BitwiseRightShift),
@@ -300,6 +302,10 @@ class Spark2(Hive):
         NVL2_SUPPORTED = True
         CAN_IMPLEMENT_ARRAY_ANY = True
 
+        def coalesce_sql(self, expression: exp.Coalesce) -> str:
+            func_name = "NVL" if expression.args.get("is_nvl") else "COALESCE"
+            return rename_func(func_name)(self, expression)
+
         PROPERTIES_LOCATION = {
             **Hive.Generator.PROPERTIES_LOCATION,
             exp.EngineProperty: exp.Properties.Location.UNSUPPORTED,
@@ -328,6 +334,7 @@ class Spark2(Hive):
                     move_schema_columns_to_partitioned_by,
                 ]
             ),
+            exp.Coalesce: coalesce_sql,
             exp.DateFromParts: rename_func("MAKE_DATE"),
             exp.DateTrunc: lambda self, e: self.func("TRUNC", e.this, unit_to_str(e)),
             exp.DayOfMonth: rename_func("DAYOFMONTH"),

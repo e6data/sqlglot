@@ -30,6 +30,7 @@ from sqlglot.dialects.dialect import (
 from sqlglot.generator import unsupported_args
 from sqlglot.helper import flatten, is_float, is_int, seq_get
 from sqlglot.tokens import TokenType
+from sqlglot.parser import build_coalesce
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E, B
@@ -410,6 +411,9 @@ class Snowflake(Dialect):
             "ARRAY_POSITION": lambda args: exp.ArrayPosition(
                 this=seq_get(args, 1), expression=seq_get(args, 0)
             ),
+            "AS_VARCHAR": lambda args: exp.Cast(
+                this=seq_get(args, 0), to=exp.DataType.build(exp.DataType.Type.VARCHAR)
+            ),
             "BITNOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BIT_NOT": lambda args: exp.BitwiseNot(this=seq_get(args, 0)),
             "BITAND": _build_bitwise(exp.BitwiseAnd, "BITAND"),
@@ -452,6 +456,7 @@ class Snowflake(Dialect):
             "MD5_HEX": exp.MD5Digest.from_arg_list,
             "LISTAGG": exp.GroupConcat.from_arg_list,
             "NULLIFZERO": _build_if_from_nullifzero,
+            "NVL": lambda args: build_coalesce(args, is_nvl=True),
             # object_construct is mapped to starmap/varmap but should be mapped to JsonObject
             "OBJECT_CONSTRUCT": _build_object_construct,
             "REGEXP_EXTRACT_ALL": _build_regexp_extract(exp.RegexpExtractAll),
@@ -920,6 +925,10 @@ class Snowflake(Dialect):
         SUPPORTS_MEDIAN = True
         ARRAY_SIZE_NAME = "ARRAY_SIZE"
 
+        def coalesce_sql(self, expression: exp.Coalesce) -> str:
+            func_name = "NVL" if expression.args.get("is_nvl") else "COALESCE"
+            return rename_func(func_name)(self, expression)
+
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
@@ -940,6 +949,7 @@ class Snowflake(Dialect):
             exp.BitwiseLeftShift: rename_func("BITSHIFTLEFT"),
             exp.BitwiseRightShift: rename_func("BITSHIFTRIGHT"),
             exp.Create: transforms.preprocess([_flatten_structured_types_unless_iceberg]),
+            exp.Coalesce: coalesce_sql,
             exp.DateAdd: date_delta_sql("DATEADD"),
             exp.DateDiff: date_delta_sql("DATEDIFF"),
             exp.DatetimeAdd: date_delta_sql("TIMESTAMPADD"),
