@@ -714,11 +714,13 @@ class Snowflake(Dialect):
 
             if isinstance(lateral.this, exp.Explode):
                 table_alias = lateral.args.get("alias")
-                columns = [exp.to_identifier(col) for col in self.FLATTEN_COLUMNS]
-                if table_alias and not table_alias.args.get("columns"):
-                    table_alias.set("columns", columns)
-                elif not table_alias:
-                    exp.alias_(lateral, "_flattened", table=columns, copy=False)
+                # we are removing this not to get unnecessary column names.
+                # columns = [exp.to_identifier(col) for col in self.FLATTEN_COLUMNS]
+                # if table_alias and not table_alias.args.get("columns"):
+                #     table_alias.set("columns", columns)
+                if not table_alias:
+                    exp.alias_(lateral, "_flattened", copy=False)
+            lateral.set("view", True)
 
             return lateral
 
