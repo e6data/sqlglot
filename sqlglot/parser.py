@@ -4662,9 +4662,8 @@ class Parser(metaclass=_Parser):
                 self._retreat(index)
                 return None
 
-        regular = self.expression(exp.Is, this=this, expression=expression)
-        not_node = self.expression(exp.Not, this=expression)
-        return self.expression(exp.Is, this=this, expression=not_node) if negate else regular
+        this = self.expression(exp.Is, this=this, expression=expression)
+        return self.expression(exp.Not, this=this) if negate else this
 
     def _parse_in(self, this: t.Optional[exp.Expression], alias: bool = False) -> exp.In:
         unnest = self._parse_unnest(with_alias=False)
