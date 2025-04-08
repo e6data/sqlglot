@@ -180,13 +180,13 @@ class TestOptimizer(unittest.TestCase):
                     actual,
                 )
 
-            if string_to_bool(execute):
-                with self.subTest(f"(execute) {title}"):
-                    df1 = self.conn.execute(
-                        sqlglot.transpile(sql, read=dialect, write="duckdb")[0]
-                    ).df()
-                    df2 = self.conn.execute(optimized.sql(dialect="duckdb")).df()
-                    assert_frame_equal(df1, df2)
+                if string_to_bool(execute):
+                    with self.subTest(f"(execute) {title}"):
+                        df1 = self.conn.execute(
+                            sqlglot.transpile(sql, read=dialect, write="duckdb")[0]
+                        ).df()
+                        df2 = self.conn.execute(optimized.sql(dialect="duckdb")).df()
+                        assert_frame_equal(df1, df2)
 
     @patch("sqlglot.generator.logger")
     def test_optimize(self, logger):
@@ -216,6 +216,28 @@ class TestOptimizer(unittest.TestCase):
         )
 
     def test_qualify_tables(self):
+        self.assertEqual(
+            optimizer.qualify_tables.qualify_tables(
+                parse_one(
+                    "WITH cte AS (SELECT * FROM t) SELECT * FROM cte PIVOT(SUM(c) FOR v IN ('x', 'y'))"
+                ),
+                db="db",
+                catalog="catalog",
+            ).sql(),
+            "WITH cte AS (SELECT * FROM catalog.db.t AS t) SELECT * FROM cte AS cte PIVOT(SUM(c) FOR v IN ('x', 'y')) AS _q_0",
+        )
+
+        self.assertEqual(
+            optimizer.qualify_tables.qualify_tables(
+                parse_one(
+                    "WITH cte AS (SELECT * FROM t) SELECT * FROM cte PIVOT(SUM(c) FOR v IN ('x', 'y')) AS pivot_alias"
+                ),
+                db="db",
+                catalog="catalog",
+            ).sql(),
+            "WITH cte AS (SELECT * FROM catalog.db.t AS t) SELECT * FROM cte AS cte PIVOT(SUM(c) FOR v IN ('x', 'y')) AS pivot_alias",
+        )
+
         self.assertEqual(
             optimizer.qualify_tables.qualify_tables(
                 parse_one("select a from b"), catalog="catalog"
@@ -640,6 +662,15 @@ SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expr
                 schema=MappingSchema(schema=unused_schema, dialect="bigquery"),
             ).sql(),
             "WITH data AS (SELECT 1 AS id) SELECT FUNC(data.id) AS id FROM data GROUP BY FUNC(data.id)",
+        )
+
+        sql = "SELECT x.a, max(x.b) as x FROM x AS x GROUP BY 1 HAVING x > 1"
+        self.assertEqual(
+            optimizer.qualify_columns.qualify_columns(
+                parse_one(sql, dialect="bigquery"),
+                schema=MappingSchema(schema=unused_schema, dialect="bigquery"),
+            ).sql(),
+            "SELECT x.a AS a, MAX(x.b) AS x FROM x AS x GROUP BY 1 HAVING x > 1",
         )
 
     def test_optimize_joins(self):
@@ -1425,6 +1456,16 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
             SELECT col FROM t;
         """
         self.assertEqual(optimizer.optimize(sql).selects[0].type.this, exp.DataType.Type.VARCHAR)
+
+    def test_udtf_annotation(self):
+        table_udtf = parse_one(
+            "SELECT * FROM TABLE(GENERATOR(ROWCOUNT => 100000))",
+            read="snowflake",
+        )
+        self.assertEqual(
+            annotate_types(table_udtf, dialect="snowflake").sql("snowflake"),
+            "SELECT * FROM TABLE(GENERATOR(ROWCOUNT => 100000))",
+        )
 
     def test_recursive_cte(self):
         query = parse_one(

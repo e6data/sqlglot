@@ -14,6 +14,7 @@ class TestMySQL(Validator):
             self.validate_identity(f"CREATE TABLE t (id {t} UNSIGNED)")
             self.validate_identity(f"CREATE TABLE t (id {t}(10) UNSIGNED)")
 
+        self.validate_identity("CREATE TABLE bar (abacate DOUBLE(10, 2) UNSIGNED)")
         self.validate_identity("CREATE TABLE t (id DECIMAL(20, 4) UNSIGNED)")
         self.validate_identity("CREATE TABLE foo (a BIGINT, UNIQUE (b) USING BTREE)")
         self.validate_identity("CREATE TABLE foo (id BIGINT)")
@@ -85,6 +86,12 @@ class TestMySQL(Validator):
             "CREATE OR REPLACE VIEW my_view AS SELECT column1 AS `boo`, column2 AS `foo` FROM my_table WHERE column3 = 'some_value' UNION SELECT q.* FROM fruits_table, JSON_TABLE(Fruits, '$[*]' COLUMNS(id VARCHAR(255) PATH '$.$id', value VARCHAR(255) PATH '$.value')) AS q",
         )
         self.validate_identity(
+            "CREATE TABLE test_table (id INT AUTO_INCREMENT, PRIMARY KEY (id) USING BTREE)"
+        )
+        self.validate_identity(
+            "CREATE TABLE test_table (id INT AUTO_INCREMENT, PRIMARY KEY (id) USING HASH)"
+        )
+        self.validate_identity(
             "/*left*/ EXPLAIN SELECT /*hint*/ col FROM t1 /*right*/",
             "/* left */ DESCRIBE /* hint */ SELECT col FROM t1 /* right */",
         )
@@ -151,6 +158,10 @@ class TestMySQL(Validator):
                 "sqlite": "CREATE TABLE x (id INTEGER NOT NULL AUTOINCREMENT PRIMARY KEY)",
             },
         )
+        self.validate_identity("ALTER TABLE t ALTER INDEX i INVISIBLE")
+        self.validate_identity("ALTER TABLE t ALTER INDEX i VISIBLE")
+        self.validate_identity("ALTER TABLE t ALTER COLUMN c SET INVISIBLE")
+        self.validate_identity("ALTER TABLE t ALTER COLUMN c SET VISIBLE")
 
     def test_identity(self):
         self.validate_identity("SELECT HIGH_PRIORITY STRAIGHT_JOIN SQL_CALC_FOUND_ROWS * FROM t")
@@ -257,8 +268,7 @@ class TestMySQL(Validator):
         self.validate_identity("SET GLOBAL TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         self.validate_identity("SET TRANSACTION READ ONLY")
         self.validate_identity("SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ WRITE")
-        self.validate_identity("SELECT SCHEMA()")
-        self.validate_identity("SELECT DATABASE()")
+        self.validate_identity("DATABASE()", "SCHEMA()")
         self.validate_identity(
             "SET GLOBAL sort_buffer_size = 1000000, SESSION sort_buffer_size = 1000000"
         )
@@ -336,6 +346,24 @@ class TestMySQL(Validator):
             write={
                 "mysql": "CHAR(10)",
                 "presto": "CHR(10)",
+                "sqlite": "CHAR(10)",
+                "tsql": "CHAR(10)",
+            },
+        )
+        self.validate_identity("CREATE TABLE t (foo VARBINARY(5))")
+        self.validate_all(
+            "CREATE TABLE t (foo BLOB)",
+            write={
+                "mysql": "CREATE TABLE t (foo BLOB)",
+                "oracle": "CREATE TABLE t (foo BLOB)",
+                "postgres": "CREATE TABLE t (foo BYTEA)",
+                "tsql": "CREATE TABLE t (foo VARBINARY)",
+                "sqlite": "CREATE TABLE t (foo BLOB)",
+                "duckdb": "CREATE TABLE t (foo VARBINARY)",
+                "hive": "CREATE TABLE t (foo BINARY)",
+                "bigquery": "CREATE TABLE t (foo BYTES)",
+                "redshift": "CREATE TABLE t (foo VARBYTE)",
+                "clickhouse": "CREATE TABLE t (foo Nullable(String))",
             },
         )
 
@@ -388,16 +416,16 @@ class TestMySQL(Validator):
 
     def test_hexadecimal_literal(self):
         write_CC = {
-            "bigquery": "SELECT 0xCC",
-            "clickhouse": "SELECT 0xCC",
+            "bigquery": "SELECT FROM_HEX('CC')",
+            "clickhouse": UnsupportedError,
             "databricks": "SELECT X'CC'",
             "drill": "SELECT 204",
-            "duckdb": "SELECT 204",
+            "duckdb": "SELECT FROM_HEX('CC')",
             "hive": "SELECT 204",
             "mysql": "SELECT x'CC'",
             "oracle": "SELECT 204",
             "postgres": "SELECT x'CC'",
-            "presto": "SELECT 204",
+            "presto": "SELECT x'CC'",
             "redshift": "SELECT 204",
             "snowflake": "SELECT x'CC'",
             "spark": "SELECT X'CC'",
@@ -405,20 +433,20 @@ class TestMySQL(Validator):
             "starrocks": "SELECT x'CC'",
             "tableau": "SELECT 204",
             "teradata": "SELECT X'CC'",
-            "trino": "SELECT X'CC'",
+            "trino": "SELECT x'CC'",
             "tsql": "SELECT 0xCC",
         }
         write_CC_with_leading_zeros = {
-            "bigquery": "SELECT 0x0000CC",
-            "clickhouse": "SELECT 0x0000CC",
+            "bigquery": "SELECT FROM_HEX('0000CC')",
+            "clickhouse": UnsupportedError,
             "databricks": "SELECT X'0000CC'",
             "drill": "SELECT 204",
-            "duckdb": "SELECT 204",
+            "duckdb": "SELECT FROM_HEX('0000CC')",
             "hive": "SELECT 204",
             "mysql": "SELECT x'0000CC'",
             "oracle": "SELECT 204",
             "postgres": "SELECT x'0000CC'",
-            "presto": "SELECT 204",
+            "presto": "SELECT x'0000CC'",
             "redshift": "SELECT 204",
             "snowflake": "SELECT x'0000CC'",
             "spark": "SELECT X'0000CC'",
@@ -426,7 +454,7 @@ class TestMySQL(Validator):
             "starrocks": "SELECT x'0000CC'",
             "tableau": "SELECT 204",
             "teradata": "SELECT X'0000CC'",
-            "trino": "SELECT X'0000CC'",
+            "trino": "SELECT x'0000CC'",
             "tsql": "SELECT 0x0000CC",
         }
 
@@ -728,9 +756,17 @@ class TestMySQL(Validator):
                     write={
                         "duckdb": "SELECT LENGTH('foo')",
                         "mysql": "SELECT CHAR_LENGTH('foo')",
+                        "postgres": "SELECT LENGTH('foo')",
                     },
                 )
 
+        self.validate_all(
+            "CURDATE()",
+            write={
+                "mysql": "CURRENT_DATE",
+                "postgres": "CURRENT_DATE",
+            },
+        )
         self.validate_all(
             "SELECT CONCAT('11', '22')",
             read={
@@ -1382,3 +1418,13 @@ COMMENT='客户账户表'"""
                 "mysql": "SELECT FORMAT(12332.2, 2, 'de_DE')",
             },
         )
+
+    def test_analyze(self):
+        self.validate_identity("ANALYZE LOCAL TABLE tbl")
+        self.validate_identity("ANALYZE NO_WRITE_TO_BINLOG TABLE tbl")
+        self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1")
+        self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1 USING DATA 'json_data'")
+        self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1 WITH 5 BUCKETS")
+        self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1 WITH 5 BUCKETS AUTO UPDATE")
+        self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1 WITH 5 BUCKETS MANUAL UPDATE")
+        self.validate_identity("ANALYZE tbl DROP HISTOGRAM ON col1")

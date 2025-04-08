@@ -7,6 +7,7 @@ from sqlglot.dialects.dialect import (
     date_delta_sql,
     build_date_delta,
     timestamptrunc_sql,
+    build_formatted_time,
     rename_func,
     trim_sql,
 )
@@ -85,6 +86,7 @@ class Databricks(Spark):
             "DATE_DIFF": build_date_delta(exp.DateDiff),
             "GETDATE": exp.CurrentTimestamp.from_arg_list,
             "GET_JSON_OBJECT": _build_json_extract,
+            "TO_DATE": build_formatted_time(exp.TsOrDsToDate, "databricks"),
             "LTRIM": lambda args: build_trim(args),
             "RTRIM": lambda args: build_trim(args, is_left=False),
             "SPLIT_PART": exp.SplitPart.from_arg_list,

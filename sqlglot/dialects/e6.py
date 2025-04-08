@@ -11,7 +11,6 @@ from sqlglot.dialects.dialect import (
     build_formatted_time,
     max_or_greatest,
     min_or_least,
-    locate_to_strposition,
     rename_func,
     unit_to_str,
     timestrtotime_sql,
@@ -1383,7 +1382,9 @@ class E6(Dialect):
             "BITWISE_AND": binary_from_function(exp.BitwiseAnd),
             "CAST": _parse_cast,
             "CHARACTER_LENGTH": exp.Length.from_arg_list,
-            "CHARINDEX": locate_to_strposition,
+            "CHARINDEX": lambda args: exp.StrPosition(
+                this=seq_get(args, 1), substr=seq_get(args, 0), position=seq_get(args, 2)
+            ),
             "CHAR_LENGTH": exp.Length.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "CONVERT_TIMEZONE": _build_convert_timezone,
@@ -1425,7 +1426,9 @@ class E6(Dialect):
             "LENGTH": exp.Length.from_arg_list,
             "LEAST": exp.Min.from_arg_list,
             "LISTAGG": exp.GroupConcat.from_arg_list,
-            "LOCATE": locate_to_strposition,
+            "LOCATE": lambda args: exp.StrPosition(
+                this=seq_get(args, 1), substr=seq_get(args, 0), position=seq_get(args, 2)
+            ),
             "LOG": exp.Log.from_arg_list,
             "LTRIM": lambda args: _build_trim(args),
             "MAX_BY": exp.ArgMax.from_arg_list,

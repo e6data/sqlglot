@@ -5,10 +5,20 @@ class TestTrino(Validator):
     dialect = "trino"
 
     def test_trino(self):
+        self.validate_identity("JSON_QUERY(m.properties, 'lax $.area' OMIT QUOTES NULL ON ERROR)")
         self.validate_identity("JSON_EXTRACT(content, json_path)")
         self.validate_identity("JSON_QUERY(content, 'lax $.HY.*')")
+        self.validate_identity("JSON_QUERY(content, 'strict $.HY.*' WITH WRAPPER)")
+        self.validate_identity("JSON_QUERY(content, 'strict $.HY.*' WITH ARRAY WRAPPER)")
         self.validate_identity("JSON_QUERY(content, 'strict $.HY.*' WITH UNCONDITIONAL WRAPPER)")
         self.validate_identity("JSON_QUERY(content, 'strict $.HY.*' WITHOUT CONDITIONAL WRAPPER)")
+        self.validate_identity("JSON_QUERY(description, 'strict $.comment' KEEP QUOTES)")
+        self.validate_identity(
+            "JSON_QUERY(description, 'strict $.comment' OMIT QUOTES ON SCALAR STRING)"
+        )
+        self.validate_identity(
+            "JSON_QUERY(content, 'strict $.HY.*' WITH UNCONDITIONAL WRAPPER KEEP QUOTES)"
+        )
 
     def test_listagg(self):
         self.validate_identity(
@@ -79,3 +89,11 @@ class TestTrino(Validator):
         self.validate_identity(
             "ALTER VIEW people SET AUTHORIZATION alice", check_command_warning=True
         )
+        self.validate_identity("CREATE SCHEMA foo WITH (LOCATION='s3://bucket/foo')")
+        self.validate_identity(
+            "CREATE TABLE foo.bar WITH (LOCATION='s3://bucket/foo/bar') AS SELECT 1"
+        )
+
+    def test_analyze(self):
+        self.validate_identity("ANALYZE tbl")
+        self.validate_identity("ANALYZE tbl WITH (prop1=val1, prop2=val2)")

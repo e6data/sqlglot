@@ -100,6 +100,7 @@ class Scope:
         self._join_hints = None
         self._pivots = None
         self._references = None
+        self._semi_anti_join_tables = None
 
     def branch(
         self,
@@ -132,6 +133,7 @@ class Scope:
         self._raw_columns = []
         self._stars = []
         self._join_hints = []
+        self._semi_anti_join_tables = set()
 
         for node in self.walk(bfs=False):
             if node is self.expression:
@@ -145,6 +147,10 @@ class Scope:
                 else:
                     self._raw_columns.append(node)
             elif isinstance(node, exp.Table) and not isinstance(node.parent, exp.JoinHint):
+                parent = node.parent
+                if isinstance(parent, exp.Join) and parent.is_semi_or_anti_join:
+                    self._semi_anti_join_tables.add(node.alias_or_name)
+
                 self._tables.append(node)
             elif isinstance(node, exp.JoinHint):
                 self._join_hints.append(node)
@@ -152,9 +158,7 @@ class Scope:
                 self._udtfs.append(node)
             elif isinstance(node, exp.CTE):
                 self._ctes.append(node)
-            elif _is_derived_table(node) and isinstance(
-                node.parent, (exp.From, exp.Join, exp.Subquery)
-            ):
+            elif _is_derived_table(node) and _is_from_or_join(node):
                 self._derived_tables.append(node)
             elif isinstance(node, exp.UNWRAPPED_QUERIES):
                 self._subqueries.append(node)
@@ -291,6 +295,7 @@ class Scope:
                     exp.Hint,
                     exp.Table,
                     exp.Star,
+                    exp.Distinct,
                 )
                 if (
                     not ancestor
@@ -298,9 +303,9 @@ class Scope:
                     or isinstance(ancestor, exp.Select)
                     or (isinstance(ancestor, exp.Table) and not isinstance(ancestor.this, exp.Func))
                     or (
-                        isinstance(ancestor, exp.Order)
+                        isinstance(ancestor, (exp.Order, exp.Distinct))
                         and (
-                            isinstance(ancestor.parent, exp.Window)
+                            isinstance(ancestor.parent, (exp.Window, exp.WithinGroup))
                             or column.name not in named_selects
                         )
                     )
@@ -325,6 +330,11 @@ class Scope:
             result = {}
 
             for name, node in self.references:
+                if name in self._semi_anti_join_tables:
+                    # The RHS table of SEMI/ANTI joins shouldn't be collected as a
+                    # selected source
+                    continue
+
                 if name in result:
                     raise OptimizeError(f"Alias already used: {name}")
                 if name in self.sources:
@@ -365,7 +375,10 @@ class Scope:
                 self._external_columns = left.external_columns + right.external_columns
             else:
                 self._external_columns = [
-                    c for c in self.columns if c.table not in self.selected_sources
+                    c
+                    for c in self.columns
+                    if c.table not in self.selected_sources
+                    and c.table not in self.semi_or_anti_join_tables
                 ]
 
         return self._external_columns
@@ -400,6 +413,10 @@ class Scope:
             ]
 
         return self._pivots
+
+    @property
+    def semi_or_anti_join_tables(self):
+        return self._semi_anti_join_tables or set()
 
     def source_columns(self, source_name):
         """
@@ -671,6 +688,19 @@ def _is_derived_table(expression: exp.Subquery) -> bool:
     return isinstance(expression, exp.Subquery) and bool(
         expression.alias or isinstance(expression.this, exp.UNWRAPPED_QUERIES)
     )
+
+
+def _is_from_or_join(expression: exp.Expression) -> bool:
+    """
+    Determine if `expression` is the FROM or JOIN clause of a SELECT statement.
+    """
+    parent = expression.parent
+
+    # Subqueries can be arbitrarily nested
+    while isinstance(parent, exp.Subquery):
+        parent = parent.parent
+
+    return isinstance(parent, (exp.From, exp.Join))
 
 
 def _traverse_tables(scope):
