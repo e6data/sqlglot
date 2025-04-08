@@ -220,6 +220,11 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT LATERAL VIEW EXPLODE(input => mv.content) AS f",
+            read={"snowflake": "select lateral flatten(input => mv.content) f"},
+        )
+
+        self.validate_all(
             "SELECT LOCATE('ehe', 'hahahahehehe')",
             read={"trino": "SELECT STRPOS('hahahahehehe','ehe')"},
         )
@@ -379,7 +384,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT NOT A IS NULL",
+            "SELECT A IS NOT NULL",
             read={"databricks": "SELECT ISNOTNULL(A)"},
             write={"databricks": "SELECT NOT A IS NULL"},
         )
@@ -494,7 +499,7 @@ class TestE6(Validator):
 
         # Test FILTER_ARRAY with NULL values
         self.validate_all(
-            "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> NOT x IS NULL)",
+            "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
             read={
                 "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(NULL, 1, NULL, 2), x -> x IS NOT NULL)",
@@ -575,7 +580,7 @@ class TestE6(Validator):
         # )
 
         self.validate_all(
-            "named_struct('x', x_start, 'y', y_start)",
+            "NAMED_STRUCT('x', x_start, 'y', y_start)",
             read={"databricks": "struct (x_start as x, y_start as y)"},
         )
 
