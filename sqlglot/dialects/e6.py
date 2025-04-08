@@ -1959,22 +1959,46 @@ class E6(Dialect):
             time_expr = expression.this
             format_expr = expression.args.get("format")
 
-            # Case 1: If `time_expr` is already `x / 1000`, do nothing
-            if isinstance(time_expr, exp.Div) and time_expr.expression.this == "1000":
-                transformed_expr = time_expr
-            else:
-                # Case 2: If not a division, transform `x` into `x / 1000`
-                transformed_expr = exp.Div(
-                    this=time_expr, expression=exp.Literal(this="1000", is_string=False)
-                )
-
             # Generate final function with or without format argument
             if format_expr:
-                return self.func(
-                    "TO_UNIX_TIMESTAMP", self.sql(transformed_expr), self.sql(format_expr)
+                unix_timestamp_expr = self.func(
+                    "TO_UNIX_TIMESTAMP", self.sql(time_expr), self.sql(format_expr)
                 )
             else:
-                return self.func("TO_UNIX_TIMESTAMP", self.sql(transformed_expr))
+                unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))
+
+            return f"{unix_timestamp_expr}/1000"
+
+        def lateral_sql(self, expression: exp.Lateral) -> str:
+            expression.set("view", True)
+            this = self.sql(expression, "this")
+
+            alias = expression.args["alias"]
+            columns = self.expressions(alias, key="columns", flat=True)
+            columns_cleaned = columns.replace('"', "")
+
+            table = f"{alias.name}" if alias and alias.name else ""
+            columns = (
+                f"{columns}"
+                if columns and not columns_cleaned == "SEQ, KEY, PATH, INDEX, VALUE, THIS"
+                else ""
+            )
+
+            op_sql = self.seg(f"LATERAL VIEW{' OUTER' if expression.args.get('outer') else ''}")
+
+            if table and columns:
+                return f"{op_sql}{self.sep()}{this} AS {table}({columns})"
+            elif table:
+                return f"{op_sql}{self.sep()}{this} AS {table}"
+            else:
+                return f"{op_sql}{self.sep()}{this}"
+
+        def not_sql(self, expression: exp.Not) -> str:
+            expr = expression.this
+            if isinstance(expr, exp.Is):
+                return f"{expr.this} IS NOT {expr.expression}"
+            else:
+                return super().not_sql(expression)
 
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
