@@ -83,6 +83,7 @@ class Databricks(Spark):
             "DATE_ADD": build_date_delta(exp.DateAdd),
             "DATEDIFF": build_date_delta(exp.DateDiff),
             "DATE_DIFF": build_date_delta(exp.DateDiff),
+            "GETDATE": exp.CurrentTimestamp.from_arg_list,
             "GET_JSON_OBJECT": _build_json_extract,
             "LTRIM": lambda args: build_trim(args),
             "RTRIM": lambda args: build_trim(args, is_left=False),

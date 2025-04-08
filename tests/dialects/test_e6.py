@@ -240,6 +240,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CURRENT_TIMESTAMP",
+            read={
+                "databricks": "select GETDATE()",
+            },
+        )
+
+        self.validate_all(
             "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             read={
                 "trino": "SELECT date_diff('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
