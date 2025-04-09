@@ -19,6 +19,15 @@ INT;
 LEAST(1, 2.5, 3);
 DOUBLE;
 
+CURRENT_TIME();
+TIME;
+
+TIME_ADD(CAST('09:05:03' AS TIME), INTERVAL 2 HOUR);
+TIME;
+
+TIME_SUB(CAST('09:05:03' AS TIME), INTERVAL 2 HOUR);
+TIME;
+
 --------------------------------------
 -- Spark2 / Spark3 / Databricks
 --------------------------------------
@@ -315,3 +324,10 @@ STRING;
 # dialect: bigquery
 STRING(timestamp_expr, timezone);
 STRING;
+
+--------------------------------------
+-- Snowflake
+--------------------------------------
+
+LEAST(x::DECIMAL(18, 2));
+DECIMAL(18, 2);

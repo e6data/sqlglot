@@ -37,6 +37,7 @@ class TokenType(AutoName):
     DASH = auto()
     PLUS = auto()
     COLON = auto()
+    DOTCOLON = auto()
     DCOLON = auto()
     DQMARK = auto()
     SEMICOLON = auto()
@@ -79,6 +80,8 @@ class TokenType(AutoName):
     XOR = auto()
     DSTAR = auto()
 
+    URI_START = auto()
+
     BLOCK_START = auto()
     BLOCK_END = auto()
 
@@ -94,6 +97,7 @@ class TokenType(AutoName):
     SCHEMA = auto()
     TABLE = auto()
     WAREHOUSE = auto()
+    STAGE = auto()
     STREAMLIT = auto()
     VAR = auto()
     BIT_STRING = auto()
@@ -123,6 +127,7 @@ class TokenType(AutoName):
     UINT256 = auto()
     FLOAT = auto()
     DOUBLE = auto()
+    UDOUBLE = auto()
     DECIMAL = auto()
     DECIMAL32 = auto()
     DECIMAL64 = auto()
@@ -138,6 +143,7 @@ class TokenType(AutoName):
     TEXT = auto()
     MEDIUMTEXT = auto()
     LONGTEXT = auto()
+    BLOB = auto()
     MEDIUMBLOB = auto()
     LONGBLOB = auto()
     TINYBLOB = auto()
@@ -192,7 +198,6 @@ class TokenType(AutoName):
     BIGSERIAL = auto()
     XML = auto()
     YEAR = auto()
-    UNIQUEIDENTIFIER = auto()
     USERDEFINED = auto()
     MONEY = auto()
     SMALLMONEY = auto()
@@ -216,6 +221,7 @@ class TokenType(AutoName):
     TDIGEST = auto()
     UNKNOWN = auto()
     VECTOR = auto()
+    DYNAMIC = auto()
 
     # keywords
     ALIAS = auto()
@@ -249,6 +255,7 @@ class TokenType(AutoName):
     CUBE = auto()
     CURRENT_DATE = auto()
     CURRENT_DATETIME = auto()
+    CURRENT_SCHEMA = auto()
     CURRENT_TIME = auto()
     CURRENT_TIMESTAMP = auto()
     CURRENT_USER = auto()
@@ -271,6 +278,7 @@ class TokenType(AutoName):
     EXISTS = auto()
     FALSE = auto()
     FETCH = auto()
+    FILE_FORMAT = auto()
     FILTER = auto()
     FINAL = auto()
     FIRST = auto()
@@ -352,6 +360,7 @@ class TokenType(AutoName):
     PROCEDURE = auto()
     PROPERTIES = auto()
     PSEUDO_TYPE = auto()
+    PUT = auto()
     QUALIFY = auto()
     QUOTE = auto()
     RANGE = auto()
@@ -410,6 +419,9 @@ class TokenType(AutoName):
     OPTION = auto()
     SINK = auto()
     SOURCE = auto()
+    ANALYZE = auto()
+    NAMESPACE = auto()
+    EXPORT = auto()
 
 
 _ALL_TOKEN_TYPES = list(TokenType)
@@ -715,6 +727,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "CROSS": TokenType.CROSS,
         "CUBE": TokenType.CUBE,
         "CURRENT_DATE": TokenType.CURRENT_DATE,
+        "CURRENT_SCHEMA": TokenType.CURRENT_SCHEMA,
         "CURRENT_TIME": TokenType.CURRENT_TIME,
         "CURRENT_TIMESTAMP": TokenType.CURRENT_TIMESTAMP,
         "CURRENT_USER": TokenType.CURRENT_USER,
@@ -771,6 +784,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "LOAD": TokenType.LOAD,
         "LOCK": TokenType.LOCK,
         "MERGE": TokenType.MERGE,
+        "NAMESPACE": TokenType.NAMESPACE,
         "NATURAL": TokenType.NATURAL,
         "NEXT": TokenType.NEXT,
         "NOT": TokenType.NOT,
@@ -855,7 +869,6 @@ class Tokenizer(metaclass=_Tokenizer):
         "INT16": TokenType.SMALLINT,
         "SHORT": TokenType.SMALLINT,
         "SMALLINT": TokenType.SMALLINT,
-        "INT128": TokenType.INT128,
         "HUGEINT": TokenType.INT128,
         "UHUGEINT": TokenType.UINT128,
         "INT2": TokenType.SMALLINT,
@@ -864,10 +877,14 @@ class Tokenizer(metaclass=_Tokenizer):
         "INT4": TokenType.INT,
         "INT32": TokenType.INT,
         "INT64": TokenType.BIGINT,
+        "INT128": TokenType.INT128,
+        "INT256": TokenType.INT256,
         "LONG": TokenType.BIGINT,
         "BIGINT": TokenType.BIGINT,
         "INT8": TokenType.TINYINT,
         "UINT": TokenType.UINT,
+        "UINT128": TokenType.UINT128,
+        "UINT256": TokenType.UINT256,
         "DEC": TokenType.DECIMAL,
         "DECIMAL": TokenType.DECIMAL,
         "DECIMAL32": TokenType.DECIMAL32,
@@ -941,7 +958,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "SEQUENCE": TokenType.SEQUENCE,
         "VARIANT": TokenType.VARIANT,
         "ALTER": TokenType.ALTER,
-        "ANALYZE": TokenType.COMMAND,
+        "ANALYZE": TokenType.ANALYZE,
         "CALL": TokenType.COMMAND,
         "COMMENT": TokenType.COMMENT,
         "EXPLAIN": TokenType.COMMAND,
@@ -981,6 +998,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "size",
         "tokens",
         "dialect",
+        "use_rs_tokenizer",
         "_start",
         "_current",
         "_line",
@@ -993,12 +1011,19 @@ class Tokenizer(metaclass=_Tokenizer):
         "_rs_dialect_settings",
     )
 
-    def __init__(self, dialect: DialectType = None) -> None:
+    def __init__(
+        self, dialect: DialectType = None, use_rs_tokenizer: t.Optional[bool] = None
+    ) -> None:
         from sqlglot.dialects import Dialect
 
         self.dialect = Dialect.get_or_raise(dialect)
 
-        if USE_RS_TOKENIZER:
+        # initialize `use_rs_tokenizer`, and allow it to be overwritten per Tokenizer instance
+        self.use_rs_tokenizer = (
+            use_rs_tokenizer if use_rs_tokenizer is not None else USE_RS_TOKENIZER
+        )
+
+        if self.use_rs_tokenizer:
             self._rs_dialect_settings = RsTokenizerDialectSettings(
                 unescaped_sequences=self.dialect.UNESCAPED_SEQUENCES,
                 identifiers_can_start_with_digit=self.dialect.IDENTIFIERS_CAN_START_WITH_DIGIT,
@@ -1024,7 +1049,7 @@ class Tokenizer(metaclass=_Tokenizer):
 
     def tokenize(self, sql: str) -> t.List[Token]:
         """Returns a list of tokens corresponding to the SQL string `sql`."""
-        if USE_RS_TOKENIZER:
+        if self.use_rs_tokenizer:
             return self.tokenize_rs(sql)
 
         self.reset()

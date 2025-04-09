@@ -16,6 +16,7 @@ class TestOracle(Validator):
         )
         self.parse_one("ALTER TABLE tbl_name DROP FOREIGN KEY fk_symbol").assert_is(exp.Alter)
 
+        self.validate_identity("CAST(value AS NUMBER DEFAULT 0 ON CONVERSION ERROR)")
         self.validate_identity("SYSDATE")
         self.validate_identity("CREATE GLOBAL TEMPORARY TABLE t AS SELECT * FROM orders")
         self.validate_identity("CREATE PRIVATE TEMPORARY TABLE t AS SELECT * FROM orders")
@@ -45,6 +46,7 @@ class TestOracle(Validator):
         self.validate_identity("SELECT COUNT(*) * 10 FROM orders SAMPLE (10) SEED (1)")
         self.validate_identity("SELECT * FROM V$SESSION")
         self.validate_identity("SELECT TO_DATE('January 15, 1989, 11:00 A.M.')")
+        self.validate_identity("SELECT INSTR(haystack, needle)")
         self.validate_identity(
             "SELECT * FROM test UNPIVOT INCLUDE NULLS (value FOR Description IN (col AS 'PREFIX ' || CHR(38) || ' SUFFIX'))"
         )
@@ -77,6 +79,10 @@ class TestOracle(Validator):
         )
         self.validate_identity(
             "SELECT MIN(column_name) KEEP (DENSE_RANK FIRST ORDER BY column_name DESC) FROM table_name"
+        )
+        self.validate_identity(
+            "SELECT CAST('January 15, 1989, 11:00 A.M.' AS DATE DEFAULT NULL ON CONVERSION ERROR, 'Month dd, YYYY, HH:MI A.M.') FROM DUAL",
+            "SELECT TO_DATE('January 15, 1989, 11:00 A.M.', 'Month dd, YYYY, HH12:MI P.M.') FROM DUAL",
         )
         self.validate_identity(
             "SELECT TRUNC(SYSDATE)",
@@ -112,6 +118,13 @@ class TestOracle(Validator):
         )
 
         self.validate_all(
+            "SELECT TRIM('|' FROM '||Hello ||| world||')",
+            write={
+                "clickhouse": "SELECT TRIM(BOTH '|' FROM '||Hello ||| world||')",
+                "oracle": "SELECT TRIM('|' FROM '||Hello ||| world||')",
+            },
+        )
+        self.validate_all(
             "SELECT department_id, department_name INTO v_department_id, v_department_name FROM departments FETCH FIRST 1 ROWS ONLY",
             write={
                 "oracle": "SELECT department_id, department_name INTO v_department_id, v_department_name FROM departments FETCH FIRST 1 ROWS ONLY",
@@ -130,13 +143,13 @@ class TestOracle(Validator):
             },
         )
         self.validate_all(
-            "CURRENT_TIMESTAMP BETWEEN TO_DATE(f.C_SDATE, 'yyyy/mm/dd') AND TO_DATE(f.C_EDATE, 'yyyy/mm/dd')",
+            "CURRENT_TIMESTAMP BETWEEN TO_DATE(f.C_SDATE, 'YYYY/MM/DD') AND TO_DATE(f.C_EDATE, 'YYYY/MM/DD')",
             read={
                 "postgres": "CURRENT_TIMESTAMP BETWEEN TO_DATE(f.C_SDATE, 'yyyy/mm/dd') AND TO_DATE(f.C_EDATE, 'yyyy/mm/dd')",
             },
             write={
-                "oracle": "CURRENT_TIMESTAMP BETWEEN TO_DATE(f.C_SDATE, 'yyyy/mm/dd') AND TO_DATE(f.C_EDATE, 'yyyy/mm/dd')",
-                "postgres": "CURRENT_TIMESTAMP BETWEEN TO_DATE(f.C_SDATE, 'yyyy/mm/dd') AND TO_DATE(f.C_EDATE, 'yyyy/mm/dd')",
+                "oracle": "CURRENT_TIMESTAMP BETWEEN TO_DATE(f.C_SDATE, 'YYYY/MM/DD') AND TO_DATE(f.C_EDATE, 'YYYY/MM/DD')",
+                "postgres": "CURRENT_TIMESTAMP BETWEEN TO_DATE(f.C_SDATE, 'YYYY/MM/DD') AND TO_DATE(f.C_EDATE, 'YYYY/MM/DD')",
             },
         )
         self.validate_all(
@@ -299,6 +312,15 @@ class TestOracle(Validator):
             "SELECT /*+ ORDERED */ * /* test */ FROM tbl",
         )
 
+        self.validate_all(
+            "SELECT * FROM t FETCH FIRST 10 ROWS ONLY",
+            write={
+                "oracle": "SELECT * FROM t FETCH FIRST 10 ROWS ONLY",
+                "tsql": "SELECT * FROM t ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH FIRST 10 ROWS ONLY",
+            },
+        )
+        self.validate_identity("CREATE OR REPLACE FORCE VIEW foo1.foo2")
+
     def test_join_marker(self):
         self.validate_identity("SELECT e1.x, e2.x FROM e e1, e e2 WHERE e1.y (+) = e2.y")
 
@@ -392,6 +414,9 @@ JOIN departments
         self.validate_identity("XMLTABLE('x' PASSING y RETURNING SEQUENCE BY REF)")
         self.validate_identity(
             "XMLTABLE('x' RETURNING SEQUENCE BY REF COLUMNS a VARCHAR2, b FLOAT)"
+        )
+        self.validate_identity(
+            "SELECT x.* FROM example t, XMLTABLE(XMLNAMESPACES(DEFAULT 'http://example.com/default', 'http://example.com/ns1' AS \"ns1\"), '/root/data' PASSING t.xml COLUMNS id NUMBER PATH '@id', value VARCHAR2(100) PATH 'ns1:value/text()') x"
         )
 
         self.validate_all(
@@ -512,10 +537,10 @@ FROM JSON_TABLE(res, '$.info[*]' COLUMNS(
   LEVEL,
   SYS_CONNECT_BY_PATH(last_name, '/') AS "Path"
 FROM employees
-START WITH last_name = 'King'
-CONNECT BY PRIOR employee_id = manager_id AND LEVEL <= 4
 WHERE
-  level <= 3 AND department_id = 80"""
+  level <= 3 AND department_id = 80
+START WITH last_name = 'King'
+CONNECT BY PRIOR employee_id = manager_id AND LEVEL <= 4"""
 
         for query in (f"{body}{start}{connect}", f"{body}{connect}{start}"):
             self.validate_identity(query, pretty, pretty=True)
@@ -656,3 +681,27 @@ WHERE
             "'W'",
         ):
             self.validate_identity(f"TRUNC(x, {unit})")
+
+    def test_analyze(self):
+        self.validate_identity("ANALYZE TABLE tbl")
+        self.validate_identity("ANALYZE INDEX ndx")
+        self.validate_identity("ANALYZE TABLE db.tbl PARTITION(foo = 'foo', bar = 'bar')")
+        self.validate_identity("ANALYZE TABLE db.tbl SUBPARTITION(foo = 'foo', bar = 'bar')")
+        self.validate_identity("ANALYZE INDEX db.ndx PARTITION(foo = 'foo', bar = 'bar')")
+        self.validate_identity("ANALYZE INDEX db.ndx PARTITION(part1)")
+        self.validate_identity("ANALYZE CLUSTER db.cluster")
+        self.validate_identity("ANALYZE TABLE tbl VALIDATE REF UPDATE")
+        self.validate_identity("ANALYZE LIST CHAINED ROWS")
+        self.validate_identity("ANALYZE LIST CHAINED ROWS INTO tbl")
+        self.validate_identity("ANALYZE DELETE STATISTICS")
+        self.validate_identity("ANALYZE DELETE SYSTEM STATISTICS")
+        self.validate_identity("ANALYZE VALIDATE REF UPDATE")
+        self.validate_identity("ANALYZE VALIDATE REF UPDATE SET DANGLING TO NULL")
+        self.validate_identity("ANALYZE VALIDATE STRUCTURE")
+        self.validate_identity("ANALYZE VALIDATE STRUCTURE CASCADE FAST")
+        self.validate_identity(
+            "ANALYZE TABLE tbl VALIDATE STRUCTURE CASCADE COMPLETE ONLINE INTO db.tbl"
+        )
+        self.validate_identity(
+            "ANALYZE TABLE tbl VALIDATE STRUCTURE CASCADE COMPLETE OFFLINE INTO db.tbl"
+        )

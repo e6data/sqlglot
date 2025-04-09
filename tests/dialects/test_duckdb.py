@@ -8,6 +8,10 @@ class TestDuckDB(Validator):
     dialect = "duckdb"
 
     def test_duckdb(self):
+        self.validate_identity("x::timestamp", "CAST(x AS TIMESTAMP)")
+        self.validate_identity("x::timestamp without time zone", "CAST(x AS TIMESTAMP)")
+        self.validate_identity("x::timestamp with time zone", "CAST(x AS TIMESTAMPTZ)")
+
         with self.assertRaises(ParseError):
             parse_one("1 //", read="duckdb")
 
@@ -258,6 +262,7 @@ class TestDuckDB(Validator):
             "a // b",
         )
 
+        self.validate_identity("CAST(x AS FOO)")
         self.validate_identity("SELECT UNNEST([1, 2])").selects[0].assert_is(exp.UDTF)
         self.validate_identity("'red' IN flags").args["field"].assert_is(exp.Column)
         self.validate_identity("'red' IN tbl.flags")
@@ -315,6 +320,10 @@ class TestDuckDB(Validator):
         )
         self.validate_identity(
             """SELECT '{ "family": "anatidae", "species": [ "duck", "goose", "swan", null ] }' ->> ['$.family', '$.species']""",
+        )
+        self.validate_identity(
+            "SELECT 20_000 AS literal",
+            "SELECT 20000 AS literal",
         )
         self.validate_identity(
             """SELECT JSON_EXTRACT_STRING('{ "family": "anatidae", "species": [ "duck", "goose", "swan", null ] }', ['$.family', '$.species'])""",
@@ -395,6 +404,9 @@ class TestDuckDB(Validator):
             "SELECT * FROM (PIVOT Cities ON Year USING SUM(Population) GROUP BY Country) AS pivot_alias"
         )
         self.validate_identity(
+            "SELECT * FROM cities PIVOT(SUM(population) FOR year IN (2000, 2010, 2020) GROUP BY country)"
+        )
+        self.validate_identity(
             # QUALIFY comes after WINDOW
             "SELECT schema_name, function_name, ROW_NUMBER() OVER my_window AS function_rank FROM DUCKDB_FUNCTIONS() WINDOW my_window AS (PARTITION BY schema_name ORDER BY function_name) QUALIFY ROW_NUMBER() OVER my_window < 3"
         )
@@ -406,10 +418,25 @@ class TestDuckDB(Validator):
         self.validate_all("x ~ y", write={"duckdb": "REGEXP_MATCHES(x, y)"})
         self.validate_all("SELECT * FROM 'x.y'", write={"duckdb": 'SELECT * FROM "x.y"'})
         self.validate_all(
+            "COUNT_IF(x)",
+            write={
+                "duckdb": "COUNT_IF(x)",
+                "duckdb, version=1.0": "SUM(CASE WHEN x THEN 1 ELSE 0 END)",
+                "duckdb, version=1.2": "COUNT_IF(x)",
+            },
+        )
+        self.validate_all(
             "SELECT STRFTIME(CAST('2020-01-01' AS TIMESTAMP), CONCAT('%Y', '%m'))",
             write={
                 "duckdb": "SELECT STRFTIME(CAST('2020-01-01' AS TIMESTAMP), CONCAT('%Y', '%m'))",
                 "tsql": "SELECT FORMAT(CAST('2020-01-01' AS DATETIME2), CONCAT('yyyy', 'MM'))",
+            },
+        )
+        self.validate_all(
+            """SELECT CAST('{"x": 1}' AS JSON)""",
+            read={
+                "duckdb": """SELECT '{"x": 1}'::JSON""",
+                "postgres": """SELECT '{"x": 1}'::JSONB""",
             },
         )
         self.validate_all(
@@ -907,6 +934,17 @@ class TestDuckDB(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT REGEXP_MATCHES('ThOmAs', 'thomas', 'i')",
+            read={
+                "postgres": "SELECT 'ThOmAs' ~* 'thomas'",
+            },
+        )
+        self.validate_identity(
+            "SELECT DATE_ADD(CAST('2020-01-01' AS DATE), INTERVAL 1 DAY)",
+            "SELECT CAST('2020-01-01' AS DATE) + INTERVAL '1' DAY",
+        )
+
     def test_array_index(self):
         with self.assertLogs(helper_logger) as cm:
             self.validate_all(
@@ -925,15 +963,15 @@ class TestDuckDB(Validator):
             )
             self.validate_identity(
                 """SELECT LIST_VALUE(1)[i]""",
-                """SELECT ([1])[i]""",
+                """SELECT [1][i]""",
             )
             self.validate_identity(
                 """{'x': LIST_VALUE(1)[i]}""",
-                """{'x': ([1])[i]}""",
+                """{'x': [1][i]}""",
             )
             self.validate_identity(
                 """SELECT LIST_APPLY(RANGE(1, 4), i -> {'f1': LIST_VALUE(1, 2, 3)[i], 'f2': LIST_VALUE(1, 2, 3)[i]})""",
-                """SELECT LIST_APPLY(RANGE(1, 4), i -> {'f1': ([1, 2, 3])[i], 'f2': ([1, 2, 3])[i]})""",
+                """SELECT LIST_APPLY(RANGE(1, 4), i -> {'f1': [1, 2, 3][i], 'f2': [1, 2, 3][i]})""",
             )
 
             self.assertEqual(
@@ -1438,4 +1476,130 @@ class TestDuckDB(Validator):
         )
         self.validate_identity(
             "SELECT * FROM (UNPIVOT monthly_sales ON COLUMNS(* EXCLUDE (empid, dept)) INTO NAME month VALUE sales) AS unpivot_alias"
+        )
+
+    def test_from_first_with_parentheses(self):
+        self.validate_identity(
+            "CREATE TABLE t1 AS (FROM t2 SELECT foo1, foo2)",
+            "CREATE TABLE t1 AS (SELECT foo1, foo2 FROM t2)",
+        )
+        self.validate_identity(
+            "FROM (FROM t1 SELECT foo1, foo2)",
+            "SELECT * FROM (SELECT foo1, foo2 FROM t1)",
+        )
+        self.validate_identity(
+            "WITH t1 AS (FROM (FROM t2 SELECT foo1, foo2)) FROM t1",
+            "WITH t1 AS (SELECT * FROM (SELECT foo1, foo2 FROM t2)) SELECT * FROM t1",
+        )
+
+    def test_analyze(self):
+        self.validate_identity("ANALYZE")
+
+    def test_prefix_aliases(self):
+        # https://duckdb.org/2025/02/25/prefix-aliases-in-sql.html
+        self.validate_identity(
+            "SELECT foo: 1",
+            "SELECT 1 AS foo",
+        )
+        self.validate_identity(
+            "SELECT foo: bar",
+            "SELECT bar AS foo",
+        )
+        self.validate_identity(
+            "SELECT foo: t.col FROM t",
+            "SELECT t.col AS foo FROM t",
+        )
+        self.validate_identity(
+            'SELECT "foo" /* bla */: 1',
+            'SELECT 1 AS "foo" /* bla */',
+        )
+        self.validate_identity(
+            'SELECT "foo": 1 /* bla */',
+            'SELECT 1 AS "foo" /* bla */',
+        )
+        self.validate_identity(
+            'SELECT "foo": /* bla */ 1',
+            'SELECT 1 AS "foo" /* bla */',
+        )
+        self.validate_identity(
+            'SELECT "foo": /* bla */ 1 /* foo */',
+            'SELECT 1 AS "foo" /* bla */ /* foo */',
+        )
+        self.validate_identity(
+            'SELECT "foo": 1',
+            'SELECT 1 AS "foo"',
+        )
+        self.validate_identity(
+            "SELECT foo: 1, bar: 2, baz: 3",
+            "SELECT 1 AS foo, 2 AS bar, 3 AS baz",
+        )
+        self.validate_identity(
+            "SELECT e: 1 + 2, f: len('asdf'), s: (SELECT 42)",
+            "SELECT 1 + 2 AS e, LENGTH('asdf') AS f, (SELECT 42) AS s",
+        )
+        self.validate_identity(
+            "SELECT * FROM foo: bar",
+            "SELECT * FROM bar AS foo",
+        )
+        self.validate_identity(
+            "SELECT * FROM foo: c.db.tbl",
+            "SELECT * FROM c.db.tbl AS foo",
+        )
+        self.validate_identity(
+            "SELECT * FROM foo /* bla */: bar",
+            "SELECT * FROM bar AS foo /* bla */",
+        )
+        self.validate_identity(
+            "SELECT * FROM foo /* bla */: bar /* baz */",
+            "SELECT * FROM bar AS foo /* bla */ /* baz */",
+        )
+        self.validate_identity(
+            "SELECT * FROM foo /* bla */: /* baz */ bar /* boo */",
+            "SELECT * FROM bar AS foo /* bla */ /* baz */ /* boo */",
+        )
+        self.validate_identity(
+            "SELECT * FROM r: range(10), v: (VALUES (42)), s: (FROM range(10))",
+            "SELECT * FROM RANGE(0, 10) AS r, (VALUES (42)) AS v, (SELECT * FROM RANGE(0, 10)) AS s",
+        )
+        self.validate_identity(
+            """
+            SELECT
+                l_returnflag,
+                l_linestatus,
+                sum_qty:        sum(l_quantity),
+                sum_base_price: sum(l_extendedprice),
+                sum_disc_price: sum(l_extendedprice * (1-l_discount)),
+                sum_charge:     sum(l_extendedprice * (1-l_discount) * (1+l_tax)),
+                avg_qty:        avg(l_quantity),
+                avg_price:      avg(l_extendedprice),
+                avg_disc:       avg(l_discount),
+                count_order:    count(*)
+            """,
+            "SELECT l_returnflag, l_linestatus, SUM(l_quantity) AS sum_qty, SUM(l_extendedprice) AS sum_base_price, SUM(l_extendedprice * (1 - l_discount)) AS sum_disc_price, SUM(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge, AVG(l_quantity) AS avg_qty, AVG(l_extendedprice) AS avg_price, AVG(l_discount) AS avg_disc, COUNT(*) AS count_order",
+        )
+
+    def test_at_sign_to_abs(self):
+        self.validate_identity(
+            "SELECT @col FROM t",
+            "SELECT ABS(col) FROM t",
+        )
+        self.validate_identity(
+            "SELECT @col + 1 FROM t",
+            "SELECT ABS(col + 1) FROM t",
+        )
+        self.validate_identity(
+            "SELECT (@col) + 1 FROM t",
+            "SELECT (ABS(col)) + 1 FROM t",
+        )
+        self.validate_identity(
+            "SELECT @(-1)",
+            "SELECT ABS((-1))",
+        )
+        self.validate_identity(
+            "SELECT @(-1) + 1",
+            "SELECT ABS((-1) + 1)",
+        )
+        self.validate_identity(
+            "SELECT (@-1) + 1",
+            "SELECT (ABS(-1)) + 1",
         )

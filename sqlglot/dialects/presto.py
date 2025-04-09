@@ -16,14 +16,13 @@ from sqlglot.dialects.dialect import (
     left_to_substring_sql,
     no_ilike_sql,
     no_pivot_sql,
-    no_safe_divide_sql,
     no_timestamp_sql,
     regexp_extract_sql,
     rename_func,
     right_to_substring_sql,
     sha256_sql,
+    strposition_sql,
     struct_extract_sql,
-    str_position_sql,
     timestamptrunc_sql,
     timestrtotime_sql,
     ts_or_ds_add_cast,
@@ -35,6 +34,7 @@ from sqlglot.dialects.dialect import (
 from sqlglot.dialects.hive import Hive
 from sqlglot.dialects.mysql import MySQL
 from sqlglot.helper import apply_index_offset, seq_get
+from sqlglot.optimizer.scope import find_all_in_scope
 from sqlglot.tokens import TokenType
 from sqlglot.transforms import unqualify_columns
 from sqlglot.generator import unsupported_args
@@ -56,12 +56,15 @@ def _no_sort_array(self: Presto.Generator, expression: exp.SortArray) -> str:
 
 
 def _schema_sql(self: Presto.Generator, expression: exp.Schema) -> str:
-    if isinstance(expression.parent, exp.Property):
+    if isinstance(expression.parent, exp.PartitionedByProperty):
         columns = ", ".join(f"'{c.name}'" for c in expression.expressions)
         return f"ARRAY[{columns}]"
 
     if expression.parent:
         for schema in expression.parent.find_all(exp.Schema):
+            if schema is expression:
+                continue
+
             column_defs = schema.find_all(exp.ColumnDef)
             if column_defs and isinstance(schema.parent, exp.Property):
                 expression.expressions.extend(column_defs)
@@ -192,6 +195,56 @@ def _date_delta_sql(
     return _delta_sql
 
 
+def _explode_to_unnest_sql(self: Presto.Generator, expression: exp.Lateral) -> str:
+    explode = expression.this
+    if isinstance(explode, exp.Explode):
+        exploded_type = explode.this.type
+        alias = expression.args.get("alias")
+
+        # This attempts a best-effort transpilation of LATERAL VIEW EXPLODE on a struct array
+        if (
+            isinstance(alias, exp.TableAlias)
+            and isinstance(exploded_type, exp.DataType)
+            and exploded_type.is_type(exp.DataType.Type.ARRAY)
+            and exploded_type.expressions
+            and exploded_type.expressions[0].is_type(exp.DataType.Type.STRUCT)
+        ):
+            # When unnesting a ROW in Presto, it produces N columns, so we need to fix the alias
+            alias.set("columns", [c.this.copy() for c in exploded_type.expressions[0].expressions])
+    elif isinstance(explode, exp.Inline):
+        explode.replace(exp.Explode(this=explode.this.copy()))
+
+    return explode_to_unnest_sql(self, expression)
+
+
+def _amend_exploded_column_table(expression: exp.Expression) -> exp.Expression:
+    # We check for expression.type because the columns can be amended only if types were inferred
+    if isinstance(expression, exp.Select) and expression.type:
+        for lateral in expression.args.get("laterals") or []:
+            alias = lateral.args.get("alias")
+            if (
+                not isinstance(lateral.this, exp.Explode)
+                or not isinstance(alias, exp.TableAlias)
+                or len(alias.columns) != 1
+            ):
+                continue
+
+            new_table = alias.this
+            old_table = alias.columns[0].name.lower()
+
+            # When transpiling a LATERAL VIEW EXPLODE Spark query, the exploded fields may be qualified
+            # with the struct column, resulting in invalid Presto references that need to be amended
+            for column in find_all_in_scope(expression, exp.Column):
+                if column.db.lower() == old_table:
+                    column.set("table", column.args["db"].pop())
+                elif column.table.lower() == old_table:
+                    column.set("table", new_table.copy())
+                elif column.name.lower() == old_table and isinstance(column.parent, exp.Dot):
+                    column.parent.replace(exp.column(column.parent.expression, table=new_table))
+
+    return expression
+
+
 def _build_array_slice(args: list) -> exp.ArraySlice:
     """
     Parses arguments for the SLICE function and constructs an ArraySlice expression.
@@ -256,6 +309,7 @@ class Presto(Dialect):
     }
 
     class Tokenizer(tokens.Tokenizer):
+        HEX_STRINGS = [("x'", "'"), ("X'", "'")]
         UNICODE_STRINGS = [
             (prefix + q, q)
             for q in t.cast(t.List[str], tokens.Tokenizer.QUOTES)
@@ -340,9 +394,7 @@ class Presto(Dialect):
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "SPLIT_TO_MAP": exp.StrToMap.from_arg_list,
             "STRPOS": lambda args: exp.StrPosition(
-                this=seq_get(args, 0),
-                substr=seq_get(args, 1),
-                instance=seq_get(args, 2),
+                this=seq_get(args, 0), substr=seq_get(args, 1), occurrence=seq_get(args, 2)
             ),
             "TO_CHAR": _build_to_char,
             "TO_UNIXTIME": exp.TimeToUnix.from_arg_list,
@@ -450,7 +502,6 @@ class Presto(Dialect):
             exp.Encode: lambda self, e: encode_decode_sql(self, e, "TO_UTF8"),
             exp.FileFormatProperty: lambda self, e: f"FORMAT='{e.name.upper()}'",
             exp.First: _first_last_sql,
-            exp.FirstValue: _first_last_sql,
             exp.FromTimeZone: lambda self,
             e: f"WITH_TIMEZONE({self.sql(e, 'this')}, {self.sql(e, 'zone')}) AT TIME ZONE 'UTC'",
             exp.GenerateSeries: sequence_sql,
@@ -459,11 +510,9 @@ class Presto(Dialect):
             exp.If: if_sql(),
             exp.ILike: no_ilike_sql,
             exp.Initcap: _initcap_sql,
-            exp.JSONExtract: lambda self, e: self.jsonextract_sql(e),
             exp.Last: _first_last_sql,
-            exp.LastValue: _first_last_sql,
             exp.LastDay: lambda self, e: self.func("LAST_DAY_OF_MONTH", e.this),
-            exp.Lateral: explode_to_unnest_sql,
+            exp.Lateral: _explode_to_unnest_sql,
             exp.Left: left_to_substring_sql,
             exp.Levenshtein: unsupported_args("ins_cost", "del_cost", "sub_cost", "max_dist")(
                 rename_func("LEVENSHTEIN_DISTANCE")
@@ -475,20 +524,20 @@ class Presto(Dialect):
             exp.RegexpExtract: regexp_extract_sql,
             exp.RegexpExtractAll: regexp_extract_sql,
             exp.Right: right_to_substring_sql,
-            exp.SafeDivide: no_safe_divide_sql,
             exp.Schema: _schema_sql,
             exp.SchemaCommentProperty: lambda self, e: self.naked_property(e),
             exp.Select: transforms.preprocess(
                 [
                     transforms.eliminate_qualify,
                     transforms.eliminate_distinct_on,
-                    transforms.explode_to_unnest(1),
+                    transforms.explode_projection_to_unnest(1),
                     transforms.eliminate_semi_and_anti_joins,
+                    _amend_exploded_column_table,
                 ]
             ),
             exp.SortArray: _no_sort_array,
             exp.SplitPart: rename_func("SPLIT_PART"),
-            exp.StrPosition: lambda self, e: str_position_sql(self, e, generate_instance=True),
+            exp.StrPosition: lambda self, e: strposition_sql(self, e, supports_occurrence=True),
             exp.StrToDate: lambda self, e: f"CAST({_str_to_time_sql(self, e)} AS DATE)",
             exp.StrToMap: rename_func("SPLIT_TO_MAP"),
             exp.StrToTime: _str_to_time_sql,
