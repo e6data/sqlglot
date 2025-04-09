@@ -141,8 +141,8 @@ class TestE6(Validator):
             "POSITION(needle in haystack from c)",
             write={
                 "spark": "LOCATE(needle, haystack, c)",
-                "clickhouse": "position(haystack, needle, c)",
-                "snowflake": "POSITION(needle, haystack, c)",
+                "clickhouse": "POSITION(haystack, needle, c)",
+                "snowflake": "CHARINDEX(needle, haystack, c)",
                 "mysql": "LOCATE(needle, haystack, c)",
             },
         )
