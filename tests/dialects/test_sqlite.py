@@ -7,6 +7,7 @@ class TestSQLite(Validator):
     dialect = "sqlite"
 
     def test_sqlite(self):
+        self.validate_identity("UNHEX(a, b)")
         self.validate_identity("SELECT DATE()")
         self.validate_identity("SELECT DATE('now', 'start of month', '+1 month', '-1 day')")
         self.validate_identity("SELECT DATETIME(1092941466, 'unixepoch')")
@@ -93,9 +94,25 @@ class TestSQLite(Validator):
             read={"snowflake": "LEAST(x, y, z)"},
             write={"snowflake": "LEAST(x, y, z)"},
         )
+        self.validate_all(
+            "UNICODE(x)",
+            write={
+                "": "UNICODE(x)",
+                "mysql": "ORD(CONVERT(x USING utf32))",
+                "oracle": "ASCII(UNISTR(x))",
+                "postgres": "ASCII(x)",
+                "redshift": "ASCII(x)",
+                "spark": "ASCII(x)",
+            },
+        )
         self.validate_identity(
             "SELECT * FROM station WHERE city IS NOT ''",
             "SELECT * FROM station WHERE NOT city IS ''",
+        )
+        self.validate_identity("SELECT JSON_OBJECT('col1', 1, 'col2', '1')")
+        self.validate_identity(
+            'CREATE TABLE "foo t" ("foo t id" TEXT NOT NULL, PRIMARY KEY ("foo t id"))',
+            'CREATE TABLE "foo t" ("foo t id" TEXT NOT NULL PRIMARY KEY)',
         )
 
     def test_strftime(self):
@@ -227,3 +244,7 @@ class TestSQLite(Validator):
         self.validate_identity(
             "CREATE TABLE store (store_id INTEGER PRIMARY KEY AUTOINCREMENT, mgr_id INTEGER NOT NULL UNIQUE REFERENCES staff ON UPDATE CASCADE)"
         )
+
+    def test_analyze(self):
+        self.validate_identity("ANALYZE tbl")
+        self.validate_identity("ANALYZE schma.tbl")

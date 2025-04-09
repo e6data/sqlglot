@@ -133,13 +133,26 @@ class TestTSQL(Validator):
             },
         )
         self.validate_all(
-            "WITH t(c) AS (SELECT 1) SELECT * INTO TEMP UNLOGGED foo FROM (SELECT c AS c FROM t) AS temp",
+            "WITH t(c) AS (SELECT 1) SELECT * INTO UNLOGGED #foo FROM (SELECT c AS c FROM t) AS temp",
             write={
                 "duckdb": "CREATE TEMPORARY TABLE foo AS WITH t(c) AS (SELECT 1) SELECT * FROM (SELECT c AS c FROM t) AS temp",
                 "postgres": "WITH t(c) AS (SELECT 1) SELECT * INTO TEMPORARY foo FROM (SELECT c AS c FROM t) AS temp",
             },
         )
         self.validate_all(
+            "WITH t(c) AS (SELECT 1) SELECT c INTO #foo FROM t",
+            read={
+                "tsql": "WITH t(c) AS (SELECT 1) SELECT c INTO #foo FROM t",
+                "postgres": "WITH t(c) AS (SELECT 1) SELECT c INTO TEMPORARY foo FROM t",
+            },
+            write={
+                "tsql": "WITH t(c) AS (SELECT 1) SELECT c INTO #foo FROM t",
+                "postgres": "WITH t(c) AS (SELECT 1) SELECT c INTO TEMPORARY foo FROM t",
+                "duckdb": "CREATE TEMPORARY TABLE foo AS WITH t(c) AS (SELECT 1) SELECT c FROM t",
+                "snowflake": "CREATE TEMPORARY TABLE foo AS WITH t(c) AS (SELECT 1) SELECT c FROM t",
+            },
+        )
+        self.validate_all(
             "WITH t(c) AS (SELECT 1) SELECT * INTO UNLOGGED foo FROM (SELECT c AS c FROM t) AS temp",
             write={
                 "duckdb": "CREATE TABLE foo AS WITH t(c) AS (SELECT 1) SELECT * FROM (SELECT c AS c FROM t) AS temp",
@@ -149,6 +162,13 @@ class TestTSQL(Validator):
             "WITH t(c) AS (SELECT 1) SELECT * INTO UNLOGGED foo FROM (SELECT c AS c FROM t) AS temp",
             write={
                 "duckdb": "CREATE TABLE foo AS WITH t(c) AS (SELECT 1) SELECT * FROM (SELECT c AS c FROM t) AS temp",
+            },
+        )
+        self.validate_all(
+            "WITH y AS (SELECT 2 AS c) INSERT INTO #t SELECT * FROM y",
+            write={
+                "duckdb": "WITH y AS (SELECT 2 AS c) INSERT INTO t SELECT * FROM y",
+                "postgres": "WITH y AS (SELECT 2 AS c) INSERT INTO t SELECT * FROM y",
             },
         )
         self.validate_all(
@@ -184,7 +204,7 @@ class TestTSQL(Validator):
                 "tsql": "CREATE TABLE #mytemptable (a INTEGER)",
                 "snowflake": "CREATE TEMPORARY TABLE mytemptable (a INT)",
                 "duckdb": "CREATE TEMPORARY TABLE mytemptable (a INT)",
-                "oracle": "CREATE GLOBAL TEMPORARY TABLE mytemptable (a NUMBER)",
+                "oracle": "CREATE GLOBAL TEMPORARY TABLE mytemptable (a INT)",
                 "hive": "CREATE TEMPORARY TABLE mytemptable (a INT)",
                 "spark2": "CREATE TEMPORARY TABLE mytemptable (a INT) USING PARQUET",
                 "spark": "CREATE TEMPORARY TABLE mytemptable (a INT) USING PARQUET",
@@ -435,6 +455,39 @@ class TestTSQL(Validator):
         self.validate_identity(
             "'a' || 'b'",
             "'a' + 'b'",
+        )
+
+        self.validate_identity(
+            "CREATE TABLE db.t1 (a INTEGER, b VARCHAR(50), CONSTRAINT c PRIMARY KEY (a DESC))",
+        )
+        self.validate_identity(
+            "CREATE TABLE db.t1 (a INTEGER, b INTEGER, CONSTRAINT c PRIMARY KEY (a DESC, b))"
+        )
+
+        self.validate_all(
+            "SCHEMA_NAME(id)",
+            write={
+                "sqlite": "'main'",
+                "mysql": "SCHEMA()",
+                "postgres": "CURRENT_SCHEMA",
+                "tsql": "SCHEMA_NAME(id)",
+            },
+        )
+
+        with self.assertRaises(ParseError):
+            parse_one("SELECT begin", read="tsql")
+
+        self.validate_identity("CREATE PROCEDURE test(@v1 INTEGER = 1, @v2 CHAR(1) = 'c')")
+        self.validate_identity("DECLARE @v1 AS INTEGER = 1, @v2 AS CHAR(1) = 'c'")
+
+        for output in ("OUT", "OUTPUT", "READ_ONLY"):
+            self.validate_identity(
+                f"CREATE PROCEDURE test(@v1 INTEGER = 1 {output}, @v2 CHAR(1) {output})"
+            )
+
+        self.validate_identity(
+            "CREATE PROCEDURE test(@v1 AS INTEGER = 1, @v2 AS CHAR(1) = 'c')",
+            "CREATE PROCEDURE test(@v1 INTEGER = 1, @v2 CHAR(1) = 'c')",
         )
 
     def test_option(self):
@@ -755,6 +808,16 @@ class TestTSQL(Validator):
             },
         )
 
+        self.validate_all(
+            "CREATE TABLE t (col1 DATETIME2(2))",
+            read={
+                "snowflake": "CREATE TABLE t (col1 TIMESTAMP_NTZ(2))",
+            },
+            write={
+                "tsql": "CREATE TABLE t (col1 DATETIME2(2))",
+            },
+        )
+
     def test_types_bin(self):
         self.validate_all(
             "CAST(x as BIT)",
@@ -810,6 +873,9 @@ class TestTSQL(Validator):
         )
 
     def test_ddl(self):
+        for colstore in ("NONCLUSTERED COLUMNSTORE", "CLUSTERED COLUMNSTORE"):
+            self.validate_identity(f"CREATE {colstore} INDEX index_name ON foo.bar")
+
         for view_attr in ("ENCRYPTION", "SCHEMABINDING", "VIEW_METADATA"):
             self.validate_identity(f"CREATE VIEW a.b WITH {view_attr} AS SELECT * FROM x")
 
@@ -829,20 +895,21 @@ class TestTSQL(Validator):
                 f"UNIQUE {clustered_keyword} ([internal_id] ASC))",
             )
 
+        self.validate_identity("CREATE SCHEMA testSchema")
         self.validate_identity("CREATE VIEW t AS WITH cte AS (SELECT 1 AS c) SELECT c FROM cte")
+        self.validate_identity("ALTER TABLE tbl SET SYSTEM_VERSIONING=OFF")
+        self.validate_identity("ALTER TABLE tbl SET FILESTREAM_ON = 'test'")
+        self.validate_identity("ALTER TABLE tbl SET DATA_DELETION=ON")
+        self.validate_identity("ALTER TABLE tbl SET DATA_DELETION=OFF")
         self.validate_identity(
             "ALTER TABLE tbl SET SYSTEM_VERSIONING=ON(HISTORY_TABLE=db.tbl, DATA_CONSISTENCY_CHECK=OFF, HISTORY_RETENTION_PERIOD=5 DAYS)"
         )
         self.validate_identity(
             "ALTER TABLE tbl SET SYSTEM_VERSIONING=ON(HISTORY_TABLE=db.tbl, HISTORY_RETENTION_PERIOD=INFINITE)"
         )
-        self.validate_identity("ALTER TABLE tbl SET SYSTEM_VERSIONING=OFF")
-        self.validate_identity("ALTER TABLE tbl SET FILESTREAM_ON = 'test'")
         self.validate_identity(
             "ALTER TABLE tbl SET DATA_DELETION=ON(FILTER_COLUMN=col, RETENTION_PERIOD=5 MONTHS)"
         )
-        self.validate_identity("ALTER TABLE tbl SET DATA_DELETION=ON")
-        self.validate_identity("ALTER TABLE tbl SET DATA_DELETION=OFF")
 
         self.validate_identity("ALTER VIEW v AS SELECT a, b, c, d FROM foo")
         self.validate_identity("ALTER VIEW v AS SELECT * FROM foo WHERE c > 100")
@@ -859,8 +926,42 @@ class TestTSQL(Validator):
             check_command_warning=True,
         )
         self.validate_identity(
+            "CREATE COLUMNSTORE INDEX index_name ON foo.bar",
+            "CREATE NONCLUSTERED COLUMNSTORE INDEX index_name ON foo.bar",
+        )
+        self.validate_identity(
             "CREATE PROCEDURE foo AS BEGIN DELETE FROM bla WHERE foo < CURRENT_TIMESTAMP - 7 END",
             "CREATE PROCEDURE foo AS BEGIN DELETE FROM bla WHERE foo < GETDATE() - 7 END",
+        )
+        self.validate_identity(
+            "INSERT INTO Production.UpdatedInventory SELECT ProductID, LocationID, NewQty, PreviousQty FROM (MERGE INTO Production.ProductInventory AS pi USING (SELECT ProductID, SUM(OrderQty) FROM Sales.SalesOrderDetail AS sod INNER JOIN Sales.SalesOrderHeader AS soh ON sod.SalesOrderID = soh.SalesOrderID AND soh.OrderDate BETWEEN '20030701' AND '20030731' GROUP BY ProductID) AS src(ProductID, OrderQty) ON pi.ProductID = src.ProductID WHEN MATCHED AND pi.Quantity - src.OrderQty >= 0 THEN UPDATE SET pi.Quantity = pi.Quantity - src.OrderQty WHEN MATCHED AND pi.Quantity - src.OrderQty <= 0 THEN DELETE OUTPUT $action, Inserted.ProductID, Inserted.LocationID, Inserted.Quantity AS NewQty, Deleted.Quantity AS PreviousQty) AS Changes(Action, ProductID, LocationID, NewQty, PreviousQty) WHERE Action = 'UPDATE'",
+            """INSERT INTO Production.UpdatedInventory
+SELECT
+  ProductID,
+  LocationID,
+  NewQty,
+  PreviousQty
+FROM (
+  MERGE INTO Production.ProductInventory AS pi
+  USING (
+    SELECT
+      ProductID,
+      SUM(OrderQty)
+    FROM Sales.SalesOrderDetail AS sod
+    INNER JOIN Sales.SalesOrderHeader AS soh
+      ON sod.SalesOrderID = soh.SalesOrderID
+      AND soh.OrderDate BETWEEN '20030701' AND '20030731'
+    GROUP BY
+      ProductID
+  ) AS src(ProductID, OrderQty)
+  ON pi.ProductID = src.ProductID
+  WHEN MATCHED AND pi.Quantity - src.OrderQty >= 0 THEN UPDATE SET pi.Quantity = pi.Quantity - src.OrderQty
+  WHEN MATCHED AND pi.Quantity - src.OrderQty <= 0 THEN DELETE
+  OUTPUT $action, Inserted.ProductID, Inserted.LocationID, Inserted.Quantity AS NewQty, Deleted.Quantity AS PreviousQty
+) AS Changes(Action, ProductID, LocationID, NewQty, PreviousQty)
+WHERE
+  Action = 'UPDATE'""",
+            pretty=True,
         )
 
         self.validate_all(
@@ -885,6 +986,16 @@ class TestTSQL(Validator):
             },
             write={
                 "databricks": "CREATE TABLE tbl (id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 10 INCREMENT BY 1) PRIMARY KEY)",
+                "postgres": "CREATE TABLE tbl (id INT NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 10 INCREMENT BY 1) PRIMARY KEY)",
+            },
+        )
+        self.validate_all(
+            "CREATE TABLE x (a UNIQUEIDENTIFIER, b VARBINARY)",
+            write={
+                "duckdb": "CREATE TABLE x (a UUID, b BLOB)",
+                "presto": "CREATE TABLE x (a UUID, b VARBINARY)",
+                "spark": "CREATE TABLE x (a STRING, b BINARY)",
+                "postgres": "CREATE TABLE x (a UUID, b BYTEA)",
             },
         )
         self.validate_all(
@@ -950,14 +1061,6 @@ class TestTSQL(Validator):
                 "spark": "CREATE TEMPORARY TABLE mytemp (a INT, b CHAR(2), c TIMESTAMP, d FLOAT) USING PARQUET",
                 "tsql": "CREATE TABLE #mytemp (a INTEGER, b CHAR(2), c TIME(4), d FLOAT(24))",
             },
-        )
-
-        for colstore in ("NONCLUSTERED COLUMNSTORE", "CLUSTERED COLUMNSTORE"):
-            self.validate_identity(f"CREATE {colstore} INDEX index_name ON foo.bar")
-
-        self.validate_identity(
-            "CREATE COLUMNSTORE INDEX index_name ON foo.bar",
-            "CREATE NONCLUSTERED COLUMNSTORE INDEX index_name ON foo.bar",
         )
 
     def test_insert_cte(self):
@@ -1225,7 +1328,10 @@ WHERE
     def test_datefromparts(self):
         self.validate_all(
             "SELECT DATEFROMPARTS('2020', 10, 01)",
-            write={"spark": "SELECT MAKE_DATE('2020', 10, 01)"},
+            write={
+                "spark": "SELECT MAKE_DATE('2020', 10, 01)",
+                "tsql": "SELECT DATEFROMPARTS('2020', 10, 01)",
+            },
         )
 
     def test_datename(self):
@@ -1653,6 +1759,8 @@ WHERE
                 "spark": "SELECT * FROM A LIMIT 3",
             },
         )
+        self.validate_identity("SELECT TOP 10 PERCENT")
+        self.validate_identity("SELECT TOP 10 PERCENT WITH TIES")
 
     def test_format(self):
         self.validate_identity("SELECT FORMAT(foo, 'dddd', 'de-CH')")

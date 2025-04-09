@@ -9,6 +9,8 @@ class TestSpark(Validator):
     dialect = "spark"
 
     def test_ddl(self):
+        self.validate_identity("DROP NAMESPACE my_catalog.my_namespace")
+        self.validate_identity("CREATE NAMESPACE my_catalog.my_namespace")
         self.validate_identity("INSERT OVERWRITE TABLE db1.tb1 TABLE db2.tb2")
         self.validate_identity("CREATE TABLE foo AS WITH t AS (SELECT 1 AS col) SELECT col FROM t")
         self.validate_identity("CREATE TEMPORARY VIEW test AS SELECT 1")
@@ -148,6 +150,8 @@ TBLPROPERTIES (
                 "hive": "TO_DATE(x)",
                 "presto": "CAST(CAST(x AS TIMESTAMP) AS DATE)",
                 "spark": "TO_DATE(x)",
+                "snowflake": "TRY_TO_DATE(x, 'yyyy-mm-DD')",
+                "databricks": "TO_DATE(x)",
             },
         )
         self.validate_all(
@@ -157,6 +161,8 @@ TBLPROPERTIES (
                 "hive": "TO_DATE(x, 'yyyy')",
                 "presto": "CAST(DATE_PARSE(x, '%Y') AS DATE)",
                 "spark": "TO_DATE(x, 'yyyy')",
+                "snowflake": "TRY_TO_DATE(x, 'yyyy')",
+                "databricks": "TO_DATE(x, 'yyyy')",
             },
         )
 
@@ -262,6 +268,14 @@ TBLPROPERTIES (
         self.validate_identity("TRIM(TRAILING 'SL' FROM 'SSparkSQLS')")
         self.validate_identity("SPLIT(str, pattern, lim)")
         self.validate_identity(
+            "SELECT 1 limit",
+            "SELECT 1 AS limit",
+        )
+        self.validate_identity(
+            "SELECT 1 offset",
+            "SELECT 1 AS offset",
+        )
+        self.validate_identity(
             "SELECT TO_UNIX_TIMESTAMP()",
             "SELECT TO_UNIX_TIMESTAMP()",
         )
@@ -302,11 +316,19 @@ TBLPROPERTIES (
             write={
                 "databricks": "SELECT TRY_ELEMENT_AT(ARRAY(1, 2, 3), 2)",
                 "spark": "SELECT TRY_ELEMENT_AT(ARRAY(1, 2, 3), 2)",
-                "duckdb": "SELECT ([1, 2, 3])[2]",
+                "duckdb": "SELECT [1, 2, 3][2]",
+                "duckdb, version=1.1.0": "SELECT ([1, 2, 3])[2]",
                 "presto": "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 2)",
             },
         )
 
+        self.validate_all(
+            "SELECT id_column, name, age FROM test_table LATERAL VIEW INLINE(struc_column) explode_view AS name, age",
+            write={
+                "presto": "SELECT id_column, name, age FROM test_table CROSS JOIN UNNEST(struc_column) AS explode_view(name, age)",
+                "spark": "SELECT id_column, name, age FROM test_table LATERAL VIEW INLINE(struc_column) explode_view AS name, age",
+            },
+        )
         self.validate_all(
             "SELECT ARRAY_AGG(x) FILTER (WHERE x = 5) FROM (SELECT 1 UNION ALL SELECT NULL) AS t(x)",
             write={
@@ -332,7 +354,7 @@ TBLPROPERTIES (
             "SELECT DATE_FORMAT(DATE '2020-01-01', 'EEEE') AS weekday",
             write={
                 "presto": "SELECT DATE_FORMAT(CAST(CAST('2020-01-01' AS DATE) AS TIMESTAMP), '%W') AS weekday",
-                "spark": "SELECT DATE_FORMAT(CAST(CAST('2020-01-01' AS DATE) AS TIMESTAMP), 'EEEE') AS weekday",
+                "spark": "SELECT DATE_FORMAT(CAST('2020-01-01' AS DATE), 'EEEE') AS weekday",
             },
         )
         self.validate_all(
@@ -342,7 +364,8 @@ TBLPROPERTIES (
             },
             write={
                 "databricks": "SELECT TRY_ELEMENT_AT(MAP(1, 'a', 2, 'b'), 2)",
-                "duckdb": "SELECT (MAP([1, 2], ['a', 'b'])[2])[1]",
+                "duckdb": "SELECT MAP([1, 2], ['a', 'b'])[2]",
+                "duckdb, version=1.1.0": "SELECT (MAP([1, 2], ['a', 'b'])[2])[1]",
                 "spark": "SELECT TRY_ELEMENT_AT(MAP(1, 'a', 2, 'b'), 2)",
             },
         )
@@ -429,7 +452,7 @@ TBLPROPERTIES (
         self.validate_all(
             "SELECT DATEDIFF(MONTH, CAST('1996-10-30' AS TIMESTAMP), CAST('1997-02-28 10:30:00' AS TIMESTAMP))",
             read={
-                "duckdb": "SELECT DATEDIFF('month', CAST('1996-10-30' AS TIMESTAMP), CAST('1997-02-28 10:30:00' AS TIMESTAMP))",
+                "duckdb": "SELECT DATEDIFF('month', CAST('1996-10-30' AS TIMESTAMPTZ), CAST('1997-02-28 10:30:00' AS TIMESTAMPTZ))",
             },
             write={
                 "spark": "SELECT DATEDIFF(MONTH, TO_DATE(CAST('1996-10-30' AS TIMESTAMP)), TO_DATE(CAST('1997-02-28 10:30:00' AS TIMESTAMP)))",
@@ -470,6 +493,13 @@ TBLPROPERTIES (
                 "": "SELECT CAST('2016-12-31 00:12:00' AS TIMESTAMP)",
                 "duckdb": "SELECT CAST('2016-12-31 00:12:00' AS TIMESTAMP)",
                 "spark": "SELECT CAST('2016-12-31 00:12:00' AS TIMESTAMP)",
+            },
+        )
+        self.validate_all(
+            "SELECT TO_TIMESTAMP(x, 'zZ')",
+            write={
+                "": "SELECT STR_TO_TIME(x, '%Z%z')",
+                "duckdb": "SELECT STRPTIME(x, '%Z%z')",
             },
         )
         self.validate_all(
@@ -820,7 +850,7 @@ TBLPROPERTIES (
             },
         )
 
-    def test_explode_to_unnest(self):
+    def test_explode_projection_to_unnest(self):
         self.validate_all(
             "SELECT EXPLODE(x) FROM tbl",
             write={
@@ -916,3 +946,54 @@ TBLPROPERTIES (
             with self.subTest(f"Testing STRING() for {dialect}"):
                 query = parse_one("STRING(a)", dialect=dialect)
                 self.assertEqual(query.sql(dialect), "CAST(a AS STRING)")
+
+    def test_analyze(self):
+        self.validate_identity("ANALYZE TABLE tbl COMPUTE STATISTICS NOSCAN")
+        self.validate_identity("ANALYZE TABLE tbl COMPUTE STATISTICS FOR ALL COLUMNS")
+        self.validate_identity("ANALYZE TABLE tbl COMPUTE STATISTICS FOR COLUMNS foo, bar")
+        self.validate_identity("ANALYZE TABLE ctlg.db.tbl COMPUTE STATISTICS NOSCAN")
+        self.validate_identity("ANALYZE TABLES COMPUTE STATISTICS NOSCAN")
+        self.validate_identity("ANALYZE TABLES FROM db COMPUTE STATISTICS")
+        self.validate_identity("ANALYZE TABLES IN db COMPUTE STATISTICS")
+        self.validate_identity(
+            "ANALYZE TABLE ctlg.db.tbl PARTITION(foo = 'foo', bar = 'bar') COMPUTE STATISTICS NOSCAN"
+        )
+
+    def test_transpile_annotated_exploded_column(self):
+        from sqlglot.optimizer.annotate_types import annotate_types
+        from sqlglot.optimizer.qualify import qualify
+
+        for db_prefix in ("", "explode_view."):
+            with self.subTest(f"Annotated exploded column with prefix: {db_prefix}."):
+                sql = f"""
+                    WITH test_table AS (
+                      SELECT
+                        12345 AS id_column,
+                        ARRAY(
+                          STRUCT('John' AS name, 30 AS age),
+                          STRUCT('Mary' AS name, 20 AS age),
+                          STRUCT('Mike' AS name, 80 AS age),
+                          STRUCT('Dan' AS name, 50 AS age)
+                        ) AS struct_column
+                    )
+
+                    SELECT
+                        id_column,
+                        {db_prefix}new_column.name,
+                        {db_prefix}new_column.age
+                    FROM test_table
+                    LATERAL VIEW EXPLODE(struct_column) explode_view AS new_column
+                """
+
+                expr = self.parse_one(sql)
+                qualified = qualify(expr, dialect="spark")
+                annotated = annotate_types(qualified, dialect="spark")
+
+                self.assertEqual(
+                    annotated.sql("spark"),
+                    "WITH `test_table` AS (SELECT 12345 AS `id_column`, ARRAY(STRUCT('John' AS `name`, 30 AS `age`), STRUCT('Mary' AS `name`, 20 AS `age`), STRUCT('Mike' AS `name`, 80 AS `age`), STRUCT('Dan' AS `name`, 50 AS `age`)) AS `struct_column`) SELECT `test_table`.`id_column` AS `id_column`, `explode_view`.`new_column`.`name` AS `name`, `explode_view`.`new_column`.`age` AS `age` FROM `test_table` AS `test_table` LATERAL VIEW EXPLODE(`test_table`.`struct_column`) explode_view AS `new_column`",
+                )
+                self.assertEqual(
+                    annotated.sql("presto"),
+                    """WITH "test_table" AS (SELECT 12345 AS "id_column", ARRAY[CAST(ROW('John', 30) AS ROW("name" VARCHAR, "age" INTEGER)), CAST(ROW('Mary', 20) AS ROW("name" VARCHAR, "age" INTEGER)), CAST(ROW('Mike', 80) AS ROW("name" VARCHAR, "age" INTEGER)), CAST(ROW('Dan', 50) AS ROW("name" VARCHAR, "age" INTEGER))] AS "struct_column") SELECT "test_table"."id_column" AS "id_column", "explode_view"."name" AS "name", "explode_view"."age" AS "age" FROM "test_table" AS "test_table" CROSS JOIN UNNEST("test_table"."struct_column") AS "explode_view"("name", "age")""",
+                )
