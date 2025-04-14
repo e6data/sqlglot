@@ -718,3 +718,19 @@ class TestE6(Validator):
                 "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
             },
         )
+
+        self.validate_all(
+            "SELECT EXTRACT(DAY FROM CAST('2025-04-08' AS DATE))",
+            read={
+                "snowflake": "SELECT DATE_PART(day, '2025-04-08'::DATE)",
+                "databricks": "SELECT date_part('day', DATE'2025-04-08')"
+            }
+        )
+
+        self.validate_all(
+            "SELECT CASE WHEN 0 = 0 THEN NULL ELSE 0 END",
+            read={
+                "snowflake": "SELECT NULLIFZERO(0)",
+                "databricks": "SELECT nullifzero(0)"
+            }
+        )
