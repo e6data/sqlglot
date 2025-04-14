@@ -227,7 +227,51 @@ START WITH title = 'President'
 CONNECT BY manager_ID = PRIOR employee_id
 ORDER BY
   employee_ID NULLS LAST;
-WITH EMPLOYEES AS (SELECT T.TITLE AS TITLE, T.EMPLOYEE_ID AS EMPLOYEE_ID, T.MANAGER_ID AS MANAGER_ID FROM (VALUES ('President', 1, NULL), ('Vice President Engineering', 10, 1), ('Programmer', 100, 10), ('QA Engineer', 101, 10), ('Vice President HR', 20, 1), ('Health Insurance Analyst', 200, 20)) AS T(TITLE, EMPLOYEE_ID, MANAGER_ID)) SELECT EMPLOYEES.EMPLOYEE_ID AS EMPLOYEE_ID, EMPLOYEES.MANAGER_ID AS MANAGER_ID, EMPLOYEES.TITLE AS TITLE, EMPLOYEES.LEVEL AS LEVEL FROM EMPLOYEES AS EMPLOYEES START WITH EMPLOYEES.TITLE = 'President' CONNECT BY EMPLOYEES.MANAGER_ID = PRIOR EMPLOYEES.EMPLOYEE_ID ORDER BY EMPLOYEE_ID;
+WITH EMPLOYEES AS (SELECT T.TITLE AS TITLE, T.EMPLOYEE_ID AS EMPLOYEE_ID, T.MANAGER_ID AS MANAGER_ID FROM (VALUES ('President', 1, NULL), ('Vice President Engineering', 10, 1), ('Programmer', 100, 10), ('QA Engineer', 101, 10), ('Vice President HR', 20, 1), ('Health Insurance Analyst', 200, 20)) AS T(TITLE, EMPLOYEE_ID, MANAGER_ID)) SELECT EMPLOYEES.EMPLOYEE_ID AS EMPLOYEE_ID, EMPLOYEES.MANAGER_ID AS MANAGER_ID, EMPLOYEES.TITLE AS TITLE, LEVEL AS LEVEL FROM EMPLOYEES AS EMPLOYEES START WITH EMPLOYEES.TITLE = 'President' CONNECT BY EMPLOYEES.MANAGER_ID = PRIOR EMPLOYEES.EMPLOYEE_ID ORDER BY EMPLOYEE_ID;
+
+# execute: false
+# dialect: oracle
+WITH
+t1 AS (
+  SELECT
+    1 AS c1,
+    1 AS c2,
+    'Y' AS TOP_PARENT_INDICATOR,
+    1 AS id
+  FROM DUAL
+),
+t2 AS (
+  SELECT
+    1 AS c2,
+    2 AS id
+  FROM DUAL
+)
+SELECT t1.c1
+FROM t1
+LEFT JOIN t2 ON t1.c2 = t2.c2
+WHERE (t1.TOP_PARENT_INDICATOR = 'Y' OR LEVEL = 1)
+START WITH (t1.id IS NOT NULL)
+CONNECT BY PRIOR t1.id = t2.id;
+WITH T1 AS (SELECT 1 AS C1, 1 AS C2, 'Y' AS TOP_PARENT_INDICATOR, 1 AS ID FROM DUAL DUAL), T2 AS (SELECT 1 AS C2, 2 AS ID FROM DUAL DUAL) SELECT T1.C1 AS C1 FROM T1 T1 LEFT JOIN T2 T2 ON T1.C2 = T2.C2 WHERE (T1.TOP_PARENT_INDICATOR = 'Y' OR LEVEL = 1) START WITH (NOT T1.ID IS NULL) CONNECT BY PRIOR T1.ID = T2.ID;
+
+# execute: false
+# dialect: postgres
+SELECT * FROM ROWS FROM (GENERATE_SERIES(1, 3), GENERATE_SERIES(10, 12)) AS t(a, b);
+SELECT t.a AS a, t.b AS b FROM ROWS FROM (GENERATE_SERIES(1, 3), GENERATE_SERIES(10, 12)) AS t(a, b);
+
+# execute: false
+# dialect: clickhouse
+SELECT generate_series FROM generate_series(0, 10) AS g;
+SELECT g.generate_series AS generate_series FROM generate_series(0, 10) AS g(generate_series);
+
+# execute: false
+# dialect: snowflake
+SELECT * FROM quarterly_sales PIVOT(SUM(amount) FOR quarter IN (ANY ORDER BY quarter)) ORDER BY empid;
+SELECT * FROM QUARTERLY_SALES AS QUARTERLY_SALES PIVOT(SUM(QUARTERLY_SALES.AMOUNT) FOR QUARTERLY_SALES.QUARTER IN (ANY ORDER BY QUARTER)) AS _Q_0 ORDER BY _Q_0.EMPID;
+
+# execute: false
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) AS x FROM t;
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY t.x) AS x FROM t AS t;
 
 --------------------------------------
 -- Derived tables
@@ -276,6 +320,69 @@ SELECT x.a AS a FROM x AS x UNION SELECT x.a AS a FROM x AS x UNION SELECT x.a A
 
 SELECT a FROM (SELECT a FROM x UNION SELECT a FROM x) ORDER BY a;
 SELECT _q_0.a AS a FROM (SELECT x.a AS a FROM x AS x UNION SELECT x.a AS a FROM x AS x) AS _q_0 ORDER BY a;
+
+# title: nested subqueries in union
+((select a from x where a < 1)) UNION ((select a from x where a > 2));
+((SELECT x.a AS a FROM x AS x WHERE x.a < 1)) UNION ((SELECT x.a AS a FROM x AS x WHERE x.a > 2));
+
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (SELECT 1 AS foo, 2 AS bar INNER UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz);
+SELECT _q_0.bar AS bar FROM (SELECT 1 AS foo, 2 AS bar INNER UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) AS _q_0;
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (SELECT 1 AS foo, 2 AS bar UNION ALL CORRESPONDING SELECT 3 AS bar, 4 AS baz);
+SELECT _q_0.bar AS bar FROM (SELECT 1 AS foo, 2 AS bar INNER UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) AS _q_0;
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz);
+SELECT _q_0.foo AS foo, _q_0.bar AS bar FROM (SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) AS _q_0;
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (SELECT 1 AS foo, 2 AS bar FULL UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz);
+SELECT _q_0.foo AS foo, _q_0.bar AS bar, _q_0.baz AS baz FROM (SELECT 1 AS foo, 2 AS bar FULL UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) AS _q_0;
+
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (SELECT 1 AS foo, 2 AS bar LEFT UNION ALL CORRESPONDING SELECT 3 AS bar, 4 AS baz);
+SELECT _q_0.foo AS foo, _q_0.bar AS bar FROM (SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) AS _q_0;
+
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (SELECT 1 AS foo, 2 AS bar FULL UNION ALL CORRESPONDING SELECT 3 AS bar, 4 AS baz);
+SELECT _q_0.foo AS foo, _q_0.bar AS bar, _q_0.baz AS baz FROM (SELECT 1 AS foo, 2 AS bar FULL UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) AS _q_0;
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (SELECT 1 AS foo, 2 AS bar FULL UNION ALL CORRESPONDING BY (foo, bar) SELECT 3 AS bar, 4 AS baz);
+SELECT _q_0.foo AS foo, _q_0.bar AS bar FROM (SELECT 1 AS foo, 2 AS bar FULL UNION ALL BY NAME ON (foo, bar) SELECT 3 AS bar, 4 AS baz) AS _q_0;
+
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (SELECT 1 AS foo, 2 AS bar FULL UNION ALL BY NAME ON (foo, bar) SELECT 3 AS bar, 4 AS baz);
+SELECT _q_0.foo AS foo, _q_0.bar AS bar FROM (SELECT 1 AS foo, 2 AS bar FULL UNION ALL BY NAME ON (foo, bar) SELECT 3 AS bar, 4 AS baz) AS _q_0;
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM ((SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) LEFT UNION ALL BY NAME ON (bar) SELECT 3 AS foo, 4 AS bar);
+SELECT _q_0.bar AS bar FROM ((SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) LEFT UNION ALL BY NAME ON (bar) SELECT 3 AS foo, 4 AS bar) AS _q_0;
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM ((SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) FULL UNION ALL BY NAME ON (foo, qux) SELECT 3 AS qux, 4 AS bar);
+SELECT _q_0.foo AS foo, _q_0.qux AS qux FROM ((SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) FULL UNION ALL BY NAME ON (foo, qux) SELECT 3 AS qux, 4 AS bar) AS _q_0;
+
+# dialect: bigquery
+# execute: false
+SELECT * FROM (((SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) FULL UNION ALL BY NAME ON (foo, qux) SELECT 3 AS qux, 4 AS bar) INNER UNION ALL BY NAME ON (foo) SELECT 6 AS foo);
+SELECT _q_0.foo AS foo FROM (((SELECT 1 AS foo, 2 AS bar LEFT UNION ALL BY NAME SELECT 3 AS bar, 4 AS baz) FULL UNION ALL BY NAME ON (foo, qux) SELECT 3 AS qux, 4 AS bar) INNER UNION ALL BY NAME ON (foo) SELECT 6 AS foo) AS _q_0;
 
 --------------------------------------
 -- Subqueries
@@ -386,6 +493,25 @@ WITH tbl1 AS (SELECT STRUCT(1 AS col1, 2 AS col1) AS col) SELECT tbl1.col.* FROM
 # execute: false
 SELECT * FROM READ_CSV('file.csv');
 SELECT * FROM READ_CSV('file.csv') AS _q_0;
+
+# dialect: clickhouse
+# Title: Expand tuples in VALUES using the structure provided
+# execute: false
+SELECT * FROM VALUES ('person String, place String', ('Noah', 'Paris'));
+SELECT _q_0.person AS person, _q_0.place AS place FROM VALUES ('person String, place String', ('Noah', 'Paris')) AS _q_0(person, place);
+
+# dialect: clickhouse
+# Title: Expand tuples in VALUES using the default naming scheme in CH
+# execute: false
+SELECT * FROM VALUES ((1, 1), (2, 2));
+SELECT _q_0.c1 AS c1, _q_0.c2 AS c2 FROM VALUES ((1, 1), (2, 2)) AS _q_0(c1, c2);
+
+# dialect: clickhouse
+# Title: Expand fields in VALUES using the default naming scheme in CH
+# execute: false
+SELECT * FROM VALUES (1, 2, 3);
+SELECT _q_0.c1 AS c1 FROM VALUES ((1), (2), (3)) AS _q_0(c1);
+
 
 --------------------------------------
 -- CTEs
@@ -718,6 +844,16 @@ WITH RECURSIVE t(c) AS (SELECT 1 AS c UNION ALL SELECT t.c + 1 AS c FROM t AS t 
 WITH RECURSIVE t AS (SELECT 1 AS c UNION ALL SELECT c + 1 AS c FROM t WHERE c <= 10) SELECT c FROM t;
 WITH RECURSIVE t AS (SELECT 1 AS c UNION ALL SELECT t.c + 1 AS c FROM t AS t WHERE t.c <= 10) SELECT t.c AS c FROM t AS t;
 
+# title: expand DISTINCT ON ordinals / projection names
+SELECT DISTINCT ON (new_col, b + 1, 1) t1.a AS new_col FROM x AS t1 ORDER BY new_col;
+SELECT DISTINCT ON (new_col, t1.b + 1, new_col) t1.a AS new_col FROM x AS t1 ORDER BY new_col;
+
+# title: Oracle does not support lateral alias expansion
+# dialect: oracle
+# execute: false
+SELECT a AS b, b AS a FROM c;
+SELECT C.A AS B, C.B AS A FROM C C;
+
 --------------------------------------
 -- Wrapped tables / join constructs
 --------------------------------------
@@ -782,3 +918,24 @@ SELECT X.A AS FOO FROM X AS X GROUP BY X.A = 1;
 # execute: false
 SELECT x.a AS foo FROM x WHERE foo = 1;
 SELECT X.A AS FOO FROM X AS X WHERE X.A = 1;
+
+
+--------------------------------------
+-- SEMI / ANTI Joins
+--------------------------------------
+
+# title: SEMI JOIN table is excluded from the scope
+SELECT * FROM x SEMI JOIN y USING (b);
+SELECT x.a AS a, x.b AS b FROM x AS x SEMI JOIN y AS y ON x.b = y.b;
+
+# title: ANTI JOIN table is excluded from the scope
+SELECT * FROM x ANTI JOIN y USING (b);
+SELECT x.a AS a, x.b AS b FROM x AS x ANTI JOIN y AS y ON x.b = y.b;
+
+# title: SEMI + normal joins reinclude the table on scope
+SELECT * FROM x SEMI JOIN y USING (b) JOIN y USING (b);
+SELECT x.a AS a, COALESCE(x.b, y_2.b) AS b, y_2.c AS c FROM x AS x SEMI JOIN y AS y ON x.b = y.b JOIN y AS y_2 ON x.b = y_2.b;
+
+# title: ANTI + normal joins reinclude the table on scope
+SELECT * FROM x ANTI JOIN y USING (b) JOIN y USING (b);
+SELECT x.a AS a, COALESCE(x.b, y_2.b) AS b, y_2.c AS c FROM x AS x ANTI JOIN y AS y ON x.b = y.b JOIN y AS y_2 ON x.b = y_2.b;

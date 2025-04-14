@@ -3,7 +3,7 @@ from tests.dialects.test_dialect import Validator
 
 class TestE6(Validator):
     maxDiff = None
-    dialect = "E6"
+    dialect = "e6"
 
     def test_E6(self):
         self.validate_all(
@@ -141,8 +141,8 @@ class TestE6(Validator):
             "POSITION(needle in haystack from c)",
             write={
                 "spark": "LOCATE(needle, haystack, c)",
-                "clickhouse": "position(haystack, needle, c)",
-                "snowflake": "POSITION(needle, haystack, c)",
+                "clickhouse": "POSITION(haystack, needle, c)",
+                "snowflake": "CHARINDEX(needle, haystack, c)",
                 "mysql": "LOCATE(needle, haystack, c)",
             },
         )
@@ -220,6 +220,11 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT LATERAL VIEW EXPLODE(input => mv.content) AS f",
+            read={"snowflake": "select lateral flatten(input => mv.content) f"},
+        )
+
+        self.validate_all(
             "SELECT LOCATE('ehe', 'hahahahehehe')",
             read={"trino": "SELECT STRPOS('hahahahehehe','ehe')"},
         )
@@ -235,6 +240,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CURRENT_TIMESTAMP",
+            read={
+                "databricks": "select GETDATE()",
+            },
+        )
+
+        self.validate_all(
             "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             read={
                 "trino": "SELECT date_diff('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
@@ -243,7 +255,7 @@ class TestE6(Validator):
                 "databricks": "SELECT DATEDIFF(DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             },
             write={
-                "E6": "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))"
+                "e6": "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))"
             },
         )
 
@@ -272,7 +284,7 @@ class TestE6(Validator):
                 "teradata": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
             },
             write={
-                "E6": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
+                "e6": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "bigquery": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "clickhouse": "SELECT argMax(a.id, a.timestamp) FROM a",
                 "duckdb": "SELECT ARG_MAX(a.id, a.timestamp) FROM a",
@@ -345,9 +357,9 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(A / 1000)",
+            "SELECT TO_UNIX_TIMESTAMP(A)/1000",
             read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
-            write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A / 1000)"},
+            write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000"},
         )
 
         self.validate_all(
@@ -374,12 +386,12 @@ class TestE6(Validator):
             "SELECT EXTRACT(fieldStr FROM date_expr)",
             read={
                 "databricks": "SELECT DATE_PART(fieldStr, date_expr)",
-                "E6": "SELECT DATEPART(fieldStr, date_expr)",
+                "e6": "SELECT DATEPART(fieldStr, date_expr)",
             },
         )
 
         self.validate_all(
-            "SELECT NOT A IS NULL",
+            "SELECT A IS NOT NULL",
             read={"databricks": "SELECT ISNOTNULL(A)"},
             write={"databricks": "SELECT NOT A IS NULL"},
         )
@@ -494,7 +506,7 @@ class TestE6(Validator):
 
         # Test FILTER_ARRAY with NULL values
         self.validate_all(
-            "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> NOT x IS NULL)",
+            "SELECT FILTER_ARRAY(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
             read={
                 "trino": "SELECT filter(ARRAY[NULL, 1, NULL, 2], x -> x IS NOT NULL)",
                 "snowflake": "SELECT filter(ARRAY_CONSTRUCT(NULL, 1, NULL, 2), x -> x IS NOT NULL)",
@@ -575,7 +587,7 @@ class TestE6(Validator):
         # )
 
         self.validate_all(
-            "named_struct('x', x_start, 'y', y_start)",
+            "NAMED_STRUCT('x', x_start, 'y', y_start)",
             read={"databricks": "struct (x_start as x, y_start as y)"},
         )
 
@@ -601,7 +613,7 @@ class TestE6(Validator):
         self.validate_all(
             """SELECT JSON_VALUE('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array""",
             write={
-                "E6": """SELECT JSON_EXTRACT('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array"""
+                "e6": """SELECT JSON_EXTRACT('{"fruits": [{"apples": 5, "oranges": 10}, {"apples": 2, "oranges": 4}], "vegetables": [{"lettuce": 7, "kale": 8}]}', '$.fruits.apples') AS string_array"""
             },
         )
 

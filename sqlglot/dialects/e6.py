@@ -11,7 +11,6 @@ from sqlglot.dialects.dialect import (
     build_formatted_time,
     max_or_greatest,
     min_or_least,
-    locate_to_strposition,
     rename_func,
     unit_to_str,
     timestrtotime_sql,
@@ -386,6 +385,19 @@ def _trim_sql(self: E6.Generator, expression: exp.Trim) -> str:
 
     else:
         return trim_sql(self, expression)
+
+
+def build_locate_strposition(args: t.List):
+    if len(args) == 2:
+        return exp.StrPosition(
+            this=seq_get(args, 1),
+            substr=seq_get(args, 0),
+        )
+    return exp.StrPosition(
+        this=seq_get(args, 1),
+        substr=seq_get(args, 0),
+        position=seq_get(args, 2),
+    )
 
 
 class E6(Dialect):
@@ -1383,7 +1395,7 @@ class E6(Dialect):
             "BITWISE_AND": binary_from_function(exp.BitwiseAnd),
             "CAST": _parse_cast,
             "CHARACTER_LENGTH": exp.Length.from_arg_list,
-            "CHARINDEX": locate_to_strposition,
+            "CHARINDEX": build_locate_strposition,
             "CHAR_LENGTH": exp.Length.from_arg_list,
             "COLLECT_LIST": exp.ArrayAgg.from_arg_list,
             "CONVERT_TIMEZONE": _build_convert_timezone,
@@ -1425,7 +1437,7 @@ class E6(Dialect):
             "LENGTH": exp.Length.from_arg_list,
             "LEAST": exp.Min.from_arg_list,
             "LISTAGG": exp.GroupConcat.from_arg_list,
-            "LOCATE": locate_to_strposition,
+            "LOCATE": build_locate_strposition,
             "LOG": exp.Log.from_arg_list,
             "LTRIM": lambda args: _build_trim(args),
             "MAX_BY": exp.ArgMax.from_arg_list,
@@ -1541,92 +1553,6 @@ class E6(Dialect):
             exp.DataType.Type.MEDIUMTEXT: "VARCHAR",
             exp.DataType.Type.DECIMAL: "DECIMAL",
         }
-
-        # TODO:: If the below functions is not required then it's better to remove it.
-        # This function is created to manipulate the select statement for specific use case. Tried different ways but could not achieve exact requirement as it was starting.
-        # Many priorities were there so this went into backlog.
-
-        # def select_sql(self, expression: exp.Select) -> str:
-        #     def collect_aliases_and_projections(expressions):
-        #         aliases = {}
-        #         projections = []
-        #         for e in expressions:
-        #             if isinstance(e, exp.Alias):
-        #                 alias = e.args.get("alias").sql(dialect=self.dialect)
-        #                 aliases[alias] = e.this
-        #                 projections.append(e)
-        #             else:
-        #                 projections.append(e)
-        #         return aliases, projections
-        #
-        #     def find_reused_aliases(projections, aliases):
-        #         reused_aliases = set()
-        #         for e in projections:
-        #             if isinstance(e, exp.Alias):
-        #                 alias = e.args.get("alias").sql(dialect=self.dialect)
-        #                 for other_e in projections:
-        #                     if other_e is not e and alias in other_e.sql(dialect=self.dialect):
-        #                         reused_aliases.add(alias)
-        #                         break
-        #         return reused_aliases
-        #
-        #     def create_subquery(projections, reused_aliases):
-        #         subquery_expressions = []
-        #         new_projections = []
-        #         for e in projections:
-        #             if isinstance(e, exp.Alias):
-        #                 alias = e.args.get("alias")
-        #                 # subquery_expressions.append(e.this.as_(alias))
-        #                 if alias.sql(dialect=self.dialect) in reused_aliases:
-        #                     subquery_expressions.append(e.this.as_(alias))
-        #                     new_projections.append(exp.column(f"t.{alias.sql(dialect=self.dialect)}"))
-        #                 else:
-        #                     new_projections.append(e)
-        #             else:
-        #                 new_projections.append(e)
-        #
-        #         subquery = exp.Select(expressions=subquery_expressions).subquery(alias="t")
-        #         # Adjust projections to replace reused aliases with subquery reference
-        #         adjusted_projections = []
-        #         for e in new_projections:
-        #             if isinstance(e, exp.Alias):
-        #                 alias = e.args.get("alias").sql(dialect=self.dialect)
-        #                 for alias_re in reused_aliases:
-        #                     if alias_re in e.this.sql(dialect=self.dialect):
-        #                         e = e.transform(lambda node: exp.column(f"t.{alias_re}") if isinstance(node,
-        #                                                                                                exp.Column) and node.sql(
-        #                             dialect=self.dialect) == alias_re else node)
-        #                 adjusted_projections.append(e)
-        #             else:
-        #                 for alias_re in reused_aliases:
-        #                     if alias_re in e.this.sql(dialect=self.dialect):
-        #                         e = e.transform(lambda node: exp.column(f"t.{alias_re}") if isinstance(node,
-        #                                                                                                exp.Column) and node.sql(
-        #                             dialect=self.dialect) == alias_re else node)
-        #                 adjusted_projections.append(e)
-        #
-        #         return adjusted_projections, subquery
-        #
-        #     # Collect all the aliases and projections defined in the SELECT clause
-        #     aliases, projections = collect_aliases_and_projections(expression.expressions)
-        #
-        #     # Find reused aliases in the projections
-        #     reused_aliases = find_reused_aliases(projections, aliases)
-        #
-        #     if reused_aliases:
-        #         new_projections, subquery = create_subquery(projections, reused_aliases)
-        #
-        #         # Ensure the FROM clause is added if missing
-        #         if expression.args.get("from"):
-        #             from_clause = expression.args["from"]
-        #             from_clause.append(subquery)
-        #         else:
-        #             # expression.set("from", subquery)
-        #             expression.set("from",subquery)
-        #
-        #         expression.set("expressions", new_projections)
-        #
-        #     return super().select_sql(expression)
 
         # TODO:: Adithya, why there was need to override this method.
         # So what was happening was this method will get called internally while .transpile is called. They have written this method with respect to other dialects.
@@ -2045,22 +1971,46 @@ class E6(Dialect):
             time_expr = expression.this
             format_expr = expression.args.get("format")
 
-            # Case 1: If `time_expr` is already `x / 1000`, do nothing
-            if isinstance(time_expr, exp.Div) and time_expr.expression.this == "1000":
-                transformed_expr = time_expr
-            else:
-                # Case 2: If not a division, transform `x` into `x / 1000`
-                transformed_expr = exp.Div(
-                    this=time_expr, expression=exp.Literal(this="1000", is_string=False)
-                )
-
             # Generate final function with or without format argument
             if format_expr:
-                return self.func(
-                    "TO_UNIX_TIMESTAMP", self.sql(transformed_expr), self.sql(format_expr)
+                unix_timestamp_expr = self.func(
+                    "TO_UNIX_TIMESTAMP", self.sql(time_expr), self.sql(format_expr)
                 )
             else:
-                return self.func("TO_UNIX_TIMESTAMP", self.sql(transformed_expr))
+                unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))
+
+            return f"{unix_timestamp_expr}/1000"
+
+        def lateral_sql(self, expression: exp.Lateral) -> str:
+            expression.set("view", True)
+            this = self.sql(expression, "this")
+
+            alias = expression.args["alias"]
+            columns = self.expressions(alias, key="columns", flat=True)
+            columns_cleaned = columns.replace('"', "")
+
+            table = f"{alias.name}" if alias and alias.name else ""
+            columns = (
+                f"{columns}"
+                if columns and not columns_cleaned == "SEQ, KEY, PATH, INDEX, VALUE, THIS"
+                else ""
+            )
+
+            op_sql = self.seg(f"LATERAL VIEW{' OUTER' if expression.args.get('outer') else ''}")
+
+            if table and columns:
+                return f"{op_sql}{self.sep()}{this} AS {table}({columns})"
+            elif table:
+                return f"{op_sql}{self.sep()}{this} AS {table}"
+            else:
+                return f"{op_sql}{self.sep()}{this}"
+
+        def not_sql(self, expression: exp.Not) -> str:
+            expr = expression.this
+            if isinstance(expr, exp.Is):
+                return f"{expr.this} IS NOT {expr.expression}"
+            else:
+                return super().not_sql(expression)
 
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {

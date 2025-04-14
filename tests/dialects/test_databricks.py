@@ -33,10 +33,6 @@ class TestDatabricks(Validator):
             "CREATE TABLE IF NOT EXISTS db.table (a TIMESTAMP, b BOOLEAN GENERATED ALWAYS AS (NOT a IS NULL)) USING DELTA"
         )
         self.validate_identity(
-            "SELECT DATE_FORMAT(CAST(FROM_UTC_TIMESTAMP(foo, 'America/Los_Angeles') AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss') AS foo FROM t",
-            "SELECT DATE_FORMAT(CAST(FROM_UTC_TIMESTAMP(CAST(foo AS TIMESTAMP), 'America/Los_Angeles') AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss') AS foo FROM t",
-        )
-        self.validate_identity(
             "SELECT * FROM sales UNPIVOT INCLUDE NULLS (sales FOR quarter IN (q1 AS `Jan-Mar`))"
         )
         self.validate_identity(
@@ -54,6 +50,11 @@ class TestDatabricks(Validator):
         self.validate_identity(
             "COPY INTO target FROM `s3://link` FILEFORMAT = AVRO VALIDATE = ALL FILES = ('file1', 'file2') FORMAT_OPTIONS ('opt1'='true', 'opt2'='test') COPY_OPTIONS ('mergeSchema'='true')"
         )
+        self.validate_identity("SELECT PARSE_JSON('{}')")
+        self.validate_identity(
+            "SELECT DATE_FORMAT(CAST(FROM_UTC_TIMESTAMP(foo, 'America/Los_Angeles') AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss') AS foo FROM t",
+            "SELECT DATE_FORMAT(CAST(FROM_UTC_TIMESTAMP(CAST(foo AS TIMESTAMP), 'America/Los_Angeles') AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss') AS foo FROM t",
+        )
         self.validate_identity(
             "DATE_DIFF(day, created_at, current_date())",
             "DATEDIFF(DAY, created_at, CURRENT_DATE)",
@@ -61,6 +62,10 @@ class TestDatabricks(Validator):
         self.validate_identity(
             r'SELECT r"\\foo.bar\"',
             r"SELECT '\\\\foo.bar\\'",
+        )
+        self.validate_identity(
+            "FROM_UTC_TIMESTAMP(x::TIMESTAMP, tz)",
+            "FROM_UTC_TIMESTAMP(CAST(x AS TIMESTAMP), tz)",
         )
 
         self.validate_all(
@@ -292,6 +297,18 @@ class TestDatabricks(Validator):
         self.validate_identity("GRANT ALL PRIVILEGES ON TABLE forecasts TO finance")
         self.validate_identity("GRANT SELECT ON TABLE t TO `fab9e00e-ca35-11ec-9d64-0242ac120002`")
 
+    def test_analyze(self):
+        self.validate_identity("ANALYZE TABLE tbl COMPUTE DELTA STATISTICS NOSCAN")
+        self.validate_identity("ANALYZE TABLE tbl COMPUTE DELTA STATISTICS FOR ALL COLUMNS")
+        self.validate_identity("ANALYZE TABLE tbl COMPUTE DELTA STATISTICS FOR COLUMNS foo, bar")
+        self.validate_identity("ANALYZE TABLE ctlg.db.tbl COMPUTE DELTA STATISTICS NOSCAN")
+        self.validate_identity("ANALYZE TABLES COMPUTE STATISTICS NOSCAN")
+        self.validate_identity("ANALYZE TABLES FROM db COMPUTE STATISTICS")
+        self.validate_identity("ANALYZE TABLES IN db COMPUTE STATISTICS")
+        self.validate_identity(
+            "ANALYZE TABLE ctlg.db.tbl PARTITION(foo = 'foo', bar = 'bar') COMPUTE STATISTICS NOSCAN"
+        )
+
     def test_is_null_and_is_not_null(self):
         self.validate_identity("SELECT ISNULL(col)", "SELECT col IS NULL")
         self.validate_identity("SELECT ISNOTNULL(col)", "SELECT NOT col IS NULL")
@@ -307,12 +324,12 @@ class TestDatabricks(Validator):
             read={
                 "bigquery": "TRIM('abc', 'a')",
                 "snowflake": "TRIM('abc', 'a')",
-                "E6": "TRIM('a' FROM 'abc')",
+                "e6": "TRIM('a' FROM 'abc')",
             },
             write={
                 "bigquery": "TRIM('abc', 'a')",
                 "snowflake": "TRIM('abc', 'a')",
-                "E6": "TRIM('a' FROM 'abc')",
+                "e6": "TRIM('a' FROM 'abc')",
             },
         )
 
@@ -321,7 +338,7 @@ class TestDatabricks(Validator):
             read={
                 "oracle": "LTRIM('Hello World', 'H')",
                 "clickhouse": "TRIM(LEADING 'H' FROM 'Hello World')",
-                "E6": "TRIM(LEADING 'H' FROM 'Hello World')",
+                "e6": "TRIM(LEADING 'H' FROM 'Hello World')",
                 "snowflake": "LTRIM('Hello World', 'H')",
                 "bigquery": "LTRIM('Hello World', 'H')",
             },
@@ -330,7 +347,7 @@ class TestDatabricks(Validator):
                 "oracle": "LTRIM('Hello World', 'H')",
                 "snowflake": "LTRIM('Hello World', 'H')",
                 "bigquery": "LTRIM('Hello World', 'H')",
-                "E6": "LTRIM('H', 'Hello World')",
+                "e6": "LTRIM('H', 'Hello World')",
             },
         )
 
@@ -338,14 +355,14 @@ class TestDatabricks(Validator):
             "RTRIM('d', 'Hello World')",
             read={
                 "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "E6": "TRIM(TRAILING 'd' FROM 'Hello World')",
+                "e6": "TRIM(TRAILING 'd' FROM 'Hello World')",
                 "oracle": "RTRIM('Hello World', 'd')",
                 "snowflake": "RTRIM('Hello World', 'd')",
                 "bigquery": "RTRIM('Hello World', 'd')",
             },
             write={
                 "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "E6": "RTRIM('d', 'Hello World')",
+                "e6": "RTRIM('d', 'Hello World')",
                 "oracle": "RTRIM('Hello World', 'd')",
                 "snowflake": "RTRIM('Hello World', 'd')",
                 "bigquery": "RTRIM('Hello World', 'd')",
@@ -355,14 +372,14 @@ class TestDatabricks(Validator):
         self.validate_all(
             "TRIM('abcSpark')",
             read={
-                "E6": "TRIM(BOTH from 'abcSpark')",
+                "e6": "TRIM(BOTH from 'abcSpark')",
                 "snowflake": "TRIM('abcSpark')",
                 "oracle": "TRIM(BOTH from 'abcSpark')",
                 "bigquery": "TRIM('abcSpark')",
                 "clickhouse": "TRIM(BOTH from 'abcSpark')",
             },
             write={
-                "E6": "TRIM('abcSpark')",
+                "e6": "TRIM('abcSpark')",
                 "snowflake": "TRIM('abcSpark')",
                 "oracle": "TRIM('abcSpark')",
                 "bigquery": "TRIM('abcSpark')",
@@ -373,12 +390,12 @@ class TestDatabricks(Validator):
         self.validate_all(
             "TRIM(BOTH trimstr FROM 'abcSpark')",
             read={
-                "E6": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "e6": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
             },
             write={
-                "E6": "TRIM(BOTH trimstr FROM 'abcSpark')",
+                "e6": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
                 "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
             },

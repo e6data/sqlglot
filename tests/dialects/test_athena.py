@@ -155,6 +155,12 @@ class TestAthena(Validator):
             write_sql='CREATE TABLE "foo" AS WITH "foo" AS (SELECT "a", "b" FROM "bar") SELECT * FROM "foo"',
         )
 
+        # CTAS with Union should still hit the Trino engine and not Hive
+        self.validate_identity(
+            'CREATE TABLE `foo` AS WITH `foo` AS (SELECT "a", `b` FROM "bar") SELECT * FROM "foo" UNION SELECT * FROM "foo"',
+            write_sql='CREATE TABLE "foo" AS WITH "foo" AS (SELECT "a", "b" FROM "bar") SELECT * FROM "foo" UNION SELECT * FROM "foo"',
+        )
+
         self.validate_identity("DESCRIBE foo.bar", write_sql="DESCRIBE `foo`.`bar`", identify=True)
 
     def test_dml_quoting(self):
@@ -199,7 +205,8 @@ class TestAthena(Validator):
 
     def test_ctas(self):
         # Hive tables use 'external_location' to specify the table location, Iceberg tables use 'location' to specify the table location
-        # The 'table_type' property is used to determine if it's a Hive or an Iceberg table
+        # In addition, Hive tables used 'partitioned_by' to specify the partition fields and Iceberg tables use 'partitioning' to specify the partition fields
+        # The 'table_type' property is used to determine if it's a Hive or an Iceberg table. If it's omitted, it defaults to Hive
         # ref: https://docs.aws.amazon.com/athena/latest/ug/create-table-as.html#ctas-table-properties
         ctas_hive = exp.Create(
             this=exp.to_table("foo.bar"),
@@ -208,13 +215,16 @@ class TestAthena(Validator):
                 expressions=[
                     exp.FileFormatProperty(this=exp.Literal.string("parquet")),
                     exp.LocationProperty(this=exp.Literal.string("s3://foo")),
+                    exp.PartitionedByProperty(
+                        this=exp.Schema(expressions=[exp.to_column("partition_col")])
+                    ),
                 ]
             ),
             expression=exp.select("1"),
         )
         self.assertEqual(
             ctas_hive.sql(dialect=self.dialect, identify=True),
-            "CREATE TABLE \"foo\".\"bar\" WITH (format='parquet', external_location='s3://foo') AS SELECT 1",
+            "CREATE TABLE \"foo\".\"bar\" WITH (format='parquet', external_location='s3://foo', partitioned_by=ARRAY['partition_col']) AS SELECT 1",
         )
 
         ctas_iceberg = exp.Create(
@@ -224,11 +234,14 @@ class TestAthena(Validator):
                 expressions=[
                     exp.Property(this=exp.var("table_type"), value=exp.Literal.string("iceberg")),
                     exp.LocationProperty(this=exp.Literal.string("s3://foo")),
+                    exp.PartitionedByProperty(
+                        this=exp.Schema(expressions=[exp.to_column("partition_col")])
+                    ),
                 ]
             ),
             expression=exp.select("1"),
         )
         self.assertEqual(
             ctas_iceberg.sql(dialect=self.dialect, identify=True),
-            "CREATE TABLE \"foo\".\"bar\" WITH (table_type='iceberg', location='s3://foo') AS SELECT 1",
+            "CREATE TABLE \"foo\".\"bar\" WITH (table_type='iceberg', location='s3://foo', partitioning=ARRAY['partition_col']) AS SELECT 1",
         )

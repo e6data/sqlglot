@@ -6,9 +6,11 @@ from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
+    build_timetostr_or_tochar,
     build_formatted_time,
     no_ilike_sql,
     rename_func,
+    strposition_sql,
     to_number_with_nls_param,
     trim_sql,
 )
@@ -18,19 +20,6 @@ from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
-
-
-def _build_timetostr_or_tochar(args: t.List) -> exp.TimeToStr | exp.ToChar:
-    this = seq_get(args, 0)
-
-    if this and not this.type:
-        from sqlglot.optimizer.annotate_types import annotate_types
-
-        annotate_types(this)
-        if this.is_type(*exp.DataType.TEMPORAL_TYPES):
-            return build_formatted_time(exp.TimeToStr, "oracle", default=True)(args)
-
-    return exp.ToChar.from_arg_list(args)
 
 
 def _trim_sql(self: Oracle.Generator, expression: exp.Trim) -> str:
@@ -116,7 +105,7 @@ class Oracle(Dialect):
             **parser.Parser.FUNCTIONS,
             "NVL": lambda args: build_coalesce(args, is_nvl=True),
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
-            "TO_CHAR": _build_timetostr_or_tochar,
+            "TO_CHAR": build_timetostr_or_tochar,
             "TO_TIMESTAMP": build_formatted_time(exp.StrToTime, "oracle"),
             "TO_DATE": build_formatted_time(exp.StrToDate, "oracle"),
             "TRUNC": lambda args: exp.DateTrunc(
@@ -143,7 +132,6 @@ class Oracle(Dialect):
                 this=self._parse_format_json(self._parse_bitwise()),
                 order=self._parse_order(),
             ),
-            "XMLTABLE": lambda self: self._parse_xml_table(),
             "JSON_EXISTS": lambda self: self._parse_json_exists(),
         }
 
@@ -153,6 +141,7 @@ class Oracle(Dialect):
             and self.expression(exp.TemporaryProperty, this="GLOBAL"),
             "PRIVATE": lambda self: self._match_text_seq("TEMPORARY")
             and self.expression(exp.TemporaryProperty, this="PRIVATE"),
+            "FORCE": lambda self: self.expression(exp.ForceProperty),
         }
 
         QUERY_MODIFIER_PARSERS = {
@@ -180,26 +169,6 @@ class Oracle(Dialect):
                 ("CHECK", "OPTION"),
             ),
         }
-
-        def _parse_xml_table(self) -> exp.XMLTable:
-            this = self._parse_string()
-
-            passing = None
-            columns = None
-
-            if self._match_text_seq("PASSING"):
-                # The BY VALUE keywords are optional and are provided for semantic clarity
-                self._match_text_seq("BY", "VALUE")
-                passing = self._parse_csv(self._parse_column)
-
-            by_ref = self._match_text_seq("RETURNING", "SEQUENCE", "BY", "REF")
-
-            if self._match_text_seq("COLUMNS"):
-                columns = self._parse_csv(self._parse_field_def)
-
-            return self.expression(
-                exp.XMLTable, this=this, passing=passing, columns=columns, by_ref=by_ref
-            )
 
         def _parse_json_array(self, expr_type: t.Type[E], **kwargs) -> E:
             return self.expression(
@@ -291,10 +260,10 @@ class Oracle(Dialect):
 
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,
-            exp.DataType.Type.TINYINT: "NUMBER",
-            exp.DataType.Type.SMALLINT: "NUMBER",
-            exp.DataType.Type.INT: "NUMBER",
-            exp.DataType.Type.BIGINT: "NUMBER",
+            exp.DataType.Type.TINYINT: "SMALLINT",
+            exp.DataType.Type.SMALLINT: "SMALLINT",
+            exp.DataType.Type.INT: "INT",
+            exp.DataType.Type.BIGINT: "INT",
             exp.DataType.Type.DECIMAL: "NUMBER",
             exp.DataType.Type.DOUBLE: "DOUBLE PRECISION",
             exp.DataType.Type.VARCHAR: "VARCHAR2",
@@ -307,6 +276,7 @@ class Oracle(Dialect):
             exp.DataType.Type.VARBINARY: "BLOB",
             exp.DataType.Type.ROWVERSION: "BLOB",
         }
+        TYPE_MAPPING.pop(exp.DataType.Type.BLOB)
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -316,12 +286,19 @@ class Oracle(Dialect):
             exp.DateTrunc: lambda self, e: self.func("TRUNC", e.this, e.unit),
             exp.Group: transforms.preprocess([transforms.unalias_group]),
             exp.ILike: no_ilike_sql,
+            exp.LogicalOr: rename_func("MAX"),
+            exp.LogicalAnd: rename_func("MIN"),
             exp.Mod: rename_func("MOD"),
             exp.Select: transforms.preprocess(
                 [
                     transforms.eliminate_distinct_on,
                     transforms.eliminate_qualify,
                 ]
+            ),
+            exp.StrPosition: lambda self, e: (
+                strposition_sql(
+                    self, e, func_name="INSTR", supports_position=True, supports_occurrence=True
+                )
             ),
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
             exp.StrToDate: lambda self, e: self.func("TO_DATE", e.this, self.format_time(e)),
@@ -334,6 +311,7 @@ class Oracle(Dialect):
             exp.ToChar: lambda self, e: self.function_fallback_sql(e),
             exp.ToNumber: to_number_with_nls_param,
             exp.Trim: _trim_sql,
+            exp.Unicode: lambda self, e: f"ASCII(UNISTR({self.sql(e.this)}))",
             exp.UnixToTime: lambda self,
             e: f"TO_DATE('1970-01-01', 'YYYY-MM-DD') + ({self.sql(e, 'this')} / 86400)",
         }
@@ -352,17 +330,6 @@ class Oracle(Dialect):
 
         def offset_sql(self, expression: exp.Offset) -> str:
             return f"{super().offset_sql(expression)} ROWS"
-
-        def xmltable_sql(self, expression: exp.XMLTable) -> str:
-            this = self.sql(expression, "this")
-            passing = self.expressions(expression, key="passing")
-            passing = f"{self.sep()}PASSING{self.seg(passing)}" if passing else ""
-            columns = self.expressions(expression, key="columns")
-            columns = f"{self.sep()}COLUMNS{self.seg(columns)}" if columns else ""
-            by_ref = (
-                f"{self.sep()}RETURNING SEQUENCE BY REF" if expression.args.get("by_ref") else ""
-            )
-            return f"XMLTABLE({self.sep('')}{self.indent(this + passing + by_ref + columns)}{self.seg(')', sep='')}"
 
         def add_column_sql(self, expression: exp.Alter) -> str:
             actions = self.expressions(expression, key="actions", flat=True)
@@ -399,3 +366,6 @@ class Oracle(Dialect):
                     expressions.append(self.sql(expression))
 
             return f" /*+ {self.expressions(sqls=expressions, sep=self.QUERY_HINT_SEP).strip()} */"
+
+        def isascii_sql(self, expression: exp.IsAscii) -> str:
+            return f"NVL(REGEXP_LIKE({self.sql(expression.this)}, '^[' || CHR(1) || '-' || CHR(127) || ']*$'), TRUE)"
