@@ -6,6 +6,7 @@ import sqlglot
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import exp, parse_one
 import typing as t
+from sqlglot.dialects.e6 import E6
 
 FUNCTIONS_FILE = "./apis/utils/supported_functions_in_all_dialects.json"
 
@@ -178,6 +179,11 @@ def unsupported_functionality_identifiers(
 
     for parametrised in expression.find_all(exp.Placeholder):
         unsupported_list.append(f":{parametrised.this}")
+
+    for casting in expression.find_all(exp.Cast):
+        cast_to = casting.args.get("to").this.name
+        if cast_to not in E6.Parser.SUPPORTED_CAST_TYPES:
+            unsupported_list.append(f"UNSUPPORTED_CAST_TYPE:{cast_to}")
 
     if expression.find(exp.GroupingSets):
         unsupported_list.append(f"GROUPING SETS")
