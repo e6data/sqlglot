@@ -347,13 +347,13 @@ async def stats_api(
             executable = "NO"
 
         return {
-            "supported_functions": supported,
-            "unsupported_functions": unsupported,
-            "udf_list": udf_list,
+            "supported_functions": set(supported),
+            "unsupported_functions": set(unsupported),
+            "udf_list": set(udf_list),
             "converted-query": double_quotes_added_query,  # Will contain error message if error_flag is True
-            "unsupported_functions_after_transpilation": unsupported_in_converted,
+            "unsupported_functions_after_transpilation": set(unsupported_in_converted),
             "executable": executable,
-            "tables_list": tables_list,
+            "tables_list": set(tables_list),
             "joins_list": joins_list,
             "cte_values_subquery_list": cte_values_subquery_list,
             "error": error_flag,
