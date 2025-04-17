@@ -53,7 +53,7 @@ async def convert_query(
     query: str = Form(...),
     query_id: Optional[str] = Form("NO_ID_MENTIONED"),
     from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("E6"),
+    to_sql: Optional[str] = Form("e6"),
 ):
     timestamp = datetime.now().isoformat()
     try:
@@ -135,7 +135,7 @@ async def Transgaurd(
     schema: str = Form(...),
     catalog: str = Form(...),
     from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("E6"),
+    to_sql: Optional[str] = Form("e6"),
 ):
     try:
         if storage_service_client is not None:
@@ -183,7 +183,7 @@ async def stats_api(
     query: str = Form(...),
     query_id: Optional[str] = Form("NO_ID_MENTIONED"),
     from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("E6"),
+    to_sql: Optional[str] = Form("e6"),
 ):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
@@ -389,7 +389,7 @@ async def stats_api(
 async def guardstats(
     query: str = Form(...),
     from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("E6"),
+    to_sql: Optional[str] = Form("e6"),
     schema: str = Form(...),
     catalog: str = Form(...),
 ):

@@ -132,8 +132,7 @@ def _mergeable(
     inner_select = inner_scope.expression.unnest()
 
     def _is_a_window_expression_in_unmergable_operation():
-        window_expressions = inner_select.find_all(exp.Window)
-        window_alias_names = {window.parent.alias_or_name for window in window_expressions}
+        window_aliases = {s.alias_or_name for s in inner_select.selects if s.find(exp.Window)}
         inner_select_name = from_or_join.alias_or_name
         unmergable_window_columns = [
             column
@@ -145,7 +144,7 @@ def _mergeable(
         window_expressions_in_unmergable = [
             column
             for column in unmergable_window_columns
-            if column.table == inner_select_name and column.name in window_alias_names
+            if column.table == inner_select_name and column.name in window_aliases
         ]
         return any(window_expressions_in_unmergable)
 
@@ -241,12 +240,12 @@ def _rename_inner_sources(outer_scope: Scope, inner_scope: Scope, alias: str) ->
         source, _ = inner_scope.selected_sources[conflict]
         new_alias = exp.to_identifier(new_name)
 
-        if isinstance(source, exp.Subquery):
-            source.set("alias", exp.TableAlias(this=new_alias))
-        elif isinstance(source, exp.Table) and source.alias:
+        if isinstance(source, exp.Table) and source.alias:
             source.set("alias", new_alias)
         elif isinstance(source, exp.Table):
             source.replace(exp.alias_(source, new_alias))
+        elif isinstance(source.parent, exp.Subquery):
+            source.parent.set("alias", exp.TableAlias(this=new_alias))
 
         for column in inner_scope.source_columns(conflict):
             column.set("table", exp.to_identifier(new_name))
