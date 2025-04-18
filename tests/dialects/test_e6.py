@@ -122,6 +122,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "CAST(A AS VARCHAR)",
+            read={
+                "snowflake": "AS_VARCHAR(A)",
+            }
+        )
+
+        self.validate_all(
             "SELECT DAYOFWEEKISO('2024-11-09')",
             read={
                 "trino": "SELECT day_of_week('2024-11-09')",
