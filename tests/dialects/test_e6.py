@@ -125,7 +125,7 @@ class TestE6(Validator):
             "CAST(A AS VARCHAR)",
             read={
                 "snowflake": "AS_VARCHAR(A)",
-            }
+            },
         )
 
         self.validate_all(
@@ -365,8 +365,11 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT TO_UNIX_TIMESTAMP(A)/1000",
-            read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
-            write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000"},
+            read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
+            write={
+                "databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
+                "snowflake": "SELECT EXTRACT(epoch_second FROM A) / 1000",
+            },
         )
 
         self.validate_all(

@@ -1035,7 +1035,7 @@ class TestSnowflake(Validator):
                 "postgres": "CAST(A AS VARCHAR)",
                 "e6": "CAST(A AS VARCHAR)",
                 "bigquery": "CAST(A AS STRING)",
-            }
+            },
         )
 
     def test_null_treatment(self):

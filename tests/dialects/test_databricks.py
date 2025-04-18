@@ -101,8 +101,8 @@ class TestDatabricks(Validator):
                 "databricks": "SELECT CURRENT_TIMESTAMP()",
                 "snowflake": "SELECT CURRENT_TIMESTAMP()",
                 "e6": "SELECT CURRENT_TIMESTAMP",
-                "trino": "SELECT CURRENT_TIMESTAMP"
-            }
+                "trino": "SELECT CURRENT_TIMESTAMP",
+            },
         )
 
         with self.assertRaises(ParseError):
