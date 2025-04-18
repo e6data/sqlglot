@@ -2285,3 +2285,4 @@ class E6(Dialect):
             exp.DataType.Type.STRUCT: "STRUCT",
             exp.DataType.Type.ARRAY: "ARRAY",
         }
+
