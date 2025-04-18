@@ -1559,38 +1559,38 @@ class E6(Dialect):
         # So what was happening was this method will get called internally while .transpile is called. They have written this method with respect to other dialects.
         # But whenever we pass a normal query, by default parts like `NULLS LAST` etc were getting by defaults in order by clause which will differs the sequence of results displayed in original dialect and ours.
         # In order to tackle that, I overridden that so as to maintain structure of sqlglot with out altering original methods
-        # def ordered_sql(self, expression: exp.Ordered) -> str:
-        #     """
-        #     Generate the SQL string for an ORDER BY clause in the E6 dialect.
-        #
-        #     This method simplifies the ORDER BY clause by omitting any handling for NULL ordering,
-        #     as the E6 dialect does not support explicit NULLS FIRST or NULLS LAST directives.
-        #
-        #     Args:
-        #         expression (exp.Ordered): The expression containing the column or expression to order by,
-        #                                   along with sorting direction and null ordering preferences.
-        #
-        #     Returns:
-        #         str: The SQL string representing the ORDER BY clause.
-        #     """
-        #     # Determine the sorting direction based on the 'desc' argument
-        #     sort_order = {True: " DESC", False: " ASC", None: ""}.get(expression.args.get("desc"))
-        #
-        #     # Generate the SQL for the main expression to be ordered
-        #     main_expression = self.sql(expression, "this")
-        #     # TODO:: What is the significant of `this` parameter here
-        #     # `this` is the whole sql part from select node that order by is part of
-        #
-        #     # Initialize null ordering as an empty string
-        #     nulls_sort_change = ""
-        #
-        #     # Apply NULLS FIRST/LAST only if supported by the dialect
-        #     if self.NULL_ORDERING_SUPPORTED:
-        #         nulls_first = expression.args.get("nulls_first")
-        #         nulls_sort_change = " NULLS FIRST" if nulls_first else " NULLS LAST"
-        #
-        #     # Construct and return the final ORDER BY clause
-        #     return f"{main_expression}{sort_order}{nulls_sort_change}"
+        def ordered_sql(self, expression: exp.Ordered) -> str:
+            """
+            Generate the SQL string for an ORDER BY clause in the E6 dialect.
+
+            This method simplifies the ORDER BY clause by omitting any handling for NULL ordering,
+            as the E6 dialect does not support explicit NULLS FIRST or NULLS LAST directives.
+
+            Args:
+                expression (exp.Ordered): The expression containing the column or expression to order by,
+                                          along with sorting direction and null ordering preferences.
+
+            Returns:
+                str: The SQL string representing the ORDER BY clause.
+            """
+            # Determine the sorting direction based on the 'desc' argument
+            sort_order = {True: " DESC", False: " ASC", None: ""}.get(expression.args.get("desc"))
+
+            # Generate the SQL for the main expression to be ordered
+            main_expression = self.sql(expression, "this")
+            # TODO:: What is the significant of `this` parameter here
+            # `this` is the whole sql part from select node that order by is part of
+
+            # Initialize null ordering as an empty string
+            nulls_sort_change = ""
+
+            # Apply NULLS FIRST/LAST only if supported by the dialect
+            if self.NULL_ORDERING_SUPPORTED:
+                nulls_first = expression.args.get("nulls_first")
+                nulls_sort_change = " NULLS FIRST" if nulls_first else " NULLS LAST"
+
+            # Construct and return the final ORDER BY clause
+            return f"{main_expression}{sort_order}{nulls_sort_change}"
 
         def sub_sql(self, expr: exp.Sub) -> str:
             if (
@@ -2285,4 +2285,3 @@ class E6(Dialect):
             exp.DataType.Type.STRUCT: "STRUCT",
             exp.DataType.Type.ARRAY: "ARRAY",
         }
-
