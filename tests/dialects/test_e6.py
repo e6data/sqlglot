@@ -738,3 +738,18 @@ class TestE6(Validator):
                 "databricks": "SELECT date_part('day', DATE'2025-04-08')",
             },
         )
+
+    def test_aggregate(self):
+        self.validate_all(
+            "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY col) FROM (VALUES (1), (2), (2), (3), (4), (NULL)) AS tab(col)",
+            read={
+                "databricks": "SELECT median(col) FROM VALUES (1), (2), (2), (3), (4), (NULL) AS tab(col);"
+            },
+        )
+
+        self.validate_all(
+            "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY CASE WHEN cc.cost_type = 'relative' THEN (cd.'value' * rt.'value') ELSE cd.'value' END)",
+            read={
+                "databricks": "MEDIAN(CASE WHEN cc.cost_type = 'relative' THEN (cd.'value' * rt.'value') ELSE cd.'value' END)"
+            },
+        )

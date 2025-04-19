@@ -2014,12 +2014,18 @@ class E6(Dialect):
                 return super().not_sql(expression)
 
         def median_sql(self, expression: exp.Median):
-            this = self.sql(expression, "this")
-            order_by = exp.Order(expression=expression.this)
-            order_by_column = f" {order_by} {this}"
-            percentile_cont_expr = exp.PercentileCont(this=exp.Literal.number(0.5))
-            within_group = exp.WithinGroup(this=percentile_cont_expr, expression=order_by_column)
-            return f"{within_group}"
+            if not self.SUPPORTS_MEDIAN:
+                this = self.sql(expression, "this")
+                order_by = exp.Order(expression=expression.this)
+                order_by_column = f" {order_by} {this}"
+                percentile_cont_expr = exp.PercentileCont(this=exp.Literal.number(0.5))
+                within_group = exp.WithinGroup(
+                    this=percentile_cont_expr, expression=order_by_column
+                )
+                return f"{within_group}"
+
+            else:
+                return self.function_fallback_sql(expression)
 
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
