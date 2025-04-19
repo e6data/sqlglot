@@ -2018,7 +2018,7 @@ class E6(Dialect):
                 this = expression.this
 
                 # Check if Distinct keyword is present at the start
-                if this and isinstance(this,exp.Distinct):
+                if this and isinstance(this, exp.Distinct):
                     return self.function_fallback_sql(expression)
 
                 order_by = exp.Order(expression=expression.this)
