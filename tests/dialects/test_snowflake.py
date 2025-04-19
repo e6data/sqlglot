@@ -1027,6 +1027,17 @@ class TestSnowflake(Validator):
             },
         )
 
+        self.validate_all(
+            "AS_VARCHAR(A)",
+            write={
+                "databricks": "CAST(A AS STRING)",
+                "trino": "CAST(A AS VARCHAR)",
+                "postgres": "CAST(A AS VARCHAR)",
+                "e6": "CAST(A AS VARCHAR)",
+                "bigquery": "CAST(A AS STRING)",
+            },
+        )
+
     def test_null_treatment(self):
         self.validate_all(
             r"SELECT FIRST_VALUE(TABLE1.COLUMN1) OVER (PARTITION BY RANDOM_COLUMN1, RANDOM_COLUMN2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS MY_ALIAS FROM TABLE1",
