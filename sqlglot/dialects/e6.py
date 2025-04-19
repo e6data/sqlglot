@@ -2015,10 +2015,10 @@ class E6(Dialect):
 
         def median_sql(self, expression: exp.Median):
             if not self.SUPPORTS_MEDIAN:
-                this = self.sql(expression, "this")
+                this = expression.this
 
                 # Check if Distinct keyword is present at the start
-                if this and this.split()[0].lower() == "distinct":
+                if this and isinstance(this,exp.Distinct):
                     return self.function_fallback_sql(expression)
 
                 order_by = exp.Order(expression=expression.this)
