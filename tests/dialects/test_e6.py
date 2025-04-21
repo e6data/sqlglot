@@ -158,6 +158,14 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CURRENT_TIMESTAMP",
+            read={
+                "databricks": "SELECT CURRENT_TIMESTAMP()",
+                "snowflake": "select current_timestamp()",
+            },
+        )
+
+        self.validate_all(
             "POSITION(needle in haystack from c)",
             write={
                 "spark": "LOCATE(needle, haystack, c)",
