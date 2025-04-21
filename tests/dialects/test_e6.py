@@ -767,3 +767,10 @@ class TestE6(Validator):
                 "databricks": "ROUND(MEDIAN(cd.`value` * CASE WHEN cc.cost_type = 'relative' THEN 100 ELSE 1 END), 6)"
             },
         )
+
+        self.validate_all(
+            """ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cd."value" * CASE WHEN COUNT(DISTINCT (col)) > 10 THEN 100 ELSE 1 END), 6)""",
+            read={
+                "databricks": "ROUND(MEDIAN(cd.`value` * CASE WHEN count(distinct(col)) > 10 THEN 100 ELSE 1 END), 6)"
+            },
+        )
