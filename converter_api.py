@@ -56,6 +56,7 @@ async def convert_query(
     to_sql: Optional[str] = Form("e6"),
 ):
     timestamp = datetime.now().isoformat()
+    to_sql = to_sql.lower()
     try:
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
@@ -137,6 +138,7 @@ async def Transgaurd(
     from_sql: str = Form(...),
     to_sql: Optional[str] = Form("e6"),
 ):
+    to_sql = to_sql.lower()
     try:
         if storage_service_client is not None:
             # This is the main method will which help in transpiling to our e6data SQL dialects from other dialects
@@ -189,6 +191,7 @@ async def stats_api(
     API endpoint to extract supported and unsupported SQL functions from a query.
     """
     timestamp = datetime.now().isoformat()
+    to_sql = to_sql.lower()
     try:
         supported_functions_in_e6 = load_supported_functions(to_sql)
 
@@ -393,6 +396,7 @@ async def guardstats(
     schema: str = Form(...),
     catalog: str = Form(...),
 ):
+    to_sql = to_sql.lower()
     try:
         supported_functions_in_e6 = load_supported_functions(to_sql)
 
