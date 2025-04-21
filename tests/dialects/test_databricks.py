@@ -105,6 +105,13 @@ class TestDatabricks(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT CURRENT_TIMESTAMP()",
+            write={
+                "e6": "SELECT CURRENT_TIMESTAMP",
+            },
+        )
+
         with self.assertRaises(ParseError):
             transpile(
                 "CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE PYTHON AS $foo$def add_one(x):\n  return x+1$$",
