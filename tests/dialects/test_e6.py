@@ -128,6 +128,19 @@ class TestE6(Validator):
             },
         )
 
+        # Snippet taken from an Airmeet query
+        self.validate_all(
+            "CAST(JSON_EXTRACT(f.value, '$.value') AS VARCHAR)",
+            read={"snowflake": "as_varchar(f.value : value)"},
+        )
+
+        self.validate_all(
+            "COALESCE(CAST(discount_percentage AS VARCHAR), '0%')",
+            read={
+                "snowflake": "COALESCE(AS_VARCHAR(discount_percentage), '0%')",
+            },
+        )
+
         self.validate_all(
             "SELECT DAYOFWEEKISO('2024-11-09')",
             read={
@@ -374,16 +387,14 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT TO_UNIX_TIMESTAMP(CURRENT_TIMESTAMP)/1000",
-            read={
-                "databricks": "SELECT UNIX_TIMESTAMP()"
-            }
+            read={"databricks": "SELECT UNIX_TIMESTAMP()"},
         )
 
         self.validate_all(
             "SELECT * FROM events WHERE event_time >= TO_UNIX_TIMESTAMP('2023-01-01', '%Y-%m-%d')/1000 AND event_time < TO_UNIX_TIMESTAMP('2023-02-01', '%Y-%m-%d')/1000",
             read={
                 "databricks": "SELECT * FROM events WHERE event_time >= unix_timestamp('2023-01-01', 'yyyy-MM-dd') AND event_time < unix_timestamp('2023-02-01', 'yyyy-MM-dd')"
-            }
+            },
         )
 
         self.validate_all(
