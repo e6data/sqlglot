@@ -365,11 +365,25 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT TO_UNIX_TIMESTAMP(A)/1000",
-            read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
+            read={"databricks": "SELECT UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
             write={
                 "databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
                 "snowflake": "SELECT EXTRACT(epoch_second FROM A) / 1000",
             },
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(CURRENT_TIMESTAMP)/1000",
+            read={
+                "databricks": "SELECT UNIX_TIMESTAMP()"
+            }
+        )
+
+        self.validate_all(
+            "SELECT * FROM events WHERE event_time >= TO_UNIX_TIMESTAMP('2023-01-01', '%Y-%m-%d')/1000 AND event_time < TO_UNIX_TIMESTAMP('2023-02-01', '%Y-%m-%d')/1000",
+            read={
+                "databricks": "SELECT * FROM events WHERE event_time >= unix_timestamp('2023-01-01', 'yyyy-MM-dd') AND event_time < unix_timestamp('2023-02-01', 'yyyy-MM-dd')"
+            }
         )
 
         self.validate_all(
