@@ -2015,7 +2015,12 @@ class E6(Dialect):
 
         def median_sql(self, expression: exp.Median):
             if not self.SUPPORTS_MEDIAN:
-                this = self.sql(expression, "this")
+                this = expression.this
+
+                # Check if Distinct keyword is present at the start
+                if this and isinstance(this, exp.Distinct):
+                    return self.function_fallback_sql(expression)
+
                 order_by = exp.Order(expression=expression.this)
                 order_by_column = f" {order_by} {this}"
                 percentile_cont_expr = exp.PercentileCont(this=exp.Literal.number(0.5))
@@ -2024,8 +2029,7 @@ class E6(Dialect):
                 )
                 return f"{within_group}"
 
-            else:
-                return self.function_fallback_sql(expression)
+            return self.function_fallback_sql(expression)
 
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {

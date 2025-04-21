@@ -743,7 +743,7 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY col) FROM (VALUES (1), (2), (2), (3), (4), (NULL)) AS tab(col)",
             read={
-                "databricks": "SELECT median(col) FROM VALUES (1), (2), (2), (3), (4), (NULL) AS tab(col);"
+                "databricks": "SELECT median(col) FROM VALUES (1), (2), (2), (3), (4), (NULL) AS tab(col)"
             },
         )
 
@@ -751,5 +751,26 @@ class TestE6(Validator):
             "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY CASE WHEN cc.cost_type = 'relative' THEN (cd.'value' * rt.'value') ELSE cd.'value' END)",
             read={
                 "databricks": "MEDIAN(CASE WHEN cc.cost_type = 'relative' THEN (cd.'value' * rt.'value') ELSE cd.'value' END)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT MEDIAN(DISTINCT col) FROM (VALUES (1), (2), (2), (3), (4), (NULL)) AS tab(col)",
+            read={
+                "databricks": "SELECT median(DISTINCT col) FROM VALUES (1), (2), (2), (3), (4), (NULL) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            """ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cd."value" * CASE WHEN cc.cost_type = 'relative' THEN 100 ELSE 1 END), 6)""",
+            read={
+                "databricks": "ROUND(MEDIAN(cd.`value` * CASE WHEN cc.cost_type = 'relative' THEN 100 ELSE 1 END), 6)"
+            },
+        )
+
+        self.validate_all(
+            """ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cd."value" * CASE WHEN COUNT(DISTINCT (col)) > 10 THEN 100 ELSE 1 END), 6)""",
+            read={
+                "databricks": "ROUND(MEDIAN(cd.`value` * CASE WHEN count(distinct(col)) > 10 THEN 100 ELSE 1 END), 6)"
             },
         )
