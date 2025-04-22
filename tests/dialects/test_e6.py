@@ -774,3 +774,20 @@ class TestE6(Validator):
                 "databricks": "ROUND(MEDIAN(cd.`value` * CASE WHEN count(distinct(col)) > 10 THEN 100 ELSE 1 END), 6)"
             },
         )
+
+        self.validate_all(
+            "SELECT AVG(DISTINCT col) FROM (VALUES (1), (1), (2)) AS tab(col)",
+            read={"databricks": "SELECT avg(DISTINCT col) FROM VALUES (1), (1), (2) AS tab(col);"},
+        )
+
+        self.validate_all(
+            "SELECT MIN(colA) FROM table1",
+            read={"databricks": "select min(colA) from table1"},
+            write={"databricks": "SELECT MIN(colA) FROM table1"},
+        )
+
+        self.validate_all(
+            "SELECT COUNT(DISTINCT colA, colB) FROM table1",
+            read={"databricks": "SELECT count(distinct colA, colB) FROM table1"},
+            write={"databricks": "SELECT COUNT(DISTINCT colA, colB) FROM table1"},
+        )
