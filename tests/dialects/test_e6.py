@@ -791,3 +791,45 @@ class TestE6(Validator):
             read={"databricks": "SELECT count(distinct colA, colB) FROM table1"},
             write={"databricks": "SELECT COUNT(DISTINCT colA, colB) FROM table1"},
         )
+
+        self.validate_all(
+            "SELECT MAX(col) FROM table1", read={"databricks": "SELECT max(col) FROM table1"}
+        )
+
+        self.validate_all(
+            "SELECT DISTINCT (colA) FROM table1",
+            read={"databricks": "select distinct(colA) from table1"},
+        )
+
+        self.validate_all(
+            "SELECT SUM(colA) FROM table1", read={"databricks": "select sum(colA) from table1;"}
+        )
+
+        self.validate_all(
+            "SELECT ARBITRARY(colA) FROM table1",
+            read={"databricks": "select arbitrary(colA) from table1;"},
+        )
+
+        self.validate_all(
+            "SELECT ARBITRARY(col) IGNORE NULLS FROM (VALUES (NULL), (5), (20)) AS tab(col)",
+            read={
+                "databricks": "SELECT any_value(col) IGNORE NULLS FROM VALUES (NULL), (5), (20) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT department, LISTAGG(employee_name, ', ') FROM employees GROUP BY department",
+            read={
+                "postgres": "SELECT department, STRING_AGG(employee_name, ', ') FROM employees GROUP BY department"
+            },
+        )
+
+    def test_math(self):
+        self.validate_all("SELECT CEIL(5.4)", read={"databricks": "SELECT ceil(5.4)"})
+
+        self.validate_all("SELECT CEIL(3345.1, -2)", read={"databricks": "SELECT ceil(3345.1, -2)"})
+        self.validate_all("SELECT FLOOR(5.4)", read={"databricks": "SELECT floor(5.4)"})
+
+        self.validate_all(
+            "SELECT FLOOR(3345.1, -2)", read={"databricks": "SELECT floor(3345.1, -2)"}
+        )
