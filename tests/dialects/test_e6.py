@@ -220,6 +220,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT APPROX_COUNT_DISTINCT(col1) FILTER(WHERE col2 = 10) FROM (VALUES (1, 10), (1, 10), (2, 10), (2, 10), (3, 10), (1, 12)) AS tab(col1, col2)",
+            read={
+                "databricks": "SELECT APPROX_COUNT_DISTINCT(col1) FILTER(WHERE col2 = 10) FROM (VALUES (1, 10), (1, 10), (2, 10), (2, 10), (3, 10), (1, 12)) AS tab(col1, col2)",
+            },
+        )
+
+        self.validate_all(
             "SELECT LATERAL VIEW EXPLODE(input => mv.content) AS f",
             read={"snowflake": "select lateral flatten(input => mv.content) f"},
         )
@@ -426,6 +433,16 @@ class TestE6(Validator):
             read={
                 "presto": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "spark": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "postgres": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "duckdb": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
+            },
+            write={
+                "presto": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "spark": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "postgres": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "duckdb": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
             },
         )
         self.validate_all(
@@ -436,7 +453,20 @@ class TestE6(Validator):
                 "hive": "a RLIKE 'x'",
                 "spark": "a RLIKE 'x'",
             },
+            write={
+                "spark": "a RLIKE 'x'",
+                "duckdb": "REGEXP_MATCHES(a, 'x')",
+                "presto": "REGEXP_LIKE(a, 'x')",
+            },
         )
+
+        self.validate_all(
+            "SELECT FROM gold_us_prod.content.gld_cross_brand_live WHERE affiliate_links_count >= 5 AND REGEXP_LIKE(full_url, 'gift') AND REGEXP_REPLACE(s.page, '^(.*?)$', '$1') = CONCAT('https://', full_url)",
+            read={
+                "databricks": "SELECT FROM gold_us_prod.content.gld_cross_brand_live WHERE affiliate_links_count >= 5 AND full_url RLIKE 'gift' AND regexp_replace(s.page, '^(.*?)$', '$1') = CONCAT('https://', full_url)",
+            },
+        )
+
         self.validate_all(
             "SPLIT(x, 'a.')",
             read={
@@ -571,24 +601,28 @@ class TestE6(Validator):
         )
 
     def test_named_struct(self):
-        # self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
-        #
-        # self.validate_all(
-        #     "NAMED_STRUCT('key_1', 'one', 'key_2', NULL)",
-        #     read={
-        #         "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
-        #         "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-        #     },
-        #     write={
-        #         "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-        #         "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-        #         "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
-        #     },
-        # )
+        self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
 
         self.validate_all(
-            "NAMED_STRUCT('x', x_start, 'y', y_start)",
-            read={"databricks": "struct (x_start as x, y_start as y)"},
+            "NAMED_STRUCT('key_1', 'one', 'key_2', NULL)",
+            read={
+                "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
+                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
+                "databricks": "struct ('one' as key_1, NULL as key_2)",
+            },
+            write={
+                "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT a.*, TO_JSON(ARRAY[NAMED_STRUCT('x', x_start, 'y', y_start), NAMED_STRUCT('x', x_end, 'y', y_start), NAMED_STRUCT('x', x_end, 'y', y_end), NAMED_STRUCT('x', x_start, 'y', y_end)]) AS geometry",
+            read={
+                "databricks": "select a.*, to_json(array(struct (x_start as x, y_start as y),struct (x_end as x, y_start as y),struct (x_end as x, y_end as y),struct (x_start as x, y_end as y))) as geometry",
+            },
         )
 
     def test_json_extract(self):
@@ -790,4 +824,47 @@ class TestE6(Validator):
             "SELECT COUNT(DISTINCT colA, colB) FROM table1",
             read={"databricks": "SELECT count(distinct colA, colB) FROM table1"},
             write={"databricks": "SELECT COUNT(DISTINCT colA, colB) FROM table1"},
+        )
+
+    def test_to_utf(self):
+        self.validate_all(
+            "TO_UTF8(x)",
+            read={
+                "duckdb": "ENCODE(x)",
+                "spark": "ENCODE(x, 'utf-8')",
+                "presto": "TO_UTF8(x)",
+            },
+            write={
+                "duckdb": "ENCODE(x)",
+                "presto": "TO_UTF8(x)",
+                "spark": "ENCODE(x, 'utf-8')",
+            },
+        )
+
+        self.validate_all(
+            """SELECT emoji, TO_UTF8(emoji) AS utf8_bytes, LENGTH(TO_UTF8(emoji)) AS byte_length, LENGTH(emoji) AS char_length FROM (VALUES ('🔥'), ('🌍'), ('😊'), ('⚡')) AS t(emoji)""",
+            read={
+                "spark": "SELECT emoji, ENCODE(emoji, 'utf-8') AS utf8_bytes, LENGTH(ENCODE(emoji, 'utf-8')) AS byte_length, LENGTH(emoji) AS char_length FROM (VALUES ('🔥'), ('🌍'), ('😊'), ('⚡')) AS t(emoji)",
+            },
+        )
+
+    def test_md5(self):
+        self.validate_all(
+            "SELECT MD5(some_string)",
+            read={
+                "duckdb": "SELECT MD5(some_string)",
+                "spark": "SELECT MD5(some_string)",
+                "clickhouse": "SELECT MD5(some_string)",
+                "presto": "SELECT MD5(some_string)",
+                "trino": "SELECT MD5(some_string)",
+                "snowflake": "select MD5_HEX(some_string)",
+            },
+            write={
+                "bigquery": "SELECT MD5(some_string)",
+                "duckdb": "SELECT UNHEX(MD5(some_string))",
+                "clickhouse": "SELECT MD5(some_string)",
+                "presto": "SELECT MD5(some_string)",
+                "trino": "SELECT MD5(some_string)",
+                "snowflake": "SELECT MD5(some_string)",
+            },
         )
