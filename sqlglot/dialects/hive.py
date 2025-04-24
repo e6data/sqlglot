@@ -308,7 +308,7 @@ class Hive(Dialect):
             "DAY": lambda args: exp.Day(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "FIRST": _build_with_ignore_nulls(exp.First),
             "FIRST_VALUE": _build_with_ignore_nulls(exp.FirstValue),
-            "FROM_UNIXTIME": build_formatted_time(exp.UnixToStr, "hive", True),
+            "FROM_UNIXTIME": build_formatted_time(exp.UnixToStr, "hive", False),
             "GET_JSON_OBJECT": exp.JSONExtractScalar.from_arg_list,
             "LAST": _build_with_ignore_nulls(exp.Last),
             "LAST_VALUE": _build_with_ignore_nulls(exp.LastValue),
