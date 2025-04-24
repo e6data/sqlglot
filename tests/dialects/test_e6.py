@@ -15,22 +15,6 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SHIFTLEFT(x, 1)",
-            read={
-                "trino": "bitwise_left_shift(x, 1)",
-                "duckdb": "x << 1",
-                "hive": "x << 1",
-                "spark": "SHIFTLEFT(x, 1)",
-                "snowflake": "BITSHIFTLEFT(x, 1)",
-            },
-            write={
-                "snowflake": "BITSHIFTLEFT(x, 1)",
-                "spark": "SHIFTLEFT(x, 1)",
-                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)",
-            },
-        )
-
-        self.validate_all(
             "NVL(x, y, z)",
             read={
                 "spark": "NVL(x,y,z)",
@@ -39,23 +23,6 @@ class TestE6(Validator):
             write={
                 "snowflake": "NVL(x, y, z)",
                 "spark": "NVL(x, y, z)",
-            },
-        )
-
-        self.validate_all(
-            "SHIFTRIGHT(x, 1)",
-            read={
-                "trino": "bitwise_right_shift(x, 1)",
-                "duckdb": "x >> 1",
-                "hive": "x >> 1",
-                "spark": "SHIFTRIGHT(x, 1)",
-                "snowflake": "BITSHIFTRIGHT(x, 1)",
-            },
-            write={
-                "snowflake": "BITSHIFTRIGHT(x, 1)",
-                "spark": "SHIFTRIGHT(x, 1)",
-                "databricks": "SHIFTRIGHT(x, 1)",
-                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
             },
         )
 
@@ -290,15 +257,22 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT FROM_UNIXTIME_WITHUNIT(1674797653, 'milliseconds')",
+            "SELECT FROM_UNIXTIME(1674797653)",
             read={
                 "trino": "SELECT from_unixtime(1674797653)",
             },
         )
 
         self.validate_all(
-            "SELECT FROM_UNIXTIME_WITHUNIT(unixtime / 1000, 'seconds')",
+            "SELECT FROM_UNIXTIME(unixtime / 1000)",
             read={"trino": "SELECT from_unixtime(unixtime/1000)"},
+        )
+
+        self.validate_all(
+            "haha",
+            read={
+                "databricks": "from_unixtime(unix_timestamp(m.newsltr_sub_tsp), 'yyyy')",
+            }
         )
 
         self.validate_all("SELECT AVG(x)", read={"trino": "SELECT AVG(x)"})
@@ -378,6 +352,20 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CASE WHEN SIZE(arr) > 3 THEN ELEMENT_AT(TRANSFORM(arr, x -> x * 2), -2) ELSE ELEMENT_AT(arr, 1) END AS resul FROM (VALUES (ARRAY[1, 2, 3, 4]), (ARRAY[10, 20])) AS tab(arr)",
+            read={
+                "databricks": "SELECT CASE WHEN size(arr) > 3 THEN try_element_at(transform(arr, x -> x * 2), -2) ELSE try_element_at(arr, 1) END AS resul FROM VALUES (array(1, 2, 3, 4)), (array(10, 20)) AS tab(arr)",
+            }
+        )
+
+        self.validate_all(
+            "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4], x -> ELEMENT_AT(ARRAY[TRUE, FALSE, TRUE], x) = TRUE) AS filtered",
+            read={
+                "databricks": "SELECT filter(array(1, 2, 3, 4), x -> try_element_at(array(true, false, true), x) = true) AS filtered",
+            }
+        )
+
+        self.validate_all(
             'SELECT X."B"',
             read={
                 "snowflake": "SELECT X['B']",
@@ -389,7 +377,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(A)/1000",
+            "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
             read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
             write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000"},
         )
@@ -990,10 +978,10 @@ class TestE6(Validator):
             """SELECT transaction_id, amount, transaction_date, CEIL(MONTH(TO_DATE(transaction_date)) / 3.0) AS qtr, CEIL(amount / 1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount / 1000) * 1000 > 10000 THEN 'Large' WHEN CEIL(amount / 1000) * 1000 > 5000 THEN 'Medium' ELSE 'Small' END AS transaction_size FROM financial_transactions WHERE YEAR(TO_DATE(transaction_date)) = 2023""",
             read={
                 "databricks": "SELECT transaction_id, amount, transaction_date, CEIL(MONTH(transaction_date)/3.0) AS "
-                "qtr, CEIL(amount/1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount/1000) * "
-                "1000 > 10000 THEN 'Large' WHEN CEIL(amount/1000) * 1000 > 5000 THEN 'Medium' ELSE "
-                "'Small' END AS transaction_size FROM financial_transactions WHERE YEAR("
-                "transaction_date) = 2023"
+                              "qtr, CEIL(amount/1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount/1000) * "
+                              "1000 > 10000 THEN 'Large' WHEN CEIL(amount/1000) * 1000 > 5000 THEN 'Medium' ELSE "
+                              "'Small' END AS transaction_size FROM financial_transactions WHERE YEAR("
+                              "transaction_date) = 2023"
             },
         )
 
@@ -1009,11 +997,11 @@ class TestE6(Validator):
             "2023 GROUP BY account_id, transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000",
             read={
                 "databricks": "SELECT account_id, transaction_type, ROUND(SUM(amount), 2) AS total_amount, ROUND(AVG("
-                "amount), 2) AS avg_amount, ROUND(SUM(amount) * CASE WHEN currency = 'EUR' THEN 1.08 "
-                "WHEN currency = 'GBP' THEN 1.23 ELSE 1.0 END, 2) AS usd_equivalent, ROUND(SUM(amount) "
-                "/ NULLIF(COUNT(DISTINCT MONTH(transaction_date)), 0), 2) AS monthly_avg FROM "
-                "transactions WHERE YEAR(transaction_date) = 2023 GROUP BY account_id, "
-                "transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000"
+                              "amount), 2) AS avg_amount, ROUND(SUM(amount) * CASE WHEN currency = 'EUR' THEN 1.08 "
+                              "WHEN currency = 'GBP' THEN 1.23 ELSE 1.0 END, 2) AS usd_equivalent, ROUND(SUM(amount) "
+                              "/ NULLIF(COUNT(DISTINCT MONTH(transaction_date)), 0), 2) AS monthly_avg FROM "
+                              "transactions WHERE YEAR(transaction_date) = 2023 GROUP BY account_id, "
+                              "transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000"
             },
         )
 
@@ -1346,5 +1334,85 @@ class TestE6(Validator):
             "SELECT ARRAY_JOIN(ARRAY[1, 2, 3, NULL], '+', '@')",
             read={
                 "databricks": "SELECT ARRAY_JOIN(ARRAY[1, 2, 3, NULL], '+', '@')",
+            },
+        )
+
+    def test_array_agg(self):
+        self.validate_all(
+            "SELECT ARRAY_AGG(DISTINCT col) AS result FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
+            read={
+                "databricks": "SELECT collect_list(DISTINCT col) AS result FROM VALUES (1), (2), (NULL), (1) AS tab(col)",
+            },
+            write={
+                "databricks": "SELECT COLLECT_LIST(DISTINCT col) AS result FROM VALUES (1), (2), (NULL), (1) AS tab(col)"
+            }
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_AGG(employee) FILTER(WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM (VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2)) AS tab(dept, employee, performance_rating)",
+            read={
+                "databricks": "SELECT collect_list(employee) FILTER (WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM (VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2)) AS tab(dept, employee, performance_rating)",
+            },
+            write={
+                "databricks": "SELECT COLLECT_LIST(employee) FILTER(WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2) AS tab(dept, employee, performance_rating)",
+            }
+        )
+
+    def test_bitwise(self):
+        self.validate_all(
+            "BITWISE_NOT(1)",
+            read={
+                "snowflake": "BITNOT(1)",
+            },
+        )
+
+        self.validate_all(
+            "SHIFTLEFT(x, 1)",
+            read={
+                "trino": "bitwise_left_shift(x, 1)",
+                "duckdb": "x << 1",
+                "hive": "x << 1",
+                "spark": "SHIFTLEFT(x, 1)",
+                "databricks": "SHIFTLEFT(x, 1)",
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+            },
+            write={
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+                "spark": "SHIFTLEFT(x, 1)",
+                "databricks": "SHIFTLEFT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result",
+            read={
+                "databricks": "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result",
+            },
+        )
+
+        self.validate_all(
+            "SHIFTRIGHT(x, 1)",
+            read={
+                "trino": "bitwise_right_shift(x, 1)",
+                "duckdb": "x >> 1",
+                "hive": "x >> 1",
+                "spark": "SHIFTRIGHT(x, 1)",
+                "databricks": "SHIFTRIGHT(x, 1)",
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+            },
+            write={
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+                "spark": "SHIFTRIGHT(x, 1)",
+                "databricks": "SHIFTRIGHT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
+            },
+        )
+
+        self.validate_all(
+            "BITWISE_XOR(col)",
+            read={
+                "databricks": "BIT_XOR(col)",
+                "snowflake": "BIT_XOR(col)",
             },
         )
