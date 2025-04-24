@@ -817,3 +817,24 @@ class TestE6(Validator):
                 "databricks": "ROUND(MEDIAN(cd.`value` * CASE WHEN count(distinct(col)) > 10 THEN 100 ELSE 1 END), 6)"
             },
         )
+
+    def test_unixtime_functions(self):
+        self.validate_all(
+            "FORMAT_TIMESTAMP(X, 'y')",
+            read={
+                "databricks": "FROM_UNIXTIME(UNIX_TIMESTAMP(X), 'yyyy')",
+            },
+        )
+        self.validate_all(
+            "FROM_UNIXTIME(A)",
+            read={
+                "databricks": "FROM_UNIXTIME(A)",
+            },
+        )
+
+        self.validate_all(
+            "FORMAT_TIMESTAMP(FROM_UNIXTIME(A), 'y')",
+            read={
+                "databricks": "FROM_UNIXTIME(A, 'yyyy')",
+            },
+        )
