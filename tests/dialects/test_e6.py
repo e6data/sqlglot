@@ -66,6 +66,14 @@ class TestE6(Validator):
             },
         )
 
+        # Concat in dbr can accept many datatypes of args, but we map it to array_concat if type is of array. So we decided to put it as it is.
+        self.validate_all(
+            "SELECT CONCAT(TRANSFORM(ARRAY[1, 2], x -> x * 10), ARRAY[30, 40])",
+            read={
+                "databricks": "SELECT concat(transform(array(1, 2), x -> x * 10), array(30, 40))",
+            },
+        )
+
         self.validate_all(
             "POWER(x, 2)",
             read={
@@ -184,6 +192,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT SIZE(TRANSFORM(ARRAY[1, 2, 3], x -> x * 2))",
+            read={
+                "databricks": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
+            },
+        )
+
+        self.validate_all(
             "ARRAY_CONTAINS(x, 1)",
             read={
                 "duckdb": "LIST_HAS(x, 1)",
@@ -199,6 +214,14 @@ class TestE6(Validator):
                 "hive": "ARRAY_CONTAINS(x, 1)",
                 "spark": "ARRAY_CONTAINS(x, 1)",
                 "snowflake": "ARRAY_CONTAINS(1, x)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_CONTAINS(ARRAY[100, 200, 300], 200)",
+            read={
+                "databricks": "SELECT array_contains(array(100, 200, 300), 200)",
+                "snowflake": "SELECT array_contains(200, array_construct(100, 200, 300))",
             },
         )
 
@@ -288,6 +311,7 @@ class TestE6(Validator):
                 "duckdb": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "snowflake": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "spark": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
+                "databricks": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "teradata": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
             },
             write={
@@ -298,6 +322,7 @@ class TestE6(Validator):
                 "presto": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "snowflake": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "spark": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
+                "databricks": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "teradata": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
             },
         )
@@ -445,6 +470,76 @@ class TestE6(Validator):
                 "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
             },
         )
+
+        self.validate_all(
+            "SELECT REGEXP_REPLACE('100-200', pattern, 'num', 4)",
+            read={
+                "databricks": "SELECT REGEXP_REPLACE('100-200', pattern, 'num', 4)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+            read={
+                "databricks": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+                "snowflake": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+                "trino": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+            },
+            write={
+                "databricks": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+                "snowflake": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+                "trino": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT REGEXP_COUNT(a, '[[:punct:]][[:alnum:]]+[[:punct:]]', 1, 'i')",
+            read={
+                "databricks": "SELECT REGEXP_COUNT(a, '[[:punct:]][[:alnum:]]+[[:punct:]]', 1, 'i')",
+            },
+        )
+
+        self.validate_all(
+            "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+            read={
+                "bigquery": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "trino": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "presto": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "snowflake": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "duckdb": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "spark": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+                "databricks": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+            },
+            write={
+                "bigquery": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "trino": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "presto": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "snowflake": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+                "duckdb": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+                "spark": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "databricks": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+            },
+        )
+
+        self.validate_all(
+            "REGEXP_EXTRACT('abc', '(a)(b)(c)', 1)",
+            read={
+                "hive": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark2": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "databricks": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+            },
+            write={
+                "hive": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark2": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "databricks": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "presto": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "trino": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "duckdb": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+            },
+        )
+
         self.validate_all(
             "REGEXP_LIKE(a, 'x')",
             read={
@@ -452,11 +547,15 @@ class TestE6(Validator):
                 "presto": "REGEXP_LIKE(a, 'x')",
                 "hive": "a RLIKE 'x'",
                 "spark": "a RLIKE 'x'",
+                "databricks": "a RLIKE 'x'",
+                "bigquery": "REGEXP_CONTAINS(a, 'x')",
             },
             write={
                 "spark": "a RLIKE 'x'",
+                "databricks": "a RLIKE 'x'",
                 "duckdb": "REGEXP_MATCHES(a, 'x')",
                 "presto": "REGEXP_LIKE(a, 'x')",
+                "bigquery": "REGEXP_CONTAINS(a, 'x')",
             },
         )
 
@@ -679,6 +778,18 @@ class TestE6(Validator):
                 "databricks": "SELECT SLICE(A, B, C - B)",
                 "presto": "SELECT SLICE(A, B, C - B)",
                 "snowflake": "SELECT ARRAY_SLICE(A, B, C)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_SLICE(ARRAY['a', 'b', 'c', 'd', 'e'], -3, 5 + -3) AS result",
+            read={"databricks": "SELECT slice(array('a', 'b', 'c', 'd', 'e'), -3, 5) AS result"},
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_SLICE(TRANSFORM(SEQUENCE(1, 6), x -> x * 2), 2, 3 + 2)",
+            read={
+                "databricks": "SELECT slice(transform(sequence(1, 6), x -> x * 2), 2, 3)",
             },
         )
 
@@ -1182,5 +1293,58 @@ class TestE6(Validator):
                 "presto": "SELECT MD5(some_string)",
                 "trino": "SELECT MD5(some_string)",
                 "snowflake": "SELECT MD5(some_string)",
+            },
+        )
+
+    def test_array_prepend_append(self):
+        self.validate_all(
+            "ARRAY_APPEND(ARRAY[1, 2], 3)",
+            read={
+                "databricks": "ARRAY_APPEND(ARRAY(1, 2),3)",
+                "snowflake": "ARRAY_APPEND(ARRAY_CONSTRUCT(1, 2),3)",
+            },
+            write={
+                "databricks": "ARRAY_APPEND(ARRAY(1, 2), 3)",
+                "snowflake": "ARRAY_APPEND([1, 2], 3)",
+            },
+        )
+
+        self.validate_all(
+            "ARRAY_PREPEND(ARRAY[1, 2], 3)",
+            read={
+                "databricks": "ARRAY_PREPEND(ARRAY(1, 2),3)",
+                "snowflake": "ARRAY_PREPEND(ARRAY_CONSTRUCT(1, 2),3)",
+            },
+            write={
+                "databricks": "ARRAY_PREPEND(ARRAY(1, 2), 3)",
+                "snowflake": "ARRAY_PREPEND([1, 2], 3)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_APPEND(ARRAY_PREPEND(ARRAY[10, 20], 5 * 2), 100 + 23)",
+            read={
+                "databricks": "SELECT array_append(array_prepend(array(10, 20), 5 * 2), 100 + 23)",
+                "snowflake": "SELECT array_append(array_prepend(array_construct(10, 20), 5 * 2), 100 + 23)",
+            },
+        )
+
+    def test_array_to_string(self):
+        self.validate_all(
+            "SELECT ARRAY_JOIN(ARRAY[1, 2, 3], '+')",
+            read={
+                "snowflake": "SELECT ARRAY_TO_STRING(ARRAY_CONSTRUCT(1,2,3),'+')",
+                "databricks": "SELECT ARRAY_JOIN(ARRAY[1, 2, 3], '+')",
+            },
+            write={
+                "snowflake": "SELECT ARRAY_TO_STRING([1, 2, 3], '+')",
+                "databricks": "SELECT ARRAY_JOIN(ARRAY(1, 2, 3), '+')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_JOIN(ARRAY[1, 2, 3, NULL], '+', '@')",
+            read={
+                "databricks": "SELECT ARRAY_JOIN(ARRAY[1, 2, 3, NULL], '+', '@')",
             },
         )
