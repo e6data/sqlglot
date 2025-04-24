@@ -817,8 +817,8 @@ class TestE6(Validator):
         self.validate_all(
             "GREATEST(AVG(voluntary_cancellation_mrr.'CANCEL FROM PAID'), 0) * 0.15",
             read={
-                'databricks': """ GREATEST( AVG( voluntary_cancellation_mrr."CANCEL FROM PAID" ), 0 ) * 0.15 """
-            }
+                "databricks": """ GREATEST( AVG( voluntary_cancellation_mrr."CANCEL FROM PAID" ), 0 ) * 0.15 """
+            },
         )
 
         self.validate_all(
@@ -878,27 +878,17 @@ class TestE6(Validator):
         self.validate_all(
             """SELECT transaction_id, amount, transaction_date, CEIL(MONTH(TO_DATE(transaction_date)) / 3.0) AS qtr, CEIL(amount / 1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount / 1000) * 1000 > 10000 THEN 'Large' WHEN CEIL(amount / 1000) * 1000 > 5000 THEN 'Medium' ELSE 'Small' END AS transaction_size FROM financial_transactions WHERE YEAR(TO_DATE(transaction_date)) = 2023""",
             read={
-                'databricks': "SELECT transaction_id, amount, transaction_date, CEIL(MONTH(transaction_date)/3.0) AS "
-                              "qtr, CEIL(amount/1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount/1000) * "
-                              "1000 > 10000 THEN 'Large' WHEN CEIL(amount/1000) * 1000 > 5000 THEN 'Medium' ELSE "
-                              "'Small' END AS transaction_size FROM financial_transactions WHERE YEAR("
-                              "transaction_date) = 2023"
-            }
+                "databricks": "SELECT transaction_id, amount, transaction_date, CEIL(MONTH(transaction_date)/3.0) AS "
+                "qtr, CEIL(amount/1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount/1000) * "
+                "1000 > 10000 THEN 'Large' WHEN CEIL(amount/1000) * 1000 > 5000 THEN 'Medium' ELSE "
+                "'Small' END AS transaction_size FROM financial_transactions WHERE YEAR("
+                "transaction_date) = 2023"
+            },
         )
 
-        self.validate_all(
-            "SELECT ROUND(5.678)",
-            read={
-                'databricks': "select round(5.678)"
-            }
-        )
+        self.validate_all("SELECT ROUND(5.678)", read={"databricks": "select round(5.678)"})
 
-        self.validate_all(
-            "SELECT ROUND(5.678, 2)",
-            read={
-                'databricks': "select round(5.678, 2)"
-            }
-        )
+        self.validate_all("SELECT ROUND(5.678, 2)", read={"databricks": "select round(5.678, 2)"})
 
         self.validate_all(
             "SELECT account_id, transaction_type, ROUND(SUM(amount), 2) AS total_amount, ROUND(AVG(amount), "
@@ -907,20 +897,20 @@ class TestE6(Validator):
             "transaction_date))), 0), 2) AS monthly_avg FROM transactions WHERE YEAR(TO_DATE(transaction_date)) = "
             "2023 GROUP BY account_id, transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000",
             read={
-                'databricks': "SELECT account_id, transaction_type, ROUND(SUM(amount), 2) AS total_amount, ROUND(AVG("
-                              "amount), 2) AS avg_amount, ROUND(SUM(amount) * CASE WHEN currency = 'EUR' THEN 1.08 "
-                              "WHEN currency = 'GBP' THEN 1.23 ELSE 1.0 END, 2) AS usd_equivalent, ROUND(SUM(amount) "
-                              "/ NULLIF(COUNT(DISTINCT MONTH(transaction_date)), 0), 2) AS monthly_avg FROM "
-                              "transactions WHERE YEAR(transaction_date) = 2023 GROUP BY account_id, "
-                              "transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000"
-            }
+                "databricks": "SELECT account_id, transaction_type, ROUND(SUM(amount), 2) AS total_amount, ROUND(AVG("
+                "amount), 2) AS avg_amount, ROUND(SUM(amount) * CASE WHEN currency = 'EUR' THEN 1.08 "
+                "WHEN currency = 'GBP' THEN 1.23 ELSE 1.0 END, 2) AS usd_equivalent, ROUND(SUM(amount) "
+                "/ NULLIF(COUNT(DISTINCT MONTH(transaction_date)), 0), 2) AS monthly_avg FROM "
+                "transactions WHERE YEAR(transaction_date) = 2023 GROUP BY account_id, "
+                "transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000"
+            },
         )
 
         self.validate_all(
             "CASE WHEN prev_mrr IS NOT NULL THEN ABS(mrr - prev_mrr) ELSE mrr END AS mrr_diff",
             read={
-                'databricks': "CASE WHEN prev_mrr is not null then abs(mrr - prev_mrr) ELSE mrr END as mrr_diff"
-            }
+                "databricks": "CASE WHEN prev_mrr is not null then abs(mrr - prev_mrr) ELSE mrr END as mrr_diff"
+            },
         )
 
         self.validate_all(
@@ -932,200 +922,101 @@ class TestE6(Validator):
             "payment_date IS NOT NULL AND YEAR(TO_DATE(TO_DATE(due_date))) = 2023 GROUP BY customer_id HAVING COUNT("
             "*) > 5 ORDER BY avg_days_deviation DESC",
             read={
-                'databricks': '''SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF('DAY', 
+                "databricks": """SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF('DAY', 
                 payment_date, due_date))), 1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATE_DIFF('DAY', payment_date, 
                 due_date))), 1) AS stddev_days_deviation, SUM(CASE WHEN payment_date > due_date THEN 1 ELSE 0 END) AS 
                 late_payments, SUM(CASE WHEN payment_date < due_date THEN 1 ELSE 0 END) AS early_payments, 
                 ROUND(100.0 * SUM(CASE WHEN payment_date > due_date THEN 1 ELSE 0 END) / COUNT(*), 
                 1) AS late_payment_rate FROM invoices WHERE payment_date IS NOT NULL AND YEAR(TO_DATE(due_date)) = 
-                2023 GROUP BY customer_id HAVING COUNT(*) > 5 ORDER BY avg_days_deviation DESC'''
-            }
+                2023 GROUP BY customer_id HAVING COUNT(*) > 5 ORDER BY avg_days_deviation DESC"""
+            },
         )
 
         self.validate_all(
             "CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - LAG(predicted_value) OVER ("
             "PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END",
             read={
-                'databricks': """ CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - 
+                "databricks": """ CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - 
                 LAG(predicted_value) OVER (PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END """
-            }
+            },
         )
 
         self.validate_all(
-            "SELECT SIGN(INTERVAL -1 DAY)",
-            read={
-                'databricks': "SELECT sign(INTERVAL'-1' DAY)"
-            }
+            "SELECT SIGN(INTERVAL -1 DAY)", read={"databricks": "SELECT sign(INTERVAL'-1' DAY)"}
         )
 
-        self.validate_all(
-            "SELECT MOD(2, 1.8)",
-            read={
-                'databricks': "SELECT mod(2, 1.8)"
-            }
-        )
+        self.validate_all("SELECT MOD(2, 1.8)", read={"databricks": "SELECT mod(2, 1.8)"})
 
-        self.validate_all(
-            "SELECT MOD(2, 1.8)",
-            read={
-                'databricks': "SELECT 2 % 1.8"
-            }
-        )
+        self.validate_all("SELECT MOD(2, 1.8)", read={"databricks": "SELECT 2 % 1.8"})
 
         self.validate_all(
             "ROUND(SQRT(AVG(POWER(actual_value - predicted_value, 2))), 2)",
-            read={
-                'databricks': "ROUND(SQRT(AVG(POWER(actual_value - predicted_value, 2))), 2)"
-            }
+            read={"databricks": "ROUND(SQRT(AVG(POWER(actual_value - predicted_value, 2))), 2)"},
         )
 
-        self.validate_all(
-            "SELECT POWER(2, 3)",
-            read={
-                'databricks': "SELECT pow(2, 3)"
-            }
-        )
+        self.validate_all("SELECT POWER(2, 3)", read={"databricks": "SELECT pow(2, 3)"})
 
         self.validate_all(
             "SELECT c1, FACTORIAL(c1) FROM RANGE(-1, 22) AS t(c1)",
-            read={
-                'databricks': "SELECT c1, factorial(c1) FROM range(-1, 22) AS t(c1)"
-            }
+            read={"databricks": "SELECT c1, factorial(c1) FROM range(-1, 22) AS t(c1)"},
         )
 
-        self.validate_all(
-            "SELECT CBRT(27.0)",
-            read={
-                'databricks': "SELECT cbrt(27.0)"
-            }
-        )
+        self.validate_all("SELECT CBRT(27.0)", read={"databricks": "SELECT cbrt(27.0)"})
 
-        self.validate_all(
-            "SELECT EXP(0)",
-            read={
-                'databricks': "SELECT exp(0)"
-            }
-        )
+        self.validate_all("SELECT EXP(0)", read={"databricks": "SELECT exp(0)"})
 
-        self.validate_all(
-            "SELECT SIN(0)",
-            read={
-                'databricks': "SELECT sin(0)"
-            }
-        )
+        self.validate_all("SELECT SIN(0)", read={"databricks": "SELECT sin(0)"})
 
-        self.validate_all(
-            "SELECT SINH(0)",
-            read={
-                'databricks': "SELECT sinh(0)"
-            }
-        )
+        self.validate_all("SELECT SINH(0)", read={"databricks": "SELECT sinh(0)"})
 
-        self.validate_all(
-            "SELECT COS(PI())",
-            read={
-                'databricks': "SELECT cos(pi())"
-            }
-        )
+        self.validate_all("SELECT COS(PI())", read={"databricks": "SELECT cos(pi())"})
 
-        self.validate_all(
-            "SELECT COSH(0)",
-            read={
-                'databricks': "SELECT cosh(0)"
-            }
-        )
+        self.validate_all("SELECT COSH(0)", read={"databricks": "SELECT cosh(0)"})
 
-        self.validate_all(
-            "SELECT ACOSH(0)",
-            read={
-                'databricks': "SELECT acosh(0)"
-            }
-        )
+        self.validate_all("SELECT ACOSH(0)", read={"databricks": "SELECT acosh(0)"})
 
-        self.validate_all(
-            "SELECT TAN(0)",
-            read={
-                'databricks': "SELECT tan(0)"
-            }
-        )
+        self.validate_all("SELECT TAN(0)", read={"databricks": "SELECT tan(0)"})
 
-        self.validate_all(
-            "SELECT TANH(0)",
-            read={
-                'databricks': "SELECT tanh(0)"
-            }
-        )
+        self.validate_all("SELECT TANH(0)", read={"databricks": "SELECT tanh(0)"})
 
-        self.validate_all(
-            "SELECT COT(1)",
-            read={
-                'databricks': "SELECT cot(1)"
-            }
-        )
+        self.validate_all("SELECT COT(1)", read={"databricks": "SELECT cot(1)"})
 
-        self.validate_all(
-            "SELECT DEGREES(1)",
-            read={
-                'databricks': "select degrees(1)"
-            }
-        )
+        self.validate_all("SELECT DEGREES(1)", read={"databricks": "select degrees(1)"})
 
-        self.validate_all(
-            "SELECT RADIANS(1)",
-            read={
-                'databricks': "SELECT radians(1)"
-            }
-        )
+        self.validate_all("SELECT RADIANS(1)", read={"databricks": "SELECT radians(1)"})
 
-        self.validate_all(
-            "SELECT PI()",
-            read={
-                'databricks': "SELECT pi()"
-            }
-        )
+        self.validate_all("SELECT PI()", read={"databricks": "SELECT pi()"})
 
-        self.validate_all(
-            "SELECT LN(1)",
-            read={
-                'databricks': "SELECT ln(1)"
-            }
-        )
+        self.validate_all("SELECT LN(1)", read={"databricks": "SELECT ln(1)"})
 
     def test_string(self):
         self.validate_all(
             "SELECT '%SystemDrive%/Users/John' LIKE '/%SystemDrive/%//Users%' ESCAPE '/'",
             read={
-                'databricks': "SELECT '%SystemDrive%/Users/John' like '/%SystemDrive/%//Users%' ESCAPE '/'"
-            }
+                "databricks": "SELECT '%SystemDrive%/Users/John' like '/%SystemDrive/%//Users%' ESCAPE '/'"
+            },
         )
 
         # In the following test case when argument "Some" is provided in databricks, space is removed after "Some" and it is treated as function
         self.validate_all(
             "SELECT 'Spark' LIKE SOME('_park', '_ock')",
-            read={
-                'databricks': "SELECT 'Spark' like SOME ('_park', '_ock')"
-            }
+            read={"databricks": "SELECT 'Spark' like SOME ('_park', '_ock')"},
         )
 
         self.validate_all(
             """CASE WHEN LOWER(product_name) LIKE '%premium%' OR LOWER(info) LIKE '%premium%' THEN 1 ELSE 0 END""",
             read={
-                'databricks': "CASE WHEN LOWER(product_name) LIKE '%premium%' OR LOWER(info) LIKE '%premium%' THEN 1 ELSE 0 END"
-            }
+                "databricks": "CASE WHEN LOWER(product_name) LIKE '%premium%' OR LOWER(info) LIKE '%premium%' THEN 1 ELSE 0 END"
+            },
         )
 
         self.validate_all(
-            "SELECT ILIKE('Spark', '_PARK')",
-            read={
-                'databricks': "SELECT ilike('Spark', '_PARK')"
-            }
+            "SELECT ILIKE('Spark', '_PARK')", read={"databricks": "SELECT ilike('Spark', '_PARK')"}
         )
 
         self.validate_all(
             "SELECT REGEXP_LIKE('%SystemDrive%John', '%SystemDrive%.*')",
-            read={
-                'databricks': """SELECT r'%SystemDrive%John' rlike r'%SystemDrive%.*'"""
-            }
+            read={"databricks": """SELECT r'%SystemDrive%John' rlike r'%SystemDrive%.*'"""},
         )
 
         # Getting Assertion Error because of "\"
@@ -1137,172 +1028,119 @@ class TestE6(Validator):
         # )
 
         self.validate_all(
-            "SELECT LENGTH('Spark SQL ')",
-            read={
-                'databricks': "SELECT length('Spark SQL ')"
-            }
+            "SELECT LENGTH('Spark SQL ')", read={"databricks": "SELECT length('Spark SQL ')"}
+        )
+
+        self.validate_all(
+            "SELECT LENGTH('Spark SQL ')", read={"databricks": "SELECT len('Spark SQL ')"}
         )
 
         self.validate_all(
             "SELECT LENGTH('Spark SQL ')",
-            read={
-                'databricks': "SELECT len('Spark SQL ')"
-            }
+            read={"databricks": "SELECT character_length('Spark SQL ')"},
         )
 
         self.validate_all(
-            "SELECT LENGTH('Spark SQL ')",
-            read={
-                'databricks': "SELECT character_length('Spark SQL ')"
-            }
-        )
-
-        self.validate_all(
-            "SELECT LENGTH('Spark SQL ')",
-            read={
-                'databricks': "SELECT char_length('Spark SQL ')"
-            }
+            "SELECT LENGTH('Spark SQL ')", read={"databricks": "SELECT char_length('Spark SQL ')"}
         )
 
         self.validate_all(
             "SELECT REPLACE('ABCabc' COLLATE UTF8_LCASE, 'abc', 'DEF')",
-            read={
-                'databricks': "SELECT replace('ABCabc' COLLATE UTF8_LCASE, 'abc', 'DEF')"
-            }
+            read={"databricks": "SELECT replace('ABCabc' COLLATE UTF8_LCASE, 'abc', 'DEF')"},
         )
 
         self.validate_all(
             "CASE WHEN REPLACE(LOWER(table1), 'fact_', '') != table1 THEN ' WHERE event_date >= DATE_SUB(CURRENT_DATE(), 365)' WHEN REPLACE(LOWER(table1), 'dim_', '') != table1 THEN ' WHERE is_active = TRUE' ELSE '' END",
             read={
-                'databricks': "CASE WHEN REPLACE(LOWER(table1), 'fact_', '') != table1 THEN ' WHERE event_date >= DATE_SUB(CURRENT_DATE(), 365)' WHEN REPLACE(LOWER(table1), 'dim_', '') != table1 THEN ' WHERE is_active = TRUE' ELSE '' END"
-            }
+                "databricks": "CASE WHEN REPLACE(LOWER(table1), 'fact_', '') != table1 THEN ' WHERE event_date >= DATE_SUB(CURRENT_DATE(), 365)' WHEN REPLACE(LOWER(table1), 'dim_', '') != table1 THEN ' WHERE is_active = TRUE' ELSE '' END"
+            },
         )
 
         self.validate_all(
             "SELECT product_id, UPPER(product_name) AS product_name_upper FROM products WHERE UPPER(product_name) LIKE UPPER('%laptop%')",
             read={
-                'databricks': "SELECT product_id, UPPER(product_name) AS product_name_upper FROM products WHERE UPPER(product_name) LIKE UPPER('%laptop%')"
-            }
+                "databricks": "SELECT product_id, UPPER(product_name) AS product_name_upper FROM products WHERE UPPER(product_name) LIKE UPPER('%laptop%')"
+            },
         )
 
         self.validate_all(
             "SELECT SUBSTRING('Spark SQL', 5, 1)",
-            read={
-                'databricks': "SELECT substring('Spark SQL' FROM 5 FOR 1)"
-            }
+            read={"databricks": "SELECT substring('Spark SQL' FROM 5 FOR 1)"},
         )
 
         self.validate_all(
             "SELECT SUBSTRING('Spark SQL', 5, 1)",
-            read={
-                'databricks': "SELECT substring('Spark SQL', 5, 1)"
-            }
+            read={"databricks": "SELECT substring('Spark SQL', 5, 1)"},
         )
 
         self.validate_all(
             """SELECT email, SUBSTRING(email, LOCATE('@', email) + 1) AS dmn FROM users""",
             read={
-                'databricks': "SELECT email, substring(email, locate('@', email) + 1) AS dmn FROM users"
-            }
+                "databricks": "SELECT email, substring(email, locate('@', email) + 1) AS dmn FROM users"
+            },
         )
 
         self.validate_all(
             """SELECT email, SUBSTRING(email, LOCATE('@', email) + 1) AS dmn FROM users""",
             read={
-                'databricks': "SELECT email, substr(email, locate('@', email) + 1) AS dmn FROM users"
-            }
+                "databricks": "SELECT email, substr(email, locate('@', email) + 1) AS dmn FROM users"
+            },
         )
 
         self.validate_all(
-            "SELECT INITCAP('sPark sql')",
-            read={
-                'databricks': "SELECT initcap('sPark sql')"
-            }
-        )
-
-        self.validate_all(
-            "SELECT LOCATE('bar', 'abcbarbar', 5)",
-            read={
-                'databricks': "SELECT charindex('bar', 'abcbarbar', 5)"
-            }
+            "SELECT INITCAP('sPark sql')", read={"databricks": "SELECT initcap('sPark sql')"}
         )
 
         self.validate_all(
             "SELECT LOCATE('bar', 'abcbarbar', 5)",
-            read={
-                'databricks': "SELECT locate('bar', 'abcbarbar', 5)"
-            }
+            read={"databricks": "SELECT charindex('bar', 'abcbarbar', 5)"},
+        )
+
+        self.validate_all(
+            "SELECT LOCATE('bar', 'abcbarbar', 5)",
+            read={"databricks": "SELECT locate('bar', 'abcbarbar', 5)"},
         )
 
         self.validate_all(
             "SELECT LOCATE('6', 'e6data-e6data')",
-            read={
-                'databricks': "select position('6' in 'e6data-e6data')"
-            }
+            read={"databricks": "select position('6' in 'e6data-e6data')"},
         )
 
         self.validate_all(
-            "SELECT LEFT('Spark SQL', 3)",
-            read={
-                'databricks': "SELECT left('Spark SQL', 3)"
-            }
+            "SELECT LEFT('Spark SQL', 3)", read={"databricks": "SELECT left('Spark SQL', 3)"}
         )
 
         self.validate_all(
-            "SELECT RIGHT('Spark SQL', 3)",
-            read={
-                'databricks': "SELECT right('Spark SQL', 3)"
-            }
+            "SELECT RIGHT('Spark SQL', 3)", read={"databricks": "SELECT right('Spark SQL', 3)"}
         )
 
         self.validate_all(
             "SELECT CONTAINS_SUBSTR('SparkSQL', 'Spark')",
-            read={
-                'databricks': "SELECT contains('SparkSQL', 'Spark')"
-            }
+            read={"databricks": "SELECT contains('SparkSQL', 'Spark')"},
         )
 
         self.validate_all(
             "SELECT LOCATE('SQL', 'SparkSQL')",
-            read={
-                'databricks': "SELECT instr('SparkSQL', 'SQL')"
-            }
+            read={"databricks": "SELECT instr('SparkSQL', 'SQL')"},
         )
 
         self.validate_all(
-            "SELECT SOUNDEX('Miller')",
-            read={
-                'databricks': "SELECT soundex('Miller')"
-            }
+            "SELECT SOUNDEX('Miller')", read={"databricks": "SELECT soundex('Miller')"}
         )
 
         self.validate_all(
             "SELECT SPLIT('oneAtwoBthreeC', '[ABC]', 2)",
-            read={
-                'databricks': "SELECT split('oneAtwoBthreeC', '[ABC]', 2)"
-            }
+            read={"databricks": "SELECT split('oneAtwoBthreeC', '[ABC]', 2)"},
         )
 
         self.validate_all(
             "SPLIT_PART('Hello,world,!', ',', 1)",
-            read={
-                'databricks': "split_part('Hello,world,!', ',', 1)"
-            }
+            read={"databricks": "split_part('Hello,world,!', ',', 1)"},
         )
 
-        self.validate_all(
-            "SELECT REPEAT('a', 4)",
-            read={
-                'databricks': "select repeat('a', 4)"
-            }
-        )
+        self.validate_all("SELECT REPEAT('a', 4)", read={"databricks": "select repeat('a', 4)"})
 
-        self.validate_all(
-            "SELECT UNICODE('234')",
-            read={
-                'databricks': "SELECT ascii('234')"
-            }
-        )
+        self.validate_all("SELECT UNICODE('234')", read={"databricks": "SELECT ascii('234')"})
 
     def test_to_utf(self):
         self.validate_all(
