@@ -1980,7 +1980,11 @@ class E6(Dialect):
             else:
                 unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))
 
-            return f"{unix_timestamp_expr}/1000"
+            parent = expression.parent
+            if isinstance(parent, exp.Div) and parent.expression.this == '1000':
+                return f"{unix_timestamp_expr}"
+
+            return f"{self.sql(exp.Div(this=unix_timestamp_expr, expression=exp.Literal.number(1000)))}"
 
         def lateral_sql(self, expression: exp.Lateral) -> str:
             expression.set("view", True)
