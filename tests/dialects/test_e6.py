@@ -97,6 +97,26 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "CAST(A AS VARCHAR)",
+            read={
+                "snowflake": "AS_VARCHAR(A)",
+            },
+        )
+
+        # Snippet taken from an Airmeet query
+        self.validate_all(
+            "CAST(JSON_EXTRACT(f.value, '$.value') AS VARCHAR)",
+            read={"snowflake": "as_varchar(f.value : value)"},
+        )
+
+        self.validate_all(
+            "COALESCE(CAST(discount_percentage AS VARCHAR), '0%')",
+            read={
+                "snowflake": "COALESCE(AS_VARCHAR(discount_percentage), '0%')",
+            },
+        )
+
+        self.validate_all(
             "SELECT DAYOFWEEKISO('2024-11-09')",
             read={
                 "trino": "SELECT day_of_week('2024-11-09')",
@@ -110,6 +130,14 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT CURRENT_TIMESTAMP - INTERVAL 2 DAY",
             read={"databricks": "SELECT CURRENT_TIMESTAMP - 2"},
+        )
+
+        self.validate_all(
+            "SELECT CURRENT_TIMESTAMP",
+            read={
+                "databricks": "SELECT CURRENT_TIMESTAMP()",
+                "snowflake": "select current_timestamp()",
+            },
         )
 
         self.validate_all(
@@ -377,9 +405,24 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
-            read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
-            write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000"},
+            "SELECT TO_UNIX_TIMESTAMP(A)/1000",
+            read={"databricks": "SELECT UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
+            write={
+                "databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
+                "snowflake": "SELECT EXTRACT(epoch_second FROM A) / 1000",
+            },
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(CURRENT_TIMESTAMP)/1000",
+            read={"databricks": "SELECT UNIX_TIMESTAMP()"},
+        )
+
+        self.validate_all(
+            "SELECT * FROM events WHERE event_time >= TO_UNIX_TIMESTAMP('2023-01-01', '%Y-%m-%d')/1000 AND event_time < TO_UNIX_TIMESTAMP('2023-02-01', '%Y-%m-%d')/1000",
+            read={
+                "databricks": "SELECT * FROM events WHERE event_time >= unix_timestamp('2023-01-01', 'yyyy-MM-dd') AND event_time < unix_timestamp('2023-02-01', 'yyyy-MM-dd')"
+            },
         )
 
         self.validate_all(
@@ -905,6 +948,27 @@ class TestE6(Validator):
             """ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cd."value" * CASE WHEN COUNT(DISTINCT (col)) > 10 THEN 100 ELSE 1 END), 6)""",
             read={
                 "databricks": "ROUND(MEDIAN(cd.`value` * CASE WHEN count(distinct(col)) > 10 THEN 100 ELSE 1 END), 6)"
+            },
+        )
+
+    def test_unixtime_functions(self):
+        self.validate_all(
+            "FORMAT_TIMESTAMP(X, 'y')",
+            read={
+                "databricks": "FROM_UNIXTIME(UNIX_TIMESTAMP(X), 'yyyy')",
+            },
+        )
+        self.validate_all(
+            "FROM_UNIXTIME(A)",
+            read={
+                "databricks": "FROM_UNIXTIME(A)",
+            },
+        )
+
+        self.validate_all(
+            "FORMAT_TIMESTAMP(FROM_UNIXTIME(A), 'y')",
+            read={
+                "databricks": "FROM_UNIXTIME(A, 'yyyy')",
             },
         )
 
