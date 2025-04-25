@@ -12,7 +12,6 @@ from sqlglot.dialects.dialect import (
     max_or_greatest,
     min_or_least,
     rename_func,
-    unit_to_str,
     timestrtotime_sql,
     datestrtodate_sql,
     trim_sql,
@@ -338,6 +337,17 @@ def format_time_for_parsefunctions(expression):
 def add_single_quotes(expression) -> str:
     quoted_str = f"'{expression}'"
     return quoted_str
+
+
+def unit_to_str(expression: exp.Expression, default: str = "DAY") -> t.Optional[exp.Expression]:
+    unit = expression.args.get("unit")
+
+    if isinstance(unit, exp.Placeholder):
+        return unit
+    if unit:
+        unit_name_new = unit.name.replace("SQL_TSI_", "")
+        return exp.Literal.string(unit_name_new)
+    return exp.Literal.string(default) if default else None
 
 
 def _trim_sql(self: E6.Generator, expression: exp.Trim) -> str:
