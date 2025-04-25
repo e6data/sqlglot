@@ -1253,6 +1253,57 @@ class TestE6(Validator):
 
         self.validate_all("SELECT UNICODE('234')", read={"databricks": "SELECT ascii('234')"})
 
+        self.validate_all(
+            "SELECT ENDSWITH('SparkSQL', 'sql')",
+            read={"databricks": "SELECT endswith('SparkSQL', 'sql')"},
+        )
+
+        self.validate_all(
+            "SELECT STARTS_WITH('SparkSQL', 'spark')",
+            read={"databricks": "SELECT startswith('SparkSQL', 'spark')"},
+        )
+
+        self.validate_all(
+            "SELECT LOCATE('6', 'e6data')", read={"databricks": "SELECT STRPOS('e6data','6')"}
+        )
+
+        self.validate_all(
+            "SELECT LPAD('hi', 1, '??')", read={"databricks": "SELECT lpad('hi', 1, '??')"}
+        )
+
+        self.validate_all(
+            "SELECT RPAD('hi', 5, 'ab')", read={"databricks": "SELECT rpad('hi', 5, 'ab')"}
+        )
+
+        self.validate_all(
+            "SELECT REVERSE(ARRAY[2, 1, 4, 3])",
+            read={"databricks": "SELECT reverse(array(2, 1, 4, 3))"},
+        )
+
+        self.validate_all(
+            "SELECT REVERSE('Spark SQL')", read={"databricks": "SELECT reverse('Spark SQL')"}
+        )
+
+        self.validate_all(
+            "SELECT TO_CHAR(CAST(111.11 AS TIMESTAMP),'$99.9')",
+            read={"databricks": "SELECT to_char(111.11, '$99.9')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_CHAR(CAST(12454 AS TIMESTAMP),'99,999')",
+            read={"databricks": "SELECT to_char(12454, '99,999')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_CHAR(CAST(CAST('2016-04-08' AS DATE) AS TIMESTAMP),'y')",
+            read={"databricks": "SELECT to_char(date'2016-04-08', 'y')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_VARCHAR(1539177637527311044940, 'hex')",
+            read={"databricks": "SELECT to_varchar(x'537061726b2053514c', 'hex')"},
+        )
+
     def test_to_utf(self):
         self.validate_all(
             "TO_UTF8(x)",
@@ -1346,5 +1397,161 @@ class TestE6(Validator):
             "SELECT ARRAY_JOIN(ARRAY[1, 2, 3, NULL], '+', '@')",
             read={
                 "databricks": "SELECT ARRAY_JOIN(ARRAY[1, 2, 3, NULL], '+', '@')",
+            },
+        )
+
+    def test_date_time(self):
+        self.validate_all("SELECT NOW()", read={"databricks": "SELECT now()"})
+
+        self.validate_all(
+            "SELECT event_string, CAST(SUBSTRING(event_string, 1, 10) AS DATE) AS event_date FROM events",
+            read={
+                "databricks": "SELECT event_string, date(substring(event_string, 1, 10)) AS event_date FROM events"
+            },
+        )
+
+        self.validate_all(
+            "SELECT CAST('2020-04-30 12:25:13.45' AS TIMESTAMP)",
+            read={"databricks": "SELECT timestamp('2020-04-30 12:25:13.45')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_DATE('2016-12-31', 'y-MM-dd')",
+            read={"databricks": "SELECT to_date('2016-12-31', 'yyyy-MM-dd')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_DATE('2016-12-31', 'y-m-d')",
+            read={"databricks": "SELECT to_date('2016-12-31', '%y-%m-%d')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_TIMESTAMP('2016-12-31', 'y-MM-dd')",
+            read={"databricks": "SELECT to_timestamp('2016-12-31', 'yyyy-MM-dd')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_TIMESTAMP_NTZ('1997-09-06 12:29:34')",
+            read={"databricks": "select to_timestamp_ntz('1997-09-06 12:29:34')"},
+        )
+
+        # This transpilation is incorrect as format is not considered.
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT(0, 'milliseconds')",
+            read={"databricks": "SELECT from_unixtime(0, 'yyyy-MM-dd HH:mm:ss')"},
+        )
+
+        # This transpilation is incorrect as format 'yyyy-MM-dd' is not supported
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP('2016-04-08', 'yyyy-MM-dd')/1000",
+            read={"databricks": "SELECT to_unix_timestamp('2016-04-08', 'yyyy-MM-dd')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP('2016-04-08')/1000",
+            read={"databricks": "SELECT to_unix_timestamp('2016-04-08')"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_TRUNC('YEAR', '2015-03-05T09:32:05.359')",
+            read={"databricks": "SELECT date_trunc('YEAR', '2015-03-05T09:32:05.359')"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_TRUNC('MM', '2015-03-05T09:32:05.359')",
+            read={"databricks": "SELECT date_trunc('MM', '2015-03-05T09:32:05.359')"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_TRUNC('WEEK', '2019-08-04')",
+            read={"databricks": "SELECT trunc('2019-08-04', 'week')"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_ADD('YEAR', 5, CAST('2000-08-05' AS DATE))",
+            read={"databricks": "select date_add('year', 5, cast('2000-08-05' as date))"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_DIFF('YEAR', '2021-01-01', '2022-03-28')",
+            read={"databricks": """SELECT date_diff("YEAR", '2021-01-01', '2022-03-28')"""},
+        )
+
+        self.validate_all(
+            "SELECT DATE_DIFF('DAY', '2009-07-30', '2009-07-31')",
+            read={"databricks": "SELECT datediff('2009-07-31', '2009-07-30')"},
+        )
+
+        self.validate_all(
+            "SELECT TIMESTAMP_ADD('MONTH', -1, CAST('2022-03-31 00:00:00' AS TIMESTAMP))",
+            read={"databricks": "SELECT timestampadd(MONTH, -1, TIMESTAMP'2022-03-31 00:00:00')"},
+        )
+
+        self.validate_all(
+            "SELECT TIMESTAMP_DIFF(CAST('2021-01-01' AS DATE), CAST('1900-03-28' AS DATE), 'YEAR')",
+            read={"databricks": "SELECT timestampdiff(YEAR, DATE'2021-01-01', DATE'1900-03-28')"},
+        )
+
+        self.validate_all(
+            "SELECT EXTRACT(YEAR FROM CAST('2019-08-12 01:00:00.123456' AS TIMESTAMP))",
+            read={"databricks": "SELECT extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456')"},
+        )
+
+        self.validate_all(
+            "SELECT EXTRACT(DAY FROM CAST('2019-08-12' AS DATE))",
+            read={"databricks": "SELECT date_part('day', DATE'2019-08-12')"},
+        )
+
+        self.validate_all(
+            "SELECT YEAR(TO_DATE('2008-02-20'))", read={"databricks": "SELECT year('2008-02-20')"}
+        )
+
+        self.validate_all(
+            "SELECT MONTH(TO_DATE('2008-02-20'))", read={"databricks": "SELECT month('2008-02-20')"}
+        )
+
+        self.validate_all(
+            "SELECT DAYS(TO_DATE('2016-07-30'))", read={"databricks": "SELECT DAY('2016-07-30')"}
+        )
+
+        self.validate_all(
+            "SELECT LAST_DAY(CAST('2009-01-12' AS DATE))",
+            read={"databricks": "SELECT last_day('2009-01-12')"},
+        )
+
+        self.validate_all(
+            "SELECT DAYNAME(CAST('2024-11-01' AS DATE))",
+            read={"databricks": "SELECT dayname(DATE'2024-11-01')"},
+        )
+
+        self.validate_all(
+            "SELECT HOUR('2009-07-30 12:58:59')",
+            read={"databricks": "SELECT hour('2009-07-30 12:58:59')"},
+        )
+
+        self.validate_all(
+            "SELECT MINUTE('2009-07-30 12:58:59')",
+            read={"databricks": "SELECT minute('2009-07-30 12:58:59')"},
+        )
+
+        self.validate_all(
+            "SELECT SECOND('2009-07-30 12:58:59')",
+            read={"databricks": "SELECT second('2009-07-30 12:58:59')"},
+        )
+
+        self.validate_all(
+            "SELECT DAYOFWEEK(TO_DATE('2009-07-30'))",
+            read={"databricks": "SELECT dayofweek('2009-07-30')"},
+        )
+
+        self.validate_all(
+            "SELECT WEEKOFYEAR(TO_DATE('2008-02-20'))",
+            read={"databricks": "SELECT weekofyear('2008-02-20')"},
+        )
+
+        self.validate_all(
+            "SELECT FORMAT_TIMESTAMP(CAST('2024-08-26 22:38:11' AS TIMESTAMP), 'm-d-y H')",
+            read={
+                "databricks": "select date_format(cast('2024-08-26 22:38:11' as timestamp), '%m-%d-%Y %H')"
             },
         )
