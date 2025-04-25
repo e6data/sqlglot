@@ -288,14 +288,28 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT FROM_UNIXTIME_WITHUNIT(1674797653, 'milliseconds')",
+            "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
+            read={
+                "databricks": "SELECT DATEDIFF(SQL_TSI_DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
+            },
+        )
+
+        self.validate_all(
+            "SELECT TIMESTAMP_ADD('HOUR', 1, CAST('2003-01-02 11:59:59' AS TIMESTAMP))",
+            read={
+                "databricks": "SELECT TIMESTAMPADD(SQL_TSI_HOUR, 1, TIMESTAMP'2003-01-02 11:59:59')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FROM_UNIXTIME(1674797653)",
             read={
                 "trino": "SELECT from_unixtime(1674797653)",
             },
         )
 
         self.validate_all(
-            "SELECT FROM_UNIXTIME_WITHUNIT(unixtime / 1000, 'seconds')",
+            "SELECT FROM_UNIXTIME(unixtime / 1000)",
             read={"trino": "SELECT from_unixtime(unixtime/1000)"},
         )
 
