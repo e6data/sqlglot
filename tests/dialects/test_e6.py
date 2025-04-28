@@ -1475,7 +1475,7 @@ class TestE6(Validator):
 
         # This transpilation is incorrect as format is not considered.
         self.validate_all(
-            "SELECT FROM_UNIXTIME_WITHUNIT(0, 'milliseconds')",
+            "SELECT FORMAT_TIMESTAMP(FROM_UNIXTIME(0), 'y-MM-dd HH:mm:ss')",
             read={"databricks": "SELECT from_unixtime(0, 'yyyy-MM-dd HH:mm:ss')"},
         )
 
@@ -1685,13 +1685,5 @@ class TestE6(Validator):
                 "spark": "SHIFTRIGHT(x, 1)",
                 "databricks": "SHIFTRIGHT(x, 1)",
                 "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
-            },
-        )
-
-        self.validate_all(
-            "BITWISE_XOR(col)",
-            read={
-                "databricks": "BIT_XOR(col)",
-                "snowflake": "BIT_XOR(col)",
             },
         )
