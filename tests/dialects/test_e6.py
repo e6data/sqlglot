@@ -15,22 +15,6 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SHIFTLEFT(x, 1)",
-            read={
-                "trino": "bitwise_left_shift(x, 1)",
-                "duckdb": "x << 1",
-                "hive": "x << 1",
-                "spark": "SHIFTLEFT(x, 1)",
-                "snowflake": "BITSHIFTLEFT(x, 1)",
-            },
-            write={
-                "snowflake": "BITSHIFTLEFT(x, 1)",
-                "spark": "SHIFTLEFT(x, 1)",
-                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)",
-            },
-        )
-
-        self.validate_all(
             "NVL(x, y, z)",
             read={
                 "spark": "NVL(x,y,z)",
@@ -43,26 +27,17 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SHIFTRIGHT(x, 1)",
-            read={
-                "trino": "bitwise_right_shift(x, 1)",
-                "duckdb": "x >> 1",
-                "hive": "x >> 1",
-                "spark": "SHIFTRIGHT(x, 1)",
-                "snowflake": "BITSHIFTRIGHT(x, 1)",
-            },
-            write={
-                "snowflake": "BITSHIFTRIGHT(x, 1)",
-                "spark": "SHIFTRIGHT(x, 1)",
-                "databricks": "SHIFTRIGHT(x, 1)",
-                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
-            },
-        )
-
-        self.validate_all(
             "SELECT ARRAY_CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
             read={
                 "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))",
+            },
+        )
+
+        # Concat in dbr can accept many datatypes of args, but we map it to array_concat if type is of array. So we decided to put it as it is.
+        self.validate_all(
+            "SELECT CONCAT(TRANSFORM(ARRAY[1, 2], x -> x * 10), ARRAY[30, 40])",
+            read={
+                "databricks": "SELECT concat(transform(array(1, 2), x -> x * 10), array(30, 40))",
             },
         )
 
@@ -212,6 +187,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT SIZE(TRANSFORM(ARRAY[1, 2, 3], x -> x * 2))",
+            read={
+                "databricks": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
+            },
+        )
+
+        self.validate_all(
             "ARRAY_CONTAINS(x, 1)",
             read={
                 "duckdb": "LIST_HAS(x, 1)",
@@ -230,6 +212,14 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT ARRAY_CONTAINS(ARRAY[100, 200, 300], 200)",
+            read={
+                "databricks": "SELECT array_contains(array(100, 200, 300), 200)",
+                "snowflake": "SELECT array_contains(200, array_construct(100, 200, 300))",
+            },
+        )
+
         # This functions tests the `_parse_filter_array` functions that we have written.
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[5, -6, NULL, 7], x -> x > 0)",
@@ -244,6 +234,13 @@ class TestE6(Validator):
                 "presto": "SELECT APPROX_DISTINCT(a) FROM foo",
                 "hive": "SELECT APPROX_COUNT_DISTINCT(a) FROM foo",
                 "spark": "SELECT APPROX_COUNT_DISTINCT(a) FROM foo",
+            },
+        )
+
+        self.validate_all(
+            "SELECT APPROX_COUNT_DISTINCT(col1) FILTER(WHERE col2 = 10) FROM (VALUES (1, 10), (1, 10), (2, 10), (2, 10), (3, 10), (1, 12)) AS tab(col1, col2)",
+            read={
+                "databricks": "SELECT APPROX_COUNT_DISTINCT(col1) FILTER(WHERE col2 = 10) FROM (VALUES (1, 10), (1, 10), (2, 10), (2, 10), (3, 10), (1, 12)) AS tab(col1, col2)",
             },
         )
 
@@ -323,6 +320,7 @@ class TestE6(Validator):
                 "duckdb": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "snowflake": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "spark": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
+                "databricks": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "teradata": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
             },
             write={
@@ -333,6 +331,7 @@ class TestE6(Validator):
                 "presto": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "snowflake": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "spark": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
+                "databricks": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
                 "teradata": "SELECT MAX_BY(a.id, a.timestamp) FROM a",
             },
         )
@@ -384,6 +383,20 @@ class TestE6(Validator):
                 "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
                 "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
                 "duckdb": "SELECT X[4]",
+            },
+        )
+
+        self.validate_all(
+            "SELECT CASE WHEN SIZE(arr) > 3 THEN ELEMENT_AT(TRANSFORM(arr, x -> x * 2), -2) ELSE ELEMENT_AT(arr, 1) END AS resul FROM (VALUES (ARRAY[1, 2, 3, 4]), (ARRAY[10, 20])) AS tab(arr)",
+            read={
+                "databricks": "SELECT CASE WHEN size(arr) > 3 THEN try_element_at(transform(arr, x -> x * 2), -2) ELSE try_element_at(arr, 1) END AS resul FROM VALUES (array(1, 2, 3, 4)), (array(10, 20)) AS tab(arr)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4], x -> ELEMENT_AT(ARRAY[TRUE, FALSE, TRUE], x) = TRUE) AS filtered",
+            read={
+                "databricks": "SELECT filter(array(1, 2, 3, 4), x -> try_element_at(array(true, false, true), x) = true) AS filtered",
             },
         )
 
@@ -483,8 +496,90 @@ class TestE6(Validator):
             read={
                 "presto": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "spark": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "databricks": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "postgres": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "duckdb": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
+            },
+            write={
+                "presto": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "spark": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "postgres": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "duckdb": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "databricks": "REGEXP_REPLACE('abcd', 'ab', '')",
             },
         )
+
+        self.validate_all(
+            "SELECT REGEXP_REPLACE('100-200', pattern, 'num', 4)",
+            read={
+                "databricks": "SELECT REGEXP_REPLACE('100-200', pattern, 'num', 4)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+            read={
+                "databricks": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+                "snowflake": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+                "trino": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+            },
+            write={
+                "databricks": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+                "snowflake": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+                "trino": "SELECT REGEXP_COUNT('Steven Jones and Stephen Smith are the best players', 'Ste(v|ph)en')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT REGEXP_COUNT(a, '[[:punct:]][[:alnum:]]+[[:punct:]]', 1, 'i')",
+            read={
+                "databricks": "SELECT REGEXP_COUNT(a, '[[:punct:]][[:alnum:]]+[[:punct:]]', 1, 'i')",
+            },
+        )
+
+        self.validate_all(
+            "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+            read={
+                "bigquery": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "trino": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "presto": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "snowflake": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "duckdb": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "spark": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+                "databricks": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+            },
+            write={
+                "bigquery": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "trino": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "presto": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "snowflake": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+                "duckdb": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]', 0)",
+                "spark": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+                "databricks": "REGEXP_EXTRACT_ALL('a1_a2a3_a4A5a6', 'a[0-9]')",
+            },
+        )
+
+        self.validate_all(
+            "REGEXP_EXTRACT('abc', '(a)(b)(c)', 1)",
+            read={
+                "hive": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark2": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "databricks": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+            },
+            write={
+                "hive": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark2": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "spark": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "databricks": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "presto": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "trino": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+                "duckdb": "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
+            },
+        )
+
         self.validate_all(
             "REGEXP_LIKE(a, 'x')",
             read={
@@ -492,8 +587,25 @@ class TestE6(Validator):
                 "presto": "REGEXP_LIKE(a, 'x')",
                 "hive": "a RLIKE 'x'",
                 "spark": "a RLIKE 'x'",
+                "databricks": "a RLIKE 'x'",
+                "bigquery": "REGEXP_CONTAINS(a, 'x')",
+            },
+            write={
+                "spark": "a RLIKE 'x'",
+                "databricks": "a RLIKE 'x'",
+                "duckdb": "REGEXP_MATCHES(a, 'x')",
+                "presto": "REGEXP_LIKE(a, 'x')",
+                "bigquery": "REGEXP_CONTAINS(a, 'x')",
             },
         )
+
+        self.validate_all(
+            "SELECT FROM gold_us_prod.content.gld_cross_brand_live WHERE affiliate_links_count >= 5 AND REGEXP_LIKE(full_url, 'gift') AND REGEXP_REPLACE(s.page, '^(.*?)$', '$1') = CONCAT('https://', full_url)",
+            read={
+                "databricks": "SELECT FROM gold_us_prod.content.gld_cross_brand_live WHERE affiliate_links_count >= 5 AND full_url RLIKE 'gift' AND regexp_replace(s.page, '^(.*?)$', '$1') = CONCAT('https://', full_url)",
+            },
+        )
+
         self.validate_all(
             "SPLIT(x, 'a.')",
             read={
@@ -628,24 +740,28 @@ class TestE6(Validator):
         )
 
     def test_named_struct(self):
-        # self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
-        #
-        # self.validate_all(
-        #     "NAMED_STRUCT('key_1', 'one', 'key_2', NULL)",
-        #     read={
-        #         "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
-        #         "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-        #     },
-        #     write={
-        #         "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-        #         "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
-        #         "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
-        #     },
-        # )
+        self.validate_identity("SELECT NAMED_STRUCT('key_1', 'one', 'key_2', NULL)")
 
         self.validate_all(
-            "NAMED_STRUCT('x', x_start, 'y', y_start)",
-            read={"databricks": "struct (x_start as x, y_start as y)"},
+            "NAMED_STRUCT('key_1', 'one', 'key_2', NULL)",
+            read={
+                "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
+                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
+                "databricks": "struct ('one' as key_1, NULL as key_2)",
+            },
+            write={
+                "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
+                "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT a.*, TO_JSON(ARRAY[NAMED_STRUCT('x', x_start, 'y', y_start), NAMED_STRUCT('x', x_end, 'y', y_start), NAMED_STRUCT('x', x_end, 'y', y_end), NAMED_STRUCT('x', x_start, 'y', y_end)]) AS geometry",
+            read={
+                "databricks": "select a.*, to_json(array(struct (x_start as x, y_start as y),struct (x_end as x, y_start as y),struct (x_end as x, y_end as y),struct (x_start as x, y_end as y))) as geometry",
+            },
         )
 
     def test_json_extract(self):
@@ -702,6 +818,18 @@ class TestE6(Validator):
                 "databricks": "SELECT SLICE(A, B, C - B)",
                 "presto": "SELECT SLICE(A, B, C - B)",
                 "snowflake": "SELECT ARRAY_SLICE(A, B, C)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_SLICE(ARRAY['a', 'b', 'c', 'd', 'e'], -3, 5 + -3) AS result",
+            read={"databricks": "SELECT slice(array('a', 'b', 'c', 'd', 'e'), -3, 5) AS result"},
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_SLICE(TRANSFORM(SEQUENCE(1, 6), x -> x * 2), 2, 3 + 2)",
+            read={
+                "databricks": "SELECT slice(transform(sequence(1, 6), x -> x * 2), 2, 3)",
             },
         )
 
@@ -832,6 +960,646 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT AVG(DISTINCT col) FROM (VALUES (1), (1), (2)) AS tab(col)",
+            read={"databricks": "SELECT avg(DISTINCT col) FROM VALUES (1), (1), (2) AS tab(col);"},
+        )
+
+        self.validate_all(
+            "GREATEST(AVG(voluntary_cancellation_mrr.'CANCEL FROM PAID'), 0) * 0.15",
+            read={
+                "databricks": """ GREATEST( AVG( voluntary_cancellation_mrr."CANCEL FROM PAID" ), 0 ) * 0.15 """
+            },
+        )
+
+        self.validate_all(
+            "SELECT MIN(colA) FROM table1",
+            read={"databricks": "select min(colA) from table1"},
+            write={"databricks": "SELECT MIN(colA) FROM table1"},
+        )
+
+        self.validate_all(
+            "SELECT COUNT(DISTINCT colA, colB) FROM table1",
+            read={"databricks": "SELECT count(distinct colA, colB) FROM table1"},
+            write={"databricks": "SELECT COUNT(DISTINCT colA, colB) FROM table1"},
+        )
+
+        self.validate_all(
+            "SELECT MAX(col) FROM table1", read={"databricks": "SELECT max(col) FROM table1"}
+        )
+
+        self.validate_all(
+            "SELECT DISTINCT (colA) FROM table1",
+            read={"databricks": "select distinct(colA) from table1"},
+        )
+
+        self.validate_all(
+            "SELECT SUM(colA) FROM table1", read={"databricks": "select sum(colA) from table1;"}
+        )
+
+        self.validate_all(
+            "SELECT ARBITRARY(colA) FROM table1",
+            read={"databricks": "select arbitrary(colA) from table1;"},
+        )
+
+        self.validate_all(
+            "SELECT ARBITRARY(col) IGNORE NULLS FROM (VALUES (NULL), (5), (20)) AS tab(col)",
+            read={
+                "databricks": "SELECT any_value(col) IGNORE NULLS FROM VALUES (NULL), (5), (20) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT department, LISTAGG(employee_name, ', ') FROM employees GROUP BY department",
+            read={
+                "postgres": "SELECT department, STRING_AGG(employee_name, ', ') FROM employees GROUP BY department"
+            },
+        )
+
+    def test_math(self):
+        self.validate_all("SELECT CEIL(5.4)", read={"databricks": "SELECT ceil(5.4)"})
+
+        self.validate_all("SELECT CEIL(3345.1, -2)", read={"databricks": "SELECT ceil(3345.1, -2)"})
+        self.validate_all("SELECT FLOOR(5.4)", read={"databricks": "SELECT floor(5.4)"})
+
+        self.validate_all(
+            "SELECT FLOOR(3345.1, -2)", read={"databricks": "SELECT floor(3345.1, -2)"}
+        )
+
+        self.validate_all(
+            """SELECT transaction_id, amount, transaction_date, CEIL(MONTH(TO_DATE(transaction_date)) / 3.0) AS qtr, CEIL(amount / 1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount / 1000) * 1000 > 10000 THEN 'Large' WHEN CEIL(amount / 1000) * 1000 > 5000 THEN 'Medium' ELSE 'Small' END AS transaction_size FROM financial_transactions WHERE YEAR(TO_DATE(transaction_date)) = 2023""",
+            read={
+                "databricks": "SELECT transaction_id, amount, transaction_date, CEIL(MONTH(transaction_date)/3.0) AS "
+                "qtr, CEIL(amount/1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount/1000) * "
+                "1000 > 10000 THEN 'Large' WHEN CEIL(amount/1000) * 1000 > 5000 THEN 'Medium' ELSE "
+                "'Small' END AS transaction_size FROM financial_transactions WHERE YEAR("
+                "transaction_date) = 2023"
+            },
+        )
+
+        self.validate_all("SELECT ROUND(5.678)", read={"databricks": "select round(5.678)"})
+
+        self.validate_all("SELECT ROUND(5.678, 2)", read={"databricks": "select round(5.678, 2)"})
+
+        self.validate_all(
+            "SELECT account_id, transaction_type, ROUND(SUM(amount), 2) AS total_amount, ROUND(AVG(amount), "
+            "2) AS avg_amount, ROUND(SUM(amount) * CASE WHEN currency = 'EUR' THEN 1.08 WHEN currency = 'GBP' THEN "
+            "1.23 ELSE 1.0 END, 2) AS usd_equivalent, ROUND(SUM(amount) / NULLIF(COUNT(DISTINCT MONTH(TO_DATE("
+            "transaction_date))), 0), 2) AS monthly_avg FROM transactions WHERE YEAR(TO_DATE(transaction_date)) = "
+            "2023 GROUP BY account_id, transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000",
+            read={
+                "databricks": "SELECT account_id, transaction_type, ROUND(SUM(amount), 2) AS total_amount, ROUND(AVG("
+                "amount), 2) AS avg_amount, ROUND(SUM(amount) * CASE WHEN currency = 'EUR' THEN 1.08 "
+                "WHEN currency = 'GBP' THEN 1.23 ELSE 1.0 END, 2) AS usd_equivalent, ROUND(SUM(amount) "
+                "/ NULLIF(COUNT(DISTINCT MONTH(transaction_date)), 0), 2) AS monthly_avg FROM "
+                "transactions WHERE YEAR(transaction_date) = 2023 GROUP BY account_id, "
+                "transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000"
+            },
+        )
+
+        self.validate_all(
+            "CASE WHEN prev_mrr IS NOT NULL THEN ABS(mrr - prev_mrr) ELSE mrr END AS mrr_diff",
+            read={
+                "databricks": "CASE WHEN prev_mrr is not null then abs(mrr - prev_mrr) ELSE mrr END as mrr_diff"
+            },
+        )
+
+        self.validate_all(
+            "SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF('DAY', payment_date, due_date))), "
+            "1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATE_DIFF('DAY', payment_date, due_date))), "
+            "1) AS stddev_days_deviation, SUM(CASE WHEN payment_date > due_date THEN 1 ELSE 0 END) AS late_payments, "
+            "SUM(CASE WHEN payment_date < due_date THEN 1 ELSE 0 END) AS early_payments, ROUND(100.0 * SUM(CASE WHEN "
+            "payment_date > due_date THEN 1 ELSE 0 END) / COUNT(*), 1) AS late_payment_rate FROM invoices WHERE "
+            "payment_date IS NOT NULL AND YEAR(TO_DATE(TO_DATE(due_date))) = 2023 GROUP BY customer_id HAVING COUNT("
+            "*) > 5 ORDER BY avg_days_deviation DESC",
+            read={
+                "databricks": """SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF('DAY', 
+                payment_date, due_date))), 1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATE_DIFF('DAY', payment_date, 
+                due_date))), 1) AS stddev_days_deviation, SUM(CASE WHEN payment_date > due_date THEN 1 ELSE 0 END) AS 
+                late_payments, SUM(CASE WHEN payment_date < due_date THEN 1 ELSE 0 END) AS early_payments, 
+                ROUND(100.0 * SUM(CASE WHEN payment_date > due_date THEN 1 ELSE 0 END) / COUNT(*), 
+                1) AS late_payment_rate FROM invoices WHERE payment_date IS NOT NULL AND YEAR(TO_DATE(due_date)) = 
+                2023 GROUP BY customer_id HAVING COUNT(*) > 5 ORDER BY avg_days_deviation DESC"""
+            },
+        )
+
+        self.validate_all(
+            "CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - LAG(predicted_value) OVER ("
+            "PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END",
+            read={
+                "databricks": """ CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - 
+                LAG(predicted_value) OVER (PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END """
+            },
+        )
+
+        self.validate_all(
+            "SELECT SIGN(INTERVAL -1 DAY)", read={"databricks": "SELECT sign(INTERVAL'-1' DAY)"}
+        )
+
+        self.validate_all("SELECT MOD(2, 1.8)", read={"databricks": "SELECT mod(2, 1.8)"})
+
+        self.validate_all("SELECT MOD(2, 1.8)", read={"databricks": "SELECT 2 % 1.8"})
+
+        self.validate_all(
+            "ROUND(SQRT(AVG(POWER(actual_value - predicted_value, 2))), 2)",
+            read={"databricks": "ROUND(SQRT(AVG(POWER(actual_value - predicted_value, 2))), 2)"},
+        )
+
+        self.validate_all("SELECT POWER(2, 3)", read={"databricks": "SELECT pow(2, 3)"})
+
+        self.validate_all(
+            "SELECT c1, FACTORIAL(c1) FROM RANGE(-1, 22) AS t(c1)",
+            read={"databricks": "SELECT c1, factorial(c1) FROM range(-1, 22) AS t(c1)"},
+        )
+
+        self.validate_all("SELECT CBRT(27.0)", read={"databricks": "SELECT cbrt(27.0)"})
+
+        self.validate_all("SELECT EXP(0)", read={"databricks": "SELECT exp(0)"})
+
+        self.validate_all("SELECT SIN(0)", read={"databricks": "SELECT sin(0)"})
+
+        self.validate_all("SELECT SINH(0)", read={"databricks": "SELECT sinh(0)"})
+
+        self.validate_all("SELECT COS(PI())", read={"databricks": "SELECT cos(pi())"})
+
+        self.validate_all("SELECT COSH(0)", read={"databricks": "SELECT cosh(0)"})
+
+        self.validate_all("SELECT ACOSH(0)", read={"databricks": "SELECT acosh(0)"})
+
+        self.validate_all("SELECT TAN(0)", read={"databricks": "SELECT tan(0)"})
+
+        self.validate_all("SELECT TANH(0)", read={"databricks": "SELECT tanh(0)"})
+
+        self.validate_all("SELECT COT(1)", read={"databricks": "SELECT cot(1)"})
+
+        self.validate_all("SELECT DEGREES(1)", read={"databricks": "select degrees(1)"})
+
+        self.validate_all("SELECT RADIANS(1)", read={"databricks": "SELECT radians(1)"})
+
+        self.validate_all("SELECT PI()", read={"databricks": "SELECT pi()"})
+
+        self.validate_all("SELECT LN(1)", read={"databricks": "SELECT ln(1)"})
+
+    def test_string(self):
+        self.validate_all(
+            "SELECT '%SystemDrive%/Users/John' LIKE '/%SystemDrive/%//Users%' ESCAPE '/'",
+            read={
+                "databricks": "SELECT '%SystemDrive%/Users/John' like '/%SystemDrive/%//Users%' ESCAPE '/'"
+            },
+        )
+
+        # In the following test case when argument "Some" is provided in databricks, space is removed after "Some" and it is treated as function
+        self.validate_all(
+            "SELECT 'Spark' LIKE SOME('_park', '_ock')",
+            read={"databricks": "SELECT 'Spark' like SOME ('_park', '_ock')"},
+        )
+
+        self.validate_all(
+            """CASE WHEN LOWER(product_name) LIKE '%premium%' OR LOWER(info) LIKE '%premium%' THEN 1 ELSE 0 END""",
+            read={
+                "databricks": "CASE WHEN LOWER(product_name) LIKE '%premium%' OR LOWER(info) LIKE '%premium%' THEN 1 ELSE 0 END"
+            },
+        )
+
+        self.validate_all(
+            "SELECT ILIKE('Spark', '_PARK')", read={"databricks": "SELECT ilike('Spark', '_PARK')"}
+        )
+
+        self.validate_all(
+            "SELECT REGEXP_LIKE('%SystemDrive%John', '%SystemDrive%.*')",
+            read={"databricks": """SELECT r'%SystemDrive%John' rlike r'%SystemDrive%.*'"""},
+        )
+
+        # Getting Assertion Error because of "\"
+        # self.validate_all(
+        #     """CASE WHEN REGEXP_LIKE(url, '(?i)/products/\\d+') THEN 'Product Page' ELSE 'Other Page' END AS page_type""",
+        #     read={
+        #         'databricks': """CASE WHEN url RLIKE '(?i)/products/\\d+' THEN 'Product Page' ELSE 'Other Page' END AS page_type"""
+        #     }
+        # )
+
+        self.validate_all(
+            "SELECT LENGTH('Spark SQL ')", read={"databricks": "SELECT length('Spark SQL ')"}
+        )
+
+        self.validate_all(
+            "SELECT LENGTH('Spark SQL ')", read={"databricks": "SELECT len('Spark SQL ')"}
+        )
+
+        self.validate_all(
+            "SELECT LENGTH('Spark SQL ')",
+            read={"databricks": "SELECT character_length('Spark SQL ')"},
+        )
+
+        self.validate_all(
+            "SELECT LENGTH('Spark SQL ')", read={"databricks": "SELECT char_length('Spark SQL ')"}
+        )
+
+        self.validate_all(
+            "SELECT REPLACE('ABCabc' COLLATE UTF8_LCASE, 'abc', 'DEF')",
+            read={"databricks": "SELECT replace('ABCabc' COLLATE UTF8_LCASE, 'abc', 'DEF')"},
+        )
+
+        self.validate_all(
+            "CASE WHEN REPLACE(LOWER(table1), 'fact_', '') != table1 THEN ' WHERE event_date >= DATE_SUB(CURRENT_DATE(), 365)' WHEN REPLACE(LOWER(table1), 'dim_', '') != table1 THEN ' WHERE is_active = TRUE' ELSE '' END",
+            read={
+                "databricks": "CASE WHEN REPLACE(LOWER(table1), 'fact_', '') != table1 THEN ' WHERE event_date >= DATE_SUB(CURRENT_DATE(), 365)' WHEN REPLACE(LOWER(table1), 'dim_', '') != table1 THEN ' WHERE is_active = TRUE' ELSE '' END"
+            },
+        )
+
+        self.validate_all(
+            "SELECT product_id, UPPER(product_name) AS product_name_upper FROM products WHERE UPPER(product_name) LIKE UPPER('%laptop%')",
+            read={
+                "databricks": "SELECT product_id, UPPER(product_name) AS product_name_upper FROM products WHERE UPPER(product_name) LIKE UPPER('%laptop%')"
+            },
+        )
+
+        self.validate_all(
+            "SELECT SUBSTRING('Spark SQL', 5, 1)",
+            read={"databricks": "SELECT substring('Spark SQL' FROM 5 FOR 1)"},
+        )
+
+        self.validate_all(
+            "SELECT SUBSTRING('Spark SQL', 5, 1)",
+            read={"databricks": "SELECT substring('Spark SQL', 5, 1)"},
+        )
+
+        self.validate_all(
+            """SELECT email, SUBSTRING(email, LOCATE('@', email) + 1) AS dmn FROM users""",
+            read={
+                "databricks": "SELECT email, substring(email, locate('@', email) + 1) AS dmn FROM users"
+            },
+        )
+
+        self.validate_all(
+            """SELECT email, SUBSTRING(email, LOCATE('@', email) + 1) AS dmn FROM users""",
+            read={
+                "databricks": "SELECT email, substr(email, locate('@', email) + 1) AS dmn FROM users"
+            },
+        )
+
+        self.validate_all(
+            "SELECT INITCAP('sPark sql')", read={"databricks": "SELECT initcap('sPark sql')"}
+        )
+
+        self.validate_all(
+            "SELECT LOCATE('bar', 'abcbarbar', 5)",
+            read={"databricks": "SELECT charindex('bar', 'abcbarbar', 5)"},
+        )
+
+        self.validate_all(
+            "SELECT LOCATE('bar', 'abcbarbar', 5)",
+            read={"databricks": "SELECT locate('bar', 'abcbarbar', 5)"},
+        )
+
+        self.validate_all(
+            "SELECT LOCATE('6', 'e6data-e6data')",
+            read={"databricks": "select position('6' in 'e6data-e6data')"},
+        )
+
+        self.validate_all(
+            "SELECT LEFT('Spark SQL', 3)", read={"databricks": "SELECT left('Spark SQL', 3)"}
+        )
+
+        self.validate_all(
+            "SELECT RIGHT('Spark SQL', 3)", read={"databricks": "SELECT right('Spark SQL', 3)"}
+        )
+
+        self.validate_all(
+            "SELECT CONTAINS_SUBSTR('SparkSQL', 'Spark')",
+            read={"databricks": "SELECT contains('SparkSQL', 'Spark')"},
+        )
+
+        self.validate_all(
+            "SELECT LOCATE('SQL', 'SparkSQL')",
+            read={"databricks": "SELECT instr('SparkSQL', 'SQL')"},
+        )
+
+        self.validate_all(
+            "SELECT SOUNDEX('Miller')", read={"databricks": "SELECT soundex('Miller')"}
+        )
+
+        self.validate_all(
+            "SELECT SPLIT('oneAtwoBthreeC', '[ABC]', 2)",
+            read={"databricks": "SELECT split('oneAtwoBthreeC', '[ABC]', 2)"},
+        )
+
+        self.validate_all(
+            "SPLIT_PART('Hello,world,!', ',', 1)",
+            read={"databricks": "split_part('Hello,world,!', ',', 1)"},
+        )
+
+        self.validate_all("SELECT REPEAT('a', 4)", read={"databricks": "select repeat('a', 4)"})
+
+        self.validate_all("SELECT UNICODE('234')", read={"databricks": "SELECT ascii('234')"})
+
+        self.validate_all(
+            "SELECT ENDSWITH('SparkSQL', 'sql')",
+            read={"databricks": "SELECT endswith('SparkSQL', 'sql')"},
+        )
+
+        self.validate_all(
+            "SELECT STARTS_WITH('SparkSQL', 'spark')",
+            read={"databricks": "SELECT startswith('SparkSQL', 'spark')"},
+        )
+
+        self.validate_all(
+            "SELECT LOCATE('6', 'e6data')", read={"databricks": "SELECT STRPOS('e6data','6')"}
+        )
+
+        self.validate_all(
+            "SELECT LPAD('hi', 1, '??')", read={"databricks": "SELECT lpad('hi', 1, '??')"}
+        )
+
+        self.validate_all(
+            "SELECT RPAD('hi', 5, 'ab')", read={"databricks": "SELECT rpad('hi', 5, 'ab')"}
+        )
+
+        self.validate_all(
+            "SELECT REVERSE(ARRAY[2, 1, 4, 3])",
+            read={"databricks": "SELECT reverse(array(2, 1, 4, 3))"},
+        )
+
+        self.validate_all(
+            "SELECT REVERSE('Spark SQL')", read={"databricks": "SELECT reverse('Spark SQL')"}
+        )
+
+        self.validate_all(
+            "SELECT TO_CHAR(CAST(111.11 AS TIMESTAMP),'$99.9')",
+            read={"databricks": "SELECT to_char(111.11, '$99.9')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_CHAR(CAST(12454 AS TIMESTAMP),'99,999')",
+            read={"databricks": "SELECT to_char(12454, '99,999')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_CHAR(CAST(CAST('2016-04-08' AS DATE) AS TIMESTAMP),'y')",
+            read={"databricks": "SELECT to_char(date'2016-04-08', 'y')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_VARCHAR(1539177637527311044940, 'hex')",
+            read={"databricks": "SELECT to_varchar(x'537061726b2053514c', 'hex')"},
+        )
+
+    def test_to_utf(self):
+        self.validate_all(
+            "TO_UTF8(x)",
+            read={
+                "duckdb": "ENCODE(x)",
+                "spark": "ENCODE(x, 'utf-8')",
+                "databricks": "ENCODE(x, 'utf-8')",
+                "presto": "TO_UTF8(x)",
+            },
+            write={
+                "duckdb": "ENCODE(x)",
+                "presto": "TO_UTF8(x)",
+                "spark": "ENCODE(x, 'utf-8')",
+                "databricks": "ENCODE(x, 'utf-8')",
+            },
+        )
+
+        self.validate_all(
+            """SELECT emoji, TO_UTF8(emoji) AS utf8_bytes, LENGTH(TO_UTF8(emoji)) AS byte_length, LENGTH(emoji) AS char_length FROM (VALUES ('🔥'), ('🌍'), ('😊'), ('⚡')) AS t(emoji)""",
+            read={
+                "spark": "SELECT emoji, ENCODE(emoji, 'utf-8') AS utf8_bytes, LENGTH(ENCODE(emoji, 'utf-8')) AS byte_length, LENGTH(emoji) AS char_length FROM (VALUES ('🔥'), ('🌍'), ('😊'), ('⚡')) AS t(emoji)",
+            },
+        )
+
+    def test_md5(self):
+        self.validate_all(
+            "SELECT MD5('E6')",
+            read={
+                "duckdb": "SELECT MD5('E6')",
+                "spark": "SELECT MD5('E6')",
+                "databricks": "SELECT MD5('E6')",
+                "clickhouse": "SELECT MD5('E6')",
+                "presto": "SELECT MD5('E6')",
+                "trino": "SELECT MD5('E6')",
+                "snowflake": "select MD5_HEX('E6')",
+            },
+            write={
+                "bigquery": "SELECT MD5('E6')",
+                "duckdb": "SELECT UNHEX(MD5('E6'))",
+                "clickhouse": "SELECT MD5('E6')",
+                "presto": "SELECT MD5('E6')",
+                "trino": "SELECT MD5('E6')",
+                "snowflake": "SELECT MD5('E6')",
+                "databricks": "SELECT UNHEX(MD5('E6'))",
+            },
+        )
+
+    def test_array_prepend_append(self):
+        self.validate_all(
+            "ARRAY_APPEND(ARRAY[1, 2], 3)",
+            read={
+                "databricks": "ARRAY_APPEND(ARRAY(1, 2),3)",
+                "snowflake": "ARRAY_APPEND(ARRAY_CONSTRUCT(1, 2),3)",
+            },
+            write={
+                "databricks": "ARRAY_APPEND(ARRAY(1, 2), 3)",
+                "snowflake": "ARRAY_APPEND([1, 2], 3)",
+            },
+        )
+
+        self.validate_all(
+            "ARRAY_PREPEND(ARRAY[1, 2], 3)",
+            read={
+                "databricks": "ARRAY_PREPEND(ARRAY(1, 2),3)",
+                "snowflake": "ARRAY_PREPEND(ARRAY_CONSTRUCT(1, 2),3)",
+            },
+            write={
+                "databricks": "ARRAY_PREPEND(ARRAY(1, 2), 3)",
+                "snowflake": "ARRAY_PREPEND([1, 2], 3)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_APPEND(ARRAY_PREPEND(ARRAY[10, 20], 5 * 2), 100 + 23)",
+            read={
+                "databricks": "SELECT array_append(array_prepend(array(10, 20), 5 * 2), 100 + 23)",
+                "snowflake": "SELECT array_append(array_prepend(array_construct(10, 20), 5 * 2), 100 + 23)",
+            },
+        )
+
+    def test_array_to_string(self):
+        self.validate_all(
+            "SELECT ARRAY_JOIN(ARRAY[1, 2, 3], '+')",
+            read={
+                "snowflake": "SELECT ARRAY_TO_STRING(ARRAY_CONSTRUCT(1,2,3),'+')",
+                "databricks": "SELECT ARRAY_JOIN(ARRAY[1, 2, 3], '+')",
+            },
+            write={
+                "snowflake": "SELECT ARRAY_TO_STRING([1, 2, 3], '+')",
+                "databricks": "SELECT ARRAY_JOIN(ARRAY(1, 2, 3), '+')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_JOIN(ARRAY[1, 2, 3, NULL], '+', '@')",
+            read={
+                "databricks": "SELECT ARRAY_JOIN(ARRAY[1, 2, 3, NULL], '+', '@')",
+            },
+        )
+
+    def test_date_time(self):
+        self.validate_all("SELECT NOW()", read={"databricks": "SELECT now()"})
+
+        self.validate_all(
+            "SELECT event_string, CAST(SUBSTRING(event_string, 1, 10) AS DATE) AS event_date FROM events",
+            read={
+                "databricks": "SELECT event_string, date(substring(event_string, 1, 10)) AS event_date FROM events"
+            },
+        )
+
+        self.validate_all(
+            "SELECT CAST('2020-04-30 12:25:13.45' AS TIMESTAMP)",
+            read={"databricks": "SELECT timestamp('2020-04-30 12:25:13.45')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_DATE('2016-12-31', 'y-MM-dd')",
+            read={"databricks": "SELECT to_date('2016-12-31', 'yyyy-MM-dd')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_DATE('2016-12-31', 'y-m-d')",
+            read={"databricks": "SELECT to_date('2016-12-31', '%y-%m-%d')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_TIMESTAMP('2016-12-31', 'y-MM-dd')",
+            read={"databricks": "SELECT to_timestamp('2016-12-31', 'yyyy-MM-dd')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_TIMESTAMP_NTZ('1997-09-06 12:29:34')",
+            read={"databricks": "select to_timestamp_ntz('1997-09-06 12:29:34')"},
+        )
+
+        # This transpilation is incorrect as format is not considered.
+        self.validate_all(
+            "SELECT FORMAT_TIMESTAMP(FROM_UNIXTIME(0), 'y-MM-dd HH:mm:ss')",
+            read={"databricks": "SELECT from_unixtime(0, 'yyyy-MM-dd HH:mm:ss')"},
+        )
+
+        # This transpilation is incorrect as format 'yyyy-MM-dd' is not supported
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP('2016-04-08', 'yyyy-MM-dd')/1000",
+            read={"databricks": "SELECT to_unix_timestamp('2016-04-08', 'yyyy-MM-dd')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP('2016-04-08')/1000",
+            read={"databricks": "SELECT to_unix_timestamp('2016-04-08')"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_TRUNC('YEAR', '2015-03-05T09:32:05.359')",
+            read={"databricks": "SELECT date_trunc('YEAR', '2015-03-05T09:32:05.359')"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_TRUNC('MM', '2015-03-05T09:32:05.359')",
+            read={"databricks": "SELECT date_trunc('MM', '2015-03-05T09:32:05.359')"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_TRUNC('WEEK', '2019-08-04')",
+            read={"databricks": "SELECT trunc('2019-08-04', 'week')"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_ADD('YEAR', 5, CAST('2000-08-05' AS DATE))",
+            read={"databricks": "select date_add('year', 5, cast('2000-08-05' as date))"},
+        )
+
+        self.validate_all(
+            "SELECT DATE_DIFF('YEAR', '2021-01-01', '2022-03-28')",
+            read={"databricks": """SELECT date_diff("YEAR", '2021-01-01', '2022-03-28')"""},
+        )
+
+        self.validate_all(
+            "SELECT DATE_DIFF('DAY', '2009-07-30', '2009-07-31')",
+            read={"databricks": "SELECT datediff('2009-07-31', '2009-07-30')"},
+        )
+
+        self.validate_all(
+            "SELECT TIMESTAMP_ADD('MONTH', -1, CAST('2022-03-31 00:00:00' AS TIMESTAMP))",
+            read={"databricks": "SELECT timestampadd(MONTH, -1, TIMESTAMP'2022-03-31 00:00:00')"},
+        )
+
+        self.validate_all(
+            "SELECT TIMESTAMP_DIFF(CAST('2021-01-01' AS DATE), CAST('1900-03-28' AS DATE), 'YEAR')",
+            read={"databricks": "SELECT timestampdiff(YEAR, DATE'2021-01-01', DATE'1900-03-28')"},
+        )
+
+        self.validate_all(
+            "SELECT EXTRACT(YEAR FROM CAST('2019-08-12 01:00:00.123456' AS TIMESTAMP))",
+            read={"databricks": "SELECT extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456')"},
+        )
+
+        self.validate_all(
+            "SELECT EXTRACT(DAY FROM CAST('2019-08-12' AS DATE))",
+            read={"databricks": "SELECT date_part('day', DATE'2019-08-12')"},
+        )
+
+        self.validate_all(
+            "SELECT YEAR(TO_DATE('2008-02-20'))", read={"databricks": "SELECT year('2008-02-20')"}
+        )
+
+        self.validate_all(
+            "SELECT MONTH(TO_DATE('2008-02-20'))", read={"databricks": "SELECT month('2008-02-20')"}
+        )
+
+        self.validate_all(
+            "SELECT DAYS(TO_DATE('2016-07-30'))", read={"databricks": "SELECT DAY('2016-07-30')"}
+        )
+
+        self.validate_all(
+            "SELECT LAST_DAY(CAST('2009-01-12' AS DATE))",
+            read={"databricks": "SELECT last_day('2009-01-12')"},
+        )
+
+        self.validate_all(
+            "SELECT DAYNAME(CAST('2024-11-01' AS DATE))",
+            read={"databricks": "SELECT dayname(DATE'2024-11-01')"},
+        )
+
+        self.validate_all(
+            "SELECT HOUR('2009-07-30 12:58:59')",
+            read={"databricks": "SELECT hour('2009-07-30 12:58:59')"},
+        )
+
+        self.validate_all(
+            "SELECT MINUTE('2009-07-30 12:58:59')",
+            read={"databricks": "SELECT minute('2009-07-30 12:58:59')"},
+        )
+
+        self.validate_all(
+            "SELECT SECOND('2009-07-30 12:58:59')",
+            read={"databricks": "SELECT second('2009-07-30 12:58:59')"},
+        )
+
+        self.validate_all(
+            "SELECT DAYOFWEEK(TO_DATE('2009-07-30'))",
+            read={"databricks": "SELECT dayofweek('2009-07-30')"},
+        )
+
+        self.validate_all(
+            "SELECT WEEKOFYEAR(TO_DATE('2008-02-20'))",
+            read={"databricks": "SELECT weekofyear('2008-02-20')"},
+        )
+
+        self.validate_all(
+            "SELECT FORMAT_TIMESTAMP(CAST('2024-08-26 22:38:11' AS TIMESTAMP), 'm-d-y H')",
+            read={
+                "databricks": "select date_format(cast('2024-08-26 22:38:11' as timestamp), '%m-%d-%Y %H')"
+            },
+        )
+
     def test_unixtime_functions(self):
         self.validate_all(
             "FORMAT_TIMESTAMP(X, 'y')",
@@ -839,6 +1607,7 @@ class TestE6(Validator):
                 "databricks": "FROM_UNIXTIME(UNIX_TIMESTAMP(X), 'yyyy')",
             },
         )
+
         self.validate_all(
             "FROM_UNIXTIME(A)",
             read={
@@ -850,5 +1619,77 @@ class TestE6(Validator):
             "FORMAT_TIMESTAMP(FROM_UNIXTIME(A), 'y')",
             read={
                 "databricks": "FROM_UNIXTIME(A, 'yyyy')",
+            },
+        )
+
+    def test_array_agg(self):
+        self.validate_all(
+            "SELECT ARRAY_AGG(DISTINCT col) AS result FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
+            read={
+                "databricks": "SELECT collect_list(DISTINCT col) AS result FROM VALUES (1), (2), (NULL), (1) AS tab(col)",
+            },
+            write={
+                "databricks": "SELECT COLLECT_LIST(DISTINCT col) AS result FROM VALUES (1), (2), (NULL), (1) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_AGG(employee) FILTER(WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM (VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2)) AS tab(dept, employee, performance_rating)",
+            read={
+                "databricks": "SELECT collect_list(employee) FILTER (WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM (VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2)) AS tab(dept, employee, performance_rating)",
+            },
+            write={
+                "databricks": "SELECT COLLECT_LIST(employee) FILTER(WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2) AS tab(dept, employee, performance_rating)",
+            },
+        )
+
+    def test_bitwise(self):
+        self.validate_all(
+            "BITWISE_NOT(1)",
+            read={
+                "snowflake": "BITNOT(1)",
+            },
+        )
+
+        self.validate_all(
+            "SHIFTLEFT(x, 1)",
+            read={
+                "trino": "bitwise_left_shift(x, 1)",
+                "duckdb": "x << 1",
+                "hive": "x << 1",
+                "spark": "SHIFTLEFT(x, 1)",
+                "databricks": "SHIFTLEFT(x, 1)",
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+            },
+            write={
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+                "spark": "SHIFTLEFT(x, 1)",
+                "databricks": "SHIFTLEFT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result",
+            read={
+                "databricks": "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result",
+            },
+        )
+
+        self.validate_all(
+            "SHIFTRIGHT(x, 1)",
+            read={
+                "trino": "bitwise_right_shift(x, 1)",
+                "duckdb": "x >> 1",
+                "hive": "x >> 1",
+                "spark": "SHIFTRIGHT(x, 1)",
+                "databricks": "SHIFTRIGHT(x, 1)",
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+            },
+            write={
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+                "spark": "SHIFTRIGHT(x, 1)",
+                "databricks": "SHIFTRIGHT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
             },
         )
