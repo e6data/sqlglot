@@ -496,6 +496,7 @@ class TestE6(Validator):
             read={
                 "presto": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "spark": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "databricks": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "postgres": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "duckdb": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
@@ -506,6 +507,7 @@ class TestE6(Validator):
                 "postgres": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "duckdb": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "databricks": "REGEXP_REPLACE('abcd', 'ab', '')",
             },
         )
 
@@ -1348,12 +1350,14 @@ class TestE6(Validator):
             read={
                 "duckdb": "ENCODE(x)",
                 "spark": "ENCODE(x, 'utf-8')",
+                "databricks": "ENCODE(x, 'utf-8')",
                 "presto": "TO_UTF8(x)",
             },
             write={
                 "duckdb": "ENCODE(x)",
                 "presto": "TO_UTF8(x)",
                 "spark": "ENCODE(x, 'utf-8')",
+                "databricks": "ENCODE(x, 'utf-8')",
             },
         )
 
@@ -1366,22 +1370,24 @@ class TestE6(Validator):
 
     def test_md5(self):
         self.validate_all(
-            "SELECT MD5(some_string)",
+            "SELECT MD5('E6')",
             read={
-                "duckdb": "SELECT MD5(some_string)",
-                "spark": "SELECT MD5(some_string)",
-                "clickhouse": "SELECT MD5(some_string)",
-                "presto": "SELECT MD5(some_string)",
-                "trino": "SELECT MD5(some_string)",
-                "snowflake": "select MD5_HEX(some_string)",
+                "duckdb": "SELECT MD5('E6')",
+                "spark": "SELECT MD5('E6')",
+                "databricks": "SELECT MD5('E6')",
+                "clickhouse": "SELECT MD5('E6')",
+                "presto": "SELECT MD5('E6')",
+                "trino": "SELECT MD5('E6')",
+                "snowflake": "select MD5_HEX('E6')",
             },
             write={
-                "bigquery": "SELECT MD5(some_string)",
-                "duckdb": "SELECT UNHEX(MD5(some_string))",
-                "clickhouse": "SELECT MD5(some_string)",
-                "presto": "SELECT MD5(some_string)",
-                "trino": "SELECT MD5(some_string)",
-                "snowflake": "SELECT MD5(some_string)",
+                "bigquery": "SELECT MD5('E6')",
+                "duckdb": "SELECT UNHEX(MD5('E6'))",
+                "clickhouse": "SELECT MD5('E6')",
+                "presto": "SELECT MD5('E6')",
+                "trino": "SELECT MD5('E6')",
+                "snowflake": "SELECT MD5('E6')",
+                "databricks": "SELECT UNHEX(MD5('E6'))",
             },
         )
 
