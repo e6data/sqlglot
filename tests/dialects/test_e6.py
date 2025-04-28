@@ -390,14 +390,14 @@ class TestE6(Validator):
             "SELECT CASE WHEN SIZE(arr) > 3 THEN ELEMENT_AT(TRANSFORM(arr, x -> x * 2), -2) ELSE ELEMENT_AT(arr, 1) END AS resul FROM (VALUES (ARRAY[1, 2, 3, 4]), (ARRAY[10, 20])) AS tab(arr)",
             read={
                 "databricks": "SELECT CASE WHEN size(arr) > 3 THEN try_element_at(transform(arr, x -> x * 2), -2) ELSE try_element_at(arr, 1) END AS resul FROM VALUES (array(1, 2, 3, 4)), (array(10, 20)) AS tab(arr)",
-            }
+            },
         )
 
         self.validate_all(
             "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4], x -> ELEMENT_AT(ARRAY[TRUE, FALSE, TRUE], x) = TRUE) AS filtered",
             read={
                 "databricks": "SELECT filter(array(1, 2, 3, 4), x -> try_element_at(array(true, false, true), x) = true) AS filtered",
-            }
+            },
         )
 
         self.validate_all(
@@ -1591,7 +1591,7 @@ class TestE6(Validator):
             "SELECT FORMAT_TIMESTAMP(CAST('2024-08-26 22:38:11' AS TIMESTAMP), 'm-d-y H')",
             read={
                 "databricks": "select date_format(cast('2024-08-26 22:38:11' as timestamp), '%m-%d-%Y %H')"
-            }
+            },
         )
 
     def test_unixtime_functions(self):
@@ -1606,7 +1606,7 @@ class TestE6(Validator):
             "FROM_UNIXTIME(A)",
             read={
                 "databricks": "FROM_UNIXTIME(A)",
-            }
+            },
         )
 
         self.validate_all(
@@ -1624,7 +1624,7 @@ class TestE6(Validator):
             },
             write={
                 "databricks": "SELECT COLLECT_LIST(DISTINCT col) AS result FROM VALUES (1), (2), (NULL), (1) AS tab(col)"
-            }
+            },
         )
 
         self.validate_all(
@@ -1634,7 +1634,7 @@ class TestE6(Validator):
             },
             write={
                 "databricks": "SELECT COLLECT_LIST(employee) FILTER(WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2) AS tab(dept, employee, performance_rating)",
-            }
+            },
         )
 
     def test_bitwise(self):
