@@ -285,6 +285,20 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
+            read={
+                "databricks": "SELECT DATEDIFF(SQL_TSI_DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
+            },
+        )
+
+        self.validate_all(
+            "SELECT TIMESTAMP_ADD('HOUR', 1, CAST('2003-01-02 11:59:59' AS TIMESTAMP))",
+            read={
+                "databricks": "SELECT TIMESTAMPADD(SQL_TSI_HOUR, 1, TIMESTAMP'2003-01-02 11:59:59')",
+            },
+        )
+
+        self.validate_all(
             "SELECT FROM_UNIXTIME(1674797653)",
             read={
                 "trino": "SELECT from_unixtime(1674797653)",
@@ -294,13 +308,6 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT FROM_UNIXTIME(unixtime / 1000)",
             read={"trino": "SELECT from_unixtime(unixtime/1000)"},
-        )
-
-        self.validate_all(
-            "haha",
-            read={
-                "databricks": "from_unixtime(unix_timestamp(m.newsltr_sub_tsp), 'yyyy')",
-            }
         )
 
         self.validate_all("SELECT AVG(x)", read={"trino": "SELECT AVG(x)"})
@@ -951,27 +958,6 @@ class TestE6(Validator):
             },
         )
 
-    def test_unixtime_functions(self):
-        self.validate_all(
-            "FORMAT_TIMESTAMP(X, 'y')",
-            read={
-                "databricks": "FROM_UNIXTIME(UNIX_TIMESTAMP(X), 'yyyy')",
-            },
-        )
-        self.validate_all(
-            "FROM_UNIXTIME(A)",
-            read={
-                "databricks": "FROM_UNIXTIME(A)",
-            },
-        )
-
-        self.validate_all(
-            "FORMAT_TIMESTAMP(FROM_UNIXTIME(A), 'y')",
-            read={
-                "databricks": "FROM_UNIXTIME(A, 'yyyy')",
-            },
-        )
-
         self.validate_all(
             "SELECT AVG(DISTINCT col) FROM (VALUES (1), (1), (2)) AS tab(col)",
             read={"databricks": "SELECT avg(DISTINCT col) FROM VALUES (1), (1), (2) AS tab(col);"},
@@ -1042,10 +1028,10 @@ class TestE6(Validator):
             """SELECT transaction_id, amount, transaction_date, CEIL(MONTH(TO_DATE(transaction_date)) / 3.0) AS qtr, CEIL(amount / 1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount / 1000) * 1000 > 10000 THEN 'Large' WHEN CEIL(amount / 1000) * 1000 > 5000 THEN 'Medium' ELSE 'Small' END AS transaction_size FROM financial_transactions WHERE YEAR(TO_DATE(transaction_date)) = 2023""",
             read={
                 "databricks": "SELECT transaction_id, amount, transaction_date, CEIL(MONTH(transaction_date)/3.0) AS "
-                              "qtr, CEIL(amount/1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount/1000) * "
-                              "1000 > 10000 THEN 'Large' WHEN CEIL(amount/1000) * 1000 > 5000 THEN 'Medium' ELSE "
-                              "'Small' END AS transaction_size FROM financial_transactions WHERE YEAR("
-                              "transaction_date) = 2023"
+                "qtr, CEIL(amount/1000) * 1000 AS amount_rounded_up, CASE WHEN CEIL(amount/1000) * "
+                "1000 > 10000 THEN 'Large' WHEN CEIL(amount/1000) * 1000 > 5000 THEN 'Medium' ELSE "
+                "'Small' END AS transaction_size FROM financial_transactions WHERE YEAR("
+                "transaction_date) = 2023"
             },
         )
 
@@ -1061,11 +1047,11 @@ class TestE6(Validator):
             "2023 GROUP BY account_id, transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000",
             read={
                 "databricks": "SELECT account_id, transaction_type, ROUND(SUM(amount), 2) AS total_amount, ROUND(AVG("
-                              "amount), 2) AS avg_amount, ROUND(SUM(amount) * CASE WHEN currency = 'EUR' THEN 1.08 "
-                              "WHEN currency = 'GBP' THEN 1.23 ELSE 1.0 END, 2) AS usd_equivalent, ROUND(SUM(amount) "
-                              "/ NULLIF(COUNT(DISTINCT MONTH(transaction_date)), 0), 2) AS monthly_avg FROM "
-                              "transactions WHERE YEAR(transaction_date) = 2023 GROUP BY account_id, "
-                              "transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000"
+                "amount), 2) AS avg_amount, ROUND(SUM(amount) * CASE WHEN currency = 'EUR' THEN 1.08 "
+                "WHEN currency = 'GBP' THEN 1.23 ELSE 1.0 END, 2) AS usd_equivalent, ROUND(SUM(amount) "
+                "/ NULLIF(COUNT(DISTINCT MONTH(transaction_date)), 0), 2) AS monthly_avg FROM "
+                "transactions WHERE YEAR(transaction_date) = 2023 GROUP BY account_id, "
+                "transaction_type, currency HAVING ROUND(SUM(amount), 2) > 1000"
             },
         )
 
@@ -1605,6 +1591,28 @@ class TestE6(Validator):
             "SELECT FORMAT_TIMESTAMP(CAST('2024-08-26 22:38:11' AS TIMESTAMP), 'm-d-y H')",
             read={
                 "databricks": "select date_format(cast('2024-08-26 22:38:11' as timestamp), '%m-%d-%Y %H')"
+            }
+        )
+
+    def test_unixtime_functions(self):
+        self.validate_all(
+            "FORMAT_TIMESTAMP(X, 'y')",
+            read={
+                "databricks": "FROM_UNIXTIME(UNIX_TIMESTAMP(X), 'yyyy')",
+            },
+        )
+
+        self.validate_all(
+            "FROM_UNIXTIME(A)",
+            read={
+                "databricks": "FROM_UNIXTIME(A)",
+            }
+        )
+
+        self.validate_all(
+            "FORMAT_TIMESTAMP(FROM_UNIXTIME(A), 'y')",
+            read={
+                "databricks": "FROM_UNIXTIME(A, 'yyyy')",
             },
         )
 
