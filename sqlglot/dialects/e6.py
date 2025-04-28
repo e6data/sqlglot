@@ -12,7 +12,6 @@ from sqlglot.dialects.dialect import (
     max_or_greatest,
     min_or_least,
     rename_func,
-    unit_to_str,
     timestrtotime_sql,
     datestrtodate_sql,
     trim_sql,
@@ -196,33 +195,6 @@ def build_datediff(expression_class: t.Type[E]) -> t.Callable[[t.List], E]:
     return _builder
 
 
-# how others use use from_unixtime_withunit and how E6 differs.
-def _from_unixtime_withunit_sql(
-    self: E6.Generator, expression: exp.UnixToTime | exp.UnixToStr
-) -> str:
-    seconds_str = "'seconds'"
-    milliseconds_str = "'milliseconds'"
-    timestamp = self.sql(expression, "this")
-    scale = expression.args.get("scale")  # Default to 'seconds' if scale is None
-
-    # Extract scale string, ensure it is lowercase and strip any extraneous quotes
-    scale_str = self.sql(scale).lower().strip('"').strip("'")
-    if scale_str == "seconds":
-        return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, seconds_str)
-    elif scale_str == "milliseconds":
-        return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, milliseconds_str)
-    # If no scale is mentioned in the original query - case: if arg1/1000 -> scale=seconds elif arg1 -> scale=milliseconds
-    elif scale is None:
-        if isinstance(expression.this, exp.Div) and (expression.this.right.this == "1000"):
-            return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, seconds_str)
-        else:
-            return self.func("FROM_UNIXTIME_WITHUNIT", timestamp, milliseconds_str)
-    else:
-        raise ValueError(
-            f"Unsupported unit for FROM_UNIXTIME_WITHUNIT: {scale_str} and we only support 'seconds' and 'milliseconds'"
-        )
-
-
 def _build_to_unix_timestamp(args: t.List[exp.Expression]) -> exp.Func:
     if len(args) == 2:
         return exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=args)
@@ -365,6 +337,17 @@ def format_time_for_parsefunctions(expression):
 def add_single_quotes(expression) -> str:
     quoted_str = f"'{expression}'"
     return quoted_str
+
+
+def unit_to_str(expression: exp.Expression, default: str = "DAY") -> t.Optional[exp.Expression]:
+    unit = expression.args.get("unit")
+
+    if isinstance(unit, exp.Placeholder):
+        return unit
+    if unit:
+        unit_name_new = unit.name.replace("SQL_TSI_", "")
+        return exp.Literal.string(unit_name_new)
+    return exp.Literal.string(default) if default else None
 
 
 def _trim_sql(self: E6.Generator, expression: exp.Trim) -> str:
@@ -1980,6 +1963,8 @@ class E6(Dialect):
             else:
                 unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))
 
+            if isinstance(expression.parent, (exp.UnixToTime, exp.UnixToStr)):
+                return f"{unix_timestamp_expr}"
             return f"{unix_timestamp_expr}/1000"
 
         def lateral_sql(self, expression: exp.Lateral) -> str:
@@ -2030,6 +2015,24 @@ class E6(Dialect):
                 return f"{within_group}"
 
             return self.function_fallback_sql(expression)
+
+        def from_unixtime_sql(
+            self: E6.Generator, expression: exp.UnixToTime | exp.UnixToStr
+        ) -> str:
+            unix_expr = expression.this
+            format_expr = expression.args.get("format")
+
+            if not format_expr:
+                return self.func("FROM_UNIXTIME", unix_expr)
+            format_expr_modified = self.convert_format_time(format_expr)
+            format_expr_modified = add_single_quotes(format_expr_modified)
+
+            if isinstance(unix_expr, (exp.TimeToUnix, exp.StrToUnix)):
+                return self.func("FORMAT_TIMESTAMP", unix_expr.this, format_expr_modified)
+
+            return self.func(
+                "FORMAT_TIMESTAMP", self.func("FROM_UNIXTIME", unix_expr), format_expr_modified
+            )
 
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
@@ -2167,8 +2170,8 @@ class E6(Dialect):
                 e.this,
             ),
             exp.TsOrDsToDate: TsOrDsToDate_sql,
-            exp.UnixToTime: _from_unixtime_withunit_sql,
-            exp.UnixToStr: _from_unixtime_withunit_sql,
+            exp.UnixToTime: from_unixtime_sql,
+            exp.UnixToStr: from_unixtime_sql,
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
         }
 

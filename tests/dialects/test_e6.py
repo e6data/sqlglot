@@ -15,22 +15,6 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SHIFTLEFT(x, 1)",
-            read={
-                "trino": "bitwise_left_shift(x, 1)",
-                "duckdb": "x << 1",
-                "hive": "x << 1",
-                "spark": "SHIFTLEFT(x, 1)",
-                "snowflake": "BITSHIFTLEFT(x, 1)",
-            },
-            write={
-                "snowflake": "BITSHIFTLEFT(x, 1)",
-                "spark": "SHIFTLEFT(x, 1)",
-                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)",
-            },
-        )
-
-        self.validate_all(
             "NVL(x, y, z)",
             read={
                 "spark": "NVL(x,y,z)",
@@ -39,23 +23,6 @@ class TestE6(Validator):
             write={
                 "snowflake": "NVL(x, y, z)",
                 "spark": "NVL(x, y, z)",
-            },
-        )
-
-        self.validate_all(
-            "SHIFTRIGHT(x, 1)",
-            read={
-                "trino": "bitwise_right_shift(x, 1)",
-                "duckdb": "x >> 1",
-                "hive": "x >> 1",
-                "spark": "SHIFTRIGHT(x, 1)",
-                "snowflake": "BITSHIFTRIGHT(x, 1)",
-            },
-            write={
-                "snowflake": "BITSHIFTRIGHT(x, 1)",
-                "spark": "SHIFTRIGHT(x, 1)",
-                "databricks": "SHIFTRIGHT(x, 1)",
-                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
             },
         )
 
@@ -130,6 +97,26 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "CAST(A AS VARCHAR)",
+            read={
+                "snowflake": "AS_VARCHAR(A)",
+            },
+        )
+
+        # Snippet taken from an Airmeet query
+        self.validate_all(
+            "CAST(JSON_EXTRACT(f.value, '$.value') AS VARCHAR)",
+            read={"snowflake": "as_varchar(f.value : value)"},
+        )
+
+        self.validate_all(
+            "COALESCE(CAST(discount_percentage AS VARCHAR), '0%')",
+            read={
+                "snowflake": "COALESCE(AS_VARCHAR(discount_percentage), '0%')",
+            },
+        )
+
+        self.validate_all(
             "SELECT DAYOFWEEKISO('2024-11-09')",
             read={
                 "trino": "SELECT day_of_week('2024-11-09')",
@@ -143,6 +130,14 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT CURRENT_TIMESTAMP - INTERVAL 2 DAY",
             read={"databricks": "SELECT CURRENT_TIMESTAMP - 2"},
+        )
+
+        self.validate_all(
+            "SELECT CURRENT_TIMESTAMP",
+            read={
+                "databricks": "SELECT CURRENT_TIMESTAMP()",
+                "snowflake": "select current_timestamp()",
+            },
         )
 
         self.validate_all(
@@ -290,14 +285,28 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT FROM_UNIXTIME_WITHUNIT(1674797653, 'milliseconds')",
+            "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
+            read={
+                "databricks": "SELECT DATEDIFF(SQL_TSI_DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
+            },
+        )
+
+        self.validate_all(
+            "SELECT TIMESTAMP_ADD('HOUR', 1, CAST('2003-01-02 11:59:59' AS TIMESTAMP))",
+            read={
+                "databricks": "SELECT TIMESTAMPADD(SQL_TSI_HOUR, 1, TIMESTAMP'2003-01-02 11:59:59')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FROM_UNIXTIME(1674797653)",
             read={
                 "trino": "SELECT from_unixtime(1674797653)",
             },
         )
 
         self.validate_all(
-            "SELECT FROM_UNIXTIME_WITHUNIT(unixtime / 1000, 'seconds')",
+            "SELECT FROM_UNIXTIME(unixtime / 1000)",
             read={"trino": "SELECT from_unixtime(unixtime/1000)"},
         )
 
@@ -378,6 +387,20 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CASE WHEN SIZE(arr) > 3 THEN ELEMENT_AT(TRANSFORM(arr, x -> x * 2), -2) ELSE ELEMENT_AT(arr, 1) END AS resul FROM (VALUES (ARRAY[1, 2, 3, 4]), (ARRAY[10, 20])) AS tab(arr)",
+            read={
+                "databricks": "SELECT CASE WHEN size(arr) > 3 THEN try_element_at(transform(arr, x -> x * 2), -2) ELSE try_element_at(arr, 1) END AS resul FROM VALUES (array(1, 2, 3, 4)), (array(10, 20)) AS tab(arr)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4], x -> ELEMENT_AT(ARRAY[TRUE, FALSE, TRUE], x) = TRUE) AS filtered",
+            read={
+                "databricks": "SELECT filter(array(1, 2, 3, 4), x -> try_element_at(array(true, false, true), x) = true) AS filtered",
+            },
+        )
+
+        self.validate_all(
             'SELECT X."B"',
             read={
                 "snowflake": "SELECT X['B']",
@@ -390,8 +413,23 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT TO_UNIX_TIMESTAMP(A)/1000",
-            read={"databricks": "SELECT TO_UNIX_TIMESTAMP(A)"},
-            write={"databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000"},
+            read={"databricks": "SELECT UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
+            write={
+                "databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
+                "snowflake": "SELECT EXTRACT(epoch_second FROM A) / 1000",
+            },
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(CURRENT_TIMESTAMP)/1000",
+            read={"databricks": "SELECT UNIX_TIMESTAMP()"},
+        )
+
+        self.validate_all(
+            "SELECT * FROM events WHERE event_time >= TO_UNIX_TIMESTAMP('2023-01-01', '%Y-%m-%d')/1000 AND event_time < TO_UNIX_TIMESTAMP('2023-02-01', '%Y-%m-%d')/1000",
+            read={
+                "databricks": "SELECT * FROM events WHERE event_time >= unix_timestamp('2023-01-01', 'yyyy-MM-dd') AND event_time < unix_timestamp('2023-02-01', 'yyyy-MM-dd')"
+            },
         )
 
         self.validate_all(
@@ -458,6 +496,7 @@ class TestE6(Validator):
             read={
                 "presto": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "spark": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "databricks": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "postgres": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "duckdb": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
@@ -468,6 +507,7 @@ class TestE6(Validator):
                 "postgres": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "duckdb": "REGEXP_REPLACE('abcd', 'ab', '')",
                 "snowflake": "REGEXP_REPLACE('abcd', 'ab', '')",
+                "databricks": "REGEXP_REPLACE('abcd', 'ab', '')",
             },
         )
 
@@ -1310,12 +1350,14 @@ class TestE6(Validator):
             read={
                 "duckdb": "ENCODE(x)",
                 "spark": "ENCODE(x, 'utf-8')",
+                "databricks": "ENCODE(x, 'utf-8')",
                 "presto": "TO_UTF8(x)",
             },
             write={
                 "duckdb": "ENCODE(x)",
                 "presto": "TO_UTF8(x)",
                 "spark": "ENCODE(x, 'utf-8')",
+                "databricks": "ENCODE(x, 'utf-8')",
             },
         )
 
@@ -1328,22 +1370,24 @@ class TestE6(Validator):
 
     def test_md5(self):
         self.validate_all(
-            "SELECT MD5(some_string)",
+            "SELECT MD5('E6')",
             read={
-                "duckdb": "SELECT MD5(some_string)",
-                "spark": "SELECT MD5(some_string)",
-                "clickhouse": "SELECT MD5(some_string)",
-                "presto": "SELECT MD5(some_string)",
-                "trino": "SELECT MD5(some_string)",
-                "snowflake": "select MD5_HEX(some_string)",
+                "duckdb": "SELECT MD5('E6')",
+                "spark": "SELECT MD5('E6')",
+                "databricks": "SELECT MD5('E6')",
+                "clickhouse": "SELECT MD5('E6')",
+                "presto": "SELECT MD5('E6')",
+                "trino": "SELECT MD5('E6')",
+                "snowflake": "select MD5_HEX('E6')",
             },
             write={
-                "bigquery": "SELECT MD5(some_string)",
-                "duckdb": "SELECT UNHEX(MD5(some_string))",
-                "clickhouse": "SELECT MD5(some_string)",
-                "presto": "SELECT MD5(some_string)",
-                "trino": "SELECT MD5(some_string)",
-                "snowflake": "SELECT MD5(some_string)",
+                "bigquery": "SELECT MD5('E6')",
+                "duckdb": "SELECT UNHEX(MD5('E6'))",
+                "clickhouse": "SELECT MD5('E6')",
+                "presto": "SELECT MD5('E6')",
+                "trino": "SELECT MD5('E6')",
+                "snowflake": "SELECT MD5('E6')",
+                "databricks": "SELECT UNHEX(MD5('E6'))",
             },
         )
 
@@ -1437,7 +1481,7 @@ class TestE6(Validator):
 
         # This transpilation is incorrect as format is not considered.
         self.validate_all(
-            "SELECT FROM_UNIXTIME_WITHUNIT(0, 'milliseconds')",
+            "SELECT FORMAT_TIMESTAMP(FROM_UNIXTIME(0), 'y-MM-dd HH:mm:ss')",
             read={"databricks": "SELECT from_unixtime(0, 'yyyy-MM-dd HH:mm:ss')"},
         )
 
@@ -1559,72 +1603,81 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT DATETIME(DATETIME(CAST('2022-05-01 07:10:12' AS TIMESTAMP), 'America/Los_Angeles'), 'Africa/Cairo')",
             read={
-                'databricks': "select convert_timezone('America/Los_Angeles','Africa/Cairo','2022-05-01 07:10:12')"
-            }
+                "databricks": "select convert_timezone('America/Los_Angeles','Africa/Cairo','2022-05-01 07:10:12')"
+            },
         )
 
     def test_conditional_expression(self):
         self.validate_all(
             "SELECT SUM(COALESCE(CASE WHEN performance_rating > 7 THEN 1 END, 0))",
             read={
-                'databricks': "SELECT SUM(COALESCE( CASE WHEN performance_rating > 7 THEN 1 END, 0 ))"
-            }
+                "databricks": "SELECT SUM(COALESCE( CASE WHEN performance_rating > 7 THEN 1 END, 0 ))"
+            },
         )
 
-        self.validate_all("SELECT NULLIF(12, NULL)", read={'databricks': "select nullif(12, null)"})
+        self.validate_all("SELECT NULLIF(12, NULL)", read={"databricks": "select nullif(12, null)"})
 
-        self.validate_all("SELECT NULLIF(12, 12)", read={'databricks': "select nullif(12, 12)"})
+        self.validate_all("SELECT NULLIF(12, 12)", read={"databricks": "select nullif(12, 12)"})
 
-        self.validate_all("SELECT GREATEST(100, 12, 23, 1999, 2)",
-                          read={'databricks': "select greatest(100, 12, 23, 1999, 2)"})
+        self.validate_all(
+            "SELECT GREATEST(100, 12, 23, 1999, 2)",
+            read={"databricks": "select greatest(100, 12, 23, 1999, 2)"},
+        )
 
-        self.validate_all("SELECT LEAST(100, 12, 23, 1999, 2)",
-                          read={'databricks': "select least(100, 12, 23, 1999, 2)"})
+        self.validate_all(
+            "SELECT LEAST(100, 12, 23, 1999, 2)",
+            read={"databricks": "select least(100, 12, 23, 1999, 2)"},
+        )
 
-        self.validate_all("SELECT NVL(NULL, 2)", read={'databricks': "SELECT nvl(NULL, 2)"})
+        self.validate_all("SELECT NVL(NULL, 2)", read={"databricks": "SELECT nvl(NULL, 2)"})
 
-        self.validate_all("SELECT NVL(3, 2)", read={'databricks': "SELECT nvl(3, 2)"})
+        self.validate_all("SELECT NVL(3, 2)", read={"databricks": "SELECT nvl(3, 2)"})
 
-        self.validate_all("SELECT NVL2(NULL, 2, 1)", read={'databricks': "SELECT nvl2(NULL, 2, 1)"})
+        self.validate_all("SELECT NVL2(NULL, 2, 1)", read={"databricks": "SELECT nvl2(NULL, 2, 1)"})
 
-        self.validate_all("SELECT NVL2('spark', 2, 1)", read={'databricks': "SELECT nvl2('spark', 2, 1)"})
+        self.validate_all(
+            "SELECT NVL2('spark', 2, 1)", read={"databricks": "SELECT nvl2('spark', 2, 1)"}
+        )
 
-        self.validate_all("SELECT TRY_CAST('45.6789' AS DOUBLE)", read={'databricks': "select try_cast('45.6789' AS double)"})
+        self.validate_all(
+            "SELECT TRY_CAST('45.6789' AS DOUBLE)",
+            read={"databricks": "select try_cast('45.6789' AS double)"},
+        )
 
     def test_window_funcs(self):
         self.validate_all(
             "SELECT a, b, DENSE_RANK() OVER (PARTITION BY a ORDER BY b), RANK() OVER (PARTITION BY a ORDER BY b), ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1)) AS tab(a, b)",
             read={
-                'databricks': "SELECT a, b, dense_rank() OVER(PARTITION BY a ORDER BY b), rank() OVER(PARTITION BY a ORDER BY b), row_number() OVER(PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b)"
-            }
+                "databricks": "SELECT a, b, dense_rank() OVER(PARTITION BY a ORDER BY b), rank() OVER(PARTITION BY a ORDER BY b), row_number() OVER(PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b)"
+            },
         )
 
         self.validate_all(
             "SELECT a, b, NTILE(2) OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1))",
             read={
-                'databricks': "SELECT a, b, ntile(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1)"
-            }
+                "databricks": "SELECT a, b, ntile(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1)"
+            },
         )
 
         self.validate_all(
             "SELECT FIRST_VALUE(col) IGNORE NULLS FROM (VALUES (NULL), (5), (20)) AS tab(col)",
             read={
-                'databricks': "SELECT first_value(col, true) FROM VALUES (NULL), (5), (20) AS tab(col)"
-            }
+                "databricks": "SELECT first_value(col, true) FROM VALUES (NULL), (5), (20) AS tab(col)"
+            },
         )
 
         self.validate_all(
             "SELECT ARRAY_AGG(DISTINCT col) FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
             read={
-                'databricks': "SELECT collect_list(DISTINCT col) FROM VALUES (1), (2), (NULL), (1) AS tab(col)"
-            }
+                "databricks": "SELECT collect_list(DISTINCT col) FROM VALUES (1), (2), (NULL), (1) AS tab(col)"
+            },
         )
 
         self.validate_all(
             "SELECT FIRST_VALUE(col) FILTER(WHERE col > 5) FROM (VALUES (5), (20)) AS tab(col)",
             read={
-                'databricks': "SELECT first_value(col) FILTER (WHERE col > 5) FROM VALUES (5), (20) AS tab(col)"
-            }
+                "databricks": "SELECT first_value(col) FILTER (WHERE col > 5) FROM VALUES (5), (20) AS tab(col)"
+            },
         )
 
         # self.validate_all(
@@ -1636,58 +1689,143 @@ class TestE6(Validator):
         #
         self.validate_all(
             "SELECT a, b, LEAD(b) OVER (PARTITION BY a ORDER BY b)",
-            read={
-                'databricks': "SELECT a, b, lead(b) OVER (PARTITION BY a ORDER BY b)"
-            }
+            read={"databricks": "SELECT a, b, lead(b) OVER (PARTITION BY a ORDER BY b)"},
         )
 
         self.validate_all(
             "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b)",
-            read={
-                'databricks': "SELECT a, b, lag(b) OVER (PARTITION BY a ORDER BY b)"
-            }
+            read={"databricks": "SELECT a, b, lag(b) OVER (PARTITION BY a ORDER BY b)"},
         )
 
         self.validate_all(
             "SELECT 1 IN (SELECT * FROM (VALUES (1), (2)))",
-            read={
-                'databricks': "SELECT 1 IN (SELECT * FROM VALUES(1), (2))"
-            }
+            read={"databricks": "SELECT 1 IN (SELECT * FROM VALUES(1), (2))"},
         )
 
         self.validate_all(
             "SELECT (1, 2) IN ((1, 2), (2, 3))",
-            read={
-                'databricks': "SELECT (1, 2) IN ((1, 2), (2, 3))"
-            }
+            read={"databricks": "SELECT (1, 2) IN ((1, 2), (2, 3))"},
         )
 
     def test_statistical_funcs(self):
         self.validate_all(
             "SELECT STDDEV(DISTINCT col) FROM (VALUES (1), (2), (3), (3)) AS tab(col)",
             read={
-                'databricks': "SELECT stddev(DISTINCT col) FROM VALUES (1), (2), (3), (3) AS tab(col)"
-            }
+                "databricks": "SELECT stddev(DISTINCT col) FROM VALUES (1), (2), (3), (3) AS tab(col)"
+            },
         )
 
         self.validate_all(
             "SELECT STDDEV_POP(DISTINCT col) FROM (VALUES (1), (2), (3), (3)) AS tab(col)",
             read={
-                'databricks': "SELECT stddev_pop(DISTINCT col) FROM VALUES (1), (2), (3), (3) AS tab(col)"
-            }
+                "databricks": "SELECT stddev_pop(DISTINCT col) FROM VALUES (1), (2), (3), (3) AS tab(col)"
+            },
         )
 
         self.validate_all(
             "SELECT PERCENTILE_CONT(ARRAY[0.5, 0.4, 0.1]) WITHIN GROUP (ORDER BY col)",
             read={
-                'databricks': "SELECT percentile_cont(array(0.5, 0.4, 0.1)) WITHIN GROUP (ORDER BY col)"
-            }
+                "databricks": "SELECT percentile_cont(array(0.5, 0.4, 0.1)) WITHIN GROUP (ORDER BY col)"
+            },
         )
 
         self.validate_all(
             "SELECT PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY col) FROM (VALUES (0), (6), (6), (7), (9), (10)) AS tab(col)",
             read={
-                'databricks': "SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (6), (6), (7), (9), (10) AS tab(col)"
-            }
+                "databricks": "SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (6), (6), (7), (9), (10) AS tab(col)"
+            },
         )
 
+    def test_unixtime_functions(self):
+        self.validate_all(
+            "FORMAT_TIMESTAMP(X, 'y')",
+            read={
+                "databricks": "FROM_UNIXTIME(UNIX_TIMESTAMP(X), 'yyyy')",
+            },
+        )
+
+        self.validate_all(
+            "FROM_UNIXTIME(A)",
+            read={
+                "databricks": "FROM_UNIXTIME(A)",
+            },
+        )
+
+        self.validate_all(
+            "FORMAT_TIMESTAMP(FROM_UNIXTIME(A), 'y')",
+            read={
+                "databricks": "FROM_UNIXTIME(A, 'yyyy')",
+            },
+        )
+
+    def test_array_agg(self):
+        self.validate_all(
+            "SELECT ARRAY_AGG(DISTINCT col) AS result FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
+            read={
+                "databricks": "SELECT collect_list(DISTINCT col) AS result FROM VALUES (1), (2), (NULL), (1) AS tab(col)",
+            },
+            write={
+                "databricks": "SELECT COLLECT_LIST(DISTINCT col) AS result FROM VALUES (1), (2), (NULL), (1) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_AGG(employee) FILTER(WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM (VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2)) AS tab(dept, employee, performance_rating)",
+            read={
+                "databricks": "SELECT collect_list(employee) FILTER (WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM (VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2)) AS tab(dept, employee, performance_rating)",
+            },
+            write={
+                "databricks": "SELECT COLLECT_LIST(employee) FILTER(WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2) AS tab(dept, employee, performance_rating)",
+            },
+        )
+
+    def test_bitwise(self):
+        self.validate_all(
+            "BITWISE_NOT(1)",
+            read={
+                "snowflake": "BITNOT(1)",
+            },
+        )
+
+        self.validate_all(
+            "SHIFTLEFT(x, 1)",
+            read={
+                "trino": "bitwise_left_shift(x, 1)",
+                "duckdb": "x << 1",
+                "hive": "x << 1",
+                "spark": "SHIFTLEFT(x, 1)",
+                "databricks": "SHIFTLEFT(x, 1)",
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+            },
+            write={
+                "snowflake": "BITSHIFTLEFT(x, 1)",
+                "spark": "SHIFTLEFT(x, 1)",
+                "databricks": "SHIFTLEFT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_LEFT(x, 1)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result",
+            read={
+                "databricks": "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result",
+            },
+        )
+
+        self.validate_all(
+            "SHIFTRIGHT(x, 1)",
+            read={
+                "trino": "bitwise_right_shift(x, 1)",
+                "duckdb": "x >> 1",
+                "hive": "x >> 1",
+                "spark": "SHIFTRIGHT(x, 1)",
+                "databricks": "SHIFTRIGHT(x, 1)",
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+            },
+            write={
+                "snowflake": "BITSHIFTRIGHT(x, 1)",
+                "spark": "SHIFTRIGHT(x, 1)",
+                "databricks": "SHIFTRIGHT(x, 1)",
+                "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
+            },
+        )
