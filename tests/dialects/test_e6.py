@@ -1607,6 +1607,142 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT DATETIME(DATETIME(CAST('2022-05-01 07:10:12' AS TIMESTAMP), 'America/Los_Angeles'), 'Africa/Cairo')",
+            read={
+                "databricks": "select convert_timezone('America/Los_Angeles','Africa/Cairo','2022-05-01 07:10:12')"
+            },
+        )
+
+    def test_conditional_expression(self):
+        self.validate_all(
+            "SELECT SUM(COALESCE(CASE WHEN performance_rating > 7 THEN 1 END, 0))",
+            read={
+                "databricks": "SELECT SUM(COALESCE( CASE WHEN performance_rating > 7 THEN 1 END, 0 ))"
+            },
+        )
+
+        self.validate_all("SELECT NULLIF(12, NULL)", read={"databricks": "select nullif(12, null)"})
+
+        self.validate_all("SELECT NULLIF(12, 12)", read={"databricks": "select nullif(12, 12)"})
+
+        self.validate_all(
+            "SELECT GREATEST(100, 12, 23, 1999, 2)",
+            read={"databricks": "select greatest(100, 12, 23, 1999, 2)"},
+        )
+
+        self.validate_all(
+            "SELECT LEAST(100, 12, 23, 1999, 2)",
+            read={"databricks": "select least(100, 12, 23, 1999, 2)"},
+        )
+
+        self.validate_all("SELECT NVL(NULL, 2)", read={"databricks": "SELECT nvl(NULL, 2)"})
+
+        self.validate_all("SELECT NVL(3, 2)", read={"databricks": "SELECT nvl(3, 2)"})
+
+        self.validate_all("SELECT NVL2(NULL, 2, 1)", read={"databricks": "SELECT nvl2(NULL, 2, 1)"})
+
+        self.validate_all(
+            "SELECT NVL2('spark', 2, 1)", read={"databricks": "SELECT nvl2('spark', 2, 1)"}
+        )
+
+        self.validate_all(
+            "SELECT TRY_CAST('45.6789' AS DOUBLE)",
+            read={"databricks": "select try_cast('45.6789' AS double)"},
+        )
+
+    def test_window_funcs(self):
+        self.validate_all(
+            "SELECT a, b, DENSE_RANK() OVER (PARTITION BY a ORDER BY b), RANK() OVER (PARTITION BY a ORDER BY b), ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1)) AS tab(a, b)",
+            read={
+                "databricks": "SELECT a, b, dense_rank() OVER(PARTITION BY a ORDER BY b), rank() OVER(PARTITION BY a ORDER BY b), row_number() OVER(PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT a, b, NTILE(2) OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1))",
+            read={
+                "databricks": "SELECT a, b, ntile(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT FIRST_VALUE(col) IGNORE NULLS FROM (VALUES (NULL), (5), (20)) AS tab(col)",
+            read={
+                "databricks": "SELECT first_value(col, true) FROM VALUES (NULL), (5), (20) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_AGG(DISTINCT col) FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
+            read={
+                "databricks": "SELECT collect_list(DISTINCT col) FROM VALUES (1), (2), (NULL), (1) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT FIRST_VALUE(col) FILTER(WHERE col > 5) FROM (VALUES (5), (20)) AS tab(col)",
+            read={
+                "databricks": "SELECT first_value(col) FILTER (WHERE col > 5) FROM VALUES (5), (20) AS tab(col)"
+            },
+        )
+
+        # self.validate_all(
+        #     "SELECT LAST_VALUE(col) FILTER(WHERE col > 5) FROM (VALUES (5), (20)) AS tab(col)",
+        #     read={
+        #         'databricks': "SELECT last_value(col) FILTER (WHERE col > 5) FROM VALUES (5), (20) AS tab(col)"
+        #     }
+        # )
+        #
+        self.validate_all(
+            "SELECT a, b, LEAD(b) OVER (PARTITION BY a ORDER BY b)",
+            read={"databricks": "SELECT a, b, lead(b) OVER (PARTITION BY a ORDER BY b)"},
+        )
+
+        self.validate_all(
+            "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b)",
+            read={"databricks": "SELECT a, b, lag(b) OVER (PARTITION BY a ORDER BY b)"},
+        )
+
+        self.validate_all(
+            "SELECT 1 IN (SELECT * FROM (VALUES (1), (2)))",
+            read={"databricks": "SELECT 1 IN (SELECT * FROM VALUES(1), (2))"},
+        )
+
+        self.validate_all(
+            "SELECT (1, 2) IN ((1, 2), (2, 3))",
+            read={"databricks": "SELECT (1, 2) IN ((1, 2), (2, 3))"},
+        )
+
+    def test_statistical_funcs(self):
+        self.validate_all(
+            "SELECT STDDEV(DISTINCT col) FROM (VALUES (1), (2), (3), (3)) AS tab(col)",
+            read={
+                "databricks": "SELECT stddev(DISTINCT col) FROM VALUES (1), (2), (3), (3) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT STDDEV_POP(DISTINCT col) FROM (VALUES (1), (2), (3), (3)) AS tab(col)",
+            read={
+                "databricks": "SELECT stddev_pop(DISTINCT col) FROM VALUES (1), (2), (3), (3) AS tab(col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT PERCENTILE_CONT(ARRAY[0.5, 0.4, 0.1]) WITHIN GROUP (ORDER BY col)",
+            read={
+                "databricks": "SELECT percentile_cont(array(0.5, 0.4, 0.1)) WITHIN GROUP (ORDER BY col)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY col) FROM (VALUES (0), (6), (6), (7), (9), (10)) AS tab(col)",
+            read={
+                "databricks": "SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (6), (6), (7), (9), (10) AS tab(col)"
+            },
+        )
+
     def test_unixtime_functions(self):
         self.validate_all(
             "FORMAT_TIMESTAMP(X, 'y')",
