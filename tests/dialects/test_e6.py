@@ -490,6 +490,13 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT TIMESTAMP_DIFF(CAST('1900-03-28' AS DATE), CAST('2021-01-01' AS DATE), 'YEAR')",
+            read={
+                "databricks": "SELECT timestampdiff(SQL_TSI_YEAR, DATE'2021-01-01', DATE'1900-03-28')"
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",

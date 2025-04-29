@@ -2034,6 +2034,11 @@ class E6(Dialect):
                 "FORMAT_TIMESTAMP", self.func("FROM_UNIXTIME", unix_expr), format_expr_modified
             )
 
+        def timestamp_diff_sql(self, expression: exp.TimestampDiff) -> str:
+            return self.func(
+                "TIMESTAMP_DIFF", expression.this, expression.expression, unit_to_str(expression)
+            )
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2141,15 +2146,7 @@ class E6(Dialect):
             exp.TimestampAdd: lambda self, e: self.func(
                 "TIMESTAMP_ADD", unit_to_str(e), e.expression, e.this
             ),
-            exp.TimestampDiff: lambda self, e: self.func(
-                # this will not directly give correct order of args in first .transpile from X to E6.
-                # But as per our current flow, we again do E6 to E6 and it sets it right. This is due to the way it is taking args.
-                # This ensures the tight coupling of timestampdiff of bigquery, presto, databricks, MYSQL, snowflake PROPERLY.
-                "TIMESTAMP_DIFF",
-                e.expression,
-                e.this,
-                unit_to_str(e),
-            ),
+            exp.TimestampDiff: timestamp_diff_sql,
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
             # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
