@@ -213,6 +213,7 @@ class Hive(Dialect):
         "MMM": "%b",
         "MM": "%m",
         "M": "%-m",
+        "LL": "%m",
         "dd": "%d",
         "d": "%-d",
         "HH": "%H",
