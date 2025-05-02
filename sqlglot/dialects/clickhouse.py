@@ -1089,6 +1089,7 @@ class ClickHouse(Dialect):
             exp.Nullif: rename_func("nullIf"),
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
             exp.Pivot: no_pivot_sql,
+            exp.Pow: rename_func("POWER"),
             exp.Quantile: _quantile_sql,
             exp.RegexpLike: lambda self, e: self.func("match", e.this, e.expression),
             exp.Rand: rename_func("randCanonical"),

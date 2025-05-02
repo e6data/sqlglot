@@ -726,7 +726,7 @@ class TestClickhouse(Validator):
         for data_type in data_types:
             self.validate_all(
                 f"pow(2, 32)::{data_type}",
-                write={"clickhouse": f"CAST(pow(2, 32) AS {data_type})"},
+                write={"clickhouse": f"CAST(POWER(2, 32) AS {data_type})"},
             )
 
     def test_geom_types(self):

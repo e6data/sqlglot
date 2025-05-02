@@ -98,7 +98,7 @@ class TestDatabricks(Validator):
         self.validate_all(
             "SELECT GETDATE()",
             write={
-                "databricks": "SELECT CURRENT_TIMESTAMP()",
+                "databricks": "SELECT GETDATE()",
                 "snowflake": "SELECT CURRENT_TIMESTAMP()",
                 "e6": "SELECT CURRENT_TIMESTAMP",
                 "trino": "SELECT CURRENT_TIMESTAMP",

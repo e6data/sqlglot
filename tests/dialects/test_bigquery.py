@@ -1640,7 +1640,7 @@ WHERE
         self.validate_all(
             """SELECT INT64(JSON_QUERY(JSON '{"key": 2000}', '$.key'))""",
             write={
-                "bigquery": """SELECT INT64(JSON_QUERY(PARSE_JSON('{"key": 2000}'), '$.key'))""",
+                "bigquery": """SELECT INT64(JSON_EXTRACT(PARSE_JSON('{"key": 2000}'), '$.key'))""",
                 "duckdb": """SELECT CAST(JSON('{"key": 2000}') -> '$.key' AS BIGINT)""",
                 "snowflake": """SELECT CAST(GET_PATH(PARSE_JSON('{"key": 2000}'), 'key') AS BIGINT)""",
             },
@@ -2196,7 +2196,7 @@ OPTIONS (
         self.validate_all(
             """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
             write={
-                "bigquery": """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
+                "bigquery": """SELECT JSON_EXTRACT('{"class": {"students": []}}', '$.class')""",
                 "duckdb": """SELECT '{"class": {"students": []}}' -> '$.class'""",
                 "snowflake": """SELECT GET_PATH(PARSE_JSON('{"class": {"students": []}}'), 'class')""",
             },
@@ -2207,7 +2207,7 @@ OPTIONS (
                 self.validate_all(
                     f"SELECT {func}('5')",
                     write={
-                        "bigquery": f"SELECT {func}('5', '$')",
+                        "bigquery": "SELECT JSON_EXTRACT_SCALAR('5', '$')",
                         "duckdb": """SELECT '5' ->> '$'""",
                     },
                 )
@@ -2216,7 +2216,7 @@ OPTIONS (
                 self.validate_all(
                     sql,
                     write={
-                        "bigquery": sql,
+                        "bigquery": """SELECT JSON_EXTRACT_SCALAR('{"name": "Jakob", "age": "6"}', '$.age')""",
                         "duckdb": """SELECT '{"name": "Jakob", "age": "6"}' ->> '$.age'""",
                         "snowflake": """SELECT JSON_EXTRACT_PATH_TEXT('{"name": "Jakob", "age": "6"}', 'age')""",
                     },
@@ -2224,14 +2224,20 @@ OPTIONS (
 
                 self.assertEqual(
                     self.parse_one(sql).sql("bigquery", normalize_functions="upper"),
-                    sql,
+                    """SELECT JSON_EXTRACT_SCALAR('{"name": "Jakob", "age": "6"}', '$.age')""",
                 )
 
         # Test double quote escaping
-        for func in ("JSON_VALUE", "JSON_QUERY", "JSON_QUERY_ARRAY"):
-            self.validate_identity(
-                f"{func}(doc, '$. a b c .d')", f"""{func}(doc, '$." a b c ".d')"""
-            )
+        self.validate_identity(
+            "JSON_VALUE(doc, '$. a b c .d')", """JSON_EXTRACT_SCALAR(doc, '$[\\' a b c \\'].d')"""
+        )
+        self.validate_identity(
+            "JSON_QUERY(doc, '$. a b c .d')", """JSON_EXTRACT(doc, '$[\\' a b c \\'].d')"""
+        )
+        self.validate_identity(
+            "JSON_QUERY_ARRAY(doc, '$. a b c .d')",
+            """JSON_EXTRACT_ARRAY(doc, '$[\\' a b c \\'].d')""",
+        )
 
         # Test single quote & bracket escaping
         for func in ("JSON_EXTRACT", "JSON_EXTRACT_SCALAR", "JSON_EXTRACT_ARRAY"):
@@ -2246,7 +2252,7 @@ OPTIONS (
                 self.validate_all(
                     sql,
                     write={
-                        "bigquery": sql,
+                        "bigquery": """SELECT JSON_EXTRACT_ARRAY('{"fruits": [1, "oranges"]}', '$.fruits')""",
                         "duckdb": """SELECT CAST('{"fruits": [1, "oranges"]}' -> '$.fruits' AS JSON[])""",
                         "snowflake": """SELECT TRANSFORM(GET_PATH(PARSE_JSON('{"fruits": [1, "oranges"]}'), 'fruits'), x -> PARSE_JSON(TO_JSON(x)))""",
                     },
@@ -2254,7 +2260,7 @@ OPTIONS (
 
                 self.assertEqual(
                     self.parse_one(sql).sql("bigquery", normalize_functions="upper"),
-                    sql,
+                    """SELECT JSON_EXTRACT_ARRAY('{"fruits": [1, "oranges"]}', '$.fruits')""",
                 )
 
     def test_unix_seconds(self):

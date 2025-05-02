@@ -341,7 +341,7 @@ def _build_contains_substring(args: t.List) -> exp.Contains | exp.Anonymous:
 
 
 def _json_extract_sql(self: BigQuery.Generator, expression: JSON_EXTRACT_TYPE) -> str:
-    name = (expression._meta and expression.meta.get("name")) or expression.sql_name()
+    name = expression.sql_name()
     upper = name.upper()
 
     dquote_escaping = upper in DQUOTES_ESCAPING_JSON_FUNCTIONS
@@ -958,6 +958,7 @@ class BigQuery(Dialect):
             exp.MD5Digest: rename_func("MD5"),
             exp.Min: min_or_least,
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
+            exp.Pow: rename_func("POWER"),
             exp.RegexpExtract: lambda self, e: self.func(
                 "REGEXP_EXTRACT",
                 e.this,

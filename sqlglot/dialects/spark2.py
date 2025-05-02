@@ -343,6 +343,7 @@ class Spark2(Hive):
                 ]
             ),
             exp.Coalesce: coalesce_sql,
+            exp.Contains: rename_func("CONTAINS"),
             exp.DateFromParts: rename_func("MAKE_DATE"),
             exp.DateTrunc: lambda self, e: self.func("TRUNC", e.this, unit_to_str(e)),
             exp.DayOfMonth: rename_func("DAYOFMONTH"),
@@ -359,6 +360,7 @@ class Spark2(Hive):
             exp.LogicalOr: rename_func("BOOL_OR"),
             exp.Map: _map_sql,
             exp.Pivot: transforms.preprocess([_unqualify_pivot_columns]),
+            exp.Pow: rename_func("POWER"),
             exp.Reduce: rename_func("AGGREGATE"),
             exp.RegexpReplace: lambda self, e: self.func(
                 "REGEXP_REPLACE",
