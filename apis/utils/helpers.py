@@ -1,6 +1,7 @@
 import re
 import json
 import os
+import unicodedata
 
 import sqlglot
 from sqlglot.optimizer.qualify_columns import quote_identifiers
@@ -462,3 +463,50 @@ def extract_cte_n_subquery_list(sql_query_ast):
     subquery_list = list(set(subquery_list))
     values_list = list(set(values_list))
     return [cte_list, values_list, subquery_list]
+
+
+def normalize_unicode_spaces(sql: str) -> str:
+    """
+    Normalize all Unicode whitespace/separator characters (and U+FFFD) to plain ASCII spaces,
+    but do NOT touch anything inside single (') or double (") quoted literals.
+    """
+    out_chars = []
+    in_quote = None  # None, or "'" or '"'
+    i = 0
+    length = len(sql)
+
+    while i < length:
+        ch = sql[i]
+
+        # Are we entering or exiting a quoted literal?
+        if in_quote:
+            out_chars.append(ch)
+            # For SQL, single quotes are escaped by doubling (''),
+            # so only end the quote if it's a lone quote character.
+            if ch == in_quote:
+                if in_quote == "'" and i + 1 < length and sql[i + 1] == "'":
+                    # It's an escaped '' inside a single-quoted literal: consume both
+                    out_chars.append(sql[i + 1])
+                    i += 1
+                else:
+                    # Closing the literal
+                    in_quote = None
+            # Otherwise, we stay inside the literal
+        else:
+            # Not currently in a quote: check for opening
+            if ch in ("'", '"'):
+                in_quote = ch
+                out_chars.append(ch)
+            else:
+                # Normalize replacement-char
+                if ch in ("\ufffd", "\uFFFD"):
+                    out_chars.append(" ")
+                else:
+                    cat = unicodedata.category(ch)
+                    if (cat in ("Zs", "Zl", "Zp")) or (ch.isspace() and ch not in "\r\n"):
+                        out_chars.append(" ")
+                    else:
+                        out_chars.append(ch)
+        i += 1
+
+    return "".join(out_chars)

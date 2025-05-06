@@ -25,6 +25,7 @@ from apis.utils.helpers import (
     extract_db_and_Table_names,
     extract_joins_from_query,
     extract_cte_n_subquery_list,
+    normalize_unicode_spaces,
 )
 
 if t.TYPE_CHECKING:
@@ -45,6 +46,16 @@ if ENABLE_GUARDRAIL.lower() == "true":
     storage_service_client = StorageServiceClient(host=STORAGE_ENGINE_URL, port=STORAGE_ENGINE_PORT)
 
 print("Storage Service Client is created")
+
+
+def escape_unicode(s: str) -> str:
+    """
+    Turn every non-ASCII (including all Unicode spaces) into \\uXXXX,
+    so even “invisible” characters become visible in logs.
+    """
+    return s.encode("unicode_escape").decode("ascii")
+
+
 app = FastAPI()
 
 
@@ -57,7 +68,34 @@ async def convert_query(
 ):
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
+
+    if not query or not query.strip():
+        logger.info(
+            "%s AT %s FROM %s — Empty query received, returning empty result",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+        )
+        return {"converted_query": ""}
+
     try:
+        logger.info(
+            "%s AT %s FROM %s — Original:\n%s",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+            escape_unicode(query),
+        )
+
+        query = normalize_unicode_spaces(query)
+        logger.info(
+            "%s AT %s FROM %s — Normalized (escaped):\n%s",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+            escape_unicode(query),
+        )
+
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         tree2 = quote_identifiers(tree, dialect=to_sql)
@@ -67,28 +105,21 @@ async def convert_query(
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
         logger.info(
-            f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
-            "-----------------------\n"
-            "--- Original query ---\n"
-            "-----------------------\n"
-            f"{query}"
-            "-----------------------\n"
-            "--- Transpiled query ---\n"
-            "-----------------------\n"
-            f"{double_quotes_added_query}"
+            "%s AT %s FROM %s — Transpiled Query:\n%s",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+            double_quotes_added_query,
         )
         return {"converted_query": double_quotes_added_query}
     except Exception as e:
-        logger.info(
-            f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
-            "-----------------------\n"
-            "--- Original query ---\n"
-            "-----------------------\n"
-            f"{query}"
-            "-----------------------\n"
-            "-------- Error --------\n"
-            "-----------------------\n"
-            f"{str(e)}"
+        logger.error(
+            "%s AT %s FROM %s — Error:\n%s",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+            str(e),
+            exc_info=True,
         )
         raise HTTPException(status_code=500, detail=str(e))
 
