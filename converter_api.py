@@ -25,6 +25,7 @@ from apis.utils.helpers import (
     extract_db_and_Table_names,
     extract_joins_from_query,
     extract_cte_n_subquery_list,
+    normalize_unicode_spaces,
 )
 
 if t.TYPE_CHECKING:
@@ -45,19 +46,46 @@ if ENABLE_GUARDRAIL.lower() == "true":
     storage_service_client = StorageServiceClient(host=STORAGE_ENGINE_URL, port=STORAGE_ENGINE_PORT)
 
 print("Storage Service Client is created")
+
+
+def escape_unicode(s: str) -> str:
+    """
+    Turn every non-ASCII (including all Unicode spaces) into \\uXXXX,
+    so even “invisible” characters become visible in logs.
+    """
+    return s.encode("unicode_escape").decode("ascii")
+
+
 app = FastAPI()
 
 
 @app.post("/convert-query")
 async def convert_query(
-    query: str = Form(...),
-    query_id: Optional[str] = Form("NO_ID_MENTIONED"),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("e6"),
+        query: str = Form(...),
+        query_id: Optional[str] = Form("NO_ID_MENTIONED"),
+        from_sql: str = Form(...),
+        to_sql: Optional[str] = Form("e6"),
 ):
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
     try:
+        logger.info(
+            "%s AT %s FROM %s — Original:\n%s",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+            escape_unicode(query),
+        )
+
+        query = normalize_unicode_spaces(query)
+        logger.info(
+            "%s AT %s FROM %s — Normalized (escaped):\n%s",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+            escape_unicode(query),
+        )
+
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         tree2 = quote_identifiers(tree, dialect=to_sql)
@@ -67,28 +95,21 @@ async def convert_query(
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
         logger.info(
-            f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
-            "-----------------------\n"
-            "--- Original query ---\n"
-            "-----------------------\n"
-            f"{query}"
-            "-----------------------\n"
-            "--- Transpiled query ---\n"
-            "-----------------------\n"
-            f"{double_quotes_added_query}"
+            "%s AT %s FROM %s — Transpiled Query:\n%s",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+            double_quotes_added_query,
         )
         return {"converted_query": double_quotes_added_query}
     except Exception as e:
-        logger.info(
-            f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
-            "-----------------------\n"
-            "--- Original query ---\n"
-            "-----------------------\n"
-            f"{query}"
-            "-----------------------\n"
-            "-------- Error --------\n"
-            "-----------------------\n"
-            f"{str(e)}"
+        logger.error(
+            "%s AT %s FROM %s — Error:\n%s",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+            str(e),
+            exc_info=True,
         )
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -100,9 +121,9 @@ def health_check():
 
 @app.post("/guardrail")
 async def gaurd(
-    query: str = Form(...),
-    schema: str = Form(...),
-    catalog: str = Form(...),
+        query: str = Form(...),
+        schema: str = Form(...),
+        catalog: str = Form(...),
 ):
     try:
         if storage_service_client is not None:
@@ -122,7 +143,7 @@ async def gaurd(
                 return {"action": "allow", "violations": []}
         else:
             detail = (
-                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
@@ -132,11 +153,11 @@ async def gaurd(
 
 @app.post("/transpile-guardrail")
 async def Transgaurd(
-    query: str = Form(...),
-    schema: str = Form(...),
-    catalog: str = Form(...),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("e6"),
+        query: str = Form(...),
+        schema: str = Form(...),
+        catalog: str = Form(...),
+        from_sql: str = Form(...),
+        to_sql: Optional[str] = Form("e6"),
 ):
     to_sql = to_sql.lower()
     try:
@@ -172,7 +193,7 @@ async def Transgaurd(
                 return {"action": "allow", "violations": []}
         else:
             detail = (
-                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
@@ -182,10 +203,10 @@ async def Transgaurd(
 
 @app.post("/statistics")
 async def stats_api(
-    query: str = Form(...),
-    query_id: Optional[str] = Form("NO_ID_MENTIONED"),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("e6"),
+        query: str = Form(...),
+        query_id: Optional[str] = Form("NO_ID_MENTIONED"),
+        from_sql: str = Form(...),
+        to_sql: Optional[str] = Form("e6"),
 ):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
@@ -233,7 +254,7 @@ async def stats_api(
         # Regex patterns
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
         keyword_pattern = (
-            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
+                r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
         if not query.strip():
@@ -390,11 +411,11 @@ async def stats_api(
 
 @app.post("/guardstats")
 async def guardstats(
-    query: str = Form(...),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("e6"),
-    schema: str = Form(...),
-    catalog: str = Form(...),
+        query: str = Form(...),
+        from_sql: str = Form(...),
+        to_sql: Optional[str] = Form("e6"),
+        schema: str = Form(...),
+        catalog: str = Form(...),
 ):
     to_sql = to_sql.lower()
     try:
@@ -437,7 +458,7 @@ async def guardstats(
         # Regex patterns
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
         keyword_pattern = (
-            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
+                r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
         item = "condenast"
@@ -537,7 +558,7 @@ async def guardstats(
                 }
         else:
             detail = (
-                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
