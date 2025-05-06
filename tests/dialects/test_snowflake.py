@@ -248,7 +248,7 @@ class TestSnowflake(Validator):
         )
         self.validate_identity(
             "SELECT {fn CEILING(5.3)}",
-            "SELECT CEIL(5.3)",
+            "SELECT CEILING(5.3)",
         )
         self.validate_identity(
             "CAST(x AS BYTEINT)",
@@ -576,7 +576,7 @@ class TestSnowflake(Validator):
             "TO_CHAR(x, y)",
             read={
                 "": "TO_CHAR(x, y)",
-                "snowflake": "TO_VARCHAR(x, y)",
+                "snowflake": "TO_CHAR(x, y)",
             },
             write={
                 "": "CAST(x AS TEXT)",

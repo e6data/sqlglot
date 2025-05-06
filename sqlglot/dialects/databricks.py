@@ -69,6 +69,7 @@ def _trim_sql(self: Databricks.Generator, expression: exp.Trim) -> str:
 class Databricks(Spark):
     SAFE_DIVISION = False
     COPY_PARAMS_ARE_CSV = False
+    PRESERVE_ORIGINAL_NAMES = True
 
     class JSONPathTokenizer(jsonpath.JSONPathTokenizer):
         IDENTIFIERS = ["`", '"']

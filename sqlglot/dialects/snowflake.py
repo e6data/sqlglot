@@ -350,7 +350,7 @@ class Snowflake(Dialect):
     TABLESAMPLE_SIZE_IS_PERCENT = True
     COPY_PARAMS_ARE_CSV = False
     ARRAY_AGG_INCLUDES_NULLS = None
-    PRESERVE_ORIGINAL_NAMES = False
+    PRESERVE_ORIGINAL_NAMES = True
 
     TIME_MAPPING = {
         "YYYY": "%Y",
@@ -1047,6 +1047,8 @@ class Snowflake(Dialect):
             exp.BitwiseRightShift: rename_func("BITSHIFTRIGHT"),
             exp.Create: transforms.preprocess([_flatten_structured_types_unless_iceberg]),
             exp.Coalesce: coalesce_sql,
+            exp.Contains: rename_func("CONTAINS"),
+            exp.CurrentTimestamp: rename_func("CURRENT_TIMESTAMP"),
             exp.DateAdd: date_delta_sql("DATEADD"),
             exp.DateDiff: date_delta_sql("DATEDIFF"),
             exp.DatetimeAdd: date_delta_sql("TIMESTAMPADD"),
@@ -1099,9 +1101,11 @@ class Snowflake(Dialect):
                 [transforms.add_within_group_for_percentiles]
             ),
             exp.Pivot: transforms.preprocess([_unqualify_pivot_columns]),
+            exp.Pow: rename_func("POWER"),
             exp.RegexpExtract: _regexpextract_sql,
             exp.RegexpExtractAll: _regexpextract_sql,
             exp.RegexpILike: _regexpilike_sql,
+            exp.RegexpLike: rename_func("REGEXP_LIKE"),
             exp.Rand: rename_func("RANDOM"),
             exp.Select: transforms.preprocess(
                 [
@@ -1112,6 +1116,7 @@ class Snowflake(Dialect):
                 ]
             ),
             exp.SHA: rename_func("SHA1"),
+            exp.SHA2: rename_func("SHA2"),
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.StarMap: rename_func("OBJECT_CONSTRUCT"),
             exp.StartsWith: rename_func("STARTSWITH"),
@@ -1121,6 +1126,7 @@ class Snowflake(Dialect):
             exp.StrToDate: lambda self, e: self.func("DATE", e.this, self.format_time(e)),
             exp.Stuff: rename_func("INSERT"),
             exp.TimeAdd: date_delta_sql("TIMEADD"),
+            exp.TimeFromParts: rename_func("TIME_FROM_PARTS"),
             exp.Timestamp: no_timestamp_sql,
             exp.TimestampAdd: date_delta_sql("TIMESTAMPADD"),
             exp.TimestampDiff: lambda self, e: self.func(
