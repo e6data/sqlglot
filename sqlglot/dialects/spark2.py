@@ -270,7 +270,9 @@ class Spark2(Hive):
                 if len(args) == 1
                 else build_formatted_time(exp.StrToTime, "spark")(args)
             ),
-            "TO_UNIX_TIMESTAMP": exp.StrToUnix.from_arg_list,
+            "TO_UNIX_TIMESTAMP": lambda args: build_formatted_time(exp.StrToUnix, "spark", False)(
+                args
+            ),
             "TO_UTC_TIMESTAMP": lambda args, dialect: exp.FromTimeZone(
                 this=exp.cast(
                     seq_get(args, 0) or exp.Var(this=""),

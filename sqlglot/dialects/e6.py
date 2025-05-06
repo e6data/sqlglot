@@ -436,7 +436,7 @@ class E6(Dialect):
         "%s": "%s",
         "%f": "%f",
         "%b": "%b",
-        "%M": "%M",
+        "%M": "%i",
         "%a": "%a",
         "%W": "%W",
         "%j": "%j",
@@ -1952,13 +1952,19 @@ class E6(Dialect):
         def to_unix_timestamp_sql(
             self: E6.Generator, expression: exp.TimeToUnix | exp.StrToUnix
         ) -> str:
+            format_str = None
             time_expr = expression.this
             format_expr = expression.args.get("format")
 
-            # Generate final function with or without format argument
             if format_expr:
+                format_str = format_expr.this
+                for key, value in E6().TIME_MAPPING_FOR_PARSE_FUNCTIONS.items():
+                    format_str = format_str.replace(key, value)
+
+            # Generate final function with or without format argument
+            if format_str:
                 unix_timestamp_expr = self.func(
-                    "TO_UNIX_TIMESTAMP", self.sql(time_expr), self.sql(format_expr)
+                    "TO_UNIX_TIMESTAMP", self.func("PARSE_DATETIME", self.sql(format_str), self.sql(time_expr))
                 )
             else:
                 unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))

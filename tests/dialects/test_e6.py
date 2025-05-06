@@ -412,27 +412,6 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(A)/1000",
-            read={"databricks": "SELECT UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
-            write={
-                "databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
-                "snowflake": "SELECT EXTRACT(epoch_second FROM A) / 1000",
-            },
-        )
-
-        self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(CURRENT_TIMESTAMP)/1000",
-            read={"databricks": "SELECT UNIX_TIMESTAMP()"},
-        )
-
-        self.validate_all(
-            "SELECT * FROM events WHERE event_time >= TO_UNIX_TIMESTAMP('2023-01-01', '%Y-%m-%d')/1000 AND event_time < TO_UNIX_TIMESTAMP('2023-02-01', '%Y-%m-%d')/1000",
-            read={
-                "databricks": "SELECT * FROM events WHERE event_time >= unix_timestamp('2023-01-01', 'yyyy-MM-dd') AND event_time < unix_timestamp('2023-02-01', 'yyyy-MM-dd')"
-            },
-        )
-
-        self.validate_all(
             "SELECT CONVERT_TIMEZONE('Asia/Seoul', 'UTC', CAST('2016-08-31' AS TIMESTAMP))",
             read={"databricks": "SELECT to_utc_timestamp('2016-08-31', 'Asia/Seoul')"},
         )
@@ -1492,17 +1471,6 @@ class TestE6(Validator):
             read={"databricks": "SELECT from_unixtime(0, 'yyyy-MM-dd HH:mm:ss')"},
         )
 
-        # This transpilation is incorrect as format 'yyyy-MM-dd' is not supported
-        self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP('2016-04-08', 'yyyy-MM-dd')/1000",
-            read={"databricks": "SELECT to_unix_timestamp('2016-04-08', 'yyyy-MM-dd')"},
-        )
-
-        self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP('2016-04-08')/1000",
-            read={"databricks": "SELECT to_unix_timestamp('2016-04-08')"},
-        )
-
         self.validate_all(
             "SELECT DATE_TRUNC('YEAR', '2015-03-05T09:32:05.359')",
             read={"databricks": "SELECT date_trunc('YEAR', '2015-03-05T09:32:05.359')"},
@@ -1764,6 +1732,45 @@ class TestE6(Validator):
                 "databricks": "FROM_UNIXTIME(A, 'yyyy')",
             },
         )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2016-04-08'))/1000",
+            read={"databricks": "SELECT unix_timestamp('2016-04-08', 'yyyy-MM-dd')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP('2016-04-08')/1000",
+            read={"databricks": "SELECT to_unix_timestamp('2016-04-08')"},
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(A)/1000",
+            read={"databricks": "SELECT UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
+            write={
+                "databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
+                "snowflake": "SELECT EXTRACT(epoch_second FROM A) / 1000",
+            },
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(CURRENT_TIMESTAMP)/1000",
+            read={"databricks": "SELECT UNIX_TIMESTAMP()"},
+        )
+
+        self.validate_all(
+            "SELECT * FROM events WHERE event_time >= TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-01-01'))/1000 AND event_time < TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-02-01'))/1000",
+            read={
+                "databricks": "SELECT * FROM events WHERE event_time >= unix_timestamp('2023-01-01', 'yyyy-MM-dd') AND event_time < unix_timestamp('2023-02-01', 'yyyy-MM-dd')"
+            },
+        )
+
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME(%Y-%m-%d %h:%i:%S, '2016-04-08 12:10:15'))/1000",
+            read={
+                "databricks": "SELECT to_unix_timestamp('2016-04-08 12:10:15', 'yyyy-LL-dd hh:mm:ss')"
+            }
+        )
+
 
     def test_array_agg(self):
         self.validate_all(
