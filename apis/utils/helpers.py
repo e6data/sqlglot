@@ -499,7 +499,7 @@ def normalize_unicode_spaces(sql: str) -> str:
                 out_chars.append(ch)
             else:
                 # Normalize replacement-char
-                if ch == "\ufffd":
+                if ch in ("\ufffd", "\uFFFD"):
                     out_chars.append(" ")
                 else:
                     cat = unicodedata.category(ch)

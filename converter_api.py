@@ -68,6 +68,16 @@ async def convert_query(
 ):
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
+
+    if not query or not query.strip():
+        logger.info(
+            "%s AT %s FROM %s — Empty query received, returning empty result",
+            query_id,
+            timestamp,
+            from_sql.upper(),
+        )
+        return {"converted_query": ""}
+
     try:
         logger.info(
             "%s AT %s FROM %s — Original:\n%s",
