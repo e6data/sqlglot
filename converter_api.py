@@ -61,10 +61,10 @@ app = FastAPI()
 
 @app.post("/convert-query")
 async def convert_query(
-        query: str = Form(...),
-        query_id: Optional[str] = Form("NO_ID_MENTIONED"),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("e6"),
+    query: str = Form(...),
+    query_id: Optional[str] = Form("NO_ID_MENTIONED"),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("e6"),
 ):
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
@@ -121,9 +121,9 @@ def health_check():
 
 @app.post("/guardrail")
 async def gaurd(
-        query: str = Form(...),
-        schema: str = Form(...),
-        catalog: str = Form(...),
+    query: str = Form(...),
+    schema: str = Form(...),
+    catalog: str = Form(...),
 ):
     try:
         if storage_service_client is not None:
@@ -143,7 +143,7 @@ async def gaurd(
                 return {"action": "allow", "violations": []}
         else:
             detail = (
-                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
@@ -153,11 +153,11 @@ async def gaurd(
 
 @app.post("/transpile-guardrail")
 async def Transgaurd(
-        query: str = Form(...),
-        schema: str = Form(...),
-        catalog: str = Form(...),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("e6"),
+    query: str = Form(...),
+    schema: str = Form(...),
+    catalog: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("e6"),
 ):
     to_sql = to_sql.lower()
     try:
@@ -193,7 +193,7 @@ async def Transgaurd(
                 return {"action": "allow", "violations": []}
         else:
             detail = (
-                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 
@@ -203,10 +203,10 @@ async def Transgaurd(
 
 @app.post("/statistics")
 async def stats_api(
-        query: str = Form(...),
-        query_id: Optional[str] = Form("NO_ID_MENTIONED"),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("e6"),
+    query: str = Form(...),
+    query_id: Optional[str] = Form("NO_ID_MENTIONED"),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("e6"),
 ):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
@@ -254,7 +254,7 @@ async def stats_api(
         # Regex patterns
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
         keyword_pattern = (
-                r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
+            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
         if not query.strip():
@@ -411,11 +411,11 @@ async def stats_api(
 
 @app.post("/guardstats")
 async def guardstats(
-        query: str = Form(...),
-        from_sql: str = Form(...),
-        to_sql: Optional[str] = Form("e6"),
-        schema: str = Form(...),
-        catalog: str = Form(...),
+    query: str = Form(...),
+    from_sql: str = Form(...),
+    to_sql: Optional[str] = Form("e6"),
+    schema: str = Form(...),
+    catalog: str = Form(...),
 ):
     to_sql = to_sql.lower()
     try:
@@ -458,7 +458,7 @@ async def guardstats(
         # Regex patterns
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
         keyword_pattern = (
-                r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
+            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
         item = "condenast"
@@ -558,7 +558,7 @@ async def guardstats(
                 }
         else:
             detail = (
-                    "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
+                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
             raise HTTPException(status_code=500, detail=detail)
 

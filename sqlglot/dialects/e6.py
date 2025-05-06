@@ -1964,7 +1964,8 @@ class E6(Dialect):
             # Generate final function with or without format argument
             if format_str:
                 unix_timestamp_expr = self.func(
-                    "TO_UNIX_TIMESTAMP", self.func("PARSE_DATETIME", self.sql(format_str), self.sql(time_expr))
+                    "TO_UNIX_TIMESTAMP",
+                    self.func("PARSE_DATETIME", self.sql(format_str), self.sql(time_expr)),
                 )
             else:
                 unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))

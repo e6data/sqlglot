@@ -122,7 +122,7 @@ def process_query(query: str) -> str:
 
 
 def extract_functions_from_query(
-        query: str, function_pattern: str, keyword_pattern: str, exclusion_list: list
+    query: str, function_pattern: str, keyword_pattern: str, exclusion_list: list
 ) -> set:
     """
     Extract function names from the sanitized query.
@@ -155,12 +155,12 @@ def extract_functions_from_query(
 
 
 def unsupported_functionality_identifiers(
-        expression, unsupported_list: t.List, supported_list: t.List
+    expression, unsupported_list: t.List, supported_list: t.List
 ):
     for sub in expression.find_all(exp.Sub):
         if (
-                isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
-                and sub.expression.is_int
+            isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
+            and sub.expression.is_int
         ):
             unsupported_list.append(sub.sql())
 
@@ -499,7 +499,7 @@ def normalize_unicode_spaces(sql: str) -> str:
                 out_chars.append(ch)
             else:
                 # Normalize replacement-char
-                if ch == "\uFFFD":
+                if ch == "\ufffd":
                     out_chars.append(" ")
                 else:
                     cat = unicodedata.category(ch)
