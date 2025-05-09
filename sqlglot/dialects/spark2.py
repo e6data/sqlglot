@@ -234,6 +234,7 @@ class Spark2(Hive):
             "AGGREGATE": exp.Reduce.from_arg_list,
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
             "BOOLEAN": _build_as_cast("boolean"),
+            "CURDATE": exp.CurrentDate.from_arg_list,
             "DATE": _build_as_cast("date"),
             "DATE_TRUNC": lambda args: exp.TimestampTrunc(
                 this=seq_get(args, 1), unit=exp.var(seq_get(args, 0))
@@ -244,6 +245,7 @@ class Spark2(Hive):
             "DAYOFMONTH": lambda args: exp.DayOfMonth(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "DAYOFWEEK": lambda args: exp.DayOfWeek(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "DAYOFYEAR": lambda args: exp.DayOfYear(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
+            "DAY_OF_YEAR": lambda args: exp.DayOfYear(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "DOUBLE": _build_as_cast("double"),
             "FLOAT": _build_as_cast("float"),
             "FROM_UTC_TIMESTAMP": lambda args, dialect: exp.AtTimeZone(

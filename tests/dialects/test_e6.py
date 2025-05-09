@@ -124,6 +124,27 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT EXTRACT(DOY FROM CAST('2024-08-09' AS TIMESTAMP))",
+            read={
+                "databricks": "SELECT dayofyear('2024-08-09')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT EXTRACT(DOY FROM CAST('2024-08-09' AS TIMESTAMP))",
+            read={
+                "databricks": "SELECT DAY_OF_YEAR('2024-08-09')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT CURRENT_DATE",
+            read={
+                "databricks": "select curdate()",
+            },
+        )
+
+        self.validate_all(
             "SELECT CURRENT_DATE - INTERVAL 2 DAY", read={"databricks": "SELECT CURRENT_DATE - 2"}
         )
 
