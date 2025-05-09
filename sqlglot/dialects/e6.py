@@ -1702,10 +1702,19 @@ class E6(Dialect):
                 return self.func("LAST_DAY", date_expr, unit)
             return self.func("LAST_DAY", date_expr)
 
-        def extract_sql(self: E6.Generator, expression: exp.Extract) -> str:
+        def extract_sql(self: E6.Generator, expression: exp.Extract | exp.DayOfYear) -> str:
             unit = expression.this.name
             unit_mapped = E6.UNIT_PART_MAPPING.get(f"'{unit.lower()}'", unit)
             expression_sql = self.sql(expression, "expression")
+            if isinstance(expression, exp.DayOfYear):
+                unit_mapped = "DOY"
+                date_expr = expression.this
+                if isinstance(
+                    date_expr, (exp.TsOrDsToDate, exp.TsOrDsToTimestamp, exp.TsOrDsToTime)
+                ):
+                    date_expr = exp.Cast(this=date_expr.this, to=exp.DataType(this="TIMESTAMP"))
+                expression_sql = self.sql(date_expr)
+
             extract_str = f"EXTRACT({unit_mapped} FROM {expression_sql})"
             return extract_str
 
@@ -2099,6 +2108,7 @@ class E6(Dialect):
             exp.DayOfMonth: rename_func("DAYS"),
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
+            exp.DayOfYear: extract_sql,
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: explode_sql,
             exp.Extract: extract_sql,
