@@ -187,7 +187,7 @@ def unsupported_functionality_identifiers(
             unsupported_list.append(f"UNSUPPORTED_CAST_TYPE:{cast_to}")
 
     if expression.find(exp.GroupingSets):
-        unsupported_list.append(f"GROUPING SETS")
+        supported_list.append(f"GROUPING SETS")
 
     return supported_list, unsupported_list
 
