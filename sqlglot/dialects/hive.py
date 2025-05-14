@@ -198,6 +198,7 @@ class Hive(Dialect):
     SAFE_DIVISION = True
     ARRAY_AGG_INCLUDES_NULLS = None
     REGEXP_EXTRACT_DEFAULT_GROUP = 1
+    PRESERVE_ORIGINAL_NAMES = True
 
     # https://spark.apache.org/docs/latest/sql-ref-identifier.html#description
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE

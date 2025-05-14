@@ -389,6 +389,8 @@ class E6(Dialect):
     This class defines strategies, mappings, and tokenization rules unique to the E6 dialect.
     """
 
+    PRESERVE_ORIGINAL_NAMES = True
+
     # Strategy to normalize keywords: Here, keywords will be converted to lowercase.
     NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
 
