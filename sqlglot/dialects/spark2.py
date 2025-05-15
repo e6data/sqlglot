@@ -233,6 +233,9 @@ class Spark2(Hive):
             **Hive.Parser.FUNCTIONS,
             "AGGREGATE": exp.Reduce.from_arg_list,
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
+            "BIGINT": lambda args: exp.Cast(
+                this=seq_get(args, 0), to=exp.DataType.build(exp.DataType.Type.BIGINT)
+            ),
             "BOOLEAN": _build_as_cast("boolean"),
             "CURDATE": exp.CurrentDate.from_arg_list,
             "DATE": _build_as_cast("date"),

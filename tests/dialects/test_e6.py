@@ -502,6 +502,13 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SPLIT_PART(attr.RPT_SHORT_DESC, ' ', 1) = CAST(LEFT(dc.div_no, 3) AS BIGINT)",
+            read={
+                "databricks": "SPLIT_PART(attr.RPT_SHORT_DESC, ' ', 1) = BIGINT(LEFT(dc.div_no, 3))"
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
