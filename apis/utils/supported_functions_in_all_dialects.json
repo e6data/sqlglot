@@ -763,7 +763,8 @@
         "WEEKISO",
         "DATE_ADD",
         "POSITION",
-        "OBJECT_CONSTRUCT"
+        "OBJECT_CONSTRUCT",
+        "DATE_SUB"
     ],
     "databricks": [
          "ABS",

@@ -298,11 +298,7 @@ class Hive(Dialect):
                     seq_get(args, 1),
                 ]
             ),
-            "DATE_SUB": lambda args: exp.TsOrDsAdd(
-                this=seq_get(args, 0),
-                expression=exp.Mul(this=seq_get(args, 1), expression=exp.Literal.number(-1)),
-                unit=exp.Literal.string("DAY"),
-            ),
+            "DATE_SUB": exp.DateSub.from_arg_list,
             "DATEDIFF": lambda args: exp.DateDiff(
                 this=exp.TsOrDsToDate(this=seq_get(args, 0)),
                 expression=exp.TsOrDsToDate(this=seq_get(args, 1)),
