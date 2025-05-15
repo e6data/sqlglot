@@ -1037,6 +1037,8 @@ class Snowflake(Dialect):
             exp.ArrayFilter: rename_func("FILTER"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
             exp.ArraySlice: rename_func("ARRAY_SLICE"),
+            exp.ArrayToString: rename_func("ARRAY_TO_STRING"),
+            exp.ArrayUniqueAgg: rename_func("ARRAY_UNIQUE_AGG"),
             exp.AtTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), e.this
             ),

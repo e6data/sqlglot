@@ -545,6 +545,7 @@ class Hive(Dialect):
             ),
             exp.JSONFormat: _json_format_sql,
             exp.Left: left_to_substring_sql,
+            exp.Ln: rename_func("LN"),
             exp.Map: var_map_sql,
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("UNHEX", self.func("MD5", e.this)),
@@ -561,8 +562,10 @@ class Hive(Dialect):
                     move_schema_columns_to_partitioned_by,
                 ]
             ),
+            exp.Pow: rename_func("POWER"),
             exp.Quantile: rename_func("PERCENTILE"),
             exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
+            exp.Reduce: rename_func("REDUCE"),
             exp.RegexpExtract: regexp_extract_sql,
             exp.RegexpExtractAll: regexp_extract_sql,
             exp.RegexpReplace: regexp_replace_sql,
