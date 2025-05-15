@@ -389,6 +389,8 @@ class E6(Dialect):
     This class defines strategies, mappings, and tokenization rules unique to the E6 dialect.
     """
 
+    PRESERVE_ORIGINAL_NAMES = True
+
     # Strategy to normalize keywords: Here, keywords will be converted to lowercase.
     NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
 
@@ -1974,7 +1976,11 @@ class E6(Dialect):
             if format_str:
                 unix_timestamp_expr = self.func(
                     "TO_UNIX_TIMESTAMP",
-                    self.func("PARSE_DATETIME", self.sql(format_str), self.sql(time_expr)),
+                    self.func(
+                        "PARSE_DATETIME",
+                        add_single_quotes(self.sql(format_str)),
+                        self.sql(time_expr),
+                    ),
                 )
             else:
                 unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))
@@ -2001,7 +2007,7 @@ class E6(Dialect):
             op_sql = self.seg(f"LATERAL VIEW{' OUTER' if expression.args.get('outer') else ''}")
 
             if table and columns:
-                return f"{op_sql}{self.sep()}{this} AS {table}({columns})"
+                return f"{op_sql}{self.sep()}{this} {table} AS {columns}"
             elif table:
                 return f"{op_sql}{self.sep()}{this} AS {table}"
             else:

@@ -198,6 +198,7 @@ class Hive(Dialect):
     SAFE_DIVISION = True
     ARRAY_AGG_INCLUDES_NULLS = None
     REGEXP_EXTRACT_DEFAULT_GROUP = 1
+    PRESERVE_ORIGINAL_NAMES = True
 
     # https://spark.apache.org/docs/latest/sql-ref-identifier.html#description
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
@@ -209,11 +210,11 @@ class Hive(Dialect):
         "yyyy": "%Y",
         "YY": "%y",
         "yy": "%y",
+        "LL": "%m",
         "MMMM": "%B",
         "MMM": "%b",
         "MM": "%m",
         "M": "%-m",
-        "LL": "%m",
         "dd": "%d",
         "d": "%-d",
         "HH": "%H",
@@ -516,6 +517,7 @@ class Hive(Dialect):
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ArgMax: arg_max_or_min_no_count("MAX_BY"),
             exp.ArgMin: arg_max_or_min_no_count("MIN_BY"),
+            exp.ArrayFilter: rename_func("FILTER"),
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayToString: lambda self, e: self.func("CONCAT_WS", e.expression, e.this),
             exp.ArraySort: _array_sort_sql,
@@ -543,6 +545,7 @@ class Hive(Dialect):
             ),
             exp.JSONFormat: _json_format_sql,
             exp.Left: left_to_substring_sql,
+            exp.Ln: rename_func("LN"),
             exp.Map: var_map_sql,
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("UNHEX", self.func("MD5", e.this)),
@@ -559,8 +562,10 @@ class Hive(Dialect):
                     move_schema_columns_to_partitioned_by,
                 ]
             ),
+            exp.Pow: rename_func("POWER"),
             exp.Quantile: rename_func("PERCENTILE"),
             exp.ApproxQuantile: rename_func("PERCENTILE_APPROX"),
+            exp.Reduce: rename_func("REDUCE"),
             exp.RegexpExtract: regexp_extract_sql,
             exp.RegexpExtractAll: regexp_extract_sql,
             exp.RegexpReplace: regexp_replace_sql,

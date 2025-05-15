@@ -1298,7 +1298,7 @@ class TestE6(Validator):
 
         self.validate_all("SELECT REPEAT('a', 4)", read={"databricks": "select repeat('a', 4)"})
 
-        self.validate_all("SELECT UNICODE('234')", read={"databricks": "SELECT ascii('234')"})
+        self.validate_all("SELECT ASCII('234')", read={"databricks": "SELECT ascii('234')"})
 
         self.validate_all(
             "SELECT ENDSWITH('SparkSQL', 'sql')",
@@ -1786,7 +1786,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME(%Y-%m-%d %h:%i:%S, '2016-04-08 12:10:15'))/1000",
+            "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d %h:%i:%S', '2016-04-08 12:10:15'))/1000",
             read={
                 "databricks": "SELECT to_unix_timestamp('2016-04-08 12:10:15', 'yyyy-LL-dd hh:mm:ss')"
             },
