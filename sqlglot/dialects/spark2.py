@@ -381,6 +381,7 @@ class Spark2(Hive):
                     transforms.any_to_exists,
                 ]
             ),
+            exp.SHA2: rename_func("SHA2"),
             exp.StrToUnix: rename_func("TO_UNIX_TIMESTAMP"),
             exp.ArraySlice: lambda self, e: self.func(
                 "SLICE",
