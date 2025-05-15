@@ -2003,7 +2003,7 @@ class E6(Dialect):
             op_sql = self.seg(f"LATERAL VIEW{' OUTER' if expression.args.get('outer') else ''}")
 
             if table and columns:
-                return f"{op_sql}{self.sep()}{this} AS {table}({columns})"
+                return f"{op_sql}{self.sep()}{this} {table} AS {columns}"
             elif table:
                 return f"{op_sql}{self.sep()}{this} AS {table}"
             else:
