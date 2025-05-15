@@ -74,6 +74,11 @@ class TestE6(Validator):
             "SELECT LATERAL VIEW EXPLODE(a)", read={"databricks": "SELECT LATERAL VIEW EXPLODE(a)"}
         )
 
+        self.validate_all(
+            "SELECT LATERAL VIEW EXPLODE(a) t2 AS date_column",
+            read={"databricks": "SELECT LATERAL VIEW EXPLODE(a) t2 AS date_column"},
+        )
+
         self.validate_identity("SELECT a FROM tab WHERE a != 5")
 
         self.validate_all("SELECT DAYS('2024-11-09')", read={"trino": "SELECT DAYS('2024-11-09')"})
@@ -494,6 +499,13 @@ class TestE6(Validator):
             "SELECT TIMESTAMP_DIFF(CAST('1900-03-28' AS DATE), CAST('2021-01-01' AS DATE), 'YEAR')",
             read={
                 "databricks": "SELECT timestampdiff(SQL_TSI_YEAR, DATE'2021-01-01', DATE'1900-03-28')"
+            },
+        )
+
+        self.validate_all(
+            "SPLIT_PART(attr.RPT_SHORT_DESC, ' ', 1) = CAST(LEFT(dc.div_no, 3) AS BIGINT)",
+            read={
+                "databricks": "SPLIT_PART(attr.RPT_SHORT_DESC, ' ', 1) = BIGINT(LEFT(dc.div_no, 3))"
             },
         )
 
