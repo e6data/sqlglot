@@ -1602,6 +1602,11 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT DATE_SUB('2016-07-30', 1)",
+            read={"databricks": "SELECT date_sub('2016-07-30', 1)"},
+        )
+
+        self.validate_all(
             "SELECT FORMAT_TIMESTAMP(CAST('2024-08-26 22:38:11' AS TIMESTAMP), 'm-d-y H')",
             read={
                 "databricks": "select date_format(cast('2024-08-26 22:38:11' as timestamp), '%m-%d-%Y %H')"

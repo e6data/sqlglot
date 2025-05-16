@@ -2108,6 +2108,7 @@ class E6(Dialect):
                 e.expression,
                 e.this,
             ),
+            exp.DateSub: rename_func("DATE_SUB"),
             exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.Datetime: lambda self, e: self.func("DATETIME", e.this, e.expression),
             exp.Day: rename_func("DAYS"),

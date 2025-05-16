@@ -8,6 +8,7 @@ from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import exp, parse_one
 import typing as t
 from sqlglot.dialects.e6 import E6
+from curses.ascii import isascii
 
 FUNCTIONS_FILE = "./apis/utils/supported_functions_in_all_dialects.json"
 
@@ -499,7 +500,7 @@ def normalize_unicode_spaces(sql: str) -> str:
                 out_chars.append(ch)
             else:
                 # Normalize replacement-char
-                if ch is "\ufffd":
+                if not isascii(ch):
                     out_chars.append(" ")
                 else:
                     cat = unicodedata.category(ch)
