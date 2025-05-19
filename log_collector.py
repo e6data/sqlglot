@@ -14,6 +14,8 @@ def setup_logger():
     root_logger = logging.getLogger()
     if not any(isinstance(h, ListLogHandler) for h in root_logger.handlers):
         handler = ListLogHandler()
-        handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s - TRANSPILER - %(levelname)s - %(message)s")
+        )
         root_logger.addHandler(handler)
         root_logger.setLevel(logging.INFO)
