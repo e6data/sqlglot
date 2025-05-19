@@ -764,6 +764,7 @@
         "DATE_ADD",
         "POSITION",
         "OBJECT_CONSTRUCT",
+        "DATE_SUB",
         "GROUPING SETS"
     ],
     "databricks": [
