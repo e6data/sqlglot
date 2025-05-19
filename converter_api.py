@@ -7,6 +7,7 @@ import os
 import sqlglot
 import logging
 from datetime import datetime
+from log_collector import setup_logger, log_records
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from guardrail.main import StorageServiceClient
@@ -31,7 +32,7 @@ from apis.utils.helpers import (
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
-logger = logging.getLogger("uvicorn.error")
+setup_logger()
 
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
@@ -39,13 +40,17 @@ STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
 
 storage_service_client = None
 
+app = FastAPI()
+
+logger = logging.getLogger(__name__)
+
 if ENABLE_GUARDRAIL.lower() == "true":
-    print("Storage Engine URL: ", STORAGE_ENGINE_URL)
-    print("Storage Engine Port: ", STORAGE_ENGINE_PORT)
+    logger.info("Storage Engine URL: ", STORAGE_ENGINE_URL)
+    logger.info("Storage Engine Port: ", STORAGE_ENGINE_PORT)
 
     storage_service_client = StorageServiceClient(host=STORAGE_ENGINE_URL, port=STORAGE_ENGINE_PORT)
 
-print("Storage Service Client is created")
+logger.info("Storage Service Client is created")
 
 
 def escape_unicode(s: str) -> str:
@@ -54,9 +59,6 @@ def escape_unicode(s: str) -> str:
     so even “invisible” characters become visible in logs.
     """
     return s.encode("unicode_escape").decode("ascii")
-
-
-app = FastAPI()
 
 
 @app.post("/convert-query")
@@ -143,7 +145,7 @@ async def gaurd(
 
             # tables = client.get_table_names(catalog_name="hive", db_name="tpcds_1000")
             table_map = get_table_infos(tables, storage_service_client, catalog, schema)
-            print("table info is ", table_map)
+            logger.info("table info is ", table_map)
 
             violations_found = validate_queries(queries, table_map)
 
@@ -155,9 +157,11 @@ async def gaurd(
             detail = (
                 "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
             )
+            logger.error(detail)
             raise HTTPException(status_code=500, detail=detail)
 
     except Exception as e:
+        logger.error(f"Error in guardrail API: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -223,6 +227,9 @@ async def stats_api(
     """
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
+
+    logger.info(f"{query_id} AT start time: {timestamp} FROM {from_sql.upper()}")
+
     try:
         supported_functions_in_e6 = load_supported_functions(to_sql)
 
@@ -268,6 +275,7 @@ async def stats_api(
         )
 
         if not query.strip():
+            logger.info("Query is empty or only contains comments!")
             return {
                 "supported_functions": [],
                 "unsupported_functions": [],
@@ -276,6 +284,7 @@ async def stats_api(
                 "unsupported_functions_after_transpilation": [],
                 "executable": "NO",
                 "error": True,
+                "log_records": log_records,
             }
 
         item = "condenast"
@@ -322,6 +331,8 @@ async def stats_api(
 
             double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
+            logger.info("Got the converted query!!!!")
+
             all_functions_converted_query = extract_functions_from_query(
                 double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
             )
@@ -347,7 +358,7 @@ async def stats_api(
                 executable = "NO"
 
             logger.info(
-                f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+                f"{query_id} executed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} seconds FROM {from_sql.upper()}\n"
                 "-----------------------\n"
                 "--- Original query ---\n"
                 "-----------------------\n"
@@ -360,7 +371,7 @@ async def stats_api(
 
         except Exception as e:
             logger.info(
-                f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+                f"{query_id} executed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} seconds FROM {from_sql.upper()}\n"
                 "-----------------------\n"
                 "--- Original query ---\n"
                 "-----------------------\n"
@@ -371,7 +382,6 @@ async def stats_api(
                 f"{str(e)}"
             )
             error_message = f"{str(e)}"
-            print(error_message)
             error_flag = True
             double_quotes_added_query = error_message
             tables_list = []
@@ -391,11 +401,12 @@ async def stats_api(
             "joins_list": joins_list,
             "cte_values_subquery_list": cte_values_subquery_list,
             "error": error_flag,
+            "log_records": log_records,
         }
 
     except Exception as e:
-        logger.info(
-            f"{query_id} AT {timestamp} FROM {from_sql.upper()}\n"
+        logger.error(
+            f"{query_id} occurred at time {datetime.now().isoformat()} with processing time {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} FROM {from_sql.upper()}\n"
             "-----------------------\n"
             "--- Original query ---\n"
             "-----------------------\n"
@@ -416,6 +427,7 @@ async def stats_api(
             "joins_list": [],
             "cte_values_subquery_list": [],
             "error": True,
+            "log_records": log_records,
         }
 
 
@@ -481,7 +493,7 @@ async def guardstats(
         supported, unsupported = categorize_functions(
             all_functions, supported_functions_in_e6, functions_as_keywords
         )
-        print(f"supported: {supported}\n\nunsupported: {unsupported}")
+        logger.info(f"supported: {supported}\n\nunsupported: {unsupported}")
 
         original_ast = parse_one(query, read=from_sql)
         tables_list = extract_db_and_Table_names(original_ast)
@@ -530,7 +542,7 @@ async def guardstats(
 
             # tables = client.get_table_names(catalog_name="hive", db_name="tpcds_1000")
             table_map = get_table_infos(tables, storage_service_client, catalog, schema)
-            print("table info is ", table_map)
+            logger.info("table info is ", table_map)
 
             violations_found = validate_queries(queries, table_map)
 
@@ -551,6 +563,7 @@ async def guardstats(
                     "cte_values_subquery_list": cte_values_subquery_list,
                     "action": "deny",
                     "violations": violations_found,
+                    "log_records": log_records,
                 }
             else:
                 return {
@@ -565,6 +578,7 @@ async def guardstats(
                     "cte_values_subquery_list": cte_values_subquery_list,
                     "action": "allow",
                     "violations": [],
+                    "log_records": log_records,
                 }
         else:
             detail = (
