@@ -1,5 +1,6 @@
 import re
 import json
+import logging
 import os
 import unicodedata
 
@@ -10,6 +11,7 @@ import typing as t
 from sqlglot.dialects.e6 import E6
 
 FUNCTIONS_FILE = "./apis/utils/supported_functions_in_all_dialects.json"
+logger = logging.getLogger(__name__)
 
 
 def transpile_query(query: str, from_sql: str, to_sql: str) -> str:
@@ -39,12 +41,16 @@ def replace_struct_in_query(query: str) -> str:
     Replace STRUCT(STRUCT()) pattern in SQL queries.
     Example: STRUCT(STRUCT(some_value)) → {{some_value}}
     """
-    pattern = re.compile(r"Struct\s*\(\s*Struct\s*\(\s*([^\(\)]+)\s*\)\s*\)", re.IGNORECASE)
+    try:
+        pattern = re.compile(r"Struct\s*\(\s*Struct\s*\(\s*([^\(\)]+)\s*\)\s*\)", re.IGNORECASE)
 
-    def replace_match(match):
-        return f"{{{{{match.group(1)}}}}}"
+        def replace_match(match):
+            return f"{{{{{match.group(1)}}}}}"
 
-    return pattern.sub(replace_match, query) if query else query
+        return pattern.sub(replace_match, query) if query else query
+    except re.error as e:
+        logging.error(f"Regex Error replacing struct in query: {e}")
+        return query
 
 
 def process_guardrail(query, schema, catalog, storage_service_client):
@@ -127,29 +133,40 @@ def extract_functions_from_query(
     """
     Extract function names from the sanitized query.
     """
+    logger.info("Extracting functions from query")
     sanitized_query = processing_comments(query)
-    sanitized_query = process_query(sanitized_query)
+
+    try:
+        sanitized_query = process_query(sanitized_query)
+    except Exception as e:
+        logger.warning(f"Error while processing the query to handle string literals: {e}")
 
     all_functions = set()
 
     # Match functions requiring parentheses
-    matches = re.findall(function_pattern, sanitized_query.upper())
-    for match in matches:
-        if not re.search(r"\bAS\s+" + re.escape(match), sanitized_query.upper()):
-            if match not in exclusion_list:  # Exclude unwanted tokens
-                all_functions.add(match)
+    try:
+        matches = re.findall(function_pattern, sanitized_query.upper())
+        for match in matches:
+            if not re.search(r"\bAS\s+" + re.escape(match), sanitized_query.upper()):
+                if match not in exclusion_list:  # Exclude unwanted tokens
+                    all_functions.add(match)
+    except re.error as e:
+        logging.warning(f"Regex Error matching functions requiring parenthesis: {e}")
 
     # Match keywords treated as functions
-    keyword_matches = re.findall(keyword_pattern, sanitized_query.upper())
-    for match in keyword_matches:
-        all_functions.add(match)
+    try:
+        keyword_matches = re.findall(keyword_pattern, sanitized_query.upper())
+        for match in keyword_matches:
+            all_functions.add(match)
+    except re.error as e:
+        logging.warning(f"Regex error matching keywords: {e}")
 
     # Handle '||' as a function-like operator
     pipe_matches = find_double_pipe(query)
     if pipe_matches:
         all_functions.add("||")
 
-    print(f"all functions: {all_functions}")
+    logger.info(f"All Functions: {all_functions}")
 
     return all_functions
 
@@ -157,37 +174,41 @@ def extract_functions_from_query(
 def unsupported_functionality_identifiers(
     expression, unsupported_list: t.List, supported_list: t.List
 ):
-    for sub in expression.find_all(exp.Sub):
-        if (
-            isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
-            and sub.expression.is_int
-        ):
-            unsupported_list.append(sub.sql())
+    logger.info("Identifying unsupported functionality.....")
+    try:
+        for sub in expression.find_all(exp.Sub):
+            if (
+                isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
+                and sub.expression.is_int
+            ):
+                unsupported_list.append(sub.sql())
 
-    for cte in expression.find_all(exp.CTE, exp.Subquery):
-        cte_name = cte.alias.upper()
-        if cte_name in unsupported_list:
-            unsupported_list.remove(cte_name)
+        for cte in expression.find_all(exp.CTE, exp.Subquery):
+            cte_name = cte.alias.upper()
+            if cte_name in unsupported_list:
+                unsupported_list.remove(cte_name)
 
-    for filter_expr in expression.find_all(exp.Filter, exp.ArrayFilter):
-        if isinstance(filter_expr, exp.Filter) and unsupported_list.count("FILTER") > 0:
-            unsupported_list.remove("FILTER")
-            supported_list.append("FILTER as projection")
+        for filter_expr in expression.find_all(exp.Filter, exp.ArrayFilter):
+            if isinstance(filter_expr, exp.Filter) and unsupported_list.count("FILTER") > 0:
+                unsupported_list.remove("FILTER")
+                supported_list.append("FILTER as projection")
 
-        elif isinstance(filter_expr, exp.ArrayFilter) and unsupported_list.count("FILTER") > 0:
-            unsupported_list.remove("FILTER")
-            unsupported_list.append("FILTER as filter_array")
+            elif isinstance(filter_expr, exp.ArrayFilter) and unsupported_list.count("FILTER") > 0:
+                unsupported_list.remove("FILTER")
+                unsupported_list.append("FILTER as filter_array")
 
-    for parametrised in expression.find_all(exp.Placeholder):
-        unsupported_list.append(f":{parametrised.this}")
+        for parametrised in expression.find_all(exp.Placeholder):
+            unsupported_list.append(f":{parametrised.this}")
 
-    for casting in expression.find_all(exp.Cast):
-        cast_to = casting.args.get("to").this.name
-        if cast_to not in E6.Parser.SUPPORTED_CAST_TYPES:
-            unsupported_list.append(f"UNSUPPORTED_CAST_TYPE:{cast_to}")
+        for casting in expression.find_all(exp.Cast):
+            cast_to = casting.args.get("to").this.name
+            if cast_to not in E6.Parser.SUPPORTED_CAST_TYPES:
+                unsupported_list.append(f"UNSUPPORTED_CAST_TYPE:{cast_to}")
 
-    if expression.find(exp.GroupingSets):
-        supported_list.append(f"GROUPING SETS")
+        if expression.find(exp.GroupingSets):
+            supported_list.append(f"GROUPING SETS")
+    except Exception as e:
+        logger.warning(f"Unexpected error in unsupported_functionality_identifiers: {e}")
 
     return supported_list, unsupported_list
 
@@ -203,7 +224,12 @@ def processing_comments(query: str) -> str:
         str: The SQL query with single-line comments removed.
     """
     # Remove block comments (multi-line `/* ... */`)
-    query = re.sub(r"/\*.*?\*/", "", query, flags=re.DOTALL)
+    try:
+        query = re.sub(r"/\*.*?\*/", "", query, flags=re.DOTALL)
+    except TypeError as e:
+        logging.error(f"[processing_comments] Invalid input type: {e}")
+    except re.error as e:
+        logging.error(f"[processing_comments] Regex error: {e}")
     processed_lines = []
 
     for line in query.splitlines():
@@ -225,6 +251,7 @@ def categorize_functions(extracted_functions, supported_functions_in_e6, functio
     """
     Categorize functions into supported and unsupported.
     """
+    logger.info("Categorizing extracted functions into supported and unsupported.....")
     supported_functions = set()
     unsupported_functions = set()
 
@@ -251,13 +278,18 @@ def add_comment_to_query(query: str, comment: str) -> str:
     if comment:
         # Regex to find the first SELECT
         select_pattern = r"\bSELECT\b"
-        match = re.search(select_pattern, query, re.IGNORECASE)
+        try:
+            match = re.search(select_pattern, query, re.IGNORECASE)
+            if match:
+                # Insert the comment immediately after the first SELECT
+                insert_position = match.end()  # Get the position after "SELECT"
+                modified_query = query[:insert_position] + f" {comment} " + query[insert_position:]
+                return modified_query
+        except re.error as e:
+            logging.warning(
+                f"Regex Error searching first select while adding comments to query: {e}"
+            )
 
-        if match:
-            # Insert the comment immediately after the first SELECT
-            insert_position = match.end()  # Get the position after "SELECT"
-            modified_query = query[:insert_position] + f" {comment} " + query[insert_position:]
-            return modified_query
         return query
     else:
         return query
@@ -275,21 +307,33 @@ def strip_comment(query: str, item: str) -> tuple:
         tuple: (stripped_query, extracted_comment)
     """
     # Use a regex pattern to find comments like /* item::UUID */
-    comment_pattern = rf"/\*\s*{item}::[a-zA-Z0-9]+\s*\*/"
+    logger.info("Stripping Comments!")
+    try:
+        comment_pattern = rf"/\*\s*{item}::[a-zA-Z0-9]+\s*\*/"
 
-    # Search for the comment in the query
-    match = re.search(comment_pattern, query)
-    if match:
-        extracted_comment = match.group(0)  # Capture the entire comment
-        stripped_query = query.replace(extracted_comment, "").strip()  # Remove it from the query
-        return stripped_query, extracted_comment
-    return query, None
+        # Search for the comment in the query
+        match = re.search(comment_pattern, query)
+        if match:
+            extracted_comment = match.group(0)  # Capture the entire comment
+            stripped_query = query.replace(
+                extracted_comment, ""
+            ).strip()  # Remove it from the query
+            return stripped_query, extracted_comment
+        return query, None
+
+    except re.error as regex_err:
+        logger.error(f"Invalid regex pattern with item='{item}': {regex_err}")
+        return query, None
+    except Exception as e:
+        logger.error(f"Unexpected error during comment extraction: {e}")
+        return query, None
 
 
 def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
     """
     Ensures that any CTE using VALUES directly is modified to SELECT * FROM VALUES(...).
     """
+    logger.info("Ensuring select from values.....")
     for cte in expression.find_all(exp.CTE):
         cte_query = cte.this
         # Check if the CTE contains only a VALUES clause
@@ -306,6 +350,7 @@ def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
 
 
 def extract_udfs(unsupported_list, from_dialect_func_list):
+    logger.info("Extracting UDFs from unsupported functions list.....")
     udf_list = set()
     remaining_unsupported = []
     for unsupported_function in unsupported_list:
@@ -329,7 +374,7 @@ def load_supported_functions(dialect: str):
                       Returns an empty set/list if the dialect is not found.
     """
     if not os.path.exists(FUNCTIONS_FILE):
-        print(f"Warning: {FUNCTIONS_FILE} not found. Returning an empty list/set.")
+        logger.warning(f"Warning: {FUNCTIONS_FILE} not found. Returning an empty list/set.")
         return set()  # Return an empty set for non-existent file.
 
     try:
@@ -341,19 +386,22 @@ def load_supported_functions(dialect: str):
             # If the dialect is present, return a set of functions for O(1) lookup
             return set(json_data[dialect])  # Convert the list to set if required.
         else:
-            print(f"Warning: Dialect '{dialect}' not found in the function mapping.")
+            logger.warning(f"Warning: Dialect '{dialect}' not found in the function mapping.")
             return set()  # Return an empty set if dialect is not found.
 
     except json.JSONDecodeError:
-        print(f"Error: {FUNCTIONS_FILE} contains invalid JSON.")
+        logger.error(
+            f"Error in loading supported functions: {FUNCTIONS_FILE} contains invalid JSON."
+        )
         return set()
 
     except Exception as e:
-        print(f"Unexpected error while loading functions: {e}")
+        logger.error(f"Unexpected error while loading functions: {e}")
         return set()
 
 
 def extract_db_and_Table_names(sql_query_ast):
+    logger.info("Extracting database and table names....")
     tables_list = []
     if sql_query_ast:
         for table in sql_query_ast.find_all(exp.Table):
@@ -382,82 +430,94 @@ def extract_joins_from_query(sql_query_ast):
                 ...
             ]
     """
+    logger.info("Extracting joins from query.....")
+
     join_info_list = []
     joins_list = []
 
-    for select in sql_query_ast.find_all(exp.Select):
-        if not select.args.get("from"):
-            continue
+    try:
+        for select in sql_query_ast.find_all(exp.Select):
+            if not select.args.get("from"):
+                continue
 
-        from_statement = select.args.get("from")
+            from_statement = select.args.get("from")
 
-        if isinstance(from_statement.this, (exp.Subquery, exp.CTE, exp.Values)):
-            alias_columns = ", ".join(from_statement.this.alias_column_names)
-            base_table = (
-                f"{from_statement.this.alias}({alias_columns})"
-                if alias_columns
-                else f"{from_statement.this.alias}"
-            )
+            if isinstance(from_statement.this, (exp.Subquery, exp.CTE, exp.Values)):
+                alias_columns = ", ".join(from_statement.this.alias_column_names)
+                base_table = (
+                    f"{from_statement.this.alias}({alias_columns})"
+                    if alias_columns
+                    else f"{from_statement.this.alias}"
+                )
 
-        else:
-            base_table = from_statement.this
-            base_table = f"{base_table.db}.{base_table.name}" if base_table.db else base_table.name
+            else:
+                base_table = from_statement.this
+                base_table = (
+                    f"{base_table.db}.{base_table.name}" if base_table.db else base_table.name
+                )
 
-        if select.args.get("joins"):
-            joins_list.append([base_table])
-            for join in select.args.get("joins"):
-                if isinstance(join.this, (exp.Subquery, exp.CTE, exp.Values, exp.Lateral)):
-                    alias_columns = ", ".join(join.this.alias_column_names)
-                    join_table = (
-                        f"{join.this.alias}({alias_columns})"
-                        if alias_columns
-                        else f"{join.this.alias}"
-                    )
-
-                else:
-                    join_table = join.this
-                    if isinstance(join_table, exp.Table):
+            if select.args.get("joins"):
+                joins_list.append([base_table])
+                for join in select.args.get("joins"):
+                    if isinstance(join.this, (exp.Subquery, exp.CTE, exp.Values, exp.Lateral)):
+                        alias_columns = ", ".join(join.this.alias_column_names)
                         join_table = (
-                            f"{join_table.db}.{join_table.name}"
-                            if join_table.db
-                            else join_table.name
+                            f"{join.this.alias}({alias_columns})"
+                            if alias_columns
+                            else f"{join.this.alias}"
                         )
-                # join_table = f"{join.this.db}.{join.this.name}" if join.this.db else join.this.name
-                join_side = join.text("side").upper() or ""
-                join_type = join.text("kind").upper()
 
-                if not join_type:
-                    join_type = "OUTER" if join_side else "CROSS"
+                    else:
+                        join_table = join.this
+                        if isinstance(join_table, exp.Table):
+                            join_table = (
+                                f"{join_table.db}.{join_table.name}"
+                                if join_table.db
+                                else join_table.name
+                            )
+                    # join_table = f"{join.this.db}.{join.this.name}" if join.this.db else join.this.name
+                    join_side = join.text("side").upper() or ""
+                    join_type = join.text("kind").upper()
 
-                if not join_side:
-                    joins_list.append([join_table, join_type])
-                else:
-                    joins_list.append([join_table, join_type, join_side])
-            join_info_list.append(joins_list)
-            joins_list = []
+                    if not join_type:
+                        join_type = "OUTER" if join_side else "CROSS"
 
-    join_info_list = list(map(list, {tuple(map(tuple, sublist)) for sublist in join_info_list}))
+                    if not join_side:
+                        joins_list.append([join_table, join_type])
+                    else:
+                        joins_list.append([join_table, join_type, join_side])
+                join_info_list.append(joins_list)
+                joins_list = []
+
+        join_info_list = list(map(list, {tuple(map(tuple, sublist)) for sublist in join_info_list}))
+    except Exception as e:
+        logger.error(f"Error in extracting joins from query {e}")
+
     return join_info_list
 
 
 def extract_cte_n_subquery_list(sql_query_ast):
+    logger.info("Extracting cte, subqueries and values....")
     cte_list = []
     subquery_list = []
     values_list = []
-    for node in sql_query_ast.find_all(exp.CTE, exp.Subquery, exp.Values):
-        if isinstance(node, exp.Values):
-            columns_list = node.alias_column_names
-            columns_alises_list = ", ".join(columns_list)
-            if node.alias_or_name:
-                if len(columns_list) > 0:
-                    values_list.append(f"{node.alias_or_name}({columns_alises_list})")
-                else:
-                    values_list.append(f"{node.alias_or_name}")
-        elif node.alias:
-            if isinstance(node, exp.Subquery):
-                subquery_list.append(node.alias)
-            elif isinstance(node, exp.CTE):
-                cte_list.append(node.alias)
+    try:
+        for node in sql_query_ast.find_all(exp.CTE, exp.Subquery, exp.Values):
+            if isinstance(node, exp.Values):
+                columns_list = node.alias_column_names
+                columns_alises_list = ", ".join(columns_list)
+                if node.alias_or_name:
+                    if len(columns_list) > 0:
+                        values_list.append(f"{node.alias_or_name}({columns_alises_list})")
+                    else:
+                        values_list.append(f"{node.alias_or_name}")
+            elif node.alias:
+                if isinstance(node, exp.Subquery):
+                    subquery_list.append(node.alias)
+                elif isinstance(node, exp.CTE):
+                    cte_list.append(node.alias)
+    except Exception as e:
+        logger.error(f"Error while Extracting cte, subqueries and values: {e}")
 
     cte_list = list(set(cte_list))
     subquery_list = list(set(subquery_list))
