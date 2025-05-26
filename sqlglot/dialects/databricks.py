@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from copy import deepcopy
+from collections import defaultdict
+
 import typing as t
 
 from sqlglot import exp, transforms, jsonpath
@@ -14,6 +17,7 @@ from sqlglot.dialects.dialect import (
 from sqlglot.dialects.spark import Spark
 from sqlglot.tokens import TokenType
 from sqlglot.helper import seq_get
+from sqlglot.optimizer.annotate_types import TypeAnnotator
 
 
 def _build_json_extract(args: t.List) -> exp.JSONExtract:
@@ -71,8 +75,24 @@ class Databricks(Spark):
     COPY_PARAMS_ARE_CSV = False
     PRESERVE_ORIGINAL_NAMES = True
 
+    COERCES_TO = defaultdict(set, deepcopy(TypeAnnotator.COERCES_TO))
+    for text_type in exp.DataType.TEXT_TYPES:
+        COERCES_TO[text_type] |= {
+            *exp.DataType.NUMERIC_TYPES,
+            *exp.DataType.TEMPORAL_TYPES,
+            exp.DataType.Type.BINARY,
+            exp.DataType.Type.BOOLEAN,
+            exp.DataType.Type.INTERVAL,
+        }
+
     class JSONPathTokenizer(jsonpath.JSONPathTokenizer):
         IDENTIFIERS = ["`", '"']
+
+    class Tokenizer(Spark.Tokenizer):
+        KEYWORDS = {
+            **Spark.Tokenizer.KEYWORDS,
+            "VOID": TokenType.VOID,
+        }
 
     class Parser(Spark.Parser):
         LOG_DEFAULTS_TO_LN = True
@@ -136,6 +156,11 @@ class Databricks(Spark):
         }
 
         TRANSFORMS.pop(exp.TryCast)
+
+        TYPE_MAPPING = {
+            **Spark.Generator.TYPE_MAPPING,
+            exp.DataType.Type.NULL: "VOID",
+        }
 
         def columndef_sql(self, expression: exp.ColumnDef, sep: str = " ") -> str:
             constraint = expression.find(exp.GeneratedAsIdentityColumnConstraint)

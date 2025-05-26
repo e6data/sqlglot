@@ -531,7 +531,10 @@ FROM "unioned" AS "unioned"
 WHERE
   "unioned"."source_system" = 'bamboohr' OR "unioned"."source_system" = 'workday'
 QUALIFY
-  ROW_NUMBER() OVER (PARTITION BY "unioned"."unique_filter_key" ORDER BY "unioned"."sort_order" DESC, 1) = 1;
+  ROW_NUMBER() OVER (
+    PARTITION BY "unioned"."unique_filter_key"
+    ORDER BY "unioned"."sort_order" DESC, 1
+  ) = 1;
 
 # title: pivoted source with explicit selections
 # execute: false
@@ -760,10 +763,12 @@ SELECT
   `_q_0`.`first_half_sales` AS `first_half_sales`,
   `_q_0`.`second_half_sales` AS `second_half_sales`
 FROM `produce` AS `produce`
-UNPIVOT((`first_half_sales`, `second_half_sales`) FOR `semesters` IN (
-  (`produce`.`q1`, `produce`.`q2`) AS 'semester_1',
-  (`produce`.`q3`, `produce`.`q4`) AS 'semester_2'
-)) AS `_q_0`;
+UNPIVOT((`first_half_sales`, `second_half_sales`) FOR 
+  `semesters` IN (
+    (`produce`.`q1`, `produce`.`q2`) AS 'semester_1',
+    (`produce`.`q3`, `produce`.`q4`) AS 'semester_2'
+  )
+) AS `_q_0`;
 
 # title: quoting is preserved
 # dialect: snowflake
@@ -1453,3 +1458,38 @@ LEFT JOIN "_u_1" AS "_u_1"
   ON "_u_1"."tagname" = "event"."tagname"
 WHERE
   "event"."priority" = 'High' AND NOT "_u_1"."tagname" IS NULL;
+
+# title: SELECT TRANSFORM ... Spark clause when schema is provided
+# execute: false
+# dialect: spark
+WITH a AS (SELECT 'v' AS x) SELECT * FROM (SELECT TRANSFORM(x) USING 'cat' AS (y STRING) FROM a);
+WITH `a` AS (
+  SELECT
+    'v' AS `x`
+), `_q_0` AS (
+  SELECT
+    TRANSFORM(`a`.`x`) USING 'cat' AS (
+      `y` STRING
+    )
+  FROM `a` AS `a`
+)
+SELECT
+  `_q_0`.`y` AS `y`
+FROM `_q_0` AS `_q_0`;
+
+# title: SELECT TRANSFORM ... Spark clause when schema is not provided
+# execute: false
+# dialect: spark
+WITH a AS (SELECT 'v' AS x) SELECT * FROM (SELECT TRANSFORM(x) USING 'cat'  FROM a);
+WITH `a` AS (
+  SELECT
+    'v' AS `x`
+), `_q_0` AS (
+  SELECT
+    TRANSFORM(`a`.`x`) USING 'cat'
+  FROM `a` AS `a`
+)
+SELECT
+  `_q_0`.`key` AS `key`,
+  `_q_0`.`value` AS `value`
+FROM `_q_0` AS `_q_0`;

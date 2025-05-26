@@ -41,6 +41,9 @@ from sqlglot.helper import is_int, seq_get
 from sqlglot.parser import binary_range_parser
 from sqlglot.tokens import TokenType
 
+if t.TYPE_CHECKING:
+    from sqlglot.dialects.dialect import DialectType
+
 
 DATE_DIFF_FACTOR = {
     "MICROSECOND": " * 1000000",
@@ -191,7 +194,7 @@ def _json_extract_sql(
     return _generate
 
 
-def _build_regexp_replace(args: t.List) -> exp.RegexpReplace:
+def _build_regexp_replace(args: t.List, dialect: DialectType = None) -> exp.RegexpReplace:
     # The signature of REGEXP_REPLACE is:
     # regexp_replace(source, pattern, replacement [, start [, N ]] [, flags ])
     #
@@ -204,7 +207,7 @@ def _build_regexp_replace(args: t.List) -> exp.RegexpReplace:
             if not last.type or last.is_type(exp.DataType.Type.UNKNOWN, exp.DataType.Type.NULL):
                 from sqlglot.optimizer.annotate_types import annotate_types
 
-                last = annotate_types(last)
+                last = annotate_types(last, dialect=dialect)
 
             if last.is_type(*exp.DataType.TEXT_TYPES):
                 regexp_replace = exp.RegexpReplace.from_arg_list(args[:-1])
@@ -318,7 +321,6 @@ class Postgres(Dialect):
             "BEGIN": TokenType.COMMAND,
             "BEGIN TRANSACTION": TokenType.BEGIN,
             "BIGSERIAL": TokenType.BIGSERIAL,
-            "CHARACTER VARYING": TokenType.VARCHAR,
             "CONSTRAINT TRIGGER": TokenType.COMMAND,
             "CSTRING": TokenType.PSEUDO_TYPE,
             "DECLARE": TokenType.COMMAND,
@@ -517,6 +519,7 @@ class Postgres(Dialect):
         LIKE_PROPERTY_INSIDE_SCHEMA = True
         MULTI_ARG_DISTINCT = False
         CAN_IMPLEMENT_ARRAY_ANY = True
+        SUPPORTS_WINDOW_EXCLUDE = True
         COPY_HAS_INTO_KEYWORD = False
         ARRAY_CONCAT_IS_VAR_LEN = False
         SUPPORTS_MEDIAN = False
@@ -537,6 +540,7 @@ class Postgres(Dialect):
             exp.DataType.Type.VARBINARY: "BYTEA",
             exp.DataType.Type.ROWVERSION: "BYTEA",
             exp.DataType.Type.DATETIME: "TIMESTAMP",
+            exp.DataType.Type.TIMESTAMPNTZ: "TIMESTAMP",
             exp.DataType.Type.BLOB: "BYTEA",
         }
 
@@ -584,7 +588,6 @@ class Postgres(Dialect):
                 [transforms.add_within_group_for_percentiles]
             ),
             exp.Pivot: no_pivot_sql,
-            exp.Pow: lambda self, e: self.binary(e, "^"),
             exp.Rand: rename_func("RANDOM"),
             exp.RegexpLike: lambda self, e: self.binary(e, "~"),
             exp.RegexpILike: lambda self, e: self.binary(e, "~*"),
@@ -658,7 +661,7 @@ class Postgres(Dialect):
 
                 from sqlglot.optimizer.annotate_types import annotate_types
 
-                this = annotate_types(arg)
+                this = annotate_types(arg, dialect=self.dialect)
                 if this.is_type("array<json>"):
                     while isinstance(this, exp.Cast):
                         this = this.this
@@ -741,3 +744,12 @@ class Postgres(Dialect):
         @unsupported_args("this")
         def currentschema_sql(self, expression: exp.CurrentSchema) -> str:
             return "CURRENT_SCHEMA"
+
+        def interval_sql(self, expression: exp.Interval) -> str:
+            unit = expression.text("unit").lower()
+
+            if unit.startswith("quarter") and isinstance(expression.this, exp.Literal):
+                expression.this.replace(exp.Literal.number(int(expression.this.to_py()) * 3))
+                expression.args["unit"].replace(exp.var("MONTH"))
+
+            return super().interval_sql(expression)

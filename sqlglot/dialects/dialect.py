@@ -242,7 +242,7 @@ class _Dialect(type):
         if enum not in ("", "bigquery"):
             klass.generator_class.SELECT_KINDS = ()
 
-        if enum not in ("", "athena", "presto", "trino"):
+        if enum not in ("", "athena", "presto", "trino", "duckdb"):
             klass.generator_class.TRY_SUPPORTED = False
             klass.generator_class.SUPPORTS_UESCAPE = False
 
@@ -711,6 +711,7 @@ class Dialect(metaclass=_Dialect):
             exp.Concat,
             exp.ConcatWs,
             exp.DateToDateStr,
+            exp.DPipe,
             exp.GroupConcat,
             exp.Initcap,
             exp.Lower,
@@ -783,6 +784,7 @@ class Dialect(metaclass=_Dialect):
         exp.Slice: lambda self, e: self._annotate_with_type(e, exp.DataType.Type.UNKNOWN),
         exp.Struct: lambda self, e: self._annotate_struct(e),
         exp.Sum: lambda self, e: self._annotate_by_args(e, "this", "expressions", promote=True),
+        exp.SortArray: lambda self, e: self._annotate_by_args(e, "this"),
         exp.Timestamp: lambda self, e: self._annotate_with_type(
             e,
             exp.DataType.Type.TIMESTAMPTZ if e.args.get("with_tz") else exp.DataType.Type.TIMESTAMP,
@@ -792,6 +794,9 @@ class Dialect(metaclass=_Dialect):
         exp.Unnest: lambda self, e: self._annotate_unnest(e),
         exp.VarMap: lambda self, e: self._annotate_map(e),
     }
+
+    # Specifies what types a given type can be coerced into
+    COERCES_TO: t.Dict[exp.DataType.Type, t.Set[exp.DataType.Type]] = {}
 
     @classmethod
     def get_or_raise(cls, dialect: DialectType) -> Dialect:
@@ -1243,15 +1248,20 @@ def build_date_delta(
     exp_class: t.Type[E],
     unit_mapping: t.Optional[t.Dict[str, str]] = None,
     default_unit: t.Optional[str] = "DAY",
+    supports_timezone: bool = False,
 ) -> t.Callable[[t.List], E]:
     def _builder(args: t.List) -> E:
-        unit_based = len(args) == 3
+        unit_based = len(args) >= 3
+        has_timezone = len(args) == 4
         this = args[2] if unit_based else seq_get(args, 0)
         unit = None
         if unit_based or default_unit:
             unit = args[0] if unit_based else exp.Literal.string(default_unit)
             unit = exp.var(unit_mapping.get(unit.name.lower(), unit.name)) if unit_mapping else unit
-        return exp_class(this=this, expression=seq_get(args, 1), unit=unit)
+        expression = exp_class(this=this, expression=seq_get(args, 1), unit=unit)
+        if supports_timezone and has_timezone:
+            expression.set("zone", args[-1])
+        return expression
 
     return _builder
 
@@ -1310,7 +1320,9 @@ def no_timestamp_sql(self: Generator, expression: exp.Timestamp) -> str:
     if not zone:
         from sqlglot.optimizer.annotate_types import annotate_types
 
-        target_type = annotate_types(expression).type or exp.DataType.Type.TIMESTAMP
+        target_type = (
+            annotate_types(expression, dialect=self.dialect).type or exp.DataType.Type.TIMESTAMP
+        )
         return self.sql(exp.cast(expression.this, target_type))
     if zone.name.lower() in TIMEZONES:
         return self.sql(
@@ -1888,7 +1900,7 @@ def build_timetostr_or_tochar(args: t.List, dialect: Dialect) -> exp.TimeToStr |
     if this and not this.type:
         from sqlglot.optimizer.annotate_types import annotate_types
 
-        annotate_types(this)
+        annotate_types(this, dialect=dialect)
         if this.is_type(*exp.DataType.TEMPORAL_TYPES):
             dialect_name = dialect.__class__.__name__.lower()
             return build_formatted_time(exp.TimeToStr, dialect_name, default=True)(args)

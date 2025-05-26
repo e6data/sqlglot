@@ -104,6 +104,7 @@ def _datetime_delta_sql(name: str) -> t.Callable[[Generator, DATEΤΙΜΕ_DELTA]
             unit_to_var(expression),
             expression.expression,
             expression.this,
+            expression.args.get("zone"),
         )
 
     return _delta_sql
@@ -253,6 +254,7 @@ class ClickHouse(Dialect):
             "DYNAMIC": TokenType.DYNAMIC,
             "ENUM8": TokenType.ENUM8,
             "ENUM16": TokenType.ENUM16,
+            "EXCHANGE": TokenType.COMMAND,
             "FINAL": TokenType.FINAL,
             "FIXEDSTRING": TokenType.FIXEDSTRING,
             "FLOAT32": TokenType.FLOAT,
@@ -261,6 +263,7 @@ class ClickHouse(Dialect):
             "LOWCARDINALITY": TokenType.LOWCARDINALITY,
             "MAP": TokenType.MAP,
             "NESTED": TokenType.NESTED,
+            "NOTHING": TokenType.NOTHING,
             "SAMPLE": TokenType.TABLE_SAMPLE,
             "TUPLE": TokenType.STRUCT,
             "UINT16": TokenType.USMALLINT,
@@ -302,8 +305,8 @@ class ClickHouse(Dialect):
             "COUNTIF": _build_count_if,
             "DATE_ADD": build_date_delta(exp.DateAdd, default_unit=None),
             "DATEADD": build_date_delta(exp.DateAdd, default_unit=None),
-            "DATE_DIFF": build_date_delta(exp.DateDiff, default_unit=None),
-            "DATEDIFF": build_date_delta(exp.DateDiff, default_unit=None),
+            "DATE_DIFF": build_date_delta(exp.DateDiff, default_unit=None, supports_timezone=True),
+            "DATEDIFF": build_date_delta(exp.DateDiff, default_unit=None, supports_timezone=True),
             "DATE_FORMAT": _build_date_format,
             "DATE_SUB": build_date_delta(exp.DateSub, default_unit=None),
             "DATESUB": build_date_delta(exp.DateSub, default_unit=None),
@@ -500,7 +503,10 @@ class ClickHouse(Dialect):
 
         FUNCTION_PARSERS.pop("MATCH")
 
-        PROPERTY_PARSERS = parser.Parser.PROPERTY_PARSERS.copy()
+        PROPERTY_PARSERS = {
+            **parser.Parser.PROPERTY_PARSERS,
+            "ENGINE": lambda self: self._parse_engine_property(),
+        }
         PROPERTY_PARSERS.pop("DYNAMIC")
 
         NO_PAREN_FUNCTION_PARSERS = parser.Parser.NO_PAREN_FUNCTION_PARSERS.copy()
@@ -572,6 +578,13 @@ class ClickHouse(Dialect):
             **parser.Parser.PLACEHOLDER_PARSERS,
             TokenType.L_BRACE: lambda self: self._parse_query_parameter(),
         }
+
+        def _parse_engine_property(self) -> exp.EngineProperty:
+            self._match(TokenType.EQ)
+            return self.expression(
+                exp.EngineProperty,
+                this=self._parse_field(any_token=True, anonymous_func=True),
+            )
 
         # https://clickhouse.com/docs/en/sql-reference/statements/create/function
         def _parse_user_defined_function_expression(self) -> t.Optional[exp.Expression]:
@@ -849,7 +862,7 @@ class ClickHouse(Dialect):
         def _parse_on_property(self) -> t.Optional[exp.Expression]:
             index = self._index
             if self._match_text_seq("CLUSTER"):
-                this = self._parse_id_var()
+                this = self._parse_string() or self._parse_id_var()
                 if this:
                     return self.expression(exp.OnCluster, this=this)
                 else:
@@ -945,8 +958,8 @@ class ClickHouse(Dialect):
                 this = exp.Apply(this=this, expression=self._parse_var(any_token=True))
             return this
 
-        def _parse_value(self) -> t.Optional[exp.Tuple]:
-            value = super()._parse_value()
+        def _parse_value(self, values: bool = True) -> t.Optional[exp.Tuple]:
+            value = super()._parse_value(values=values)
             if not value:
                 return None
 
@@ -956,7 +969,7 @@ class ClickHouse(Dialect):
             # but the final result is not altered by the extra parentheses.
             # Note: Clickhouse allows VALUES([structure], value, ...) so the branch checks for the last expression
             expressions = value.expressions
-            if not isinstance(expressions[-1], exp.Tuple):
+            if values and not isinstance(expressions[-1], exp.Tuple):
                 value.set(
                     "expressions",
                     [self.expression(exp.Tuple, expressions=[expr]) for expr in expressions],
@@ -1018,6 +1031,7 @@ class ClickHouse(Dialect):
             exp.DataType.Type.DECIMAL128: "Decimal128",
             exp.DataType.Type.DECIMAL256: "Decimal256",
             exp.DataType.Type.TIMESTAMP: "DateTime",
+            exp.DataType.Type.TIMESTAMPNTZ: "DateTime",
             exp.DataType.Type.TIMESTAMPTZ: "DateTime",
             exp.DataType.Type.DOUBLE: "Float64",
             exp.DataType.Type.ENUM: "Enum",
@@ -1032,6 +1046,7 @@ class ClickHouse(Dialect):
             exp.DataType.Type.LOWCARDINALITY: "LowCardinality",
             exp.DataType.Type.MAP: "Map",
             exp.DataType.Type.NESTED: "Nested",
+            exp.DataType.Type.NOTHING: "Nothing",
             exp.DataType.Type.SMALLINT: "Int16",
             exp.DataType.Type.STRUCT: "Tuple",
             exp.DataType.Type.TINYINT: "Int8",
