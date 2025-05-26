@@ -58,7 +58,7 @@ def _date_add_sql(kind: str) -> t.Callable[[Postgres.Generator, DATE_ADD_OR_SUB]
             expression = ts_or_ds_add_cast(expression)
 
         this = self.sql(expression, "this")
-        unit = expression.args.get("unit")
+        unit = expression.args.get("unit") or exp.Var(this="DAY")
 
         e = self._simplify_unless_literal(expression.expression)
         if isinstance(e, exp.Literal):

@@ -205,6 +205,17 @@ def _format_sql(self: TSQL.Generator, expression: exp.NumberToStr | exp.TimeToSt
     return self.func("FORMAT", expression.this, fmt_sql, expression.args.get("culture"))
 
 
+def _date_sub_sql(self, expression: exp.DateSub):
+    interval = expression.expression
+    date_expr = exp.cast(expression.this, exp.DataType.Type.TIMESTAMP)
+    return self.func(
+        "DATEADD",
+        exp.Var(this="DAY"),
+        interval * (-1),
+        date_expr,
+    )
+
+
 def _string_agg_sql(self: TSQL.Generator, expression: exp.GroupConcat) -> str:
     this = expression.this
     distinct = expression.find(exp.Distinct)
@@ -971,6 +982,7 @@ class TSQL(Dialect):
             exp.CurrentDate: rename_func("GETDATE"),
             exp.CurrentTimestamp: rename_func("GETDATE"),
             exp.DateStrToDate: datestrtodate_sql,
+            exp.DateSub: _date_sub_sql,
             exp.Extract: rename_func("DATEPART"),
             exp.GeneratedAsIdentityColumnConstraint: generatedasidentitycolumnconstraint_sql,
             exp.GroupConcat: _string_agg_sql,

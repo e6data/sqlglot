@@ -1303,7 +1303,7 @@ class TestDuckDB(Validator):
             },
         )
         self.validate_all(
-            "CAST(x AS DATE) + INTERVAL (7 * -1) DAY",
+            "x - INTERVAL 7 DAY",
             read={
                 "spark": "DATE_SUB(x, 7)",
             },
