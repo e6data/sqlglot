@@ -201,6 +201,16 @@ def _build_to_date(args: t.List) -> exp.TsOrDsToDate:
     return expr
 
 
+def _jsonextract_sql(
+    self: Hive.Generator, expression: exp.JSONExtract | exp.JSONExtractScalar
+) -> str:
+    this = self.sql(expression, "this")
+    expr = self.sql(expression, "expression")
+    if not expr.startswith("'$"):
+        expr = f"'$.{expr}'"
+    return self.func("GET_JSON_OBJECT", this, expr)
+
+
 class Hive(Dialect):
     ALIAS_POST_TABLESAMPLE = True
     IDENTIFIERS_CAN_START_WITH_DIGIT = True
@@ -333,7 +343,7 @@ class Hive(Dialect):
             "DAY": lambda args: exp.Day(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "FIRST": _build_with_ignore_nulls(exp.First),
             "FIRST_VALUE": _build_with_ignore_nulls(exp.FirstValue),
-            "FROM_UNIXTIME": build_formatted_time(exp.UnixToStr, "hive", True),
+            "FROM_UNIXTIME": build_formatted_time(exp.UnixToStr, "hive", False),
             "GET_JSON_OBJECT": lambda args, dialect: exp.JSONExtractScalar(
                 this=seq_get(args, 0), expression=dialect.to_json_path(seq_get(args, 1))
             ),
@@ -565,10 +575,8 @@ class Hive(Dialect):
             exp.If: if_sql(),
             exp.ILike: no_ilike_sql,
             exp.IsNan: rename_func("ISNAN"),
-            exp.JSONExtract: lambda self, e: self.func("GET_JSON_OBJECT", e.this, e.expression),
-            exp.JSONExtractScalar: lambda self, e: self.func(
-                "GET_JSON_OBJECT", e.this, e.expression
-            ),
+            exp.JSONExtract: _jsonextract_sql,
+            exp.JSONExtractScalar: _jsonextract_sql,
             exp.JSONFormat: _json_format_sql,
             exp.Left: left_to_substring_sql,
             exp.Ln: rename_func("LN"),

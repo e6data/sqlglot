@@ -452,7 +452,7 @@ class TestE6(Validator):
             write={
                 "bigquery": "TO_JSON_STRING(x)",
                 "duckdb": "CAST(TO_JSON(x) AS TEXT)",
-                "presto": "JSON_FORMAT(x)",
+                "presto": "JSON_FORMAT(CAST(x AS JSON))",
                 "spark": "TO_JSON(x)",
             },
         )
