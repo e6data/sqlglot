@@ -15,6 +15,7 @@ from itertools import count
 if t.TYPE_CHECKING:
     from sqlglot import exp
     from sqlglot._typing import A, E, T
+    from sqlglot.dialects.dialect import DialectType
     from sqlglot.expressions import Expression
 
 
@@ -150,6 +151,7 @@ def apply_index_offset(
     this: exp.Expression,
     expressions: t.List[E],
     offset: int,
+    dialect: DialectType = None,
 ) -> t.List[E]:
     """
     Applies an offset to a given integer literal expression.
@@ -158,6 +160,7 @@ def apply_index_offset(
         this: The target of the index.
         expressions: The expression the offset will be applied to, wrapped in a list.
         offset: The offset that will be applied.
+        dialect: the dialect of interest.
 
     Returns:
         The original expression with the offset applied to it, wrapped in a list. If the provided
@@ -173,7 +176,7 @@ def apply_index_offset(
     from sqlglot.optimizer.simplify import simplify
 
     if not this.type:
-        annotate_types(this)
+        annotate_types(this, dialect=dialect)
 
     if t.cast(exp.DataType, this.type).this not in (
         exp.DataType.Type.UNKNOWN,
@@ -182,7 +185,7 @@ def apply_index_offset(
         return expressions
 
     if not expression.type:
-        annotate_types(expression)
+        annotate_types(expression, dialect=dialect)
 
     if t.cast(exp.DataType, expression.type).this in exp.DataType.INTEGER_TYPES:
         logger.info("Applying array index offset (%s)", offset)
@@ -208,16 +211,31 @@ def while_changing(expression: Expression, func: t.Callable[[Expression], E]) ->
     Returns:
         The transformed expression.
     """
-    while True:
-        for n in reversed(tuple(expression.walk())):
-            n._hash = hash(n)
+    end_hash: t.Optional[int] = None
 
-        start = hash(expression)
+    while True:
+        # No need to walk the AST– we've already cached the hashes in the previous iteration
+        if end_hash is None:
+            for n in reversed(tuple(expression.walk())):
+                n._hash = hash(n)
+
+        start_hash = hash(expression)
         expression = func(expression)
 
-        for n in expression.walk():
+        expression_nodes = tuple(expression.walk())
+
+        # Uncache previous caches so we can recompute them
+        for n in reversed(expression_nodes):
             n._hash = None
-        if start == hash(expression):
+            n._hash = hash(n)
+
+        end_hash = hash(expression)
+
+        if start_hash == end_hash:
+            # ... and reset the hash so we don't risk it becoming out of date if a mutation happens
+            for n in expression_nodes:
+                n._hash = None
+
             break
 
     return expression

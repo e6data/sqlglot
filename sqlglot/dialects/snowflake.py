@@ -196,12 +196,12 @@ def _unqualify_pivot_columns(expression: exp.Expression) -> exp.Expression:
         if expression.unpivot:
             expression = transforms.unqualify_columns(expression)
         else:
-            field = expression.args.get("field")
-            field_expr = seq_get(field.expressions if field else [], 0)
+            for field in expression.fields:
+                field_expr = seq_get(field.expressions if field else [], 0)
 
-            if isinstance(field_expr, exp.PivotAny):
-                unqualified_field_expr = transforms.unqualify_columns(field_expr)
-                t.cast(exp.Expression, field).set("expressions", unqualified_field_expr, 0)
+                if isinstance(field_expr, exp.PivotAny):
+                    unqualified_field_expr = transforms.unqualify_columns(field_expr)
+                    t.cast(exp.Expression, field).set("expressions", unqualified_field_expr, 0)
 
     return expression
 
@@ -408,6 +408,8 @@ class Snowflake(Dialect):
         TABLE_ALIAS_TOKENS = parser.Parser.TABLE_ALIAS_TOKENS | {TokenType.WINDOW}
         TABLE_ALIAS_TOKENS.discard(TokenType.MATCH_CONDITION)
 
+        COLON_PLACEHOLDER_TOKENS = ID_VAR_TOKENS | {TokenType.NUMBER}
+
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
@@ -543,12 +545,14 @@ class Snowflake(Dialect):
 
         STATEMENT_PARSERS = {
             **parser.Parser.STATEMENT_PARSERS,
+            TokenType.GET: lambda self: self._parse_get(),
             TokenType.PUT: lambda self: self._parse_put(),
             TokenType.SHOW: lambda self: self._parse_show(),
         }
 
         PROPERTY_PARSERS = {
             **parser.Parser.PROPERTY_PARSERS,
+            "CREDENTIALS": lambda self: self._parse_credentials_property(),
             "FILE_FORMAT": lambda self: self._parse_file_format_property(),
             "LOCATION": lambda self: self._parse_location_property(),
             "TAG": lambda self: self._parse_tag(),
@@ -899,6 +903,21 @@ class Snowflake(Dialect):
                 properties=self._parse_properties(),
             )
 
+        def _parse_get(self) -> exp.Get | exp.Command:
+            start = self._prev
+            target = self._parse_location_path()
+
+            # Parse as command if unquoted file path
+            if self._curr.token_type == TokenType.URI_START:
+                return self._parse_as_command(start)
+
+            return self.expression(
+                exp.Get,
+                this=self._parse_string(),
+                target=target,
+                properties=self._parse_properties(),
+            )
+
         def _parse_location_property(self) -> exp.LocationProperty:
             self._match(TokenType.EQ)
             return self.expression(exp.LocationProperty, this=self._parse_location_path())
@@ -948,8 +967,20 @@ class Snowflake(Dialect):
 
         def _parse_file_format_property(self) -> exp.FileFormatProperty:
             self._match(TokenType.EQ)
+            if self._match(TokenType.L_PAREN, advance=False):
+                expressions = self._parse_wrapped_options()
+            else:
+                expressions = [self._parse_format_name()]
+
             return self.expression(
-                exp.FileFormatProperty, expressions=self._parse_wrapped_options()
+                exp.FileFormatProperty,
+                expressions=expressions,
+            )
+
+        def _parse_credentials_property(self) -> exp.CredentialsProperty:
+            return self.expression(
+                exp.CredentialsProperty,
+                expressions=self._parse_wrapped_options(),
             )
 
     class Tokenizer(tokens.Tokenizer):
@@ -963,10 +994,9 @@ class Snowflake(Dialect):
             **tokens.Tokenizer.KEYWORDS,
             "FILE://": TokenType.URI_START,
             "BYTEINT": TokenType.INT,
-            "CHAR VARYING": TokenType.VARCHAR,
-            "CHARACTER VARYING": TokenType.VARCHAR,
             "EXCLUDE": TokenType.EXCEPT,
             "FILE FORMAT": TokenType.FILE_FORMAT,
+            "GET": TokenType.GET,
             "ILIKE ANY": TokenType.ILIKE_ANY,
             "LIKE ANY": TokenType.LIKE_ANY,
             "MATCH_CONDITION": TokenType.MATCH_CONDITION,
@@ -1059,6 +1089,7 @@ class Snowflake(Dialect):
             exp.DateStrToDate: datestrtodate_sql,
             exp.DayOfMonth: rename_func("DAYOFMONTH"),
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
+            exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.DayOfYear: rename_func("DAYOFYEAR"),
             exp.Explode: rename_func("FLATTEN"),
             exp.Extract: rename_func("DATE_PART"),
@@ -1112,6 +1143,7 @@ class Snowflake(Dialect):
             exp.Rand: rename_func("RANDOM"),
             exp.Select: transforms.preprocess(
                 [
+                    transforms.eliminate_window_clause,
                     transforms.eliminate_distinct_on,
                     transforms.explode_projection_to_unnest(),
                     transforms.eliminate_semi_and_anti_joins,
@@ -1169,6 +1201,7 @@ class Snowflake(Dialect):
             **generator.Generator.TYPE_MAPPING,
             exp.DataType.Type.NESTED: "OBJECT",
             exp.DataType.Type.STRUCT: "OBJECT",
+            exp.DataType.Type.BIGDECIMAL: "DOUBLE",
         }
 
         TOKEN_MAPPING = {
@@ -1177,8 +1210,9 @@ class Snowflake(Dialect):
 
         PROPERTIES_LOCATION = {
             **generator.Generator.PROPERTIES_LOCATION,
-            exp.PartitionedByProperty: exp.Properties.Location.POST_SCHEMA,
+            exp.CredentialsProperty: exp.Properties.Location.POST_WITH,
             exp.LocationProperty: exp.Properties.Location.POST_WITH,
+            exp.PartitionedByProperty: exp.Properties.Location.POST_SCHEMA,
             exp.SetProperty: exp.Properties.Location.UNSUPPORTED,
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
@@ -1242,7 +1276,7 @@ class Snowflake(Dialect):
             if value.type is None:
                 from sqlglot.optimizer.annotate_types import annotate_types
 
-                value = annotate_types(value)
+                value = annotate_types(value, dialect=self.dialect)
 
             if value.is_type(*exp.DataType.TEXT_TYPES, exp.DataType.Type.UNKNOWN):
                 return super().trycast_sql(expression)
@@ -1414,3 +1448,25 @@ class Snowflake(Dialect):
             if offset and not limit:
                 expression.limit(exp.Null(), copy=False)
             return super().select_sql(expression)
+
+        def createable_sql(self, expression: exp.Create, locations: t.DefaultDict) -> str:
+            is_materialized = expression.find(exp.MaterializedProperty)
+            copy_grants_property = expression.find(exp.CopyGrantsProperty)
+
+            if expression.kind == "VIEW" and is_materialized and copy_grants_property:
+                # For materialized views, COPY GRANTS is located *before* the columns list
+                # This is in contrast to normal views where COPY GRANTS is located *after* the columns list
+                # We default CopyGrantsProperty to POST_SCHEMA which means we need to output it POST_NAME if a materialized view is detected
+                # ref: https://docs.snowflake.com/en/sql-reference/sql/create-materialized-view#syntax
+                # ref: https://docs.snowflake.com/en/sql-reference/sql/create-view#syntax
+                post_schema_properties = locations[exp.Properties.Location.POST_SCHEMA]
+                post_schema_properties.pop(post_schema_properties.index(copy_grants_property))
+
+                this_name = self.sql(expression.this, "this")
+                copy_grants = self.sql(copy_grants_property)
+                this_schema = self.schema_columns_sql(expression.this)
+                this_schema = f"{self.sep()}{this_schema}" if this_schema else ""
+
+                return f"{this_name}{self.sep()}{copy_grants}{this_schema}"
+
+            return super().createable_sql(expression, locations)

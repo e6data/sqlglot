@@ -10,16 +10,16 @@ from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
     any_value_to_max_sql,
+    build_date_delta,
     date_delta_sql,
     datestrtodate_sql,
     generatedasidentitycolumnconstraint_sql,
     max_or_greatest,
     min_or_least,
-    build_date_delta,
     rename_func,
     strposition_sql,
-    trim_sql,
     timestrtotime_sql,
+    trim_sql,
 )
 from sqlglot.helper import seq_get
 from sqlglot.parser import build_coalesce
@@ -203,6 +203,17 @@ def _format_sql(self: TSQL.Generator, expression: exp.NumberToStr | exp.TimeToSt
         fmt_sql = self.sql(fmt)
 
     return self.func("FORMAT", expression.this, fmt_sql, expression.args.get("culture"))
+
+
+def _date_sub_sql(self, expression: exp.DateSub):
+    interval = expression.expression
+    date_expr = exp.cast(expression.this, exp.DataType.Type.TIMESTAMP)
+    return self.func(
+        "DATEADD",
+        exp.Var(this="DAY"),
+        interval * (-1),
+        date_expr,
+    )
 
 
 def _string_agg_sql(self: TSQL.Generator, expression: exp.GroupConcat) -> str:
@@ -511,6 +522,7 @@ class TSQL(Dialect):
             "DECLARE": TokenType.DECLARE,
             "EXEC": TokenType.COMMAND,
             "FOR SYSTEM_TIME": TokenType.TIMESTAMP_SNAPSHOT,
+            "GO": TokenType.COMMAND,
             "IMAGE": TokenType.IMAGE,
             "MONEY": TokenType.MONEY,
             "NONCLUSTERED INDEX": TokenType.INDEX,
@@ -577,7 +589,7 @@ class TSQL(Dialect):
             "FORMAT": _build_format,
             "GETDATE": exp.CurrentTimestamp.from_arg_list,
             "HASHBYTES": _build_hashbytes,
-            "ISNULL": build_coalesce,
+            "ISNULL": lambda args: build_coalesce(args=args, is_null=True),
             "JSON_QUERY": _build_json_query,
             "JSON_VALUE": parser.build_extract_json_with_path(exp.JSONExtractScalar),
             "LEN": _build_with_arg_as_text(exp.Length),
@@ -898,6 +910,17 @@ class TSQL(Dialect):
 
             return self.expression(exp.DeclareItem, this=var, kind=data_type, default=value)
 
+        def _parse_alter_table_alter(self) -> t.Optional[exp.Expression]:
+            expression = super()._parse_alter_table_alter()
+
+            if expression is not None:
+                collation = expression.args.get("collate")
+                if isinstance(collation, exp.Column) and isinstance(collation.this, exp.Identifier):
+                    identifier = collation.this
+                    collation.set("this", exp.Var(this=identifier.name))
+
+            return expression
+
     class Generator(generator.Generator):
         LIMIT_IS_TOP = True
         QUERY_HINTS = False
@@ -918,6 +941,7 @@ class TSQL(Dialect):
         COPY_PARAMS_EQ_REQUIRED = True
         PARSE_JSON_NAME = None
         EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
+        ALTER_SET_TYPE = ""
 
         EXPRESSIONS_WITHOUT_NESTED_CTES = {
             exp.Create,
@@ -971,6 +995,7 @@ class TSQL(Dialect):
             exp.CurrentDate: rename_func("GETDATE"),
             exp.CurrentTimestamp: rename_func("GETDATE"),
             exp.DateStrToDate: datestrtodate_sql,
+            exp.DateSub: _date_sub_sql,
             exp.Extract: rename_func("DATEPART"),
             exp.GeneratedAsIdentityColumnConstraint: generatedasidentitycolumnconstraint_sql,
             exp.GroupConcat: _string_agg_sql,
@@ -1354,3 +1379,7 @@ class TSQL(Dialect):
             output = self.sql(expression, "output")
             output = f" {output}" if output else ""
             return f"{this}{default}{output}"
+
+        def coalesce_sql(self, expression: exp.Coalesce) -> str:
+            func_name = "ISNULL" if expression.args.get("is_null") else "COALESCE"
+            return rename_func(func_name)(self, expression)

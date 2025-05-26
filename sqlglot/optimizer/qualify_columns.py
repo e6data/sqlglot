@@ -23,6 +23,7 @@ def qualify_columns(
     expand_stars: bool = True,
     infer_schema: t.Optional[bool] = None,
     allow_partial_qualification: bool = False,
+    dialect: DialectType = None,
 ) -> exp.Expression:
     """
     Rewrite sqlglot AST to have fully qualified columns.
@@ -50,7 +51,7 @@ def qualify_columns(
     Notes:
         - Currently only handles a single PIVOT or UNPIVOT operator
     """
-    schema = ensure_schema(schema)
+    schema = ensure_schema(schema, dialect=dialect)
     annotator = TypeAnnotator(schema)
     infer_schema = schema.empty if infer_schema is None else infer_schema
     dialect = Dialect.get_or_raise(schema.dialect)
@@ -140,13 +141,14 @@ def validate_qualify_columns(expression: E) -> E:
 
 
 def _unpivot_columns(unpivot: exp.Pivot) -> t.Iterator[exp.Column]:
-    name_column = []
-    field = unpivot.args.get("field")
-    if isinstance(field, exp.In) and isinstance(field.this, exp.Column):
-        name_column.append(field.this)
-
+    name_columns = [
+        field.this
+        for field in unpivot.fields
+        if isinstance(field, exp.In) and isinstance(field.this, exp.Column)
+    ]
     value_columns = (c for e in unpivot.expressions for c in e.find_all(exp.Column))
-    return itertools.chain(name_column, value_columns)
+
+    return itertools.chain(name_columns, value_columns)
 
 
 def _pop_table_column_aliases(derived_tables: t.List[exp.CTE | exp.Subquery]) -> None:
@@ -616,18 +618,19 @@ def _expand_stars(
     dialect = resolver.schema.dialect
 
     pivot_output_columns = None
-    pivot_exclude_columns = None
+    pivot_exclude_columns: t.Set[str] = set()
 
     pivot = t.cast(t.Optional[exp.Pivot], seq_get(scope.pivots, 0))
     if isinstance(pivot, exp.Pivot) and not pivot.alias_column_names:
         if pivot.unpivot:
             pivot_output_columns = [c.output_name for c in _unpivot_columns(pivot)]
 
-            field = pivot.args.get("field")
-            if isinstance(field, exp.In):
-                pivot_exclude_columns = {
-                    c.output_name for e in field.expressions for c in e.find_all(exp.Column)
-                }
+            for field in pivot.fields:
+                if isinstance(field, exp.In):
+                    pivot_exclude_columns.update(
+                        c.output_name for e in field.expressions for c in e.find_all(exp.Column)
+                    )
+
         else:
             pivot_exclude_columns = set(c.output_name for c in pivot.find_all(exp.Column))
 
@@ -778,7 +781,7 @@ def qualify_outputs(scope_or_expression: Scope | exp.Expression) -> None:
     for i, (selection, aliased_column) in enumerate(
         itertools.zip_longest(scope.expression.selects, scope.outer_columns)
     ):
-        if selection is None:
+        if selection is None or isinstance(selection, exp.QueryTransform):
             break
 
         if isinstance(selection, exp.Subquery):
@@ -795,7 +798,7 @@ def qualify_outputs(scope_or_expression: Scope | exp.Expression) -> None:
 
         new_selections.append(selection)
 
-    if isinstance(scope.expression, exp.Select):
+    if new_selections and isinstance(scope.expression, exp.Select):
         scope.expression.set("expressions", new_selections)
 
 
@@ -953,7 +956,14 @@ class Resolver:
                 else:
                     columns = set_op.named_selects
             else:
-                columns = source.expression.named_selects
+                select = seq_get(source.expression.selects, 0)
+
+                if isinstance(select, exp.QueryTransform):
+                    # https://spark.apache.org/docs/3.5.1/sql-ref-syntax-qry-select-transform.html
+                    schema = select.args.get("schema")
+                    columns = [c.name for c in schema.expressions] if schema else ["key", "value"]
+                else:
+                    columns = source.expression.named_selects
 
             node, _ = self.scope.selected_sources.get(name) or (None, None)
             if isinstance(node, Scope):

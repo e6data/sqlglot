@@ -106,7 +106,9 @@ def _unqualify_pivot_columns(expression: exp.Expression) -> exp.Expression:
         SELECT * FROM tbl PIVOT(SUM(tbl.sales) FOR quarter IN ('Q1', 'Q1'))
     """
     if isinstance(expression, exp.Pivot):
-        expression.set("field", transforms.unqualify_columns(expression.args["field"]))
+        expression.set(
+            "fields", [transforms.unqualify_columns(field) for field in expression.fields]
+        )
 
     return expression
 
@@ -309,7 +311,7 @@ class Spark2(Hive):
 
         def _pivot_column_names(self, aggregations: t.List[exp.Expression]) -> t.List[str]:
             if len(aggregations) == 1:
-                return [""]
+                return []
             return pivot_column_names(aggregations, dialect="spark")
 
     class Generator(Hive.Generator):
@@ -421,7 +423,9 @@ class Spark2(Hive):
 
         def cast_sql(self, expression: exp.Cast, safe_prefix: t.Optional[str] = None) -> str:
             arg = expression.this
-            is_json_extract = isinstance(arg, (exp.JSONExtract, exp.JSONExtractScalar))
+            is_json_extract = isinstance(
+                arg, (exp.JSONExtract, exp.JSONExtractScalar)
+            ) and not arg.args.get("variant_extract")
 
             # We can't use a non-nested type (eg. STRING) as a schema
             if expression.to.args.get("nested") and (is_parse_json(arg) or is_json_extract):

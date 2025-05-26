@@ -1025,9 +1025,6 @@ class TestPresto(Validator):
         )
         self.validate_all(
             "JSON_FORMAT(x)",
-            read={
-                "spark": "TO_JSON(x)",
-            },
             write={
                 "bigquery": "TO_JSON_STRING(x)",
                 "duckdb": "CAST(TO_JSON(x) AS TEXT)",

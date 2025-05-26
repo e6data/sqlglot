@@ -57,8 +57,14 @@ def _no_sort_array(self: Presto.Generator, expression: exp.SortArray) -> str:
 
 def _schema_sql(self: Presto.Generator, expression: exp.Schema) -> str:
     if isinstance(expression.parent, exp.PartitionedByProperty):
-        columns = ", ".join(f"'{c.name}'" for c in expression.expressions)
-        return f"ARRAY[{columns}]"
+        # Any columns in the ARRAY[] string literals should not be quoted
+        expression.transform(lambda n: n.name if isinstance(n, exp.Identifier) else n, copy=False)
+
+        partition_exprs = [
+            self.sql(c) if isinstance(c, (exp.Func, exp.Property)) else self.sql(c, "this")
+            for c in expression.expressions
+        ]
+        return self.sql(exp.Array(expressions=[exp.Literal.string(c) for c in partition_exprs]))
 
     if expression.parent:
         for schema in expression.parent.find_all(exp.Schema):
@@ -217,7 +223,7 @@ def _explode_to_unnest_sql(self: Presto.Generator, expression: exp.Lateral) -> s
     return explode_to_unnest_sql(self, expression)
 
 
-def _amend_exploded_column_table(expression: exp.Expression) -> exp.Expression:
+def amend_exploded_column_table(expression: exp.Expression) -> exp.Expression:
     # We check for expression.type because the columns can be amended only if types were inferred
     if isinstance(expression, exp.Select) and expression.type:
         for lateral in expression.args.get("laterals") or []:
@@ -364,6 +370,7 @@ class Presto(Dialect):
             "DATE_TRUNC": date_trunc_to_time,
             "DAY_OF_WEEK": exp.DayOfWeekIso.from_arg_list,
             "DOW": exp.DayOfWeekIso.from_arg_list,
+            "DOY": exp.DayOfYear.from_arg_list,
             "ELEMENT_AT": lambda args: exp.Bracket(
                 this=seq_get(args, 0),
                 expressions=[seq_get(args, 1)],
@@ -377,6 +384,9 @@ class Presto(Dialect):
                 this=seq_get(args, 0),
                 replace=seq_get(args, 1),
                 charset=exp.Literal.string("utf-8"),
+            ),
+            "JSON_FORMAT": lambda args: exp.JSONFormat(
+                this=seq_get(args, 0), options=seq_get(args, 1), is_json=True
             ),
             "LEVENSHTEIN_DISTANCE": exp.Levenshtein.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
@@ -528,11 +538,12 @@ class Presto(Dialect):
             exp.SchemaCommentProperty: lambda self, e: self.naked_property(e),
             exp.Select: transforms.preprocess(
                 [
+                    transforms.eliminate_window_clause,
                     transforms.eliminate_qualify,
                     transforms.eliminate_distinct_on,
                     transforms.explode_projection_to_unnest(1),
                     transforms.eliminate_semi_and_anti_joins,
-                    _amend_exploded_column_table,
+                    amend_exploded_column_table,
                 ]
             ),
             exp.SortArray: _no_sort_array,
@@ -638,13 +649,27 @@ class Presto(Dialect):
             "with",
         }
 
+        def jsonformat_sql(self, expression: exp.JSONFormat) -> str:
+            this = expression.this
+            is_json = expression.args.get("is_json")
+
+            if this and not (is_json or this.type):
+                from sqlglot.optimizer.annotate_types import annotate_types
+
+                this = annotate_types(this, dialect=self.dialect)
+
+            if not (is_json or this.is_type(exp.DataType.Type.JSON)):
+                this.replace(exp.cast(this, exp.DataType.Type.JSON))
+
+            return self.function_fallback_sql(expression)
+
         def md5_sql(self, expression: exp.MD5) -> str:
             this = expression.this
 
             if not this.type:
                 from sqlglot.optimizer.annotate_types import annotate_types
 
-                this = annotate_types(this)
+                this = annotate_types(this, dialect=self.dialect)
 
             if this.is_type(*exp.DataType.TEXT_TYPES):
                 this = exp.Encode(this=this, charset=exp.Literal.string("utf-8"))
@@ -686,6 +711,7 @@ class Presto(Dialect):
                             expression.this,
                             expression.expressions,
                             1 - expression.args.get("offset", 0),
+                            dialect=self.dialect,
                         ),
                         0,
                     ),
@@ -695,7 +721,7 @@ class Presto(Dialect):
         def struct_sql(self, expression: exp.Struct) -> str:
             from sqlglot.optimizer.annotate_types import annotate_types
 
-            expression = annotate_types(expression)
+            expression = annotate_types(expression, dialect=self.dialect)
             values: t.List[str] = []
             schema: t.List[str] = []
             unknown_type = False

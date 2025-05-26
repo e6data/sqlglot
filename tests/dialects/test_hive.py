@@ -318,8 +318,8 @@ class TestHive(Validator):
             write={
                 "duckdb": "DATE_DIFF('DAY', CAST(b AS DATE), CAST(a AS DATE))",
                 "presto": "DATE_DIFF('DAY', CAST(CAST(b AS TIMESTAMP) AS DATE), CAST(CAST(a AS TIMESTAMP) AS DATE))",
-                "hive": "DATEDIFF(TO_DATE(a), TO_DATE(b))",
-                "spark": "DATEDIFF(TO_DATE(a), TO_DATE(b))",
+                "hive": "DATEDIFF(a, b)",
+                "spark": "DATEDIFF(a, b)",
                 "": "DATEDIFF(CAST(a AS DATE), CAST(b AS DATE))",
             },
         )
@@ -359,15 +359,15 @@ class TestHive(Validator):
         self.validate_all(
             "DATE_SUB('2020-01-01', 1)",
             write={
-                "": "TS_OR_DS_ADD('2020-01-01', 1 * -1, DAY)",
-                "bigquery": "DATE_ADD(CAST(CAST('2020-01-01' AS DATETIME) AS DATE), INTERVAL (1 * -1) DAY)",
-                "duckdb": "CAST('2020-01-01' AS DATE) + INTERVAL (1 * -1) DAY",
-                "hive": "DATE_ADD('2020-01-01', 1 * -1)",
-                "presto": "DATE_ADD('DAY', 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
-                "redshift": "DATEADD(DAY, 1 * -1, '2020-01-01')",
-                "snowflake": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
-                "spark": "DATE_ADD('2020-01-01', 1 * -1)",
-                "tsql": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS DATETIME2) AS DATE))",
+                "": "DATE_SUB('2020-01-01', 1)",
+                "bigquery": "DATE_SUB('2020-01-01', INTERVAL 1 DAY)",
+                "duckdb": "CAST('2020-01-01' AS DATE) - INTERVAL 1 DAY",
+                "hive": "DATE_ADD('2020-01-01', -1)",
+                "presto": "DATE_ADD('DAY', 1 * -1, '2020-01-01')",
+                "redshift": "'2020-01-01' - INTERVAL '1 DAY'",
+                "snowflake": "DATEADD(DAY, 1 * -1, '2020-01-01')",
+                "spark": "DATE_ADD('2020-01-01', -1)",
+                "tsql": "DATEADD(DAY, 1 * -1, CAST('2020-01-01' AS DATETIME2))",
             },
         )
         self.validate_all("DATE_ADD('2020-01-01', -1)", read={"": "DATE_SUB('2020-01-01', 1)"})
@@ -381,8 +381,8 @@ class TestHive(Validator):
             write={
                 "duckdb": "DATE_DIFF('DAY', CAST(x AS DATE), CAST(y AS DATE))",
                 "presto": "DATE_DIFF('DAY', CAST(CAST(x AS TIMESTAMP) AS DATE), CAST(CAST(CAST(CAST(y AS TIMESTAMP) AS DATE) AS TIMESTAMP) AS DATE))",
-                "hive": "DATEDIFF(TO_DATE(y), TO_DATE(x))",
-                "spark": "DATEDIFF(TO_DATE(y), TO_DATE(x))",
+                "hive": "DATEDIFF(TO_DATE(y), x)",
+                "spark": "DATEDIFF(TO_DATE(y), x)",
                 "": "DATEDIFF(CAST(y AS DATE), CAST(x AS DATE))",
             },
         )
@@ -404,8 +404,8 @@ class TestHive(Validator):
                 write={
                     "duckdb": f"{unit}(CAST(x AS DATE))",
                     "presto": f"{unit}(CAST(CAST(x AS TIMESTAMP) AS DATE))",
-                    "hive": f"{unit}(TO_DATE(x))",
-                    "spark": f"{unit}(TO_DATE(x))",
+                    "hive": f"{unit}(x)",
+                    "spark": f"{unit}(x)",
                 },
             )
 
@@ -421,6 +421,8 @@ class TestHive(Validator):
         )
 
     def test_hive(self):
+        self.validate_identity("TO_DATE(TO_DATE(x))")
+        self.validate_identity("DAY(TO_DATE(x))")
         self.validate_identity("SELECT * FROM t WHERE col IN ('stream')")
         self.validate_identity("SET hiveconf:some_var = 5", check_command_warning=True)
         self.validate_identity("(VALUES (1 AS a, 2 AS b, 3))")

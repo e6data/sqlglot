@@ -52,14 +52,6 @@ DATETIME_DELTA = t.Union[
     exp.DatetimeSub,
 ]
 
-WINDOW_FUNCS_WITH_IGNORE_NULLS = (
-    exp.FirstValue,
-    exp.LastValue,
-    exp.Lag,
-    exp.Lead,
-    exp.NthValue,
-)
-
 
 def _date_delta_sql(self: DuckDB.Generator, expression: DATETIME_DELTA) -> str:
     this = expression.this
@@ -161,6 +153,13 @@ def _build_make_timestamp(args: t.List) -> exp.Expression:
         min=seq_get(args, 4),
         sec=seq_get(args, 5),
     )
+
+
+def _show_parser(*args: t.Any, **kwargs: t.Any) -> t.Callable[[DuckDB.Parser], exp.Show]:
+    def _parse(self: DuckDB.Parser) -> exp.Show:
+        return self._parse_show_duckdb(*args, **kwargs)
+
+    return _parse
 
 
 def _struct_sql(self: DuckDB.Generator, expression: exp.Struct) -> str:
@@ -329,7 +328,7 @@ class DuckDB(Dialect):
             "BITSTRING": TokenType.BIT,
             "BPCHAR": TokenType.TEXT,
             "CHAR": TokenType.TEXT,
-            "CHARACTER VARYING": TokenType.TEXT,
+            "DATETIME": TokenType.TIMESTAMPNTZ,
             "DETACH": TokenType.DETACH,
             "EXCLUDE": TokenType.EXCEPT,
             "LOGICAL": TokenType.BOOLEAN,
@@ -339,6 +338,7 @@ class DuckDB(Dialect):
             "SIGNED": TokenType.INT,
             "STRING": TokenType.TEXT,
             "SUMMARIZE": TokenType.SUMMARIZE,
+            "TIMESTAMP": TokenType.TIMESTAMPNTZ,
             "TIMESTAMP_S": TokenType.TIMESTAMP_S,
             "TIMESTAMP_MS": TokenType.TIMESTAMP_MS,
             "TIMESTAMP_NS": TokenType.TIMESTAMP_NS,
@@ -355,6 +355,8 @@ class DuckDB(Dialect):
             **tokens.Tokenizer.SINGLE_TOKENS,
             "$": TokenType.PARAMETER,
         }
+
+        COMMANDS = tokens.Tokenizer.COMMANDS - {TokenType.SHOW}
 
     class Parser(parser.Parser):
         BITWISE = {
@@ -378,6 +380,11 @@ class DuckDB(Dialect):
         FUNCTIONS_WITH_ALIASED_ARGS = {
             *parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS,
             "STRUCT_PACK",
+        }
+
+        SHOW_PARSERS = {
+            "TABLES": _show_parser("TABLES"),
+            "ALL TABLES": _show_parser("ALL TABLES"),
         }
 
         FUNCTIONS = {
@@ -478,6 +485,7 @@ class DuckDB(Dialect):
             **parser.Parser.STATEMENT_PARSERS,
             TokenType.ATTACH: lambda self: self._parse_attach_detach(),
             TokenType.DETACH: lambda self: self._parse_attach_detach(is_attach=False),
+            TokenType.SHOW: lambda self: self._parse_show(),
         }
 
         def _parse_expression(self) -> t.Optional[exp.Expression]:
@@ -592,6 +600,9 @@ class DuckDB(Dialect):
                 else self.expression(exp.Detach, this=this, exists=exists)
             )
 
+        def _parse_show_duckdb(self, this: str) -> exp.Show:
+            return self.expression(exp.Show, this=this)
+
     class Generator(generator.Generator):
         PARAMETER_TOKEN = "$"
         NAMED_PLACEHOLDER_TOKEN = "$"
@@ -613,6 +624,7 @@ class DuckDB(Dialect):
         MULTI_ARG_DISTINCT = False
         CAN_IMPLEMENT_ARRAY_ANY = True
         SUPPORTS_TO_NUMBER = False
+        SUPPORTS_WINDOW_EXCLUDE = True
         COPY_HAS_INTO_KEYWORD = False
         STAR_EXCEPT = "EXCLUDE"
         PAD_FILL_PATTERN_IS_REQUIRED = True
@@ -874,6 +886,17 @@ class DuckDB(Dialect):
         PROPERTIES_LOCATION[exp.TemporaryProperty] = exp.Properties.Location.POST_CREATE
         PROPERTIES_LOCATION[exp.ReturnsProperty] = exp.Properties.Location.POST_ALIAS
 
+        IGNORE_RESPECT_NULLS_WINDOW_FUNCTIONS = (
+            exp.FirstValue,
+            exp.Lag,
+            exp.LastValue,
+            exp.Lead,
+            exp.NthValue,
+        )
+
+        def show_sql(self, expression: exp.Show) -> str:
+            return f"SHOW {expression.name}"
+
         def fromiso8601timestamp_sql(self, expression: exp.FromISO8601Timestamp) -> str:
             return self.sql(exp.cast(expression.this, exp.DataType.Type.TIMESTAMPTZ))
 
@@ -1001,7 +1024,7 @@ class DuckDB(Dialect):
                 if not this.type:
                     from sqlglot.optimizer.annotate_types import annotate_types
 
-                    this = annotate_types(this)
+                    this = annotate_types(this, dialect=self.dialect)
 
                 if this.is_type(exp.DataType.Type.MAP):
                     bracket = f"({bracket})[1]"
@@ -1035,7 +1058,7 @@ class DuckDB(Dialect):
             if not arg.type:
                 from sqlglot.optimizer.annotate_types import annotate_types
 
-                arg = annotate_types(arg)
+                arg = annotate_types(arg, dialect=self.dialect)
 
             if arg.is_type(*exp.DataType.TEXT_TYPES):
                 return self.func("LENGTH", arg)
@@ -1091,11 +1114,21 @@ class DuckDB(Dialect):
             return super().unnest_sql(expression)
 
         def ignorenulls_sql(self, expression: exp.IgnoreNulls) -> str:
-            if isinstance(expression.this, WINDOW_FUNCS_WITH_IGNORE_NULLS):
+            if isinstance(expression.this, self.IGNORE_RESPECT_NULLS_WINDOW_FUNCTIONS):
                 # DuckDB should render IGNORE NULLS only for the general-purpose
                 # window functions that accept it e.g. FIRST_VALUE(... IGNORE NULLS) OVER (...)
                 return super().ignorenulls_sql(expression)
 
+            self.unsupported("IGNORE NULLS is not supported for non-window functions.")
+            return self.sql(expression, "this")
+
+        def respectnulls_sql(self, expression: exp.RespectNulls) -> str:
+            if isinstance(expression.this, self.IGNORE_RESPECT_NULLS_WINDOW_FUNCTIONS):
+                # DuckDB should render RESPECT NULLS only for the general-purpose
+                # window functions that accept it e.g. FIRST_VALUE(... RESPECT NULLS) OVER (...)
+                return super().respectnulls_sql(expression)
+
+            self.unsupported("RESPECT NULLS is not supported for non-window functions.")
             return self.sql(expression, "this")
 
         def arraytostring_sql(self, expression: exp.ArrayToString) -> str:

@@ -64,6 +64,7 @@ SQLGLOT_META = "sqlglot.meta"
 SQLGLOT_ANONYMOUS = "sqlglot.anonymous"
 TABLE_PARTS = ("this", "db", "catalog")
 COLUMN_PARTS = ("this", "table", "db", "catalog")
+POSITION_META_KEYS = ("line", "col", "start", "end")
 
 
 class Expression(metaclass=_Expression):
@@ -854,6 +855,32 @@ class Expression(metaclass=_Expression):
             The new Not instance.
         """
         return not_(self, copy=copy)
+
+    def update_positions(
+        self: E, other: t.Optional[Token | Expression] = None, **kwargs: t.Any
+    ) -> E:
+        """
+        Update this expression with positions from a token or other expression.
+
+        Args:
+            other: a token or expression to update this expression with.
+
+        Returns:
+            The updated expression.
+        """
+        if isinstance(other, Expression):
+            self.meta.update({k: v for k, v in other.meta.items() if k in POSITION_META_KEYS})
+        elif other is not None:
+            self.meta.update(
+                {
+                    "line": other.line,
+                    "col": other.col,
+                    "start": other.start,
+                    "end": other.end,
+                }
+            )
+        self.meta.update({k: v for k, v in kwargs.items() if k in POSITION_META_KEYS})
+        return self
 
     def as_(
         self,
@@ -1969,7 +1996,7 @@ class TransformColumnConstraint(ColumnConstraintKind):
 
 
 class PrimaryKeyColumnConstraint(ColumnConstraintKind):
-    arg_types = {"desc": False}
+    arg_types = {"desc": False, "options": False}
 
 
 class TitleColumnConstraint(ColumnConstraintKind):
@@ -1982,6 +2009,7 @@ class UniqueColumnConstraint(ColumnConstraintKind):
         "index_type": False,
         "on_conflict": False,
         "nulls": False,
+        "options": False,
     }
 
 
@@ -2181,6 +2209,7 @@ class ForeignKey(Expression):
         "reference": False,
         "delete": False,
         "update": False,
+        "options": False,
     }
 
 
@@ -2504,6 +2533,7 @@ class Join(Expression):
         "hint": False,
         "match_condition": False,  # Snowflake
         "expressions": False,
+        "pivots": False,
     }
 
     @property
@@ -2625,6 +2655,7 @@ class Lateral(UDTF):
         "outer": False,
         "alias": False,
         "cross_apply": False,  # True -> CROSS APPLY, False -> OUTER APPLY
+        "ordinality": False,
     }
 
 
@@ -2829,6 +2860,10 @@ class FileFormatProperty(Property):
     arg_types = {"this": False, "expressions": False}
 
 
+class CredentialsProperty(Property):
+    arg_types = {"expressions": True}
+
+
 class FreespaceProperty(Property):
     arg_types = {"this": True, "percent": False}
 
@@ -2869,6 +2904,10 @@ class JournalProperty(Property):
 
 class LanguageProperty(Property):
     arg_types = {"this": True}
+
+
+class EnviromentProperty(Property):
+    arg_types = {"expressions": True}
 
 
 # spark ddl
@@ -2951,6 +2990,14 @@ class OnCommitProperty(Property):
 
 class PartitionedByProperty(Property):
     arg_types = {"this": True}
+
+
+class PartitionedByBucket(Property):
+    arg_types = {"this": True, "expression": True}
+
+
+class PartitionByTruncate(Property):
+    arg_types = {"this": True, "expression": True}
 
 
 # https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/
@@ -3174,6 +3221,7 @@ class Properties(Expression):
         "CLUSTERED_BY": ClusteredByProperty,
         "COLLATE": CollateProperty,
         "COMMENT": SchemaCommentProperty,
+        "CREDENTIALS": CredentialsProperty,
         "DEFINER": DefinerProperty,
         "DISTKEY": DistKeyProperty,
         "DISTRIBUTED_BY": DistributedByProperty,
@@ -3324,6 +3372,11 @@ class HistoricalData(Expression):
 
 # https://docs.snowflake.com/en/sql-reference/sql/put
 class Put(Expression):
+    arg_types = {"this": True, "target": True, "properties": False}
+
+
+# https://docs.snowflake.com/en/sql-reference/sql/get
+class Get(Expression):
     arg_types = {"this": True, "target": True, "properties": False}
 
 
@@ -4372,7 +4425,7 @@ class Pivot(Expression):
         "this": False,
         "alias": False,
         "expressions": False,
-        "field": False,
+        "fields": False,
         "unpivot": False,
         "using": False,
         "group": False,
@@ -4385,6 +4438,10 @@ class Pivot(Expression):
     @property
     def unpivot(self) -> bool:
         return bool(self.args.get("unpivot"))
+
+    @property
+    def fields(self) -> t.List[Expression]:
+        return self.args.get("fields", [])
 
 
 # https://duckdb.org/docs/sql/statements/unpivot#simplified-unpivot-syntax
@@ -4412,6 +4469,7 @@ class WindowSpec(Expression):
         "start_side": False,
         "end": False,
         "end_side": False,
+        "exclude": False,
     }
 
 
@@ -4558,6 +4616,7 @@ class DataType(Expression):
         NAME = auto()
         NCHAR = auto()
         NESTED = auto()
+        NOTHING = auto()
         NULL = auto()
         NUMMULTIRANGE = auto()
         NUMRANGE = auto()
@@ -5487,6 +5546,11 @@ class Convert(Func):
     arg_types = {"this": True, "expression": True, "style": False}
 
 
+# https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/CONVERT.html
+class ConvertToCharset(Func):
+    arg_types = {"this": True, "dest": True, "source": False}
+
+
 class ConvertTimezone(Func):
     arg_types = {"source_tz": False, "target_tz": True, "timestamp": True}
 
@@ -5699,6 +5763,11 @@ class CastToStrType(Func):
     arg_types = {"this": True, "to": True}
 
 
+# https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Functions-Expressions-and-Predicates/String-Operators-and-Functions/TRANSLATE/TRANSLATE-Function-Syntax
+class TranslateCharacters(Expression):
+    arg_types = {"this": True, "expression": True, "with_error": False}
+
+
 class Collate(Binary, Func):
     pass
 
@@ -5709,7 +5778,7 @@ class Ceil(Func):
 
 
 class Coalesce(Func):
-    arg_types = {"this": True, "expressions": False, "is_nvl": False}
+    arg_types = {"this": True, "expressions": False, "is_nvl": False, "is_null": False}
     is_var_len_args = True
     _sql_names = ["COALESCE", "IFNULL", "NVL"]
 
@@ -5800,7 +5869,7 @@ class DateSub(Func, IntervalOp):
 
 class DateDiff(Func, TimeUnit):
     _sql_names = ["DATEDIFF", "DATE_DIFF"]
-    arg_types = {"this": True, "expression": True, "unit": False}
+    arg_types = {"this": True, "expression": True, "unit": False, "zone": False}
 
 
 class DateTrunc(Func):
@@ -6393,7 +6462,7 @@ class JSONBExtractScalar(Binary, Func):
 
 
 class JSONFormat(Func):
-    arg_types = {"this": False, "options": False}
+    arg_types = {"this": False, "options": False, "is_json": False}
     _sql_names = ["JSON_FORMAT"]
 
 
@@ -7998,7 +8067,7 @@ def parse_identifier(name: str | Identifier, dialect: DialectType = None) -> Ide
     return expression
 
 
-INTERVAL_STRING_RE = re.compile(r"\s*([0-9]+)\s*([a-zA-Z]+)\s*")
+INTERVAL_STRING_RE = re.compile(r"\s*(-?[0-9]+)\s*([a-zA-Z]+)\s*")
 
 
 def to_interval(interval: str | Literal) -> Interval:

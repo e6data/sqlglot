@@ -42,6 +42,7 @@ class TestClickhouse(Validator):
         self.assertEqual(expr.sql(dialect="clickhouse"), "COUNT(x)")
         self.assertIsNone(expr._meta)
 
+        self.validate_identity('SELECT DISTINCT ON ("id") * FROM t')
         self.validate_identity("SELECT 1 OR (1 = 2)")
         self.validate_identity("SELECT 1 AND (1 = 2)")
         self.validate_identity("SELECT json.a.:Int64")
@@ -114,8 +115,11 @@ class TestClickhouse(Validator):
         self.validate_identity("SELECT * FROM table LIMIT 1 BY a, b")
         self.validate_identity("SELECT * FROM table LIMIT 2 OFFSET 1 BY a, b")
         self.validate_identity("TRUNCATE TABLE t1 ON CLUSTER test_cluster")
+        self.validate_identity("TRUNCATE TABLE t1 ON CLUSTER '{cluster}'")
         self.validate_identity("TRUNCATE DATABASE db")
         self.validate_identity("TRUNCATE DATABASE db ON CLUSTER test_cluster")
+        self.validate_identity("TRUNCATE DATABASE db ON CLUSTER '{cluster}'")
+        self.validate_identity("EXCHANGE TABLES x.a AND y.b", check_command_warning=True)
         self.validate_identity(
             "SELECT DATE_BIN(toDateTime('2023-01-01 14:45:00'), INTERVAL '1' MINUTE, toDateTime('2023-01-01 14:35:30'), 'UTC')",
         )
@@ -165,10 +169,20 @@ class TestClickhouse(Validator):
             "CREATE TABLE test ON CLUSTER default (id UInt8) ENGINE=AggregatingMergeTree() ORDER BY tuple()"
         )
         self.validate_identity(
+            "CREATE TABLE test ON CLUSTER '{cluster}' (id UInt8) ENGINE=AggregatingMergeTree() ORDER BY tuple()"
+        )
+        self.validate_identity(
             "CREATE MATERIALIZED VIEW test_view ON CLUSTER cl1 (id UInt8) ENGINE=AggregatingMergeTree() ORDER BY tuple() AS SELECT * FROM test_data"
         )
         self.validate_identity(
+            "CREATE MATERIALIZED VIEW test_view ON CLUSTER '{cluster}' (id UInt8) ENGINE=AggregatingMergeTree() ORDER BY tuple() AS SELECT * FROM test_data"
+        )
+        self.validate_identity("CREATE TABLE test (id UInt8) ENGINE=Null()")
+        self.validate_identity(
             "CREATE MATERIALIZED VIEW test_view ON CLUSTER cl1 TO table1 AS SELECT * FROM test_data"
+        )
+        self.validate_identity(
+            "CREATE MATERIALIZED VIEW test_view ON CLUSTER '{cluster}' TO table1 AS SELECT * FROM test_data"
         )
         self.validate_identity(
             "CREATE MATERIALIZED VIEW test_view TO db.table1 (id UInt8) AS SELECT * FROM test_data"
@@ -556,7 +570,9 @@ class TestClickhouse(Validator):
         )
         self.validate_identity("ALTER TABLE visits REPLACE PARTITION ID '201901' FROM visits_tmp")
         self.validate_identity("ALTER TABLE visits ON CLUSTER test_cluster DROP COLUMN col1")
+        self.validate_identity("ALTER TABLE visits ON CLUSTER '{cluster}' DROP COLUMN col1")
         self.validate_identity("DELETE FROM tbl ON CLUSTER test_cluster WHERE date = '2019-01-01'")
+        self.validate_identity("DELETE FROM tbl ON CLUSTER '{cluster}' WHERE date = '2019-01-01'")
 
         self.assertIsInstance(
             parse_one("Tuple(select Int64)", into=exp.DataType, read="clickhouse"),
@@ -742,6 +758,12 @@ class TestClickhouse(Validator):
             with self.subTest(f"Casting to ClickHouse {data_type}"):
                 self.validate_identity(f"SELECT CAST(val AS {data_type})")
 
+    def test_nothing_type(self):
+        data_types = ["Nothing", "Nullable(Nothing)"]
+        for data_type in data_types:
+            with self.subTest(f"Casting to ClickHouse {data_type}"):
+                self.validate_identity(f"SELECT CAST(val AS {data_type})")
+
     def test_aggregate_function_column_with_any_keyword(self):
         # Regression test for https://github.com/tobymao/sqlglot/issues/4723
         self.validate_all(
@@ -768,6 +790,17 @@ ORDER BY (
             },
             pretty=True,
         )
+
+    def test_create_table_as_alias(self):
+        ctas_alias = "CREATE TABLE my_db.my_table AS another_db.another_table"
+
+        expected = exp.Create(
+            this=exp.to_table("my_db.my_table"),
+            kind="TABLE",
+            expression=exp.to_table("another_db.another_table"),
+        )
+        self.assertEqual(self.parse_one(ctas_alias), expected)
+        self.validate_identity(ctas_alias)
 
     def test_ddl(self):
         db_table_expr = exp.Table(this=None, db=exp.to_identifier("foo"), catalog=None)
@@ -1199,6 +1232,7 @@ LIFETIME(MIN 0 MAX 0)""",
         for creatable in ("DATABASE", "TABLE", "VIEW", "DICTIONARY", "FUNCTION"):
             with self.subTest(f"Test DROP {creatable} ON CLUSTER"):
                 self.validate_identity(f"DROP {creatable} test ON CLUSTER test_cluster")
+                self.validate_identity(f"DROP {creatable} test ON CLUSTER '{{cluster}}'")
 
     def test_datetime_funcs(self):
         # Each datetime func has an alias that is roundtripped to the original name e.g. (DATE_SUB, DATESUB) -> DATE_SUB
@@ -1225,6 +1259,15 @@ LIFETIME(MIN 0 MAX 0)""",
                     self.validate_identity(
                         f"SELECT {func_alias}(SECOND, 1, bar)",
                         f"SELECT {func_name}(SECOND, 1, bar)",
+                    )
+        # 4-arg functions of type <func>(unit, value, date, timezone)
+        for func in (("DATE_DIFF", "DATEDIFF"),):
+            func_name = func[0]
+            for func_alias in func:
+                with self.subTest(f"Test 4-arg date-time function {func_alias}"):
+                    self.validate_identity(
+                        f"SELECT {func_alias}(SECOND, 1, bar, 'UTC')",
+                        f"SELECT {func_name}(SECOND, 1, bar, 'UTC')",
                     )
 
     def test_convert(self):
