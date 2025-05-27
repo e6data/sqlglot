@@ -15,7 +15,6 @@ from sqlglot.dialects.dialect import (
     timestrtotime_sql,
     datestrtodate_sql,
     trim_sql,
-    var_map_sql,
 )
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset, flatten
 from sqlglot.tokens import TokenType
@@ -1865,8 +1864,13 @@ class E6(Dialect):
 
         def array_sql(self, expression: exp.Array) -> str:
             expressions_sql = ", ".join(self.sql(e) for e in expression.expressions)
-            # expressions_sql = f"[{expressions_sql}]"
             return f"ARRAY[{expressions_sql}]"
+
+        def map_sql(self, expression: exp.Map | exp.VarMap) -> str:
+            keys = expression.args.get("keys")
+            values = expression.args.get("values")
+
+            return f"MAP[{self.sql(keys)},{self.sql(values)}]"
 
         def length_sql(self, expression: exp.Length) -> str:
             """
@@ -2135,7 +2139,7 @@ class E6(Dialect):
             exp.LastValue: rename_func("LAST_VALUE"),
             exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
-            exp.Map: lambda self, e: var_map_sql(self, e, "NAMED_STRUCT"),
+            exp.Map: map_sql,
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
             exp.Min: min_or_least,
@@ -2193,6 +2197,7 @@ class E6(Dialect):
             exp.TsOrDsToDate: TsOrDsToDate_sql,
             exp.UnixToTime: from_unixtime_sql,
             exp.UnixToStr: from_unixtime_sql,
+            exp.VarMap: map_sql,
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
         }
 
