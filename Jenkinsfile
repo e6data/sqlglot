@@ -192,5 +192,13 @@ pipeline {
                 sh 'skopeo copy --all docker://${PROD_IMAGE}:${TAG_VALUE} docker://${AZURE_IMAGE}:${TAG_VALUE}'
             }
         }
+
+        stage('Trigger CD') {
+            steps {
+                build job: '/adhoc_pipes/transpiler_batch_cd_transpiler/batch-deployment', parameters: [
+                  string(name: 'IMAGE_TAG', value: env.TAG_VALUE)
+                    ]
+           }
+       }
     }
 }

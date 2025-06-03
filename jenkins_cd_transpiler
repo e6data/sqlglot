@@ -1,0 +1,61 @@
+pipeline {
+
+  parameters {
+    string(name: 'IMAGE_TAG', description: 'Docker image tag to deploy')
+  }
+
+  environment {
+    SERVICE_NAME = "transpiler"
+    RELEASE_NAME = "pipeline-release"
+    AWS_ACCOUNT_ID = credentials('PERF_AWS_ACCOUNT_ID')
+    NAMESPACE = "realtime-ingest"
+    AWS_REGION = "us-east-1"
+    CLUSTER_NAME = "e6data-workspaces"
+
+    ASSUMED_ROLE_ARN ="arn:aws:iam::670514002493:role/cross-account-jenkins-access"
+  }
+
+  agent {
+      kubernetes {
+        defaultContainer 'jnlp'
+      }
+  }
+
+  stages {
+    stage('aws auth') {
+      agent {
+       kubernetes {
+         inheritFrom 'helmdeploy'
+         defaultContainer 'helm'
+       }
+      }
+      steps {
+        sh 'pip3 install boto3'
+        sh '''
+        wget https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -O /usr/bin/yq
+        chmod +x /usr/bin/yq
+        '''
+
+        script {
+                   env.TEMP_ROLE=sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${ASSUMED_ROLE_ARN} --role-session-name storage-service-${BUILD_NUMBER}').trim()
+                   env.AWS_ACCESS_KEY_ID=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.AccessKeyId"').trim()
+                   env.AWS_SECRET_ACCESS_KEY=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SecretAccessKey"').trim()
+                   env.AWS_SESSION_TOKEN=sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SessionToken"').trim()
+                   env.ECR_TOKEN=sh(returnStdout: true, script: "aws ecr get-login-password --region ${AWS_REGION} --output text").trim()
+                   env.ECR_REPO = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.SERVICE_NAME}"
+        }
+        sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}"
+        dir('deployment/pipeline-chart') {
+          sh """
+          yq e '.transpiler.image = "${ECR_REPO}"' -i values.eks.yaml
+          yq e '.transpiler.tag = "${IMAGE_TAG}"' -i values.eks.yaml
+
+          helm upgrade --install ${RELEASE_NAME} . \\
+            -f values.eks.yaml \\
+            -n ${NAMESPACE} \\
+          """
+        }
+      }
+    }
+  }
+}
