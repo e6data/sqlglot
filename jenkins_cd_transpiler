@@ -13,22 +13,20 @@ pipeline {
     CLUSTER_NAME = "e6data-workspaces"
 
     ASSUMED_ROLE_ARN ="arn:aws:iam::670514002493:role/cross-account-jenkins-access"
+    CHART_REPO_URL   = "https://github.com/e6data/transpiler-pipeline.git"
+    CHART_REPO_REF   = "refs/heads/helm_chart_deployment"  // branch
+    CHART_REL_PATH   = "deployment/pipeline-chart"         // folder inside repo
   }
 
   agent {
-      kubernetes {
-        defaultContainer 'jnlp'
-      }
+    kubernetes {
+      inheritFrom 'helmdeploy'
+      defaultContainer 'helm'
+    }
   }
 
   stages {
     stage('aws auth') {
-      agent {
-       kubernetes {
-         inheritFrom 'helmdeploy'
-         defaultContainer 'helm'
-       }
-      }
       steps {
         sh 'pip3 install boto3'
         sh '''
@@ -45,14 +43,44 @@ pipeline {
                    env.ECR_REPO = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.SERVICE_NAME}"
         }
         sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}"
-        dir('deployment/pipeline-chart') {
-          sh """
-          yq e '.transpiler.image = "${ECR_REPO}"' -i values.eks.yaml
-          yq e '.transpiler.tag = "${IMAGE_TAG}"' -i values.eks.yaml
+      }
+    }
+    stage('Checkout chart repo') {
+      steps {
+        dir('charts-src') {
+          checkout([
+            $class: 'GitSCM',
+            branches: [[name: "${CHART_REPO_REF}"]],
+            userRemoteConfigs: [[
+              url: "${CHART_REPO_URL}",
+              credentialsId: 'GITHUB_E6DATA_PAT'
+            ]]
+          ])
+        }
 
-          helm upgrade --install ${RELEASE_NAME} . \\
-            -f values.eks.yaml \\
-            -n ${NAMESPACE} \\
+        /* yq binary for YAML edits */
+        sh '''
+          wget -qO /usr/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64
+          chmod +x /usr/bin/yq
+        '''
+      }
+    }
+    stage('Helm upgrade') {
+      steps {
+        script {
+          env.ECR_REPO = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${SERVICE_NAME}"
+        }
+
+        dir("charts-src/${CHART_REL_PATH}") {
+          sh """
+            yq e '.transpiler.image = "${ECR_REPO}"'  -i values.eks.yaml
+            yq e '.transpiler.tag   = "${IMAGE_TAG}"' -i values.eks.yaml
+
+            helm upgrade --install ${RELEASE_NAME} . \
+              --set transpiler.image=${ECR_REPO} \
+              --set transpiler.tag=${IMAGE_TAG} \
+              -f values.eks.yaml \
+              -n ${NAMESPACE}
           """
         }
       }
