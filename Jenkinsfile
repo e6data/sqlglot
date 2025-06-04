@@ -195,7 +195,7 @@ pipeline {
 
         stage('Trigger CD') {
             steps {
-                build job: '/adhoc_pipes/transpiler_batch_cd_transpiler_1/batch-deployment', parameters: [
+                build job: '/adhoc_pipes/transpiler_batch_cd_pipeline_1/batch-deployment', parameters: [
                   string(name: 'IMAGE_TAG', value: env.TAG_VALUE)
                     ]
            }
