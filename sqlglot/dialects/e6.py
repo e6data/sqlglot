@@ -2135,6 +2135,7 @@ class E6(Dialect):
             exp.LastValue: rename_func("LAST_VALUE"),
             exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
+            exp.Lower: rename_func("LOWER"),
             exp.Map: lambda self, e: var_map_sql(self, e, "NAMED_STRUCT"),
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
@@ -2193,6 +2194,7 @@ class E6(Dialect):
             exp.TsOrDsToDate: TsOrDsToDate_sql,
             exp.UnixToTime: from_unixtime_sql,
             exp.UnixToStr: from_unixtime_sql,
+            exp.Upper: rename_func("UPPER"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
         }
 
