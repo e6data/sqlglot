@@ -266,6 +266,7 @@ async def stats_api(
             "GROUP",
             "EXCEPT",
             "SETS",
+            "WITH",
         ]
 
         # Regex patterns
