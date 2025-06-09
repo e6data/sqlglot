@@ -1222,14 +1222,14 @@ class TestE6(Validator):
         self.validate_all(
             "CASE WHEN REPLACE(LOWER(table1), 'fact_', '') != table1 THEN ' WHERE event_date >= DATE_SUB(CURRENT_DATE(), 365)' WHEN REPLACE(LOWER(table1), 'dim_', '') != table1 THEN ' WHERE is_active = TRUE' ELSE '' END",
             read={
-                "databricks": "CASE WHEN REPLACE(LOWER(table1), 'fact_', '') != table1 THEN ' WHERE event_date >= DATE_SUB(CURRENT_DATE(), 365)' WHEN REPLACE(LOWER(table1), 'dim_', '') != table1 THEN ' WHERE is_active = TRUE' ELSE '' END"
+                "databricks": "CASE WHEN REPLACE(LCASE(table1), 'fact_', '') != table1 THEN ' WHERE event_date >= DATE_SUB(CURRENT_DATE(), 365)' WHEN REPLACE(LOWER(table1), 'dim_', '') != table1 THEN ' WHERE is_active = TRUE' ELSE '' END"
             },
         )
 
         self.validate_all(
             "SELECT product_id, UPPER(product_name) AS product_name_upper FROM products WHERE UPPER(product_name) LIKE UPPER('%laptop%')",
             read={
-                "databricks": "SELECT product_id, UPPER(product_name) AS product_name_upper FROM products WHERE UPPER(product_name) LIKE UPPER('%laptop%')"
+                "databricks": "SELECT product_id, UCASE(product_name) AS product_name_upper FROM products WHERE UCASE(product_name) LIKE UPPER('%laptop%')"
             },
         )
 
