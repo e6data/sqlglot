@@ -413,6 +413,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "ELEMENT_AT(X, 5)",
+            read={
+                "databricks": "GET(X, 4)",
+            },
+        )
+
+        self.validate_all(
             "SELECT CASE WHEN SIZE(arr) > 3 THEN ELEMENT_AT(TRANSFORM(arr, x -> x * 2), -2) ELSE ELEMENT_AT(arr, 1) END AS resul FROM (VALUES (ARRAY[1, 2, 3, 4]), (ARRAY[10, 20])) AS tab(arr)",
             read={
                 "databricks": "SELECT CASE WHEN size(arr) > 3 THEN try_element_at(transform(arr, x -> x * 2), -2) ELSE try_element_at(arr, 1) END AS resul FROM VALUES (array(1, 2, 3, 4)), (array(10, 20)) AS tab(arr)",
@@ -1827,6 +1834,13 @@ class TestE6(Validator):
             },
             write={
                 "databricks": "SELECT COLLECT_LIST(employee) FILTER(WHERE performance_rating > 3) OVER (PARTITION BY dept) AS top_performers FROM VALUES ('Sales', 'Alice', 5), ('Sales', 'Bob', 2) AS tab(dept, employee, performance_rating)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_AGG(col) FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
+            read={
+                "databricks": "SELECT collect_set(col) FROM VALUES (1), (2), (NULL), (1) AS tab(col)",
             },
         )
 
