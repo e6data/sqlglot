@@ -1830,6 +1830,13 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT ARRAY_AGG(col) FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
+            read={
+                "databricks": "SELECT collect_set(col) FROM VALUES (1), (2), (NULL), (1) AS tab(col)",
+            },
+        )
+
     def test_bitwise(self):
         self.validate_all(
             "BITWISE_NOT(1)",

@@ -2078,6 +2078,7 @@ class E6(Dialect):
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArraySize: rename_func("size"),
             exp.ArraySlice: rename_func("ARRAY_SLICE"),
+            exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
             exp.AtTimeZone: lambda self, e: self.func("DATETIME", e.this, e.args.get("zone")),
             exp.BitwiseLeftShift: lambda self, e: self.func("SHIFTLEFT", e.this, e.expression),
