@@ -333,6 +333,15 @@ TBLPROPERTIES (
         )
 
         self.validate_all(
+            "SELECT GET(ARRAY(1, 2, 3), 2)",
+            write={
+                "duckdb": "SELECT [1, 2, 3][3]",
+                "duckdb, version=1.1.0": "SELECT ([1, 2, 3])[3]",
+                "presto": "SELECT ELEMENT_AT(ARRAY[1, 2, 3], 3)",
+            },
+        )
+
+        self.validate_all(
             "SELECT id_column, name, age FROM test_table LATERAL VIEW INLINE(struc_column) explode_view AS name, age",
             write={
                 "presto": "SELECT id_column, name, age FROM test_table CROSS JOIN UNNEST(struc_column) AS explode_view(name, age)",

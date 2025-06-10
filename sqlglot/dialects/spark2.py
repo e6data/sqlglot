@@ -261,6 +261,9 @@ class Spark2(Hive):
                 ),
                 zone=seq_get(args, 1),
             ),
+            "GET": lambda args: exp.Bracket(
+                this=seq_get(args, 0), expressions=[seq_get(args, 1)], offset=0, safe=True
+            ),
             "INT": _build_as_cast("int"),
             "ISNULL": lambda args: _parse_is_null_functions(args, "isnull"),
             "ISNOTNULL": lambda args: _parse_is_null_functions(args, "isnotnull"),
