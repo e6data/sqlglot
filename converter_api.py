@@ -27,6 +27,8 @@ from apis.utils.helpers import (
     extract_joins_from_query,
     extract_cte_n_subquery_list,
     normalize_unicode_spaces,
+    sanitize_preserve_blocks,
+    auto_quote_reserved,
 )
 
 if t.TYPE_CHECKING:
@@ -98,6 +100,10 @@ async def convert_query(
             escape_unicode(query),
         )
 
+        item = "condenast"
+        query = auto_quote_reserved(query)
+        query, comment = sanitize_preserve_blocks(query, item)
+
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         tree2 = quote_identifiers(tree, dialect=to_sql)
@@ -107,6 +113,8 @@ async def convert_query(
         double_quotes_added_query = values_ensured_ast.sql(dialect=to_sql, from_dialect=from_sql)
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+        double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
         logger.info(
             "%s AT %s FROM %s — Transpiled Query:\n%s",
@@ -290,7 +298,8 @@ async def stats_api(
             }
 
         item = "condenast"
-        query, comment = strip_comment(query, item)
+        query = auto_quote_reserved(query)
+        query, comment = sanitize_preserve_blocks(query, item)
 
         # Extract functions from the query
         all_functions = extract_functions_from_query(

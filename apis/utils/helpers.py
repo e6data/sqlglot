@@ -1,4 +1,5 @@
 import re
+from typing import Optional, Set, Type
 import json
 import logging
 import os
@@ -330,6 +331,47 @@ def strip_comment(query: str, item: str) -> tuple:
         return query, None
 
 
+def sanitize_preserve_blocks(sql: str, item: str) -> tuple[str, str]:
+    # 1. strip your /* item::UUID */ header
+    q, header = strip_comment(sql, item)
+
+    out = []
+    i, n = 0, len(q)
+    while i < n:
+        if q.startswith("/*", i):
+            # copy the entire block comment verbatim
+            j = q.find("*/", i + 2)
+            if j < 0:
+                j = n - 2
+            out.append(q[i : j + 2])
+            i = j + 2
+        elif q.startswith("--", i):
+            # convert the rest of this line to one block
+            i += 2
+            # grab until newline
+            start = i
+            while i < n and q[i] != "\n":
+                i += 1
+            body = q[start:i].strip()
+            # neutralize any stray /* or */ in body
+            body = body.replace("/*", "/ *").replace("*/", "* /")
+            out.append(f"/* {body} */")
+        else:
+            out.append(q[i])
+            i += 1
+
+    sanitized = "".join(out)
+    # (optional) balance unmatched /* or */
+    opens = sanitized.count("/*")
+    closes = sanitized.count("*/")
+    if closes > opens:
+        sanitized = re.sub(r"\*/", "", sanitized, count=closes - opens)
+    elif opens > closes:
+        sanitized = sanitized.rstrip() + " */"
+
+    return sanitized, header
+
+
 def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
     """
     Ensures that any CTE using VALUES directly is modified to SELECT * FROM VALUES(...).
@@ -571,3 +613,46 @@ def normalize_unicode_spaces(sql: str) -> str:
         i += 1
 
     return "".join(out_chars)
+
+
+def auto_quote_reserved(
+    sql: str,
+    dialect: Type[E6] = E6,
+    extra_reserved: Optional[Set[str]] = None,
+) -> str:
+    """
+    Quote any identifier that is also a reserved keyword for the given dialect.
+
+    Parameters
+    ----------
+    sql : str
+        Raw SQL text.
+    dialect : Dialect subclass, default E6
+        Dialect whose RESERVED_KEYWORDS list is consulted.
+    extra_reserved : Optional[Set[str]]
+        Extra words you also want to treat as reserved.
+
+    Returns
+    -------
+    str
+        SQL with problem identifiers double-quoted.
+    """
+    # 1️⃣  build reserved-word set
+    reserved: Set[str] = {kw.lower() for kw in dialect.Generator.RESERVED_KEYWORDS}
+    if extra_reserved:
+        reserved.update(w.lower() for w in extra_reserved)
+
+    def _quote_if(word: str) -> str:
+        return f'"{word}"' if word.lower() in reserved else word
+
+    CTE_RE = re.compile(r"(?is)(\bwith\s+)(\w+)(\s+as\b)")
+    FROM_RE = re.compile(r"(?is)(\bfrom\s+|,\s*)(\w+)\b")
+    JOIN_RE = re.compile(r"(?is)(\bjoin\s+)(\w+)\b")
+    DOT_RE = re.compile(r"(?is)\b(\w+)\b(?=\s*\.)")
+
+    sql = CTE_RE.sub(lambda m: f"{m.group(1)}{_quote_if(m.group(2))}{m.group(3)}", sql)
+    sql = FROM_RE.sub(lambda m: f"{m.group(1)}{_quote_if(m.group(2))}", sql)
+    sql = JOIN_RE.sub(lambda m: f"{m.group(1)}{_quote_if(m.group(2))}", sql)
+    sql = DOT_RE.sub(lambda m: _quote_if(m.group(1)), sql)
+
+    return sql
