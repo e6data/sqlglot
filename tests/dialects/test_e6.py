@@ -1912,3 +1912,20 @@ class TestE6(Validator):
                 "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
             },
         )
+
+    def test_databricks_to_e6data_pretty(self):
+        sql = (
+            "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 "
+            "THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result"
+        )
+
+        expected = """SELECT
+      CASE
+        WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3)
+        ELSE SHIFTLEFT(2, 2)
+      END AS result"""
+
+        self.validate_all(
+            sql,
+            read={"databricks": sql}
+        )
