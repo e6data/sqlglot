@@ -2082,6 +2082,7 @@ class E6(Dialect):
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArraySize: rename_func("size"),
             exp.ArraySlice: rename_func("ARRAY_SLICE"),
+            exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
             exp.AtTimeZone: lambda self, e: self.func("DATETIME", e.this, e.args.get("zone")),
             exp.BitwiseLeftShift: lambda self, e: self.func("SHIFTLEFT", e.this, e.expression),
@@ -2139,6 +2140,7 @@ class E6(Dialect):
             exp.LastValue: rename_func("LAST_VALUE"),
             exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
+            exp.Lower: rename_func("LOWER"),
             exp.Map: map_sql,
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
@@ -2198,6 +2200,7 @@ class E6(Dialect):
             exp.UnixToTime: from_unixtime_sql,
             exp.UnixToStr: from_unixtime_sql,
             exp.VarMap: map_sql,
+            exp.Upper: rename_func("UPPER"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
         }
 
