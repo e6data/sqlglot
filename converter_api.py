@@ -4,6 +4,7 @@ import typing as t
 import uvicorn
 import re
 import os
+import json
 import sqlglot
 import logging
 from datetime import datetime
@@ -27,6 +28,7 @@ from apis.utils.helpers import (
     extract_joins_from_query,
     extract_cte_n_subquery_list,
     normalize_unicode_spaces,
+    transform_table_part,
 )
 
 if t.TYPE_CHECKING:
@@ -67,9 +69,17 @@ async def convert_query(
     query_id: Optional[str] = Form("NO_ID_MENTIONED"),
     from_sql: str = Form(...),
     to_sql: Optional[str] = Form("e6"),
+    feature_flags: Optional[str] = Form(None),
 ):
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
+
+    flags_dict = {"USE_TWO_PHASE_QUALIFICATION_SCHEME": False}
+    if feature_flags:
+        try:
+            flags_dict = json.loads(feature_flags)
+        except json.JSONDecodeError as je:
+            return HTTPException(status_code=500, detail=str(je))
 
     if not query or not query.strip():
         logger.info(
@@ -99,6 +109,9 @@ async def convert_query(
         )
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+
+        if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME"):
+            tree = transform_table_part(tree)
 
         tree2 = quote_identifiers(tree, dialect=to_sql)
 
