@@ -29,25 +29,25 @@ pipeline {
     }
 
     stages {
-        stage('Sonarqube Scan') {
-            agent {
-                kubernetes {
-                    inheritFrom 'docker'
-                    defaultContainer 'docker'
-                }
-            }
+        // stage('Sonarqube Scan') {
+        //     agent {
+        //         kubernetes {
+        //             inheritFrom 'docker'
+        //             defaultContainer 'docker'
+        //         }
+        //     }
 
-            environment {
-                SCANNER_HOME = tool 'sonarqube'
-            }
+        //     environment {
+        //         SCANNER_HOME = tool 'sonarqube'
+        //     }
 
-            steps {
-                withSonarQubeEnv('sonarqube-jenkins') {
-                    checkout scm
-                    sh '${SCANNER_HOME}/bin/sonar-scanner'
-                }
-            }
-        }
+        //     steps {
+        //         withSonarQubeEnv('sonarqube-jenkins') {
+        //             checkout scm
+        //             sh '${SCANNER_HOME}/bin/sonar-scanner'
+        //         }
+        //     }
+        // }
 
         // stage("Quality Gate") {
         //     steps {
