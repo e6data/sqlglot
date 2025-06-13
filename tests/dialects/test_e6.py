@@ -66,6 +66,24 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "MAP[ARRAY[a, c],ARRAY[b, d]]",
+            read={
+                "clickhouse": "map(a, b, c, d)",
+                "duckdb": "MAP([a, c], [b, d])",
+                "hive": "MAP(a, b, c, d)",
+                "presto": "MAP(ARRAY[a, c], ARRAY[b, d])",
+                "spark": "MAP(a, b, c, d)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT MAP[SPLIT('test', ','),SPLIT('-18000', ',')]",
+            read={
+                "trino": "SELECT map(split('test',','), split('-18000',','))",
+            },
+        )
+
+        self.validate_all(
             "SELECT TO_TIMESTAMP('2024-11-09', 'dd-MM-YY')",
             read={"trino": "SELECT date_parse('2024-11-09', '%d-%m-%y')"},
         )

@@ -574,6 +574,21 @@ def normalize_unicode_spaces(sql: str) -> str:
     return "".join(out_chars)
 
 
+def transform_table_part(expression: exp.Expression) -> exp.Expression:
+    for column_or_table in expression.find_all(exp.Column, exp.Table):
+        db = column_or_table.args.get("db")
+        catalog = column_or_table.args.get("catalog")
+        if db and catalog:
+            db_name = db.this
+            catalog_name = catalog.this
+            combined_catalog_db = f"{catalog_name}_{db_name}"
+
+            column_or_table.set("db", exp.to_identifier(combined_catalog_db))
+            column_or_table.set("catalog", None)
+
+    return expression
+
+
 def auto_quote_reserved(
     sql: str,
     dialect: Type[E6] = E6,

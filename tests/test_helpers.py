@@ -2,7 +2,10 @@ import unittest
 from apis.utils.helpers import (
     normalize_unicode_spaces,
     auto_quote_reserved,
+    transform_table_part,
 )
+
+from sqlglot import parse_one, exp
 
 
 class TestHelpers(unittest.TestCase):
@@ -37,6 +40,22 @@ class TestHelpers(unittest.TestCase):
         # Mix of multiple spaces and newline preserved
         self.assertEqual(
             normalize_unicode_spaces("SELECT\n\u2028*\u00a0FROM\rusers"), "SELECT\n * FROM\rusers"
+        )
+
+    def test_transform_table_part(self):
+        def create_ast(query: str) -> exp.Expression:
+            return parse_one(query)
+
+        def create_query(ast: exp.Expression) -> str:
+            return ast.sql()
+
+        self.assertEqual(
+            create_query(
+                transform_table_part(
+                    create_ast("SELECT catalogn.dbn.tablen.column from catalogn.dbn.tablen")
+                )
+            ),
+            "SELECT catalogn_dbn.tablen.column FROM catalogn_dbn.tablen",
         )
 
 
