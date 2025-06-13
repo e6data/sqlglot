@@ -1919,8 +1919,4 @@ class TestE6(Validator):
         expected = """SELECT
   CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result"""
 
-        self.validate_all(
-            expected,
-            read={"databricks": sql},
-            pretty=True
-        )
+        self.validate_all(expected, read={"databricks": sql}, pretty=True)
