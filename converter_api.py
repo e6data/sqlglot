@@ -117,7 +117,9 @@ async def convert_query(
 
         values_ensured_ast = ensure_select_from_values(tree2)
 
-        double_quotes_added_query = values_ensured_ast.sql(dialect=to_sql, from_dialect=from_sql)
+        double_quotes_added_query = values_ensured_ast.sql(
+            dialect=to_sql, from_dialect=from_sql, pretty=True
+        )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
