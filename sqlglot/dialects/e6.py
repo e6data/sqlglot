@@ -1544,6 +1544,13 @@ class E6(Dialect):
         # So what was happening was this method will get called internally while .transpile is called. They have written this method with respect to other dialects.
         # But whenever we pass a normal query, by default parts like `NULLS LAST` etc were getting by defaults in order by clause which will differs the sequence of results displayed in original dialect and ours.
         # In order to tackle that, I overridden that so as to maintain structure of sqlglot with out altering original methods
+
+        def pad_comment(self, comment: str) -> str:
+            comment = comment.replace("/*", "/ *").replace("*/", "* /")
+            comment = " " + comment if comment[0].strip() else comment
+            comment = comment + " " if comment[-1].strip() else comment
+            return comment
+
         def ordered_sql(self, expression: exp.Ordered) -> str:
             """
             Generate the SQL string for an ORDER BY clause in the E6 dialect.

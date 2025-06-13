@@ -27,7 +27,6 @@ from apis.utils.helpers import (
     extract_joins_from_query,
     extract_cte_n_subquery_list,
     normalize_unicode_spaces,
-    sanitize_preserve_blocks,
     auto_quote_reserved,
 )
 
@@ -102,7 +101,7 @@ async def convert_query(
 
         item = "condenast"
         query = auto_quote_reserved(query)
-        query, comment = sanitize_preserve_blocks(query, item)
+        query, comment = strip_comment(query, item)
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
@@ -299,7 +298,7 @@ async def stats_api(
 
         item = "condenast"
         query = auto_quote_reserved(query)
-        query, comment = sanitize_preserve_blocks(query, item)
+        query, comment = strip_comment(query, item)
 
         # Extract functions from the query
         all_functions = extract_functions_from_query(

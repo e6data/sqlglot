@@ -331,47 +331,6 @@ def strip_comment(query: str, item: str) -> tuple:
         return query, None
 
 
-def sanitize_preserve_blocks(sql: str, item: str) -> tuple[str, str]:
-    # 1. strip your /* item::UUID */ header
-    q, header = strip_comment(sql, item)
-
-    out = []
-    i, n = 0, len(q)
-    while i < n:
-        if q.startswith("/*", i):
-            # copy the entire block comment verbatim
-            j = q.find("*/", i + 2)
-            if j < 0:
-                j = n - 2
-            out.append(q[i : j + 2])
-            i = j + 2
-        elif q.startswith("--", i):
-            # convert the rest of this line to one block
-            i += 2
-            # grab until newline
-            start = i
-            while i < n and q[i] != "\n":
-                i += 1
-            body = q[start:i].strip()
-            # neutralize any stray /* or */ in body
-            body = body.replace("/*", "/ *").replace("*/", "* /")
-            out.append(f"/* {body} */")
-        else:
-            out.append(q[i])
-            i += 1
-
-    sanitized = "".join(out)
-    # (optional) balance unmatched /* or */
-    opens = sanitized.count("/*")
-    closes = sanitized.count("*/")
-    if closes > opens:
-        sanitized = re.sub(r"\*/", "", sanitized, count=closes - opens)
-    elif opens > closes:
-        sanitized = sanitized.rstrip() + " */"
-
-    return sanitized, header
-
-
 def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
     """
     Ensures that any CTE using VALUES directly is modified to SELECT * FROM VALUES(...).
