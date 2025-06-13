@@ -89,7 +89,6 @@ class Databricks(Spark):
         IDENTIFIERS = ["`", '"']
 
     class Tokenizer(Spark.Tokenizer):
-        COMMENTS = ["//", "--", ("/*", "*/")]
         KEYWORDS = {
             **Spark.Tokenizer.KEYWORDS,
             "VOID": TokenType.VOID,
