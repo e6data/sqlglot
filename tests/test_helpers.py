@@ -3,6 +3,7 @@ from apis.utils.helpers import (
     normalize_unicode_spaces,
     auto_quote_reserved,
     transform_table_part,
+    set_cte_names_case_sensitively,
 )
 
 from sqlglot import parse_one, exp
@@ -99,3 +100,13 @@ class TestAutoQuoteReserved(unittest.TestCase):
             auto_quote_reserved(raw, extra_reserved={"temp"}),
             expected,
         )
+
+
+class TestCteNamesCaseSensitivity(unittest.TestCase):
+    def test_set_cte_names_case_sensitively(self):
+        raw = "with final as(select 1, 2, 3) select * from Final"
+        expected = "WITH final AS (SELECT 1, 2, 3) SELECT * FROM final"
+        raw_ast = parse_one(raw)
+        set_ast = set_cte_names_case_sensitively(raw_ast)
+        handled_sql = set_ast.sql()
+        self.assertEqual(handled_sql, expected)

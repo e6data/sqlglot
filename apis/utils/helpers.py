@@ -498,6 +498,23 @@ def extract_joins_from_query(sql_query_ast):
     return join_info_list
 
 
+def set_cte_names_case_sensitively(sql_query_ast):
+    [cte_list, values_list, subquery_list] = extract_cte_n_subquery_list(sql_query_ast)
+    total_list = cte_list + values_list + subquery_list
+
+    def compare_names_from_one_to_list(join_name: str, total_name_list: list):
+        for cte in total_name_list:
+            if cte.lower() == join_name.lower():
+                return cte
+
+    for table in sql_query_ast.find_all(exp.Table):
+        cte_name = compare_names_from_one_to_list(table.name, total_list)
+        if not table.db and cte_name is not None:
+            table.this.set("this", cte_name)
+
+    return sql_query_ast
+
+
 def extract_cte_n_subquery_list(sql_query_ast):
     logger.info("Extracting cte, subqueries and values....")
     cte_list = []
