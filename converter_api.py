@@ -125,7 +125,9 @@ async def convert_query(
 
         cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
 
-        double_quotes_added_query = cte_names_equivalence_checked_ast.sql(dialect=to_sql, from_dialect=from_sql, pretty=True)
+        double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
+            dialect=to_sql, from_dialect=from_sql, pretty=True
+        )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
@@ -352,7 +354,9 @@ async def stats_api(
 
             tree2 = quote_identifiers(tree, dialect=to_sql)
 
-            double_quotes_added_query = tree2.sql(dialect=to_sql, from_dialect=from_sql, pretty=True)
+            double_quotes_added_query = tree2.sql(
+                dialect=to_sql, from_dialect=from_sql, pretty=True
+            )
 
             double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
