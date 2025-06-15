@@ -29,7 +29,6 @@ from apis.utils.helpers import (
     extract_cte_n_subquery_list,
     normalize_unicode_spaces,
     transform_table_part,
-    auto_quote_reserved,
     set_cte_names_case_sensitively,
 )
 
