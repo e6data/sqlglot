@@ -1,4 +1,5 @@
 import re
+from typing import Optional, Set, Type
 import json
 import logging
 import os
@@ -497,6 +498,23 @@ def extract_joins_from_query(sql_query_ast):
     return join_info_list
 
 
+def set_cte_names_case_sensitively(sql_query_ast):
+    [cte_list, values_list, subquery_list] = extract_cte_n_subquery_list(sql_query_ast)
+    total_list = cte_list + values_list + subquery_list
+
+    def compare_names_from_one_to_list(join_name: str, total_name_list: list):
+        for cte in total_name_list:
+            if cte.lower() == join_name.lower():
+                return cte
+
+    for table in sql_query_ast.find_all(exp.Table):
+        cte_name = compare_names_from_one_to_list(table.name, total_list)
+        if not table.db and cte_name is not None:
+            table.this.set("this", cte_name)
+
+    return sql_query_ast
+
+
 def extract_cte_n_subquery_list(sql_query_ast):
     logger.info("Extracting cte, subqueries and values....")
     cte_list = []
@@ -586,3 +604,46 @@ def transform_table_part(expression: exp.Expression) -> exp.Expression:
             column_or_table.set("catalog", None)
 
     return expression
+
+
+# def auto_quote_reserved(
+#     sql: str,
+#     dialect: Type[E6] = E6,
+#     extra_reserved: Optional[Set[str]] = None,
+# ) -> str:
+#     """
+#     Quote any identifier that is also a reserved keyword for the given dialect.
+#
+#     Parameters
+#     ----------
+#     sql : str
+#         Raw SQL text.
+#     dialect : Dialect subclass, default E6
+#         Dialect whose RESERVED_KEYWORDS list is consulted.
+#     extra_reserved : Optional[Set[str]]
+#         Extra words you also want to treat as reserved.
+#
+#     Returns
+#     -------
+#     str
+#         SQL with problem identifiers double-quoted.
+#     """
+#     # 1️⃣  build reserved-word set
+#     reserved: Set[str] = {kw.lower() for kw in dialect.Generator.RESERVED_KEYWORDS}
+#     if extra_reserved:
+#         reserved.update(w.lower() for w in extra_reserved)
+#
+#     def _quote_if(word: str) -> str:
+#         return f'"{word}"' if word.lower() in reserved else word
+#
+#     CTE_RE = re.compile(r"(?is)(\bwith\s+)(\w+)(\s+as\b)")
+#     FROM_RE = re.compile(r"(?is)(\bfrom\s+|,\s*)(\w+)\b")
+#     JOIN_RE = re.compile(r"(?is)(\bjoin\s+)(\w+)\b")
+#     DOT_RE = re.compile(r"(?is)\b(\w+)\b(?=\s*\.)")
+#
+#     sql = CTE_RE.sub(lambda m: f"{m.group(1)}{_quote_if(m.group(2))}{m.group(3)}", sql)
+#     sql = FROM_RE.sub(lambda m: f"{m.group(1)}{_quote_if(m.group(2))}", sql)
+#     sql = JOIN_RE.sub(lambda m: f"{m.group(1)}{_quote_if(m.group(2))}", sql)
+#     sql = DOT_RE.sub(lambda m: _quote_if(m.group(1)), sql)
+#
+#     return sql

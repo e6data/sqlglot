@@ -29,6 +29,7 @@ from apis.utils.helpers import (
     extract_cte_n_subquery_list,
     normalize_unicode_spaces,
     transform_table_part,
+    set_cte_names_case_sensitively,
 )
 
 if t.TYPE_CHECKING:
@@ -108,6 +109,10 @@ async def convert_query(
             escape_unicode(query),
         )
 
+        item = "condenast"
+        query = auto_quote_reserved(query)
+        query, comment = strip_comment(query, item)
+
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME"):
@@ -117,11 +122,15 @@ async def convert_query(
 
         values_ensured_ast = ensure_select_from_values(tree2)
 
-        double_quotes_added_query = values_ensured_ast.sql(
+        cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
+
+        double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
             dialect=to_sql, from_dialect=from_sql, pretty=True
         )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+        double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
         logger.info(
             "%s AT %s FROM %s — Transpiled Query:\n%s",
@@ -305,6 +314,7 @@ async def stats_api(
             }
 
         item = "condenast"
+        query = auto_quote_reserved(query)
         query, comment = strip_comment(query, item)
 
         # Extract functions from the query
@@ -333,7 +343,8 @@ async def stats_api(
                 original_ast, unsupported, supported
             )
             values_ensured_ast = ensure_select_from_values(original_ast)
-            query = values_ensured_ast.sql(from_sql)
+            cte_names_equivalence_ast = set_cte_names_case_sensitively(values_ensured_ast)
+            query = cte_names_equivalence_ast.sql(from_sql)
 
             # ------------------------------
             # Step 2: Transpile the Query
@@ -342,7 +353,9 @@ async def stats_api(
 
             tree2 = quote_identifiers(tree, dialect=to_sql)
 
-            double_quotes_added_query = tree2.sql(dialect=to_sql, from_dialect=from_sql)
+            double_quotes_added_query = tree2.sql(
+                dialect=to_sql, from_dialect=from_sql, pretty=True
+            )
 
             double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
