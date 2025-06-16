@@ -77,7 +77,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT MAP[SPLIT('test', ','),SPLIT('-18000', ',')]",
+            "SELECT MAP['test','-18000']",
             read={
                 "trino": "SELECT map(split('test',','), split('-18000',','))",
             },

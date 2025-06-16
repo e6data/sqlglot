@@ -1876,8 +1876,17 @@ class E6(Dialect):
         def map_sql(self, expression: exp.Map | exp.VarMap) -> str:
             keys = expression.args.get("keys")
             values = expression.args.get("values")
+            final_keys = keys
+            final_values = values
+            if isinstance(keys, exp.Split):
+                key_str = keys.this.this if isinstance(keys.this, exp.Literal) else None
+                final_keys = f"'{key_str}'"
 
-            return f"MAP[{self.sql(keys)},{self.sql(values)}]"
+            if isinstance(values, exp.Split):
+                values_str = values.this.this if isinstance(values.this, exp.Literal) else None
+                final_values = f"'{values_str}'"
+
+            return f"MAP[{self.sql(final_keys)},{self.sql(final_values)}]"
 
         def length_sql(self, expression: exp.Length) -> str:
             """
