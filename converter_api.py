@@ -75,7 +75,7 @@ async def convert_query(
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
 
-    flags_dict = {"USE_TWO_PHASE_QUALIFICATION_SCHEME": False}
+    flags_dict = {}
     if feature_flags:
         try:
             flags_dict = json.loads(feature_flags)
@@ -110,12 +110,12 @@ async def convert_query(
         )
 
         item = "condenast"
-        query = auto_quote_reserved(query)
+        # query = auto_quote_reserved(query)
         query, comment = strip_comment(query, item)
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
-        if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME"):
+        if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
             tree = transform_table_part(tree)
 
         tree2 = quote_identifiers(tree, dialect=to_sql)
@@ -125,7 +125,7 @@ async def convert_query(
         cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
 
         double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
-            dialect=to_sql, from_dialect=from_sql, pretty=True
+            dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
         )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
@@ -247,6 +247,7 @@ async def stats_api(
     query_id: Optional[str] = Form("NO_ID_MENTIONED"),
     from_sql: str = Form(...),
     to_sql: Optional[str] = Form("e6"),
+    feature_flags: Optional[str] = Form(None),
 ):
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
@@ -255,6 +256,13 @@ async def stats_api(
     to_sql = to_sql.lower()
 
     logger.info(f"{query_id} AT start time: {timestamp} FROM {from_sql.upper()}")
+    flags_dict = {}
+
+    if feature_flags:
+        try:
+            flags_dict = json.loads(feature_flags)
+        except json.JSONDecodeError as je:
+            return HTTPException(status_code=500, detail=str(je))
 
     try:
         supported_functions_in_e6 = load_supported_functions(to_sql)
@@ -314,7 +322,7 @@ async def stats_api(
             }
 
         item = "condenast"
-        query = auto_quote_reserved(query)
+        # query = auto_quote_reserved(query)
         query, comment = strip_comment(query, item)
 
         # Extract functions from the query
@@ -354,7 +362,7 @@ async def stats_api(
             tree2 = quote_identifiers(tree, dialect=to_sql)
 
             double_quotes_added_query = tree2.sql(
-                dialect=to_sql, from_dialect=from_sql, pretty=True
+                dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
             )
 
             double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
