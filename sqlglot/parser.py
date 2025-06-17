@@ -3392,6 +3392,14 @@ class Parser(metaclass=_Parser):
         # In some dialects, LIMIT and OFFSET can act as both identifiers and keywords (clauses)
         # so this section tries to parse the clause version and if it fails, it treats the token
         # as an identifier (alias)
+        if (
+            self._curr
+            and self._next
+            and self._next.text.lower() == "as"
+            and self._curr.text.lower() == "join"
+        ):
+            self._curr = self._curr.identifier(self._curr.text)
+
         if self._can_parse_limit_or_offset():
             return None
 
@@ -3903,6 +3911,8 @@ class Parser(metaclass=_Parser):
         return hints or None
 
     def _parse_table_part(self, schema: bool = False) -> t.Optional[exp.Expression]:
+        if self._curr and self._curr.text.lower() == "join":
+            self._curr = self._curr.identifier(self._curr.text)
         return (
             (not schema and self._parse_function(optional_parens=False))
             or self._parse_id_var(any_token=False)
