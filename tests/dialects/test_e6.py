@@ -417,8 +417,8 @@ class TestE6(Validator):
             read={
                 "snowflake": "SELECT get(X, 3)",
                 "trino": "SELECT ELEMENT_AT(X, 4)",
-                "databricks": "SELECT TRY_ELEMENT_AT(X, 4)",
-                "spark": "SELECT TRY_ELEMENT_AT(X, 4)",
+                "databricks": "SELECT ELEMENT_AT(X, 4)",
+                "spark": "SELECT ELEMENT_AT(X, 4)",
                 "duckdb": "SELECT X[4]",
             },
             write={
@@ -438,16 +438,23 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT CASE WHEN SIZE(arr) > 3 THEN ELEMENT_AT(TRANSFORM(arr, x -> x * 2), -2) ELSE ELEMENT_AT(arr, 1) END AS resul FROM (VALUES (ARRAY[1, 2, 3, 4]), (ARRAY[10, 20])) AS tab(arr)",
+            "SELECT CASE WHEN SIZE(arr) > 3 THEN TRY_ELEMENT_AT(TRANSFORM(arr, x -> x * 2), -2) ELSE TRY_ELEMENT_AT(arr, 1) END AS resul FROM (VALUES (ARRAY[1, 2, 3, 4]), (ARRAY[10, 20])) AS tab(arr)",
             read={
                 "databricks": "SELECT CASE WHEN size(arr) > 3 THEN try_element_at(transform(arr, x -> x * 2), -2) ELSE try_element_at(arr, 1) END AS resul FROM VALUES (array(1, 2, 3, 4)), (array(10, 20)) AS tab(arr)",
             },
         )
 
         self.validate_all(
-            "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4], x -> ELEMENT_AT(ARRAY[TRUE, FALSE, TRUE], x) = TRUE) AS filtered",
+            "SELECT FILTER_ARRAY(ARRAY[1, 2, 3, 4], x -> TRY_ELEMENT_AT(ARRAY[TRUE, FALSE, TRUE], x) = TRUE) AS filtered",
             read={
                 "databricks": "SELECT filter(array(1, 2, 3, 4), x -> try_element_at(array(true, false, true), x) = true) AS filtered",
+            },
+        )
+
+        self.validate_all(
+            "SELECT TRY_ELEMENT_AT(f.CustomTargeting, 'kpeid')",
+            read={
+                "databricks": "SELECT TRY_ELEMENT_AT(f.CustomTargeting, 'kpeid')",
             },
         )
 

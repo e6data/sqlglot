@@ -110,7 +110,6 @@ async def convert_query(
         )
 
         item = "condenast"
-        # query = auto_quote_reserved(query)
         query, comment = strip_comment(query, item)
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
@@ -322,7 +321,6 @@ async def stats_api(
             }
 
         item = "condenast"
-        # query = auto_quote_reserved(query)
         query, comment = strip_comment(query, item)
 
         # Extract functions from the query
