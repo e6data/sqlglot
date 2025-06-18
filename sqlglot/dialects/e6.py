@@ -19,6 +19,7 @@ from sqlglot.dialects.dialect import (
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset, flatten
 from sqlglot.tokens import TokenType
 from sqlglot.parser import build_coalesce
+from sqlglot.e6Config import E6Config
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -1846,11 +1847,17 @@ class E6(Dialect):
             return f"TO_CHAR({date_expr},'{format_expr}')"
 
         def bracket_sql(self, expression: exp.Bracket) -> str:
-            if expression.expressions.__len__() == 1 and expression.expressions[0].is_string:
+            if (
+                expression.expressions.__len__() == 1
+                and expression.expressions[0].is_string
+                and not expression._meta
+            ):
                 text_expr = expression.expressions[0].this
                 return f'{self.sql(expression.this)}."{text_expr}"'
             return self.func(
-                "ELEMENT_AT",
+                "TRY_ELEMENT_AT"
+                if expression._meta and expression._meta.get("name", "").upper() == "TRY_ELEMENT_AT"
+                else "ELEMENT_AT",
                 expression.this,
                 seq_get(
                     apply_index_offset(
@@ -2211,111 +2218,7 @@ class E6(Dialect):
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
         }
 
-        RESERVED_KEYWORDS = {
-            "add",
-            "all",
-            "and",
-            "as",
-            "asc",
-            "before",
-            "between",
-            "bigint",
-            "case",
-            "char",
-            "character",
-            "continue",
-            "convert",
-            "cube",
-            "current_date",
-            "current_timestamp",
-            "decimal",
-            "dense_rank",
-            "desc",
-            "distinct",
-            "div",
-            "double",
-            "else",
-            "except",
-            "exists",
-            "false",
-            "first_value",
-            "float",
-            "from",
-            "group",
-            "grouping",
-            "having",
-            "in",
-            "inner",
-            "int",
-            "integer",
-            "intersect",
-            "interval",
-            "is",
-            "join",
-            "key",
-            "keys",
-            "lag",
-            "last_value",
-            "lead",
-            "left",
-            "like",
-            "limit",
-            "localtime",
-            "localtimestamp",
-            "mod",
-            "not",
-            "nth_value",
-            "ntile",
-            "null",
-            "of",
-            "on",
-            "or",
-            "order",
-            "outer",
-            "over",
-            "partition",
-            "percent_rank",
-            "rank",
-            "regexp",
-            "return",
-            "right",
-            "rlike",
-            "row",
-            "row_number",
-            "select",
-            "smallint",
-            "then",
-            "true",
-            "union",
-            "unsigned",
-            "update",
-            "use",
-            "values",
-            "varchar",
-            "when",
-            "where",
-            "while",
-            "window",
-            "with",
-            "xor",
-            "dense_rank",
-            "except",
-            "first_value",
-            "grouping",
-            "groups",
-            "intersect",
-            "json_table",
-            "lag",
-            "last_value",
-            "lead",
-            "nth_value",
-            "ntile",
-            "of",
-            "over",
-            "percent_rank",
-            "rank",
-            "row_number",
-        }
+        RESERVED_KEYWORDS = E6Config.RESERVED_KEYWORDS
 
         UNSIGNED_TYPE_MAPPING = {
             exp.DataType.Type.UBIGINT: "BIGINT",
