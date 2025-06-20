@@ -144,3 +144,8 @@ sqlglot/_version.py
 
 # Emacs files
 *~
+
+# Test files
+test_converter_api.py
+csv_converter_api.py
+run.py

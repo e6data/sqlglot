@@ -1471,6 +1471,7 @@ class E6(Dialect):
             # "TO_DATE":  _build_datetime("TO_DATE", exp.DataType.Type.DATE),
             "TO_HEX": exp.Hex.from_arg_list,
             "TO_JSON": exp.JSONFormat.from_arg_list,
+            "TO_JSON_STRING": exp.JSONFormat.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_UTF8": lambda args: exp.Encode(
@@ -2087,6 +2088,12 @@ class E6(Dialect):
                 "TIMESTAMP_DIFF", expression.this, expression.expression, unit_to_str(expression)
             )
 
+        def json_format_sql(self, expression: exp.JSONFormat) -> str:
+            inner = expression.this
+            if isinstance(inner, exp.Cast) and inner.to.this == exp.DataType.Type.JSON:
+                return self.func("TO_JSON_STRING", inner.this)
+            return self.func("TO_JSON", inner)
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2156,7 +2163,7 @@ class E6(Dialect):
             exp.Interval: interval_sql,
             exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
             exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
-            exp.JSONFormat: rename_func("TO_JSON"),
+            exp.JSONFormat: json_format_sql,
             exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
