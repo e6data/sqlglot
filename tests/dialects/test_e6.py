@@ -490,6 +490,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "TO_JSON_STRING(X)",
+            read={
+                "presto": "JSON_FORMAT(CAST(X as JSON))",
+            },
+        )
+
+        self.validate_all(
             "SELECT EXTRACT(fieldStr FROM date_expr)",
             read={
                 "databricks": "SELECT DATE_PART(fieldStr, date_expr)",
