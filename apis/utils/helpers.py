@@ -178,13 +178,6 @@ def unsupported_functionality_identifiers(
 ):
     logger.info("Identifying unsupported functionality.....")
     try:
-        for sub in expression.find_all(exp.Sub):
-            if (
-                isinstance(sub.args.get("this"), (exp.CurrentDate, exp.CurrentTimestamp))
-                and sub.expression.is_int
-            ):
-                unsupported_list.append(sub.sql())
-
         for cte in expression.find_all(exp.CTE, exp.Subquery):
             cte_name = cte.alias.upper()
             if cte_name in unsupported_list:
@@ -604,4 +597,3 @@ def transform_table_part(expression: exp.Expression) -> exp.Expression:
             column_or_table.set("catalog", None)
 
     return expression
-

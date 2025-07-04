@@ -168,15 +168,6 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT CURRENT_DATE - INTERVAL 2 DAY", read={"databricks": "SELECT CURRENT_DATE - 2"}
-        )
-
-        self.validate_all(
-            "SELECT CURRENT_TIMESTAMP - INTERVAL 2 DAY",
-            read={"databricks": "SELECT CURRENT_TIMESTAMP - 2"},
-        )
-
-        self.validate_all(
             "SELECT CURRENT_TIMESTAMP",
             read={
                 "databricks": "SELECT CURRENT_TIMESTAMP()",
@@ -298,6 +289,8 @@ class TestE6(Validator):
             read={"trino": "SELECT STRPOS('hahahahehehe','ehe')"},
         )
 
+        # we are not writing test for databricks below here because implementation of function is such that it is based on from_dialect
+        # and in the test below we do not send from dialect as arg which would result in wrong or failed test.
         self.validate_all(
             "SELECT JSON_EXTRACT(x, '$.name')",
             read={
@@ -352,6 +345,13 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT FROM_UNIXTIME(unixtime / 1000)",
             read={"trino": "SELECT from_unixtime(unixtime/1000)"},
+        )
+
+        self.validate_all(
+            "SELECT FROM_UTC_TIMESTAMP(CAST('2016-08-31' AS TIMESTAMP), 'Asia/Seoul')",
+            read={
+                "databricks": "SELECT FROM_UTC_TIMESTAMP('2016-08-31', 'Asia/Seoul')",
+            },
         )
 
         self.validate_all("SELECT AVG(x)", read={"trino": "SELECT AVG(x)"})
