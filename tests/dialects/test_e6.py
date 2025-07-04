@@ -1934,3 +1934,15 @@ class TestE6(Validator):
   CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result"""
 
         self.validate_all(expected, read={"databricks": sql}, pretty=True)
+
+    def test_values_in_cte(self):
+        self.validate_identity(
+            "WITH cte1 AS (SELECT * FROM (VALUES ('foo_val')) AS data(c1)) SELECT foo1 FROM cte1"
+        )
+
+        self.validate_all(
+            """WITH map AS (SELECT * FROM (VALUES ('allure', 'Allure', 'US')) AS map(app_id, brand, market)) SELECT app_id, brand, market FROM map""",
+            read={
+                "databricks": """WITH map AS (VALUES ('allure', 'Allure', 'US') AS map(app_id, brand, market)) select app_id, brand, market from map"""
+            }
+        )
