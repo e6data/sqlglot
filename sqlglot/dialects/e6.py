@@ -19,6 +19,7 @@ from sqlglot.dialects.dialect import (
 from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset, flatten
 from sqlglot.tokens import TokenType
 from sqlglot.parser import build_coalesce
+from typing import Any, Optional
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -2077,6 +2078,19 @@ class E6(Dialect):
                 "TIMESTAMP_DIFF", expression.this, expression.expression, unit_to_str(expression)
             )
 
+        def attimezone_sql(self, expression: exp.AtTimeZone) -> str:
+            datetime_str = expression.this
+            name: str = "DATETIME"
+
+            meta: Optional[dict[str, Any]] = expression._meta
+            if meta is not None:
+                raw_name: Any = meta.get("name")
+                if isinstance(raw_name, str) and raw_name.lower() == "from_utc_timestamp":
+                    name = "FROM_UTC_TIMESTAMP"
+
+            zone = expression.args.get("zone")
+            return self.func(name, datetime_str, zone)
+
         def json_format_sql(self, expression: exp.JSONFormat) -> str:
             inner = expression.this
             if isinstance(inner, exp.Cast) and inner.to.this == exp.DataType.Type.JSON:
@@ -2109,7 +2123,7 @@ class E6(Dialect):
             exp.ArraySlice: rename_func("ARRAY_SLICE"),
             exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
-            exp.AtTimeZone: lambda self, e: self.func("DATETIME", e.this, e.args.get("zone")),
+            exp.AtTimeZone: attimezone_sql,
             exp.BitwiseLeftShift: lambda self, e: self.func("SHIFTLEFT", e.this, e.expression),
             exp.BitwiseNot: lambda self, e: self.func("BITWISE_NOT", e.this),
             exp.BitwiseAnd: lambda self, e: self.func("BITWISE_AND", e.this, e.expression),

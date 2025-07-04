@@ -347,6 +347,13 @@ class TestE6(Validator):
             read={"trino": "SELECT from_unixtime(unixtime/1000)"},
         )
 
+        self.validate_all(
+            "SELECT FROM_UTC_TIMESTAMP(CAST('2016-08-31' AS TIMESTAMP), 'Asia/Seoul')",
+            read={
+                "databricks": "SELECT FROM_UTC_TIMESTAMP('2016-08-31', 'Asia/Seoul')",
+            },
+        )
+
         self.validate_all("SELECT AVG(x)", read={"trino": "SELECT AVG(x)"})
 
         self.validate_all(
