@@ -458,3 +458,13 @@ class TestDatabricks(Validator):
                 "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
             },
         )
+
+    def test_regexp_substr(self):
+        self.validate_all(
+            "REGEXP_SUBSTR(subject, pattern)",
+            write={
+                "bigquery": "REGEXP_EXTRACT(subject, pattern)",
+                "snowflake": "REGEXP_SUBSTR(subject, pattern)",
+                "e6": "REGEXP_EXTRACT(subject, pattern)",
+            },
+        )

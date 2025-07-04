@@ -109,6 +109,7 @@ class Databricks(Spark):
             "GET_JSON_OBJECT": _build_json_extract,
             "TO_DATE": build_formatted_time(exp.TsOrDsToDate, "databricks"),
             "LTRIM": lambda args: build_trim(args),
+            "REGEXP_SUBSTR": exp.RegexpExtract.from_arg_list,
             "RTRIM": lambda args: build_trim(args, is_left=False),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
         }
