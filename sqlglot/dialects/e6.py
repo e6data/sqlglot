@@ -2083,6 +2083,13 @@ class E6(Dialect):
                 return self.func("TO_JSON_STRING", inner.this)
             return self.func("TO_JSON", inner)
 
+        def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
+            path = e.expression
+            if self.from_dialect == "databricks":
+                path = "$." + path if not path.startswith("$") else path
+                path = add_single_quotes(path)
+            return self.func("JSON_EXTRACT", e.this, path)
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2150,8 +2157,8 @@ class E6(Dialect):
             exp.GroupConcat: string_agg_sql,
             exp.Hex: rename_func("TO_HEX"),
             exp.Interval: interval_sql,
-            exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
-            exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
+            exp.JSONExtract: json_extract_sql,
+            exp.JSONExtractScalar: json_extract_sql,
             exp.JSONFormat: json_format_sql,
             exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),
             exp.LastDay: _last_day_sql,

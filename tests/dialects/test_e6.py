@@ -289,6 +289,8 @@ class TestE6(Validator):
             read={"trino": "SELECT STRPOS('hahahahehehe','ehe')"},
         )
 
+        # we are not writing test for databricks below here because implementation of function is such that it is based on from_dialect
+        # and in the test below we do not send from dialect as arg which would result in wrong or failed test.
         self.validate_all(
             "SELECT JSON_EXTRACT(x, '$.name')",
             read={
