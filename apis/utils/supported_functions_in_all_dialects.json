@@ -765,7 +765,21 @@
         "POSITION",
         "OBJECT_CONSTRUCT",
         "DATE_SUB",
-        "GROUPING SETS"
+        "GROUPING SETS",
+        "ACOS",
+        "ADD_MONTHS",
+        "CEILING",
+        "DAY",
+        "DECIMAL",
+        "FROM_UNIXTIME",
+        "FROM_UTC_TIMESTAMP",
+        "GETDATE",
+        "MAX_BY",
+        "ARRAY_SORT",
+        "POW",
+        "STDDEV_SAMP",
+        "WEEKDAY",
+        "EXPLODE"
     ],
     "databricks": [
          "ABS",
