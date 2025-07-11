@@ -2180,6 +2180,7 @@ class E6(Dialect):
             exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
             exp.Lower: rename_func("LOWER"),
+            exp.LogicalOr: rename_func("BOOL_OR"),
             exp.Map: map_sql,
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
