@@ -135,7 +135,7 @@ pipeline {
                         // sh 'mkdir -p /tmp/trivy/'
                         // sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
                         // sh 'tar -xvf /tmp/trivy/db.tar.gz'
-                        sh 'docker buildx build --no-cache --platform linux/arm64,linux/amd64  -t ${RELEASE_NAME} --load .'
+                        sh 'docker buildx build --no-cache --platform linux/arm64  -t ${RELEASE_NAME} --load .'
                         sh 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin ${TRIVY_VERSION}'
                         script {
                                 // Trivy scan passed, push the image
