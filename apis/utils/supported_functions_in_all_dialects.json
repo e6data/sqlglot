@@ -779,7 +779,12 @@
         "POW",
         "STDDEV_SAMP",
         "WEEKDAY",
-        "EXPLODE"
+        "EXPLODE",
+        "FORMAT",
+        "REDUCE",
+        "LAST_DAY_OF_MONTH",
+        "FORMAT_DATETIME",
+        "COUNT_IF"
     ],
     "databricks": [
          "ABS",
