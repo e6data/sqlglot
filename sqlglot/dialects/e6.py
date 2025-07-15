@@ -2104,6 +2104,15 @@ class E6(Dialect):
                 path = add_single_quotes(path)
             return self.func("JSON_EXTRACT", e.this, path)
 
+        def split_sql(self, expression: exp.Split|exp.RegexpSplit):
+            this = expression.this
+            delimitter = expression.expression
+            if this and delimitter and this.is_string and delimitter.is_string and not delimitter.this in this.this:
+                return f"{this}"
+            return rename_func("SPLIT")
+
+
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2191,9 +2200,9 @@ class E6(Dialect):
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
-            exp.RegexpSplit: rename_func("SPLIT"),
+            exp.RegexpSplit: split_sql,
             # exp.Select: select_sql,
-            exp.Split: rename_func("SPLIT"),
+            exp.Split: split_sql,
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.Stddev: rename_func("STDDEV"),
             exp.StddevPop: rename_func("STDDEV_POP"),

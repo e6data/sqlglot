@@ -84,6 +84,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT MAP[ARRAY['test'],ARRAY['-18000']]",
+            read={
+                "databricks": "SELECT map(split('test',','), split('-18000',','))",
+            },
+        )
+
+        self.validate_all(
             "SELECT TO_TIMESTAMP('2024-11-09', 'dd-MM-YY')",
             read={"trino": "SELECT date_parse('2024-11-09', '%d-%m-%y')"},
         )
