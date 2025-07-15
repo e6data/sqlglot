@@ -2104,14 +2104,18 @@ class E6(Dialect):
                 path = add_single_quotes(path)
             return self.func("JSON_EXTRACT", e.this, path)
 
-        def split_sql(self, expression: exp.Split|exp.RegexpSplit):
+        def split_sql(self, expression: exp.Split | exp.RegexpSplit):
             this = expression.this
             delimitter = expression.expression
-            if this and delimitter and this.is_string and delimitter.is_string and not delimitter.this in this.this:
+            if (
+                this
+                and delimitter
+                and this.is_string
+                and delimitter.is_string
+                and delimitter.this not in this.this
+            ):
                 return f"{this}"
             return rename_func("SPLIT")
-
-
 
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
