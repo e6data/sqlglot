@@ -1320,6 +1320,7 @@ class E6(Dialect):
             "DOUBLE",
             "TIMESTAMP",
             "DECIMAL",
+            "TIMESTAMP_TZ",
         }
 
         def _parse_cast(self, strict: bool, safe: t.Optional[bool] = None) -> exp.Expression:
@@ -1332,6 +1333,14 @@ class E6(Dialect):
 
             if isinstance(cast_expression, (exp.Cast, exp.TryCast)):
                 target_type = cast_expression.to.this
+
+                # Handle timestamp_tz as a special case
+                if target_type == exp.DataType.Type.USERDEFINED:
+                    # For user-defined types, check the kind in args
+                    kind = cast_expression.to.args.get("kind")
+                    if kind == "timestamp_tz":
+                        # Allow timestamp_tz as a valid cast type
+                        return cast_expression
 
                 if target_type.name not in self.SUPPORTED_CAST_TYPES:
                     self.raise_error(f"Unsupported cast type: {target_type}")
@@ -1412,6 +1421,7 @@ class E6(Dialect):
                 this=seq_get(args, 0), format=seq_get(args, 1)
             ),
             "FROM_UNIXTIME_WITHUNIT": _build_from_unixtime_withunit,
+            "FROM_ISO8601_TIMESTAMP": exp.FromISO8601Timestamp.from_arg_list,
             "GREATEST": exp.Max.from_arg_list,
             "JSON_EXTRACT": parser.build_extract_json_with_path(exp.JSONExtractScalar),
             "JSON_VALUE": parser.build_extract_json_with_path(exp.JSONExtractScalar),
@@ -1873,15 +1883,42 @@ class E6(Dialect):
         def map_sql(self, expression: exp.Map | exp.VarMap) -> str:
             keys = expression.args.get("keys")
             values = expression.args.get("values")
-            final_keys = keys
-            final_values = values
-            if isinstance(keys, exp.Split):
-                key_str = keys.this.this if isinstance(keys.this, exp.Literal) else None
-                final_keys = f"'{key_str}'"
 
-            if isinstance(values, exp.Split):
-                values_str = values.this.this if isinstance(values.this, exp.Literal) else None
-                final_values = f"'{values_str}'"
+            # Helper function to extract split info from Array or direct Split/RegexpSplit
+            def extract_split_value(expr):
+                if isinstance(expr, exp.Array) and len(expr.expressions) == 1:
+                    # If it's an Array with a single Split/RegexpSplit, extract the inner expression
+                    inner = expr.expressions[0]
+                    if isinstance(inner, (exp.Split, exp.RegexpSplit)):
+                        return inner
+                elif isinstance(expr, (exp.Split, exp.RegexpSplit)):
+                    return expr
+                return None
+
+            # Common method to process both keys and values
+            def process_map_arg(arg):
+                split_expr = extract_split_value(arg)
+                if split_expr:
+                    if (
+                        split_expr.expression
+                        and split_expr.expression.is_string
+                        and split_expr.this.is_string
+                    ):
+                        delimiter = split_expr.expression.this
+                        input_str = split_expr.this.this
+                        if delimiter not in input_str:
+                            # No split would occur, just use the string
+                            return f"'{input_str}'"
+                        else:
+                            # Split would occur, keep the original structure
+                            return arg
+                    else:
+                        return arg
+                return arg
+
+            # Process keys and values using the common method
+            final_keys = process_map_arg(keys)
+            final_values = process_map_arg(values)
 
             return f"MAP[{self.sql(final_keys)},{self.sql(final_values)}]"
 
@@ -2073,6 +2110,9 @@ class E6(Dialect):
                 "FORMAT_TIMESTAMP", self.func("FROM_UNIXTIME", unix_expr), format_expr_modified
             )
 
+        def from_iso8601_timestamp_sql(self, expression: exp.FromISO8601Timestamp) -> str:
+            return f"CAST({self.sql(expression.this)} AS timestamp_tz)"
+
         def timestamp_diff_sql(self, expression: exp.TimestampDiff) -> str:
             return self.func(
                 "TIMESTAMP_DIFF", expression.this, expression.expression, unit_to_str(expression)
@@ -2103,19 +2143,6 @@ class E6(Dialect):
                 path = "$." + path if not path.startswith("$") else path
                 path = add_single_quotes(path)
             return self.func("JSON_EXTRACT", e.this, path)
-
-        def split_sql(self, expression: exp.Split | exp.RegexpSplit):
-            this = expression.this
-            delimitter = expression.expression
-            if (
-                this
-                and delimitter
-                and this.is_string
-                and delimitter.is_string
-                and delimitter.this not in this.this
-            ):
-                return f"{this}"
-            return rename_func("SPLIT")
 
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
@@ -2180,6 +2207,7 @@ class E6(Dialect):
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
+            exp.FromISO8601Timestamp: from_iso8601_timestamp_sql,
             exp.GenerateSeries: generateseries_sql,
             exp.GroupConcat: string_agg_sql,
             exp.Hex: rename_func("TO_HEX"),
@@ -2204,9 +2232,9 @@ class E6(Dialect):
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
-            exp.RegexpSplit: split_sql,
+            exp.RegexpSplit: rename_func("SPLIT"),
             # exp.Select: select_sql,
-            exp.Split: split_sql,
+            exp.Split: rename_func("SPLIT"),
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.Stddev: rename_func("STDDEV"),
             exp.StddevPop: rename_func("STDDEV_POP"),
