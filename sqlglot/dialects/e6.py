@@ -1321,6 +1321,7 @@ class E6(Dialect):
             "TIMESTAMP",
             "DECIMAL",
             "TIMESTAMP_TZ",
+            "JSON",
         }
 
         def _parse_cast(self, strict: bool, safe: t.Optional[bool] = None) -> exp.Expression:
@@ -1549,6 +1550,7 @@ class E6(Dialect):
             exp.DataType.Type.TINYTEXT: "VARCHAR",
             exp.DataType.Type.MEDIUMTEXT: "VARCHAR",
             exp.DataType.Type.DECIMAL: "DECIMAL",
+            exp.DataType.Type.JSON: "JSON",
         }
 
         # TODO:: Adithya, why there was need to override this method.
