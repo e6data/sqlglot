@@ -1885,42 +1885,15 @@ class E6(Dialect):
         def map_sql(self, expression: exp.Map | exp.VarMap) -> str:
             keys = expression.args.get("keys")
             values = expression.args.get("values")
+            final_keys = keys
+            final_values = values
+            if isinstance(keys, exp.Split):
+                key_str = keys.this.this if isinstance(keys.this, exp.Literal) else None
+                final_keys = f"'{key_str}'"
 
-            # Helper function to extract split info from Array or direct Split/RegexpSplit
-            def extract_split_value(expr):
-                if isinstance(expr, exp.Array) and len(expr.expressions) == 1:
-                    # If it's an Array with a single Split/RegexpSplit, extract the inner expression
-                    inner = expr.expressions[0]
-                    if isinstance(inner, (exp.Split, exp.RegexpSplit)):
-                        return inner
-                elif isinstance(expr, (exp.Split, exp.RegexpSplit)):
-                    return expr
-                return None
-
-            # Common method to process both keys and values
-            def process_map_arg(arg):
-                split_expr = extract_split_value(arg)
-                if split_expr:
-                    if (
-                        split_expr.expression
-                        and split_expr.expression.is_string
-                        and split_expr.this.is_string
-                    ):
-                        delimiter = split_expr.expression.this
-                        input_str = split_expr.this.this
-                        if delimiter not in input_str:
-                            # No split would occur, just use the string
-                            return f"'{input_str}'"
-                        else:
-                            # Split would occur, keep the original structure
-                            return arg
-                    else:
-                        return arg
-                return arg
-
-            # Process keys and values using the common method
-            final_keys = process_map_arg(keys)
-            final_values = process_map_arg(values)
+            if isinstance(values, exp.Split):
+                values_str = values.this.this if isinstance(values.this, exp.Literal) else None
+                final_values = f"'{values_str}'"
 
             return f"MAP[{self.sql(final_keys)},{self.sql(final_values)}]"
 
@@ -2146,6 +2119,20 @@ class E6(Dialect):
                 path = add_single_quotes(path)
             return self.func("JSON_EXTRACT", e.this, path)
 
+        def split_sql(self, expression: exp.Split | exp.RegexpSplit):
+            this = expression.this
+            delimitter = expression.expression
+            if (
+                this
+                and delimitter
+                and this.is_string
+                and delimitter.is_string
+                and delimitter.this not in this.this
+                and not len(expression.args) == 3
+            ):
+                return f"{this}"
+            return rename_func("SPLIT")(self, expression)
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2234,9 +2221,9 @@ class E6(Dialect):
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
-            exp.RegexpSplit: rename_func("SPLIT"),
+            exp.RegexpSplit: split_sql,
             # exp.Select: select_sql,
-            exp.Split: rename_func("SPLIT"),
+            exp.Split: split_sql,
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.Stddev: rename_func("STDDEV"),
             exp.StddevPop: rename_func("STDDEV_POP"),

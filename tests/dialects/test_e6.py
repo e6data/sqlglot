@@ -84,7 +84,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT MAP['test','-18000']",
+            "SELECT MAP[ARRAY['test'],ARRAY['-18000']]",
             read={
                 "databricks": "SELECT map(split('test',','), split('-18000',','))",
             },
@@ -558,6 +558,11 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT CAST('2023-12-25T10:30:00Z' AS timestamp_tz)",
             read={"databricks": "SELECT FROM_ISO8601_TIMESTAMP('2023-12-25T10:30:00Z')"},
+        )
+
+        self.validate_all(
+            "SELECT CAST(col AS JSON)",
+            read={"databricks": "select cast(col as JSON)"},
         )
 
     def test_regex(self):
