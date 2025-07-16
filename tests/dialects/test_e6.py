@@ -84,6 +84,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT MAP[ARRAY['test'],ARRAY['-18000']]",
+            read={
+                "databricks": "SELECT map(split('test',','), split('-18000',','))",
+            },
+        )
+
+        self.validate_all(
             "SELECT TO_TIMESTAMP('2024-11-09', 'dd-MM-YY')",
             read={"trino": "SELECT date_parse('2024-11-09', '%d-%m-%y')"},
         )
@@ -546,6 +553,16 @@ class TestE6(Validator):
             read={
                 "databricks": "SPLIT_PART(attr.RPT_SHORT_DESC, ' ', 1) = BIGINT(LEFT(dc.div_no, 3))"
             },
+        )
+
+        self.validate_all(
+            "SELECT CAST('2023-12-25T10:30:00Z' AS timestamp_tz)",
+            read={"databricks": "SELECT FROM_ISO8601_TIMESTAMP('2023-12-25T10:30:00Z')"},
+        )
+
+        self.validate_all(
+            "SELECT CAST(col AS JSON)",
+            read={"databricks": "select cast(col as JSON)"},
         )
 
     def test_regex(self):
