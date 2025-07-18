@@ -5994,6 +5994,11 @@ class TimestampTrunc(Func, TimeUnit):
     arg_types = {"this": True, "unit": True, "zone": False}
 
 
+class TimestampSeconds(Func):
+    """Converts Unix timestamp in seconds to a timestamp."""
+    arg_types = {"this": True}
+
+
 class TimeAdd(Func, TimeUnit):
     arg_types = {"this": True, "expression": True, "unit": False}
 
