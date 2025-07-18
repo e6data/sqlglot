@@ -7038,6 +7038,10 @@ class UnixSeconds(Func):
     pass
 
 
+class TimestampMillis(Func):
+    arg_types = {"this": True}
+
+
 class Uuid(Func):
     _sql_names = ["UUID", "GEN_RANDOM_UUID", "GENERATE_UUID", "UUID_STRING"]
 

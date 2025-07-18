@@ -57,6 +57,8 @@ def _unix_to_time_sql(self: Spark2.Generator, expression: exp.UnixToTime) -> str
 
     if scale is None:
         return self.sql(exp.cast(exp.func("from_unixtime", timestamp), exp.DataType.Type.TIMESTAMP))
+
+    # Handle numeric scale constants
     if scale == exp.UnixToTime.SECONDS:
         return self.func("TIMESTAMP_SECONDS", timestamp)
     if scale == exp.UnixToTime.MILLIS:
@@ -64,6 +66,15 @@ def _unix_to_time_sql(self: Spark2.Generator, expression: exp.UnixToTime) -> str
     if scale == exp.UnixToTime.MICROS:
         return self.func("TIMESTAMP_MICROS", timestamp)
 
+    # Handle string scale values (from E6 and other dialects)
+    if isinstance(scale, exp.Literal) and scale.this == "milliseconds":
+        return self.func("TIMESTAMP_MILLIS", timestamp)
+    if isinstance(scale, exp.Literal) and scale.this == "seconds":
+        return self.func("TIMESTAMP_SECONDS", timestamp)
+    if isinstance(scale, exp.Literal) and scale.this == "microseconds":
+        return self.func("TIMESTAMP_MICROS", timestamp)
+
+    # Default fallback for other scales
     unix_seconds = exp.Div(this=timestamp, expression=exp.func("POW", 10, scale))
     return self.func("TIMESTAMP_SECONDS", unix_seconds)
 

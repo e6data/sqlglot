@@ -2267,6 +2267,9 @@ class E6(Dialect):
                 e.this,
             ),
             exp.TsOrDsToDate: TsOrDsToDate_sql,
+            exp.TimestampMillis: lambda self, e: self.func(
+                "FROM_UNIXTIME_WITHUNIT", e.this, exp.Literal.string("milliseconds")
+            ),
             exp.UnixToTime: from_unixtime_sql,
             exp.UnixToStr: from_unixtime_sql,
             exp.VarMap: map_sql,
