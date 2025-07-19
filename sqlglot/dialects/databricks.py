@@ -112,6 +112,7 @@ class Databricks(Spark):
             "REGEXP_SUBSTR": exp.RegexpExtract.from_arg_list,
             "RTRIM": lambda args: build_trim(args, is_left=False),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
+            "TIMESTAMP_SECONDS": exp.TimestampSeconds.from_arg_list,
         }
 
         FACTOR = {
