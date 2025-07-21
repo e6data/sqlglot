@@ -2229,6 +2229,7 @@ class E6(Dialect):
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
             exp.RegexpSplit: split_sql,
             # exp.Select: select_sql,
+            exp.Space: lambda self, e: self.func("REPEAT", exp.Literal.string(" "), e.this),
             exp.Split: split_sql,
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.Stddev: rename_func("STDDEV"),

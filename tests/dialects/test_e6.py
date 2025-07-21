@@ -2002,6 +2002,43 @@ class TestE6(Validator):
             },
         )
 
+    def test_space(self):
+        # Basic integer literal
+        self.validate_all(
+            "REPEAT(' ', 5)",
+            read={"databricks": "SPACE(5)"},
+        )
+        
+        # Column reference
+        self.validate_all(
+            "REPEAT(' ', n)",
+            read={"databricks": "SPACE(n)"},
+        )
+        
+        # Complex expression
+        self.validate_all(
+            "REPEAT(' ', column_count + 2)",
+            read={"databricks": "SPACE(column_count + 2)"},
+        )
+        
+        # Zero spaces
+        self.validate_all(
+            "REPEAT(' ', 0)",
+            read={"databricks": "SPACE(0)"},
+        )
+        
+        # In SELECT with alias
+        self.validate_all(
+            "SELECT REPEAT(' ', 10) AS spaces",
+            read={"databricks": "SELECT SPACE(10) AS spaces"},
+        )
+        
+        # With CONCAT
+        self.validate_all(
+            "SELECT CONCAT('Hello', REPEAT(' ', 5), 'World') AS greeting",
+            read={"databricks": "SELECT CONCAT('Hello', SPACE(5), 'World') AS greeting"},
+        )
+
     def test_databricks_to_e6data_pretty(self):
         sql = "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result"
 
