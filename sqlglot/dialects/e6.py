@@ -2033,6 +2033,57 @@ class E6(Dialect):
             # Generate SQL using STRING_AGG/LISTAGG, with separator or default ''
             return self.func("LISTAGG", expr_1, separator or exp.Literal.string(""))
 
+        def concat_ws_sql(self: E6.Generator, expression: exp.ConcatWs) -> str:
+            """
+            Generate the SQL for the CONCAT_WS function in E6.
+            
+            Implements Databricks CONCAT_WS behavior:
+            - If sep is NULL the result is NULL (handled by e6 engine)
+            - exprN that are NULL are ignored
+            - If only separator provided or all exprN are NULL, returns empty string
+            - Each exprN can be STRING or ARRAY of STRING
+            - NULLs within arrays are filtered out
+            - Arrays are flattened and individual elements joined with separator
+            """
+            if not expression.expressions:
+                return "''"
+            
+            # Extract separator and arguments
+            separator = expression.expressions[0]
+            args = expression.expressions[1:] if len(expression.expressions) > 1 else []
+            
+            # If no arguments provided (only separator), return empty string
+            if not args:
+                return "''"
+            
+            # Process arguments: collect all individual elements
+            all_elements = []
+            
+            for arg in args:
+                if isinstance(arg, exp.Array):
+                    # For array arguments: extract individual elements and filter NULLs
+                    # array('S', 'Q', NULL, 'L') becomes individual elements 'S', 'Q', 'L'
+                    for element in arg.expressions:
+                        if not isinstance(element, exp.Null):
+                            all_elements.append(self.sql(element))
+                else:
+                    # For string arguments: add if not NULL
+                    if not isinstance(arg, exp.Null):
+                        all_elements.append(self.sql(arg))
+            
+            # If no elements after filtering, return empty string
+            if not all_elements:
+                return "''"
+            
+            if len(all_elements) == 1:
+                # Single element case
+                return all_elements[0]
+            
+            # Multiple elements: create array and join with separator
+            # Build: ARRAY_TO_STRING(ARRAY[element1, element2, ...], separator)
+            elements_list = ", ".join(all_elements)
+            return f"ARRAY_TO_STRING(ARRAY[{elements_list}], {self.sql(separator)})"
+
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
@@ -2247,6 +2298,7 @@ class E6(Dialect):
             # We mapped this believing that for most of the cases,
             # CONCAT function in other dialects would mostly use for ARRAY concatenation
             exp.Concat: rename_func("CONCAT"),
+            exp.ConcatWs: concat_ws_sql,
             exp.Contains: rename_func("CONTAINS_SUBSTR"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
