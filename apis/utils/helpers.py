@@ -613,13 +613,10 @@ def transform_catalog_schema_only(query: str, from_sql: str) -> str:
     try:
         import re
 
-        # Parse the query to get the AST for analysis
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
-        # Find all catalog.schema patterns that need replacement
         replacements = []
 
-        # Find table references
         for table in tree.find_all(exp.Table):
             db = table.args.get("db")
             catalog = table.args.get("catalog")
