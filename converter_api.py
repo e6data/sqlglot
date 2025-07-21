@@ -29,6 +29,7 @@ from apis.utils.helpers import (
     extract_cte_n_subquery_list,
     normalize_unicode_spaces,
     transform_table_part,
+    transform_catalog_schema_only,
     set_cte_names_case_sensitively,
 )
 
@@ -111,6 +112,19 @@ async def convert_query(
 
         item = "condenast"
         query, comment = strip_comment(query, item)
+
+        # Check if we should only transform catalog.schema without full transpilation
+        if flags_dict.get("TRANSFORM_CATALOG_SCHEMA_ONLY", False):
+            transformed_query = transform_catalog_schema_only(query, from_sql)
+            transformed_query = add_comment_to_query(transformed_query, comment)
+            logger.info(
+                "%s AT %s FROM %s — Catalog.Schema Transformed Query:\n%s",
+                query_id,
+                timestamp,
+                from_sql.upper(),
+                transformed_query,
+            )
+            return {"converted_query": transformed_query}
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
