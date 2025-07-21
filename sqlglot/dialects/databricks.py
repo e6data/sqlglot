@@ -113,6 +113,9 @@ class Databricks(Spark):
             "REGEXP_SUBSTR": exp.RegexpExtract.from_arg_list,
             "RTRIM": lambda args: build_trim(args, is_left=False),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
+            "TIMEDIFF": lambda args: exp.TimestampDiff(
+                unit=seq_get(args, 0), this=seq_get(args, 1), expression=seq_get(args, 2)
+            ),
         }
 
         FACTOR = {

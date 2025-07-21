@@ -613,6 +613,45 @@ class TestE6(Validator):
             "SELECT CAST(col AS JSON)",
             read={"databricks": "select cast(col as JSON)"},
         )
+        for unit in ["SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH", "YEAR"]:
+            self.validate_all(
+                f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                read={
+                    "databricks": f"SELECT TIMEDIFF('{unit}', date1, date2)",
+                },
+                write={
+                    "e6": f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                },
+            )
+
+            self.validate_all(
+                "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                read={
+                    "databricks": "SELECT TIMEDIFF('HOUR', start1, end1), TIMEDIFF('MINUTE', start2, end2)",
+                },
+                write={
+                    "e6": "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                },
+            )
+
+            self.validate_all(
+                "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                read={
+                    "databricks": "SELECT ABS(TIMEDIFF('MINUTE', start_time, end_time))",
+                },
+                write={
+                    "e6": "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                },
+            )
+            self.validate_all(
+                "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                read={
+                    "databricks": "SELECT AVG(TIMEDIFF('HOUR', start_time, end_time)) FROM sessions",
+                },
+                write={
+                    "e6": "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                },
+            )
 
         # FIND_IN_SET function tests - Databricks to E6 transpilation
         self.validate_all(
