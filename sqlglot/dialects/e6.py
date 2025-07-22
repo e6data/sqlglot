@@ -1547,6 +1547,9 @@ class E6(Dialect):
             ),
             "TRUNC": date_trunc_to_time,
             "TRIM": lambda self: self._parse_trim(),
+            "TYPEOF": lambda args: exp.TypeOf(
+                this=seq_get(args, 0)
+            ),
             "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),
             # TODO:: I have removed the _parse_unnest_sql, was it really required
             # It was added due to some requirements before but those were asked to remove afterwards so it should not matter now
@@ -2215,6 +2218,7 @@ class E6(Dialect):
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: array_sql,
+            exp.TypeOf: rename_func("TYPEOF"),
             exp.ArrayAgg: rename_func("ARRAY_AGG"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
             exp.ArrayContains: rename_func("ARRAY_CONTAINS"),

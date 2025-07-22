@@ -118,6 +118,9 @@ class Spark(Spark2):
             "TIMESTAMPDIFF": build_date_delta(exp.TimestampDiff),
             "DATEDIFF": _build_datediff,
             "DATE_DIFF": _build_datediff,
+            "TYPEOF": lambda args: exp.TypeOf(
+                this=seq_get(args, 0)
+            ),
             "TIMESTAMP_LTZ": _build_as_cast("TIMESTAMP_LTZ"),
             "TIMESTAMP_NTZ": _build_as_cast("TIMESTAMP_NTZ"),
             "TRY_ELEMENT_AT": lambda args: exp.Bracket(

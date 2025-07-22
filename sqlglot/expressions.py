@@ -5494,6 +5494,9 @@ class Array(Func):
 class ToArray(Func):
     pass
 
+class TypeOf(Func):
+    arg_types = {"this": True}
+
 
 # https://materialize.com/docs/sql/types/list/
 class List(Func):
