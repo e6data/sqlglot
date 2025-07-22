@@ -33,6 +33,16 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT REPLACE(REPLACE(REPLACE(LOWER('AaBbCc'), 'a', '1'), 'b', '2'), 'c', '3')",
+            read={
+                "databricks":"SELECT TRANSLATE('AaBbCc' COLLATE UTF8_LCASE, 'abc', '123')",
+                "spark":"SELECT TRANSLATE('AaBbCc' COLLATE UTF8_LCASE, 'abc', '123')",
+                "spark2":"SELECT TRANSLATE('AaBbCc' COLLATE UTF8_LCASE, 'abc', '123')",
+            }
+
+        )
+
         # Concat in dbr can accept many datatypes of args, but we map it to array_concat if type is of array. So we decided to put it as it is.
         self.validate_all(
             "SELECT CONCAT(TRANSFORM(ARRAY[1, 2], x -> x * 10), ARRAY[30, 40])",

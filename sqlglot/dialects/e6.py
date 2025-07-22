@@ -137,6 +137,58 @@ def _build_from_unixtime_withunit(args: t.List[exp.Expression]) -> exp.Func:
     return exp.UnixToTime(this=this, scale=unit)
 
 
+def translate_to_nested_replace(self: E6.Generator, expression: exp.Translate) -> str:
+    """
+    Transforms TRANSLATE(expr, from, to) into nested REPLACE calls.
+    For example: TRANSLATE('AaBbCc', 'abc', '123') becomes:
+    REPLACE(REPLACE(REPLACE('AaBbCc', 'a', '1'), 'b', '2'), 'c', '3')
+    
+    If 'to' is shorter than 'from', remaining characters are replaced with empty string.
+    
+    Special handling for COLLATE expressions: (for now it only supports only this COLLATE
+    - UTF8_LCASE: wraps the expression in lower()
+    """
+    this_arg = expression.this
+    from_arg = expression.args.get("from")
+    to_arg = expression.args.get("to")
+    
+    # Handle COLLATE expressions
+    if isinstance(this_arg, exp.Collate):
+        collation = this_arg.expression
+        if isinstance(collation, exp.Var) and collation.this.upper() == "UTF8_LCASE":
+            # For UTF8_LCASE, wrap the expression in lower()
+            expr_sql = self.func("lower", self.sql(this_arg.this))
+        else:
+            # For other collations, just use the expression without COLLATE
+            expr_sql = self.sql(this_arg.this)
+    else:
+        expr_sql = self.sql(this_arg)
+    
+    if not from_arg or not to_arg:
+        return self.func("TRANSLATE", expr_sql, self.sql(from_arg), self.sql(to_arg))
+    
+    # Get the literal values if they are literals
+    if isinstance(from_arg, exp.Literal) and isinstance(to_arg, exp.Literal):
+        from_chars = from_arg.this
+        to_chars = to_arg.this
+        
+        # Build nested REPLACE calls
+        result = expr_sql
+        for i, from_char in enumerate(from_chars):
+            # If to_chars is shorter, replace with empty string
+            to_char = to_chars[i] if i < len(to_chars) else ""
+            to_char_sql = self.sql(exp.Literal.string(to_char))
+            from_char_sql = self.sql(exp.Literal.string(from_char))
+            result = self.func("REPLACE", result, from_char_sql, to_char_sql)
+        
+        return result
+    else:
+        # If arguments are not literals, we can't transform at compile time
+        # This would require runtime evaluation
+        self.unsupported("TRANSLATE with non-literal arguments cannot be transpiled to nested REPLACE")
+        return self.func("TRANSLATE", expr_sql, self.sql(from_arg), self.sql(to_arg))
+
+
 def _build_formatted_time_with_or_without_zone(
     exp_class: t.Type[E], default: t.Optional[bool | str] = None
 ) -> t.Callable[[t.List], E]:
@@ -2269,6 +2321,7 @@ class E6(Dialect):
             exp.TimestampDiff: timestamp_diff_sql,
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
+            exp.Translate: translate_to_nested_replace,
             # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
             exp.Trim: _trim_sql,
             exp.TryCast: lambda self, e: self.func(
