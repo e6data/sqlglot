@@ -565,6 +565,29 @@ class TestE6(Validator):
             read={"databricks": "select cast(col as JSON)"},
         )
 
+        # FIND_IN_SET function tests - Databricks to E6 transpilation
+        self.validate_all(
+            "SELECT ARRAY_POSITION('ab', SPLIT('abc,b,ab,c,def', ','))",
+            read={
+                "databricks": "SELECT FIND_IN_SET('ab', 'abc,b,ab,c,def')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_POSITION('test', SPLIT('hello,world,test', ','))",
+            read={
+                "databricks": "SELECT FIND_IN_SET('test', 'hello,world,test')",
+            },
+        )
+
+        # Test FIND_IN_SET with column references
+        self.validate_all(
+            "SELECT ARRAY_POSITION(search_col, SPLIT(list_col, ',')) FROM table1",
+            read={
+                "databricks": "SELECT FIND_IN_SET(search_col, list_col) FROM table1",
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",

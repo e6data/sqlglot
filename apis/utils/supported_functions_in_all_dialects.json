@@ -740,6 +740,7 @@
         "DISTINCT",
         "STDDEV",
         "FILTER_ARRAY",
+        "FIND_IN_SET",
         "TIMESTAMP",
         "REGEXP_CONTAINS",
         "CASE",
