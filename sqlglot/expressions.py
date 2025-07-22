@@ -7038,8 +7038,6 @@ class UnixSeconds(Func):
     pass
 
 
-class TimestampMillis(Func):
-    arg_types = {"this": True}
 
 
 class Uuid(Func):

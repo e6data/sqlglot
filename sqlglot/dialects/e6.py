@@ -2072,6 +2072,11 @@ class E6(Dialect):
         ) -> str:
             unix_expr = expression.this
             format_expr = expression.args.get("format")
+            scale_expr = expression.args.get("scale")
+
+            # If scale is milliseconds, use FROM_UNIXTIME_WITHUNIT
+            if scale_expr and scale_expr.this == "milliseconds":
+                return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
 
             if not format_expr:
                 return self.func("FROM_UNIXTIME", unix_expr)
@@ -2267,9 +2272,6 @@ class E6(Dialect):
                 e.this,
             ),
             exp.TsOrDsToDate: TsOrDsToDate_sql,
-            exp.TimestampMillis: lambda self, e: self.func(
-                "FROM_UNIXTIME_WITHUNIT", e.this, exp.Literal.string("milliseconds")
-            ),
             exp.UnixToTime: from_unixtime_sql,
             exp.UnixToStr: from_unixtime_sql,
             exp.VarMap: map_sql,
