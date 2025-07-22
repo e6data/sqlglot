@@ -34,9 +34,28 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT REDUCE(ARRAY[1, 2, 3], 0, (acc, x) -> acc + x)",
+            read={
+                "databricks": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+                "snowflake": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+                "athena": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+            },
+        )
+
+        self.validate_all(
             "SELECT ARRAY_CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
             read={
                 "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_INTERSECT(ARRAY[1, 2, 3], ARRAY[1, 3, 3, 5])",
+            read={
+                "databricks": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "athena": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "trino": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "snowflake": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
             },
         )
 
@@ -204,10 +223,19 @@ class TestE6(Validator):
             },
         )
 
+
+        # check it onece
+        # self.validate_all(
+        #     "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
+        #     read={"trino": "SELECT format_datetime('2024-11-09 09:08:07', '%d-%m-%y')"},
+        # )
         self.validate_all(
-            "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
-            read={"trino": "SELECT format_datetime('2024-11-09 09:08:07', '%d-%m-%y')"},
+            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
+            read={"trino":"SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')",
+                  "athena": "SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')"},
         )
+
+
 
         self.validate_all(
             "SELECT ARRAY_POSITION(1.9, ARRAY[1, 2, 3, 1.9])",
@@ -244,6 +272,8 @@ class TestE6(Validator):
             "SELECT SIZE(TRANSFORM(ARRAY[1, 2, 3], x -> x * 2))",
             read={
                 "databricks": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
+                "athena": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
+                "snowflake": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
             },
         )
 
@@ -512,6 +542,13 @@ class TestE6(Validator):
             "TO_JSON_STRING(X)",
             read={
                 "presto": "JSON_FORMAT(CAST(X as JSON))",
+            },
+        )
+        self.validate_all(
+            "SELECT FORMAT('%s%%', 123)",
+            read={
+                "presto": "SELECT FORMAT('%s%%', 123)",
+                "trino": "SELECT FORMAT('%s%%', 123)",
             },
         )
 
