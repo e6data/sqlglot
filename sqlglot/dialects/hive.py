@@ -372,6 +372,7 @@ class Hive(Dialect):
                 args or [exp.CurrentTimestamp()]
             ),
             "YEAR": lambda args: exp.Year(this=exp.TsOrDsToDate.from_arg_list(args)),
+            "TRANSLATE": exp.Translate.from_arg_list,
         }
 
         NO_PAREN_FUNCTION_PARSERS = {
