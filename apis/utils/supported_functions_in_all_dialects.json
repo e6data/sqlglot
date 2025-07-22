@@ -801,6 +801,8 @@
         "COUNT_IF",
         "INTERVAL"
 
+        "COUNT_IF",
+        "TIMESTAMP_SECONDS"
     ],
     "databricks": [
          "ABS",

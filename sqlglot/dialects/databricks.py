@@ -117,6 +117,9 @@ class Databricks(Spark):
             "TIMEDIFF": lambda args: exp.TimestampDiff(
                 unit=seq_get(args, 0), this=seq_get(args, 1), expression=seq_get(args, 2)
             ),
+            "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.Literal.string("seconds")
+            ),
         }
 
         FACTOR = {
