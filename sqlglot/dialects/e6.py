@@ -2145,6 +2145,7 @@ class E6(Dialect):
             exp.Array: array_sql,
             exp.ArrayAgg: rename_func("ARRAY_AGG"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
+            exp.ArrayIntersect: rename_func("ARRAY_INTERSECT"),
             exp.ArrayContains: rename_func("ARRAY_CONTAINS"),
             exp.ArrayFilter: filter_array_sql,
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
@@ -2193,6 +2194,8 @@ class E6(Dialect):
             exp.Explode: explode_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
+            exp.Format: rename_func("FORMAT"),
+            exp.FormatDatetime: rename_func("FORMAT_DATETIME"),
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
