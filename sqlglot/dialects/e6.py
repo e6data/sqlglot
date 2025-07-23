@@ -2383,6 +2383,13 @@ class E6(Dialect):
             "percent_rank",
             "rank",
             "row_number",
+            "sunday",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
         }
 
         UNSIGNED_TYPE_MAPPING = {

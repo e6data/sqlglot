@@ -49,6 +49,11 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT SUM(CASE WHEN week_Day = 7 THEN a END) AS \"Saturday\"",
+            read={"databricks":"SELECT sum(case when week_Day = 7 then a end) as Saturday"}
+        )
+
+        self.validate_all(
             "POWER(x, 2)",
             read={
                 "bigquery": "POWER(x, 2)",
