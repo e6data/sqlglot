@@ -796,6 +796,8 @@
         "URL_DECODE",
         "TYPEOF"
 
+        "COUNT_IF",
+        "TIMEDIFF"
     ],
     "databricks": [
          "ABS",
