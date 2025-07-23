@@ -1695,8 +1695,13 @@ class E6(Dialect):
                 # Extract the name attributes of 'this' and 'unit'
                 value = expression.this.name
                 unit = expression.unit.name
+
+                # Convert plural forms to singular if not allowed
+                if not self.INTERVAL_ALLOWS_PLURAL_FORM:
+                    unit = self.TIME_PART_SINGULARS.get(unit, unit)
+
                 # Format the INTERVAL string
-                interval_str = f"INTERVAL {value} {unit}"
+                interval_str = f"INTERVAL '{value} {unit}'"
                 return interval_str
             else:
                 # Return an empty string if either 'this' or 'unit' is missing
