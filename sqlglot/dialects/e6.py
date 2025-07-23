@@ -1665,41 +1665,38 @@ class E6(Dialect):
         def interval_sql(self, expression: exp.Interval) -> str:
             """
             Generate an SQL INTERVAL expression from the given Interval object.
-
-            This function constructs a string representing an SQL INTERVAL based on
-            the provided `expression`. If both `expression.this` (the value) and
-            `expression.unit` (the unit of time) are present, it returns a string
-            formatted as 'INTERVAL {value} {unit}'. If either is missing, it returns
-            an empty string.
+            
+            This function constructs a string representing an SQL INTERVAL in the format
+            INTERVAL 'value unit' with proper quote preservation and plural-to-singular
+            conversion (e.g., WEEKS -> WEEK).
 
             Parameters:
             expression (exp.Interval): An object containing the interval value and unit.
 
             Returns:
-            str: A string representing the SQL INTERVAL or an empty string if the
-                 necessary components are missing.
+            str: A string representing the SQL INTERVAL with quotes preserved.
 
             Example:
-            >>> expr = exp.Interval(this=exp.Literal(5), unit=exp.Literal('DAY'))
-            >>> generator = Generator()
+            >>> expr = exp.Interval(this=exp.Literal('2'), unit=exp.Var('WEEKS'))
             >>> generator.interval_sql(expr)
-            'INTERVAL 5 DAY'
+            "INTERVAL '2 week'"
             """
-            # TODO:: Ask Adithya, how he has guessed about this `.this` & `.unit`
-            # While you debug anything, you can see the tree like structures there and see what are our candidates to fetch and do manipulations
-            # You can use evaluate exression also there to verfy what we want
-
-            # Check if both 'this' (value) and 'unit' are present in the expression
             if expression.this and expression.unit:
-                # Extract the name attributes of 'this' and 'unit'
-                value = expression.this.name
-                unit = expression.unit.name
-                # Format the INTERVAL string
-                interval_str = f"INTERVAL {value} {unit}"
-                return interval_str
+                # Get the value (preserve quotes if it's a string literal)
+                value = expression.this.name if expression.this else ""
+                
+                # Get the unit and convert plural to singular if needed
+                unit = self.sql(expression, "unit")
+                if not self.INTERVAL_ALLOWS_PLURAL_FORM:
+                    unit = self.TIME_PART_SINGULARS.get(unit, unit)
+                
+                # Format as single quoted string: INTERVAL 'value unit'
+                return f"INTERVAL '{value} {unit.lower()}'"
             else:
-                # Return an empty string if either 'this' or 'unit' is missing
-                return f"INTERVAL {expression.this if expression.this else ''} {expression.unit if expression.unit else ''}"
+                # Fallback for cases where either 'this' or 'unit' is missing
+                this_part = self.sql(expression, "this") if expression.this else ""
+                unit_part = self.sql(expression, "unit") if expression.unit else ""
+                return f"INTERVAL {this_part} {unit_part}".strip()
 
         # Need to look at the problem here regarding double casts appearing
         def _last_day_sql(self: E6.Generator, expression: exp.LastDay) -> str:
