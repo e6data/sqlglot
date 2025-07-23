@@ -1681,53 +1681,24 @@ class E6(Dialect):
             >>> generator.interval_sql(expr)
             "INTERVAL '2 week'"
             """
-            # Main case: Both value and time unit are present in the INTERVAL expression
             if expression.this and expression.unit:
-                # Step 1: Extract the interval value (e.g., '2', '-1', '5')
-                # We get the raw name/value from the AST node
                 interval_value = expression.this.name if expression.this else ""
-
-                # Step 2: Extract and process the time unit (e.g., 'weeks', 'days', 'hours')
                 time_unit = self.sql(expression, "unit")
-
-                # Step 3: Convert plural time units to singular forms if required
-                # E6 dialect requires singular forms: 'weeks' -> 'week', 'days' -> 'day'
                 if not self.INTERVAL_ALLOWS_PLURAL_FORM:
-                    # Use the TIME_PART_SINGULARS mapping to convert plurals
-                    # Example: 'WEEKS' -> 'WEEK', 'DAYS' -> 'DAY'
                     time_unit = self.TIME_PART_SINGULARS.get(time_unit, time_unit)
-
-                # Step 4: Determine the output format based on the value type
-                # We need to check if the original value was a quoted string literal
                 is_string_literal = (
                     isinstance(expression.this, exp.Literal) and expression.this.is_string
                 )
-
                 if is_string_literal:
-                    # Format A: Quoted string format for string literals
-                    # Input: INTERVAL '2 weeks' -> Output: INTERVAL '2 week'
-                    # This preserves the quoted format while converting plural to singular
                     return f"INTERVAL '{interval_value} {time_unit.lower()}'"
                 else:
-                    # Format B: Separate format for numeric values
-                    # Input: INTERVAL -1 DAY -> Output: INTERVAL -1 DAY
-                    # This keeps numeric values unquoted with uppercase units
                     return f"INTERVAL {interval_value} {time_unit}"
             else:
-                # Edge case: Handle malformed INTERVAL expressions gracefully
-                # If either the value or unit is missing, we still try to generate valid SQL
-
-                # Extract whatever components are available
                 value_part = self.sql(expression, "this") if expression.this else ""
                 unit_part = self.sql(expression, "unit") if expression.unit else ""
-
-                # Combine them with proper spacing and return
-                # This ensures we don't break on incomplete INTERVAL expressions
                 return f"INTERVAL {value_part} {unit_part}".strip()
 
-        # Need to look at the problem here regarding double casts appearing
         def _last_day_sql(self: E6.Generator, expression: exp.LastDay) -> str:
-            # date_expr = self.sql(expression,"this")
             date_expr = expression.args.get("this")
             date_expr = date_expr
             if isinstance(date_expr, exp.Literal):
