@@ -5994,7 +5994,6 @@ class TimestampTrunc(Func, TimeUnit):
     arg_types = {"this": True, "unit": True, "zone": False}
 
 
-
 class TimeAdd(Func, TimeUnit):
     arg_types = {"this": True, "expression": True, "unit": False}
 
