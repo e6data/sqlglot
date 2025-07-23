@@ -787,7 +787,7 @@
         "FORMAT_DATETIME",
         "COUNT_IF",
         "TRANSLATE",
-        "typeof"
+        "TYPEOF"
 
     ],
     "databricks": [
