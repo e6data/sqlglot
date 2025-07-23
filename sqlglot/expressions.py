@@ -6163,6 +6163,10 @@ class Greatest(Func):
     is_var_len_args = True
 
 
+class WidthBucket(Func):
+    arg_types = {"this": True, "minExpr": True, "maxExpr": True, "numBuckets": True}
+
+
 # Trino's `ON OVERFLOW TRUNCATE [filler_string] {WITH | WITHOUT} COUNT`
 # https://trino.io/docs/current/functions/aggregate.html#listagg
 class OverflowTruncateBehavior(Expression):
@@ -7035,6 +7039,10 @@ class UnixToTimeStr(Func):
 
 
 class UnixSeconds(Func):
+    pass
+
+
+class UrlDecode(Func):
     pass
 
 
