@@ -5597,6 +5597,10 @@ class ArrayConcat(Func):
     is_var_len_args = True
 
 
+class ArrayIntersect(Func):
+    arg_types = {"this": True, "expression": True}
+
+
 class ArrayConstructCompact(Func):
     arg_types = {"expressions": True}
     is_var_len_args = True
@@ -6287,6 +6291,14 @@ class JSONPathWildcard(JSONPathPart):
 
 class FormatJson(Expression):
     pass
+
+class Format(Func):
+    arg_types = {"this": True, "expressions": False}
+    is_var_len_args = True
+
+
+class FormatDatetime(Func):
+    arg_types = {"this": True, "expression": True}
 
 
 class JSONKeyValue(Expression):
