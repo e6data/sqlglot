@@ -794,10 +794,10 @@
         "CORR",
         "COVAR_POP",
         "URL_DECODE",
-        "TYPEOF"
-
+        "TYPEOF",
         "COUNT_IF",
-        "TIMEDIFF"
+        "TIMEDIFF",
+        "COUNT_IF"
     ],
     "databricks": [
          "ABS",
