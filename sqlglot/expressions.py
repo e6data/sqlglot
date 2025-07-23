@@ -6753,6 +6753,11 @@ class Repeat(Func):
     arg_types = {"this": True, "times": True}
 
 
+class Space(Func):
+    """Returns a string with n spaces."""
+    arg_types = {"this": True}
+
+
 # https://learn.microsoft.com/en-us/sql/t-sql/functions/round-transact-sql?view=sql-server-ver16
 # tsql third argument function == trunctaion if not 0
 class Round(Func):

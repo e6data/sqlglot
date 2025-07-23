@@ -114,6 +114,7 @@ class Spark(Spark2):
             "ANY_VALUE": _build_with_ignore_nulls(exp.AnyValue),
             "DATE_ADD": _build_dateadd,
             "DATEADD": _build_dateadd,
+            "SPACE": exp.Space.from_arg_list,
             "TIMESTAMPADD": _build_dateadd,
             "TIMESTAMPDIFF": build_date_delta(exp.TimestampDiff),
             "DATEDIFF": _build_datediff,
