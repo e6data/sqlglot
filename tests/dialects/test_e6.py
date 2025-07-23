@@ -15,6 +15,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CAST(DATETIME(datetime_date_718, 'Asia/Calcutta') AS DATE) IS NOT NULL",
+            read={
+                "athena": "SELECT cast(datetime_date_718 AT TIME ZONE 'Asia/Calcutta' as date) is not null",
+            },
+        )
+
+        self.validate_all(
             "NVL(x, y, z)",
             read={
                 "spark": "NVL(x,y,z)",

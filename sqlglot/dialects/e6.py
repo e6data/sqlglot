@@ -2045,7 +2045,7 @@ class E6(Dialect):
         def not_sql(self, expression: exp.Not) -> str:
             expr = expression.this
             if isinstance(expr, exp.Is):
-                return f"{expr.this} IS NOT {expr.expression}"
+                return f"{self.sql(expr.this)} IS NOT {self.sql(expr.expression)}"
             else:
                 return super().not_sql(expression)
 
