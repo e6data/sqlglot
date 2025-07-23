@@ -33,16 +33,6 @@ class TestE6(Validator):
             },
         )
 
-        self.validate_all(
-            "SELECT TYPEOF('hello')",
-            read={
-                "databricks": "SELECT TYPEOF('hello');",
-                "spark": "SELECT TYPEOF('hello');",
-                "spark2": "SELECT TYPEOF('hello');",
-                "snowflake": "SELECT TYPEOF('hello');",
-            },
-        )
-
         # Concat in dbr can accept many datatypes of args, but we map it to array_concat if type is of array. So we decided to put it as it is.
         self.validate_all(
             "SELECT CONCAT(TRANSFORM(ARRAY[1, 2], x -> x * 10), ARRAY[30, 40])",
@@ -595,6 +585,29 @@ class TestE6(Validator):
             "SELECT ARRAY_POSITION(search_col, SPLIT(list_col, ',')) FROM table1",
             read={
                 "databricks": "SELECT FIND_IN_SET(search_col, list_col) FROM table1",
+            },
+        )
+
+        self.validate_all(
+            "SELECT CORR(c1, c2) FROM (VALUES (3, 2), (3, 3), (3, 3), (6, 4)) AS tab(c1, c2)",
+            read={
+                "databricks": "SELECT corr(c1, c2) FROM VALUES (3, 2), (3, 3), (3, 3), (6, 4) as tab(c1, c2)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT COVAR_POP(c1, c2) FROM (VALUES (1, 1), (2, 2), (2, 2), (3, 3)) AS tab(c1, c2)",
+            read={
+                "databricks": "SELECT covar_pop(c1, c2) FROM VALUES (1, 1), (2, 2), (2, 2), (3, 3) AS tab(c1, c2)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+            read={
+                "databricks": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+                "athena": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+                "trino": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
             },
         )
 

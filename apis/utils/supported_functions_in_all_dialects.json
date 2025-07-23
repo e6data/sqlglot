@@ -786,6 +786,11 @@
         "LAST_DAY_OF_MONTH",
         "FORMAT_DATETIME",
         "COUNT_IF",
+        "WIDTH_BUCKET",
+        "RAND",
+        "CORR",
+        "COVAR_POP",
+        "URL_DECODE",
         "TYPEOF"
 
     ],
