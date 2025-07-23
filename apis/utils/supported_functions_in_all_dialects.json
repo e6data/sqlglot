@@ -787,7 +787,6 @@
         "FORMAT_DATETIME",
         "COUNT_IF",
         "TRANSLATE",
-        "SPACE",
         "typeof"
 
     ],
