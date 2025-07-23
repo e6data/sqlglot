@@ -2112,7 +2112,7 @@ class E6(Dialect):
             # If scale is seconds, use FROM_UNIXTIME_WITHUNIT
             if scale_expr and scale_expr.this == "seconds":
                 return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
-            # If scale is milliseconds, use FROM_UNIXTIME_WITHUNIT  
+            # If scale is milliseconds, use FROM_UNIXTIME_WITHUNIT
             if scale_expr and scale_expr.this == "milliseconds":
                 return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
 
