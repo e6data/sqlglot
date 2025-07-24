@@ -2145,6 +2145,7 @@ class E6(Dialect):
             exp.Array: array_sql,
             exp.ArrayAgg: rename_func("ARRAY_AGG"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
+            exp.ArrayIntersect: rename_func("ARRAY_INTERSECT"),
             exp.ArrayContains: rename_func("ARRAY_CONTAINS"),
             exp.ArrayFilter: filter_array_sql,
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
@@ -2193,6 +2194,8 @@ class E6(Dialect):
             exp.Explode: explode_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
+            exp.Format: rename_func("FORMAT"),
+            exp.FormatDatetime: rename_func("FORMAT_DATETIME"),
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
@@ -2224,6 +2227,7 @@ class E6(Dialect):
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
             exp.RegexpSplit: split_sql,
             # exp.Select: select_sql,
+            exp.Space: lambda self, e: self.func("REPEAT", exp.Literal.string(" "), e.this),
             exp.Split: split_sql,
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.Stddev: rename_func("STDDEV"),
@@ -2378,6 +2382,13 @@ class E6(Dialect):
             "percent_rank",
             "rank",
             "row_number",
+            "sunday",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
         }
 
         UNSIGNED_TYPE_MAPPING = {

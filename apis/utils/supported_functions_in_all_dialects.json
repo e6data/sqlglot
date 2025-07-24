@@ -790,6 +790,8 @@
         "CORR",
         "COVAR_POP",
         "URL_DECODE"
+        "TRANSFORM",
+        "ARRAY_INTERSECT"
     ],
     "databricks": [
          "ABS",
