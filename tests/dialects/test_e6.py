@@ -1946,6 +1946,37 @@ class TestE6(Validator):
             },
         )
 
+        # Test TIMESTAMP_MILLIS: Databricks to E6 conversion
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT(1230219000123, 'milliseconds')",
+            read={
+                "databricks": "SELECT TIMESTAMP_MILLIS(1230219000123)",
+            },
+            write={
+                "databricks": "SELECT TIMESTAMP_MILLIS(1230219000123)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT(epoch_col, 'milliseconds')",
+            read={
+                "databricks": "SELECT TIMESTAMP_MILLIS(epoch_col)",
+            },
+            write={
+                "databricks": "SELECT TIMESTAMP_MILLIS(epoch_col)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT(ts_millis, 'milliseconds') AS converted_ts FROM events",
+            read={
+                "databricks": "SELECT TIMESTAMP_MILLIS(ts_millis) AS converted_ts FROM events",
+            },
+            write={
+                "databricks": "SELECT TIMESTAMP_MILLIS(ts_millis) AS converted_ts FROM events",
+            },
+        )
+
     def test_array_agg(self):
         self.validate_all(
             "SELECT ARRAY_AGG(DISTINCT col) AS result FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
