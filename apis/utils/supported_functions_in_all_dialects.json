@@ -643,7 +643,6 @@
         "CAST",
         "SIGN",
         "CONCAT",
-        "CONCAT_WS",
         "USING",
         "ACOSH",
         "INITCAP",
