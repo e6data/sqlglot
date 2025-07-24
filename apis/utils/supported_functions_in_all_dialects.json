@@ -785,8 +785,9 @@
         "LAST_DAY_OF_MONTH",
         "FORMAT_DATETIME",
         "COUNT_IF",
-        "INTERVAL"
-
+        "TIMESTAMP_SECONDS",
+        "TRANSFORM",
+        "ARRAY_INTERSECT"
     ],
     "databricks": [
          "ABS",

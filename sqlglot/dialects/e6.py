@@ -2106,6 +2106,14 @@ class E6(Dialect):
         ) -> str:
             unix_expr = expression.this
             format_expr = expression.args.get("format")
+            scale_expr = expression.args.get("scale")
+
+            # If scale is seconds, use FROM_UNIXTIME_WITHUNIT
+            if scale_expr and scale_expr.this == "seconds":
+                return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
+            # If scale is milliseconds, use FROM_UNIXTIME_WITHUNIT
+            if scale_expr and scale_expr.this == "milliseconds":
+                return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
 
             if not format_expr:
                 return self.func("FROM_UNIXTIME", unix_expr)
@@ -2179,6 +2187,7 @@ class E6(Dialect):
             exp.Array: array_sql,
             exp.ArrayAgg: rename_func("ARRAY_AGG"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
+            exp.ArrayIntersect: rename_func("ARRAY_INTERSECT"),
             exp.ArrayContains: rename_func("ARRAY_CONTAINS"),
             exp.ArrayFilter: filter_array_sql,
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
@@ -2227,6 +2236,8 @@ class E6(Dialect):
             exp.Explode: explode_sql,
             exp.Extract: extract_sql,
             exp.FirstValue: rename_func("FIRST_VALUE"),
+            exp.Format: rename_func("FORMAT"),
+            exp.FormatDatetime: rename_func("FORMAT_DATETIME"),
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
@@ -2258,6 +2269,7 @@ class E6(Dialect):
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
             exp.RegexpSplit: split_sql,
             # exp.Select: select_sql,
+            exp.Space: lambda self, e: self.func("REPEAT", exp.Literal.string(" "), e.this),
             exp.Split: split_sql,
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.Stddev: rename_func("STDDEV"),
@@ -2412,6 +2424,13 @@ class E6(Dialect):
             "percent_rank",
             "rank",
             "row_number",
+            "sunday",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
         }
 
         UNSIGNED_TYPE_MAPPING = {

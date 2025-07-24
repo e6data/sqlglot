@@ -1088,6 +1088,33 @@ class TestPresto(Validator):
             "SELECT id, FIRST_VALUE(is_deleted) OVER (PARTITION BY id) AS first_is_deleted, NTH_VALUE(is_deleted, 2) OVER (PARTITION BY id) AS nth_is_deleted, LAST_VALUE(is_deleted) OVER (PARTITION BY id) AS last_is_deleted FROM my_table"
         )
 
+    def test_format_functions(self):
+        # Test FORMAT function
+        self.validate_identity("SELECT FORMAT('%s%%', 123)")
+        self.validate_identity("SELECT FORMAT('Hello %s', 'World')")
+        self.validate_identity("SELECT FORMAT('%d items', 42)")
+        
+        # Test FORMAT_DATETIME function  
+        self.validate_identity("SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')")
+        self.validate_identity("SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%H:%i:%s')")
+        
+        # Test cross-dialect validation
+        self.validate_all(
+            "SELECT FORMAT('%s%%', 123)",
+            write={
+                "presto": "SELECT FORMAT('%s%%', 123)",
+                "trino": "SELECT FORMAT('%s%%', 123)",
+            },
+        )
+        
+        self.validate_all(
+            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
+            write={
+                "presto": "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
+                "trino": "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
+            },
+        )
+
     def test_encode_decode(self):
         self.validate_identity("FROM_UTF8(x, y)")
 
