@@ -120,6 +120,9 @@ class Spark(Spark2):
             "DATE_DIFF": _build_datediff,
             "TIMESTAMP_LTZ": _build_as_cast("TIMESTAMP_LTZ"),
             "TIMESTAMP_NTZ": _build_as_cast("TIMESTAMP_NTZ"),
+            "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.Literal.string("seconds")
+            ),
             "TRY_ELEMENT_AT": lambda args: exp.Bracket(
                 this=seq_get(args, 0),
                 expressions=ensure_list(seq_get(args, 1)),
