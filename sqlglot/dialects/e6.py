@@ -1702,6 +1702,35 @@ class E6(Dialect):
                 # Format the INTERVAL string
                 interval_str = f"INTERVAL '{value} {unit}'"
                 return interval_str
+            elif expression.this and not expression.unit:
+                # Handle compound intervals like '5 minutes 30 seconds'
+                value = expression.this.name if hasattr(expression.this, 'name') else str(expression.this)
+                
+                # Parse compound interval and convert to E6 format
+                import re
+                # Pattern to match number-unit pairs in the compound interval
+                pattern = r'(\d+)\s*(year|month|week|day|hour|minute|second|microsecond|millisecond)s?'
+                matches = re.findall(pattern, value.lower())
+                
+                if matches:
+                    # Convert compound interval to sum of individual intervals
+                    interval_parts = []
+                    for num, unit in matches:
+                        # Convert plural to singular if needed
+                        if not self.INTERVAL_ALLOWS_PLURAL_FORM:
+                            unit = self.TIME_PART_SINGULARS.get(unit.upper() + 'S', unit.upper())
+                        else:
+                            unit = unit.upper()
+                        interval_parts.append(f"INTERVAL '{num} {unit}'")
+                    
+                    # Join with + operator
+                    if len(interval_parts) > 1:
+                        return  ' + '.join(interval_parts)
+                    elif len(interval_parts) == 1:
+                        return interval_parts[0]
+                
+                # If no pattern matches, return as-is with quotes
+                return f"INTERVAL '{value}'"
             else:
                 # Return an empty string if either 'this' or 'unit' is missing
                 return f"INTERVAL {expression.this if expression.this else ''} {expression.unit if expression.unit else ''}"

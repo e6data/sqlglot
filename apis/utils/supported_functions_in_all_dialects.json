@@ -784,7 +784,8 @@
         "REDUCE",
         "LAST_DAY_OF_MONTH",
         "FORMAT_DATETIME",
-        "COUNT_IF"
+        "COUNT_IF",
+        "INTERVAL"
     ],
     "databricks": [
          "ABS",
