@@ -1946,6 +1946,87 @@ class TestE6(Validator):
             },
         )
 
+    def test_timestamp_seconds(self):
+        # Test basic TIMESTAMP_SECONDS with integer literal
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(1230219000, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(1230219000)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with decimal literal (fractional seconds)
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(1230219000.123, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(1230219000.123)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with column reference
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(epoch_timestamp, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(epoch_timestamp)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with expression
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(unix_time + 3600, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(unix_time + 3600)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with NULL
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(NULL, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(NULL)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS in SELECT statement
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT(1230219000, 'seconds') AS converted_timestamp",
+            read={
+                "databricks": "SELECT TIMESTAMP_SECONDS(1230219000) AS converted_timestamp",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS in WHERE clause
+        self.validate_all(
+            "SELECT * FROM events WHERE created_at > FROM_UNIXTIME_WITHUNIT(1230219000, 'seconds')",
+            read={
+                "databricks": "SELECT * FROM events WHERE created_at > TIMESTAMP_SECONDS(1230219000)",
+            },
+        )
+
+        # Test multiple TIMESTAMP_SECONDS calls
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT(start_time, 'seconds') AS start_ts, FROM_UNIXTIME_WITHUNIT(end_time, 'seconds') AS end_ts FROM events",
+            read={
+                "databricks": "SELECT TIMESTAMP_SECONDS(start_time) AS start_ts, TIMESTAMP_SECONDS(end_time) AS end_ts FROM events",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with CAST
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(CAST(epoch_string AS BIGINT), 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(CAST(epoch_string AS BIGINT))",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with subquery
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT((SELECT MAX(epoch_time) FROM historical_data), 'seconds') AS max_timestamp",
+            read={
+                "databricks": "SELECT TIMESTAMP_SECONDS((SELECT MAX(epoch_time) FROM historical_data)) AS max_timestamp",
+            },
+        )
+
     def test_array_agg(self):
         self.validate_all(
             "SELECT ARRAY_AGG(DISTINCT col) AS result FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",

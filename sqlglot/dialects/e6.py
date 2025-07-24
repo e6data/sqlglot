@@ -2072,6 +2072,14 @@ class E6(Dialect):
         ) -> str:
             unix_expr = expression.this
             format_expr = expression.args.get("format")
+            scale_expr = expression.args.get("scale")
+
+            # If scale is seconds, use FROM_UNIXTIME_WITHUNIT
+            if scale_expr and scale_expr.this == "seconds":
+                return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
+            # If scale is milliseconds, use FROM_UNIXTIME_WITHUNIT
+            if scale_expr and scale_expr.this == "milliseconds":
+                return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
 
             if not format_expr:
                 return self.func("FROM_UNIXTIME", unix_expr)
