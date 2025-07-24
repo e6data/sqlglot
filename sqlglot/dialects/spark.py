@@ -112,8 +112,10 @@ class Spark(Spark2):
         FUNCTIONS = {
             **Spark2.Parser.FUNCTIONS,
             "ANY_VALUE": _build_with_ignore_nulls(exp.AnyValue),
+            "ARRAY_INTERSECT": exp.ArrayIntersect.from_arg_list,
             "DATE_ADD": _build_dateadd,
             "DATEADD": _build_dateadd,
+            "SPACE": exp.Space.from_arg_list,
             "TIMESTAMPADD": _build_dateadd,
             "TIMESTAMPDIFF": build_date_delta(exp.TimestampDiff),
             "DATEDIFF": _build_datediff,

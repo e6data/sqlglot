@@ -27,9 +27,28 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT REDUCE(ARRAY[1, 2, 3], 0, (acc, x) -> acc + x)",
+            read={
+                "databricks": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+                "snowflake": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+                "athena": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+            },
+        )
+
+        self.validate_all(
             "SELECT ARRAY_CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
             read={
                 "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_INTERSECT(ARRAY[1, 2, 3], ARRAY[1, 3, 3, 5])",
+            read={
+                "databricks": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "athena": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "trino": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "snowflake": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
             },
         )
 
@@ -39,6 +58,11 @@ class TestE6(Validator):
             read={
                 "databricks": "SELECT concat(transform(array(1, 2), x -> x * 10), array(30, 40))",
             },
+        )
+
+        self.validate_all(
+            "SELECT SUM(CASE WHEN week_Day = 7 THEN a END) AS \"Saturday\"",
+            read={"databricks":"SELECT sum(case when week_Day = 7 then a end) as Saturday"}
         )
 
         self.validate_all(
@@ -192,10 +216,19 @@ class TestE6(Validator):
             },
         )
 
+
+        # check it onece
+        # self.validate_all(
+        #     "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
+        #     read={"trino": "SELECT format_datetime('2024-11-09 09:08:07', '%d-%m-%y')"},
+        # )
         self.validate_all(
-            "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
-            read={"trino": "SELECT format_datetime('2024-11-09 09:08:07', '%d-%m-%y')"},
+            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
+            read={"trino":"SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')",
+                  "athena": "SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')"},
         )
+
+
 
         self.validate_all(
             "SELECT ARRAY_POSITION(1.9, ARRAY[1, 2, 3, 1.9])",
@@ -232,6 +265,8 @@ class TestE6(Validator):
             "SELECT SIZE(TRANSFORM(ARRAY[1, 2, 3], x -> x * 2))",
             read={
                 "databricks": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
+                "athena": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
+                "snowflake": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
             },
         )
 
@@ -502,6 +537,13 @@ class TestE6(Validator):
                 "presto": "JSON_FORMAT(CAST(X as JSON))",
             },
         )
+        self.validate_all(
+            "SELECT FORMAT('%s%%', 123)",
+            read={
+                "presto": "SELECT FORMAT('%s%%', 123)",
+                "trino": "SELECT FORMAT('%s%%', 123)",
+            },
+        )
 
         self.validate_all(
             "SELECT EXTRACT(fieldStr FROM date_expr)",
@@ -564,6 +606,45 @@ class TestE6(Validator):
             "SELECT CAST(col AS JSON)",
             read={"databricks": "select cast(col as JSON)"},
         )
+        for unit in ["SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH", "YEAR"]:
+            self.validate_all(
+                f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                read={
+                    "databricks": f"SELECT TIMEDIFF('{unit}', date1, date2)",
+                },
+                write={
+                    "e6": f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                },
+            )
+
+            self.validate_all(
+                "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                read={
+                    "databricks": "SELECT TIMEDIFF('HOUR', start1, end1), TIMEDIFF('MINUTE', start2, end2)",
+                },
+                write={
+                    "e6": "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                },
+            )
+
+            self.validate_all(
+                "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                read={
+                    "databricks": "SELECT ABS(TIMEDIFF('MINUTE', start_time, end_time))",
+                },
+                write={
+                    "e6": "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                },
+            )
+            self.validate_all(
+                "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                read={
+                    "databricks": "SELECT AVG(TIMEDIFF('HOUR', start_time, end_time)) FROM sessions",
+                },
+                write={
+                    "e6": "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                },
+            )
 
     def test_regex(self):
         self.validate_all(
@@ -2023,6 +2104,43 @@ class TestE6(Validator):
                 "databricks": "SHIFTRIGHT(x, 1)",
                 "trino": "BITWISE_ARITHMETIC_SHIFT_RIGHT(x, 1)",
             },
+        )
+
+    def test_space(self):
+        # Basic integer literal
+        self.validate_all(
+            "REPEAT(' ', 5)",
+            read={"databricks": "SPACE(5)"},
+        )
+        
+        # Column reference
+        self.validate_all(
+            "REPEAT(' ', n)",
+            read={"databricks": "SPACE(n)"},
+        )
+        
+        # Complex expression
+        self.validate_all(
+            "REPEAT(' ', column_count + 2)",
+            read={"databricks": "SPACE(column_count + 2)"},
+        )
+        
+        # Zero spaces
+        self.validate_all(
+            "REPEAT(' ', 0)",
+            read={"databricks": "SPACE(0)"},
+        )
+        
+        # In SELECT with alias
+        self.validate_all(
+            "SELECT REPEAT(' ', 10) AS spaces",
+            read={"databricks": "SELECT SPACE(10) AS spaces"},
+        )
+        
+        # With CONCAT
+        self.validate_all(
+            "SELECT CONCAT('Hello', REPEAT(' ', 5), 'World') AS greeting",
+            read={"databricks": "SELECT CONCAT('Hello', SPACE(5), 'World') AS greeting"},
         )
 
     def test_databricks_to_e6data_pretty(self):
