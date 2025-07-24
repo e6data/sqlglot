@@ -766,6 +766,7 @@
         "OBJECT_CONSTRUCT",
         "DATE_SUB",
         "GROUPING SETS",
+        "GROUP BY ALL",
         "ACOS",
         "ADD_MONTHS",
         "CEILING",
@@ -785,13 +786,9 @@
         "LAST_DAY_OF_MONTH",
         "FORMAT_DATETIME",
         "COUNT_IF",
-        "WIDTH_BUCKET",
-        "RAND",
-        "CORR",
-        "COVAR_POP",
-        "URL_DECODE"
-        "TRANSFORM",
-        "ARRAY_INTERSECT"
+        "COVAR_SAMP",
+        "VARIANCE_SAMP",
+        "VAR_SAMP"
     ],
     "databricks": [
          "ABS",
