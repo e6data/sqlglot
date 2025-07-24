@@ -6969,11 +6969,6 @@ class Trim(Func):
     }
 
 
-class Translate(Func):
-    """Standard SQL TRANSLATE function for character replacement."""
-    arg_types = {"this": True, "from": True, "to": True}
-
-
 class TsOrDsAdd(Func, TimeUnit):
     # return_type is used to correctly cast the arguments of this expression when transpiling it
     arg_types = {"this": True, "expression": True, "unit": False, "return_type": False}
