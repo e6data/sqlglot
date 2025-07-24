@@ -2,7 +2,7 @@ import unittest
 from apis.utils.helpers import (
     normalize_unicode_spaces,
     transform_table_part,
-    set_cte_names_case_sensitively,
+    set_cte_names_case_sensitively, transform_catalog_schema_only,
 )
 
 from sqlglot import parse_one, exp
@@ -57,6 +57,10 @@ class TestHelpers(unittest.TestCase):
             ),
             "SELECT catalogn_dbn.tablen.column FROM catalogn_dbn.tablen",
         )
+
+    def test_transform_table_part_while_skipping_e6_tranpilation(self):
+        self.assertEqual(transform_catalog_schema_only("SELECT `col` FROM catalogn.dbn.tablen", from_sql="spark"
+                                                       ), "SELECT `col` FROM catalogn_dbn.tablen")
 
 
 # class TestAutoQuoteReserved(unittest.TestCase):

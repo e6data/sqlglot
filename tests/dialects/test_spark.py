@@ -317,6 +317,16 @@ TBLPROPERTIES (
                 "trino": "SELECT JSON_FORMAT(CAST(CAST(ROW('blah') AS ROW(x VARCHAR)) AS JSON)) AS y",
             },
         )
+
+        self.validate_all(
+            "SELECT SPACE(5)",
+            write={
+                "spark": "SELECT SPACE(5)",
+                "databricks": "SELECT SPACE(5)",
+                "hive": "SELECT SPACE(5)",
+            },
+        )
+
         self.validate_all(
             "SELECT TRY_ELEMENT_AT(ARRAY(1, 2, 3), 2)",
             read={
@@ -690,6 +700,18 @@ TBLPROPERTIES (
             },
         )
 
+        # Test ARRAY_INTERSECT function
+        self.validate_identity("SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 5))")
+        self.validate_identity("SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3, 1), ARRAY(1, 3, 3, 5))")
+        
+        self.validate_all(
+            "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 5))",
+            write={
+                "spark": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 5))",
+                "databricks": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 5))",
+            },
+        )
+
         self.validate_all(
             "SELECT fname, lname, age FROM person ORDER BY age DESC NULLS FIRST, fname ASC NULLS LAST, lname",
             write={
@@ -779,6 +801,10 @@ TBLPROPERTIES (
             },
         )
         self.validate_identity("DESCRIBE schema.test PARTITION(ds = '2024-01-01')")
+
+        self.validate_identity("SELECT SPACE(0)")
+        self.validate_identity("SELECT SPACE(10) AS spaces")
+        self.validate_identity("SELECT CONCAT('Hello', SPACE(5), 'World') AS greeting")
 
         self.validate_all(
             "SELECT ANY_VALUE(col, true), FIRST(col, true), FIRST_VALUE(col, true) OVER ()",
