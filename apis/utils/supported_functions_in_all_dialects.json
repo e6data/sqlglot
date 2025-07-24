@@ -786,6 +786,7 @@
         "FORMAT_DATETIME",
         "COUNT_IF",
         "INTERVAL"
+
     ],
     "databricks": [
          "ABS",
