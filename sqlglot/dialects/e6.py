@@ -2325,7 +2325,7 @@ class E6(Dialect):
             exp.TimestampDiff: timestamp_diff_sql,
             exp.TimestampTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.ToChar: tochar_sql,
-            exp.Translate: translate_to_nested_replace,
+            # exp.Translate: translate_to_nested_replace,
             # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
             exp.Trim: _trim_sql,
             exp.TryCast: lambda self, e: self.func(
