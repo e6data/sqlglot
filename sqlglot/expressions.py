@@ -6300,6 +6300,7 @@ class JSONPathWildcard(JSONPathPart):
 class FormatJson(Expression):
     pass
 
+
 class Format(Func):
     arg_types = {"this": True, "expressions": False}
     is_var_len_args = True
@@ -6775,6 +6776,7 @@ class Repeat(Func):
 
 class Space(Func):
     """Returns a string with n spaces."""
+
     arg_types = {"this": True}
 
 

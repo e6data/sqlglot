@@ -68,8 +68,8 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT SUM(CASE WHEN week_Day = 7 THEN a END) AS \"Saturday\"",
-            read={"databricks":"SELECT sum(case when week_Day = 7 then a end) as Saturday"}
+            'SELECT SUM(CASE WHEN week_Day = 7 THEN a END) AS "Saturday"',
+            read={"databricks": "SELECT sum(case when week_Day = 7 then a end) as Saturday"},
         )
 
         self.validate_all(
@@ -223,7 +223,6 @@ class TestE6(Validator):
             },
         )
 
-
         # check it onece
         # self.validate_all(
         #     "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
@@ -231,11 +230,11 @@ class TestE6(Validator):
         # )
         self.validate_all(
             "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
-            read={"trino":"SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')",
-                  "athena": "SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')"},
+            read={
+                "trino": "SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')",
+                "athena": "SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')",
+            },
         )
-
-
 
         self.validate_all(
             "SELECT ARRAY_POSITION(1.9, ARRAY[1, 2, 3, 1.9])",
@@ -1307,13 +1306,14 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT CURRENT_TIMESTAMP + INTERVAL '1 WEEK' + INTERVAL '2 HOUR'",
-            read={"databricks":"SELECT CURRENT_TIMESTAMP + INTERVAL '1 week 2 hours'",}
+            read={
+                "databricks": "SELECT CURRENT_TIMESTAMP + INTERVAL '1 week 2 hours'",
+            },
         )
 
         self.validate_all(
             "INTERVAL '5 MINUTE' + INTERVAL '30 SECOND' + INTERVAL '500 MILLISECOND'",
-            read = {
-                "databricks": "INTERVAL '5 minutes 30 seconds 500 milliseconds'"}
+            read={"databricks": "INTERVAL '5 minutes 30 seconds 500 milliseconds'"},
         )
 
         self.validate_all("SELECT MOD(2, 1.8)", read={"databricks": "SELECT mod(2, 1.8)"})
@@ -2176,31 +2176,31 @@ class TestE6(Validator):
             "REPEAT(' ', 5)",
             read={"databricks": "SPACE(5)"},
         )
-        
+
         # Column reference
         self.validate_all(
             "REPEAT(' ', n)",
             read={"databricks": "SPACE(n)"},
         )
-        
+
         # Complex expression
         self.validate_all(
             "REPEAT(' ', column_count + 2)",
             read={"databricks": "SPACE(column_count + 2)"},
         )
-        
+
         # Zero spaces
         self.validate_all(
             "REPEAT(' ', 0)",
             read={"databricks": "SPACE(0)"},
         )
-        
+
         # In SELECT with alias
         self.validate_all(
             "SELECT REPEAT(' ', 10) AS spaces",
             read={"databricks": "SELECT SPACE(10) AS spaces"},
         )
-        
+
         # With CONCAT
         self.validate_all(
             "SELECT CONCAT('Hello', REPEAT(' ', 5), 'World') AS greeting",
