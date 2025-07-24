@@ -33,15 +33,7 @@ class TestE6(Validator):
             },
         )
 
-        # self.validate_all(
-        #     "SELECT REPLACE(REPLACE(REPLACE(LOWER('AaBbCc'), 'a', '1'), 'b', '2'), 'c', '3')",
-        #     read={
-        #         "databricks":"SELECT TRANSLATE('AaBbCc' COLLATE UTF8_LCASE, 'abc', '123')",
-        #         "spark":"SELECT TRANSLATE('AaBbCc' COLLATE UTF8_LCASE, 'abc', '123')",
-        #         "spark2":"SELECT TRANSLATE('AaBbCc' COLLATE UTF8_LCASE, 'abc', '123')",
-        #     }
-        #
-        # )
+
 
         self.validate_all(
             "SELECT TYPEOF('hello')",
