@@ -1093,11 +1093,15 @@ class TestPresto(Validator):
         self.validate_identity("SELECT FORMAT('%s%%', 123)")
         self.validate_identity("SELECT FORMAT('Hello %s', 'World')")
         self.validate_identity("SELECT FORMAT('%d items', 42)")
-        
-        # Test FORMAT_DATETIME function  
-        self.validate_identity("SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')")
-        self.validate_identity("SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%H:%i:%s')")
-        
+
+        # Test FORMAT_DATETIME function
+        self.validate_identity(
+            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')"
+        )
+        self.validate_identity(
+            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%H:%i:%s')"
+        )
+
         # Test cross-dialect validation
         self.validate_all(
             "SELECT FORMAT('%s%%', 123)",
@@ -1106,7 +1110,7 @@ class TestPresto(Validator):
                 "trino": "SELECT FORMAT('%s%%', 123)",
             },
         )
-        
+
         self.validate_all(
             "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
             write={
