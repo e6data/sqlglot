@@ -15,6 +15,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CAST(DATETIME(datetime_date_718, 'Asia/Calcutta') AS DATE) IS NOT NULL",
+            read={
+                "athena": "SELECT cast(datetime_date_718 AT TIME ZONE 'Asia/Calcutta' as date) is not null",
+            },
+        )
+
+        self.validate_all(
             "NVL(x, y, z)",
             read={
                 "spark": "NVL(x,y,z)",
@@ -378,6 +385,16 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT WIDTH_BUCKET(5.3, 0.2, 10.6, 5)",
+            read={
+                "databricks": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "snowflake": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "trino": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "athena": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+            },
+        )
+
+        self.validate_all(
             "SELECT FROM_UNIXTIME(1674797653)",
             read={
                 "trino": "SELECT from_unixtime(1674797653)",
@@ -645,6 +662,29 @@ class TestE6(Validator):
                     "e6": "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
                 },
             )
+
+        self.validate_all(
+            "SELECT CORR(c1, c2) FROM (VALUES (3, 2), (3, 3), (3, 3), (6, 4)) AS tab(c1, c2)",
+            read={
+                "databricks": "SELECT corr(c1, c2) FROM VALUES (3, 2), (3, 3), (3, 3), (6, 4) as tab(c1, c2)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT COVAR_POP(c1, c2) FROM (VALUES (1, 1), (2, 2), (2, 2), (3, 3)) AS tab(c1, c2)",
+            read={
+                "databricks": "SELECT covar_pop(c1, c2) FROM VALUES (1, 1), (2, 2), (2, 2), (3, 3) AS tab(c1, c2)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+            read={
+                "databricks": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+                "athena": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+                "trino": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+            },
+        )
 
     def test_regex(self):
         self.validate_all(
@@ -2171,5 +2211,42 @@ class TestE6(Validator):
             """WITH map AS (SELECT * FROM (VALUES ('allure', 'Allure', 'US')) AS map(app_id, brand, market)) SELECT app_id, brand, market FROM map""",
             read={
                 "databricks": """WITH map AS (VALUES ('allure', 'Allure', 'US') AS map(app_id, brand, market)) select app_id, brand, market from map"""
+            },
+        )
+
+    def test_random(self):
+        self.validate_all(
+            "RAND()",
+            write={
+                "bigquery": "RAND()",
+                "clickhouse": "randCanonical()",
+                "databricks": "RAND()",
+                "doris": "RAND()",
+                "drill": "RAND()",
+                "duckdb": "RANDOM()",
+                "hive": "RAND()",
+                "mysql": "RAND()",
+                "oracle": "RAND()",
+                "postgres": "RANDOM()",
+                "presto": "RAND()",
+                "spark": "RAND()",
+                "sqlite": "RANDOM()",
+                "tsql": "RAND()",
+            },
+            read={
+                "bigquery": "RAND()",
+                "clickhouse": "randCanonical()",
+                "databricks": "RAND()",
+                "doris": "RAND()",
+                "drill": "RAND()",
+                "duckdb": "RANDOM()",
+                "hive": "RAND()",
+                "mysql": "RAND()",
+                "oracle": "RAND()",
+                "postgres": "RANDOM()",
+                "presto": "RAND()",
+                "spark": "RAND()",
+                "sqlite": "RANDOM()",
+                "tsql": "RAND()",
             },
         )

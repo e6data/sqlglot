@@ -598,6 +598,7 @@ def transform_table_part(expression: exp.Expression) -> exp.Expression:
 
     return expression
 
+
 def transform_catalog_schema_only(query: str, from_sql: str) -> str:
     """
     Transform only the catalog.schema part to catalog_schema in the query
@@ -625,8 +626,10 @@ def transform_catalog_schema_only(query: str, from_sql: str) -> str:
                 catalog_name = catalog.this
                 table_name = table.name
                 # Create regex pattern that matches the exact pattern with word boundaries
-                pattern = rf'\b{re.escape(catalog_name)}\.{re.escape(db_name)}\.{re.escape(table_name)}\b'
-                replacement = f'{catalog_name}_{db_name}.{table_name}'
+                pattern = (
+                    rf"\b{re.escape(catalog_name)}\.{re.escape(db_name)}\.{re.escape(table_name)}\b"
+                )
+                replacement = f"{catalog_name}_{db_name}.{table_name}"
                 replacements.append((pattern, replacement))
 
         # Find column references with catalog.schema
@@ -640,8 +643,8 @@ def transform_catalog_schema_only(query: str, from_sql: str) -> str:
                 column_name = column.name
                 if table_name:
                     # Create regex pattern for full column reference
-                    pattern = rf'\b{re.escape(catalog_name)}\.{re.escape(db_name)}\.{re.escape(table_name)}\.{re.escape(column_name)}\b'
-                    replacement = f'{catalog_name}_{db_name}.{table_name}.{column_name}'
+                    pattern = rf"\b{re.escape(catalog_name)}\.{re.escape(db_name)}\.{re.escape(table_name)}\.{re.escape(column_name)}\b"
+                    replacement = f"{catalog_name}_{db_name}.{table_name}.{column_name}"
                     replacements.append((pattern, replacement))
 
         # Apply replacements to the original query string
