@@ -1694,9 +1694,43 @@ class E6(Dialect):
                 # Extract the name attributes of 'this' and 'unit'
                 value = expression.this.name
                 unit = expression.unit.name
+
+                # Convert plural forms to singular if not allowed
+                if not self.INTERVAL_ALLOWS_PLURAL_FORM:
+                    unit = self.TIME_PART_SINGULARS.get(unit, unit)
+
                 # Format the INTERVAL string
-                interval_str = f"INTERVAL {value} {unit}"
+                interval_str = f"INTERVAL '{value} {unit}'"
                 return interval_str
+            elif expression.this and not expression.unit:
+                # Handle compound intervals like '5 minutes 30 seconds'
+                value = expression.this.name if hasattr(expression.this, 'name') else str(expression.this)
+                
+                # Parse compound interval and convert to E6 format
+                import re
+                # Pattern to match number-unit pairs in the compound interval
+                pattern = r'(\d+)\s*(year|month|week|day|hour|minute|second|microsecond|millisecond)s?'
+                matches = re.findall(pattern, value.lower())
+                
+                if matches:
+                    # Convert compound interval to sum of individual intervals
+                    interval_parts = []
+                    for num, unit in matches:
+                        # Convert plural to singular if needed
+                        if not self.INTERVAL_ALLOWS_PLURAL_FORM:
+                            unit = self.TIME_PART_SINGULARS.get(unit.upper() + 'S', unit.upper())
+                        else:
+                            unit = unit.upper()
+                        interval_parts.append(f"INTERVAL '{num} {unit}'")
+                    
+                    # Join with + operator
+                    if len(interval_parts) > 1:
+                        return  ' + '.join(interval_parts)
+                    elif len(interval_parts) == 1:
+                        return interval_parts[0]
+                
+                # If no pattern matches, return as-is with quotes
+                return f"INTERVAL '{value}'"
             else:
                 # Return an empty string if either 'this' or 'unit' is missing
                 return f"INTERVAL {expression.this if expression.this else ''} {expression.unit if expression.unit else ''}"
@@ -2072,6 +2106,14 @@ class E6(Dialect):
         ) -> str:
             unix_expr = expression.this
             format_expr = expression.args.get("format")
+            scale_expr = expression.args.get("scale")
+
+            # If scale is seconds, use FROM_UNIXTIME_WITHUNIT
+            if scale_expr and scale_expr.this == "seconds":
+                return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
+            # If scale is milliseconds, use FROM_UNIXTIME_WITHUNIT
+            if scale_expr and scale_expr.this == "milliseconds":
+                return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
 
             if not format_expr:
                 return self.func("FROM_UNIXTIME", unix_expr)
