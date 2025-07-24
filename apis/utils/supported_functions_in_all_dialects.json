@@ -798,6 +798,8 @@
         "COUNT_IF",
         "TIMEDIFF",
         "COUNT_IF"
+        "COUNT_IF",
+        "INTERVAL"
     ],
     "databricks": [
          "ABS",

@@ -1305,6 +1305,17 @@ class TestE6(Validator):
         #     "SELECT SIGN(INTERVAL -1 DAY)", read={"databricks": "SELECT sign(INTERVAL'-1' DAY)"}
         # )
 
+        self.validate_all(
+            "SELECT CURRENT_TIMESTAMP + INTERVAL '1 WEEK' + INTERVAL '2 HOUR'",
+            read={"databricks":"SELECT CURRENT_TIMESTAMP + INTERVAL '1 week 2 hours'",}
+        )
+
+        self.validate_all(
+            "INTERVAL '5 MINUTE' + INTERVAL '30 SECOND' + INTERVAL '500 MILLISECOND'",
+            read = {
+                "databricks": "INTERVAL '5 minutes 30 seconds 500 milliseconds'"}
+        )
+
         self.validate_all("SELECT MOD(2, 1.8)", read={"databricks": "SELECT mod(2, 1.8)"})
 
         self.validate_all("SELECT MOD(2, 1.8)", read={"databricks": "SELECT 2 % 1.8"})
