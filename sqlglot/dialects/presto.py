@@ -377,7 +377,8 @@ class Presto(Dialect):
                 offset=1,
                 safe=True,
             ),
-            "FORMAT_DATETIME": build_formatted_time(exp.TimeToStr, "presto"),
+            "FORMAT": exp.Format.from_arg_list,
+            "FORMAT_DATETIME": exp.FormatDatetime.from_arg_list,
             "FROM_HEX": exp.Unhex.from_arg_list,
             "FROM_UNIXTIME": _build_from_unixtime,
             "FROM_UTF8": lambda args: exp.Decode(
