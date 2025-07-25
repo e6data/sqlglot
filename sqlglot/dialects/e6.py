@@ -2164,8 +2164,8 @@ class E6(Dialect):
         def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
             path = e.expression
             if self.from_dialect == "databricks":
-                path = "$." + path if not path.startswith("$") else path
-                path = add_single_quotes(path)
+                path = self.sql(path) if not self.sql(path).startswith("$") else self.sql(path)
+                #path = add_single_quotes(path)
             return self.func("JSON_EXTRACT", e.this, path)
 
         def split_sql(self, expression: exp.Split | exp.RegexpSplit):
