@@ -1483,7 +1483,6 @@ class E6(Dialect):
             # "TO_DATE":  _build_datetime("TO_DATE", exp.DataType.Type.DATE),
             "TO_HEX": exp.Hex.from_arg_list,
             "TO_JSON": exp.JSONFormat.from_arg_list,
-            "TO_JSON_STRING": exp.JSONFormat.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_UTF8": lambda args: exp.Encode(
@@ -2159,14 +2158,17 @@ class E6(Dialect):
         def json_format_sql(self, expression: exp.JSONFormat) -> str:
             inner = expression.this
             if isinstance(inner, exp.Cast) and inner.to.this == exp.DataType.Type.JSON:
-                return self.func("TO_JSON_STRING", inner.this)
+                return self.func("TO_JSON", inner.this)
             return self.func("TO_JSON", inner)
 
         def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
             path = e.expression
             if self.from_dialect == "databricks":
-                path = self.sql(path) if not self.sql(path).startswith("$") else self.sql(path)
-                #path = add_single_quotes(path)
+                if not self.sql(path).startswith("'$."):
+                    path = add_single_quotes("$." + self.sql(path))
+                else:
+                    path = self.sql(path)
+
             return self.func("JSON_EXTRACT", e.this, path)
 
         def split_sql(self, expression: exp.Split | exp.RegexpSplit):
