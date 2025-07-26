@@ -5600,6 +5600,10 @@ class ArrayConcat(Func):
     is_var_len_args = True
 
 
+class ArrayIntersect(Func):
+    arg_types = {"this": True, "expression": True}
+
+
 class ArrayConstructCompact(Func):
     arg_types = {"expressions": True}
     is_var_len_args = True
@@ -6166,6 +6170,10 @@ class Greatest(Func):
     is_var_len_args = True
 
 
+class WidthBucket(Func):
+    arg_types = {"this": True, "minExpr": True, "maxExpr": True, "numBuckets": True}
+
+
 # Trino's `ON OVERFLOW TRUNCATE [filler_string] {WITH | WITHOUT} COUNT`
 # https://trino.io/docs/current/functions/aggregate.html#listagg
 class OverflowTruncateBehavior(Expression):
@@ -6290,6 +6298,15 @@ class JSONPathWildcard(JSONPathPart):
 
 class FormatJson(Expression):
     pass
+
+
+class Format(Func):
+    arg_types = {"this": True, "expressions": False}
+    is_var_len_args = True
+
+
+class FormatDatetime(Func):
+    arg_types = {"this": True, "expression": True}
 
 
 class JSONKeyValue(Expression):
@@ -6756,6 +6773,12 @@ class Repeat(Func):
     arg_types = {"this": True, "times": True}
 
 
+class Space(Func):
+    """Returns a string with n spaces."""
+
+    arg_types = {"this": True}
+
+
 # https://learn.microsoft.com/en-us/sql/t-sql/functions/round-transact-sql?view=sql-server-ver16
 # tsql third argument function == trunctaion if not 0
 class Round(Func):
@@ -7052,6 +7075,10 @@ class UnixToTimeStr(Func):
 
 
 class UnixSeconds(Func):
+    pass
+
+
+class UrlDecode(Func):
     pass
 
 

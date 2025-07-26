@@ -112,8 +112,10 @@ class Spark(Spark2):
         FUNCTIONS = {
             **Spark2.Parser.FUNCTIONS,
             "ANY_VALUE": _build_with_ignore_nulls(exp.AnyValue),
+            "ARRAY_INTERSECT": exp.ArrayIntersect.from_arg_list,
             "DATE_ADD": _build_dateadd,
             "DATEADD": _build_dateadd,
+            "SPACE": exp.Space.from_arg_list,
             "TIMESTAMPADD": _build_dateadd,
             "TIMESTAMPDIFF": build_date_delta(exp.TimestampDiff),
             "DATEDIFF": _build_datediff,
@@ -123,6 +125,9 @@ class Spark(Spark2):
             ),
             "TIMESTAMP_LTZ": _build_as_cast("TIMESTAMP_LTZ"),
             "TIMESTAMP_NTZ": _build_as_cast("TIMESTAMP_NTZ"),
+            "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.Literal.string("seconds")
+            ),
             "TRY_ELEMENT_AT": lambda args: exp.Bracket(
                 this=seq_get(args, 0),
                 expressions=ensure_list(seq_get(args, 1)),

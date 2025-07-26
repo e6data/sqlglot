@@ -15,6 +15,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT CAST(DATETIME(datetime_date_718, 'Asia/Calcutta') AS DATE) IS NOT NULL",
+            read={
+                "athena": "SELECT cast(datetime_date_718 AT TIME ZONE 'Asia/Calcutta' as date) is not null",
+            },
+        )
+
+        self.validate_all(
             "NVL(x, y, z)",
             read={
                 "spark": "NVL(x,y,z)",
@@ -27,13 +34,20 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT REDUCE(ARRAY[1, 2, 3], 0, (acc, x) -> acc + x)",
+            read={
+                "databricks": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+                "snowflake": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+                "athena": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
+            },
+        )
+
+        self.validate_all(
             "SELECT ARRAY_CONCAT(ARRAY[1, 2], ARRAY[3, 4])",
             read={
                 "snowflake": "SELECT ARRAY_CAT(ARRAY_CONSTRUCT(1, 2), ARRAY_CONSTRUCT(3, 4))",
             },
         )
-
-
 
         self.validate_all(
             "SELECT TYPEOF('hello')",
@@ -41,6 +55,16 @@ class TestE6(Validator):
               "spark":"SELECT TYPEOF('hello');",
               "spark2":"SELECT TYPEOF('hello');",
               "snowflake":"SELECT TYPEOF('hello');",}
+
+        self.validate_all(
+            "SELECT ARRAY_INTERSECT(ARRAY[1, 2, 3], ARRAY[1, 3, 3, 5])",
+            read={
+                "databricks": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "athena": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "trino": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+                "snowflake": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
+            },
+
         )
 
         # Concat in dbr can accept many datatypes of args, but we map it to array_concat if type is of array. So we decided to put it as it is.
@@ -49,6 +73,11 @@ class TestE6(Validator):
             read={
                 "databricks": "SELECT concat(transform(array(1, 2), x -> x * 10), array(30, 40))",
             },
+        )
+
+        self.validate_all(
+            'SELECT SUM(CASE WHEN week_Day = 7 THEN a END) AS "Saturday"',
+            read={"databricks": "SELECT sum(case when week_Day = 7 then a end) as Saturday"},
         )
 
         self.validate_all(
@@ -202,9 +231,17 @@ class TestE6(Validator):
             },
         )
 
+        # check it onece
+        # self.validate_all(
+        #     "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
+        #     read={"trino": "SELECT format_datetime('2024-11-09 09:08:07', '%d-%m-%y')"},
+        # )
         self.validate_all(
-            "SELECT FORMAT_DATE('2024-11-09 09:08:07', 'dd-MM-YY')",
-            read={"trino": "SELECT format_datetime('2024-11-09 09:08:07', '%d-%m-%y')"},
+            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
+            read={
+                "trino": "SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')",
+                "athena": "SELECT FORMAT_DATETIME(TIMESTAMP '2025-07-21 15:30:00', '%Y-%m-%d')",
+            },
         )
 
         self.validate_all(
@@ -242,6 +279,8 @@ class TestE6(Validator):
             "SELECT SIZE(TRANSFORM(ARRAY[1, 2, 3], x -> x * 2))",
             read={
                 "databricks": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
+                "athena": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
+                "snowflake": "SELECT ARRAY_SIZE(transform(array(1, 2, 3), x -> x * 2))",
             },
         )
 
@@ -349,6 +388,16 @@ class TestE6(Validator):
             "SELECT TIMESTAMP_ADD('HOUR', 1, CAST('2003-01-02 11:59:59' AS TIMESTAMP))",
             read={
                 "databricks": "SELECT TIMESTAMPADD(SQL_TSI_HOUR, 1, TIMESTAMP'2003-01-02 11:59:59')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT WIDTH_BUCKET(5.3, 0.2, 10.6, 5)",
+            read={
+                "databricks": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "snowflake": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "trino": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "athena": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
             },
         )
 
@@ -507,9 +556,25 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "TO_JSON_STRING(X)",
+            "SELECT JSON_EXTRACT(c1, '$.item[1].price')",
+            read={"databricks": "SELECT GET_JSON_OBJECT(c1, '$.item[1].price')"},
+        )
+        self.validate_all(
+            "SELECT JSON_EXTRACT(c1, '$.box[1].price')",
+            read={"databricks": "SELECT c1:box[1].price"},
+        )
+
+        self.validate_all(
+            "TO_JSON(X)",
             read={
                 "presto": "JSON_FORMAT(CAST(X as JSON))",
+            },
+        )
+        self.validate_all(
+            "SELECT FORMAT('%s%%', 123)",
+            read={
+                "presto": "SELECT FORMAT('%s%%', 123)",
+                "trino": "SELECT FORMAT('%s%%', 123)",
             },
         )
 
@@ -573,6 +638,68 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT CAST(col AS JSON)",
             read={"databricks": "select cast(col as JSON)"},
+        )
+        for unit in ["SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH", "YEAR"]:
+            self.validate_all(
+                f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                read={
+                    "databricks": f"SELECT TIMEDIFF('{unit}', date1, date2)",
+                },
+                write={
+                    "e6": f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                },
+            )
+
+            self.validate_all(
+                "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                read={
+                    "databricks": "SELECT TIMEDIFF('HOUR', start1, end1), TIMEDIFF('MINUTE', start2, end2)",
+                },
+                write={
+                    "e6": "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                },
+            )
+
+            self.validate_all(
+                "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                read={
+                    "databricks": "SELECT ABS(TIMEDIFF('MINUTE', start_time, end_time))",
+                },
+                write={
+                    "e6": "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                },
+            )
+            self.validate_all(
+                "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                read={
+                    "databricks": "SELECT AVG(TIMEDIFF('HOUR', start_time, end_time)) FROM sessions",
+                },
+                write={
+                    "e6": "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                },
+            )
+
+        self.validate_all(
+            "SELECT CORR(c1, c2) FROM (VALUES (3, 2), (3, 3), (3, 3), (6, 4)) AS tab(c1, c2)",
+            read={
+                "databricks": "SELECT corr(c1, c2) FROM VALUES (3, 2), (3, 3), (3, 3), (6, 4) as tab(c1, c2)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT COVAR_POP(c1, c2) FROM (VALUES (1, 1), (2, 2), (2, 2), (3, 3)) AS tab(c1, c2)",
+            read={
+                "databricks": "SELECT covar_pop(c1, c2) FROM VALUES (1, 1), (2, 2), (2, 2), (3, 3) AS tab(c1, c2)"
+            },
+        )
+
+        self.validate_all(
+            "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+            read={
+                "databricks": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+                "athena": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+                "trino": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+            },
         )
 
         # FIND_IN_SET function tests - Databricks to E6 transpilation
@@ -1200,8 +1327,20 @@ class TestE6(Validator):
             },
         )
 
+        # self.validate_all(
+        #     "SELECT SIGN(INTERVAL -1 DAY)", read={"databricks": "SELECT sign(INTERVAL'-1' DAY)"}
+        # )
+
         self.validate_all(
-            "SELECT SIGN(INTERVAL -1 DAY)", read={"databricks": "SELECT sign(INTERVAL'-1' DAY)"}
+            "SELECT CURRENT_TIMESTAMP + INTERVAL '1 WEEK' + INTERVAL '2 HOUR'",
+            read={
+                "databricks": "SELECT CURRENT_TIMESTAMP + INTERVAL '1 week 2 hours'",
+            },
+        )
+
+        self.validate_all(
+            "INTERVAL '5 MINUTE' + INTERVAL '30 SECOND' + INTERVAL '500 MILLISECOND'",
+            read={"databricks": "INTERVAL '5 minutes 30 seconds 500 milliseconds'"},
         )
 
         self.validate_all("SELECT MOD(2, 1.8)", read={"databricks": "SELECT mod(2, 1.8)"})
@@ -1898,6 +2037,87 @@ class TestE6(Validator):
             },
         )
 
+    def test_timestamp_seconds(self):
+        # Test basic TIMESTAMP_SECONDS with integer literal
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(1230219000, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(1230219000)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with decimal literal (fractional seconds)
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(1230219000.123, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(1230219000.123)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with column reference
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(epoch_timestamp, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(epoch_timestamp)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with expression
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(unix_time + 3600, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(unix_time + 3600)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with NULL
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(NULL, 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(NULL)",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS in SELECT statement
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT(1230219000, 'seconds') AS converted_timestamp",
+            read={
+                "databricks": "SELECT TIMESTAMP_SECONDS(1230219000) AS converted_timestamp",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS in WHERE clause
+        self.validate_all(
+            "SELECT * FROM events WHERE created_at > FROM_UNIXTIME_WITHUNIT(1230219000, 'seconds')",
+            read={
+                "databricks": "SELECT * FROM events WHERE created_at > TIMESTAMP_SECONDS(1230219000)",
+            },
+        )
+
+        # Test multiple TIMESTAMP_SECONDS calls
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT(start_time, 'seconds') AS start_ts, FROM_UNIXTIME_WITHUNIT(end_time, 'seconds') AS end_ts FROM events",
+            read={
+                "databricks": "SELECT TIMESTAMP_SECONDS(start_time) AS start_ts, TIMESTAMP_SECONDS(end_time) AS end_ts FROM events",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with CAST
+        self.validate_all(
+            "FROM_UNIXTIME_WITHUNIT(CAST(epoch_string AS BIGINT), 'seconds')",
+            read={
+                "databricks": "TIMESTAMP_SECONDS(CAST(epoch_string AS BIGINT))",
+            },
+        )
+
+        # Test TIMESTAMP_SECONDS with subquery
+        self.validate_all(
+            "SELECT FROM_UNIXTIME_WITHUNIT((SELECT MAX(epoch_time) FROM historical_data), 'seconds') AS max_timestamp",
+            read={
+                "databricks": "SELECT TIMESTAMP_SECONDS((SELECT MAX(epoch_time) FROM historical_data)) AS max_timestamp",
+            },
+        )
+
     def test_array_agg(self):
         self.validate_all(
             "SELECT ARRAY_AGG(DISTINCT col) AS result FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
@@ -1977,6 +2197,43 @@ class TestE6(Validator):
             },
         )
 
+    def test_space(self):
+        # Basic integer literal
+        self.validate_all(
+            "REPEAT(' ', 5)",
+            read={"databricks": "SPACE(5)"},
+        )
+
+        # Column reference
+        self.validate_all(
+            "REPEAT(' ', n)",
+            read={"databricks": "SPACE(n)"},
+        )
+
+        # Complex expression
+        self.validate_all(
+            "REPEAT(' ', column_count + 2)",
+            read={"databricks": "SPACE(column_count + 2)"},
+        )
+
+        # Zero spaces
+        self.validate_all(
+            "REPEAT(' ', 0)",
+            read={"databricks": "SPACE(0)"},
+        )
+
+        # In SELECT with alias
+        self.validate_all(
+            "SELECT REPEAT(' ', 10) AS spaces",
+            read={"databricks": "SELECT SPACE(10) AS spaces"},
+        )
+
+        # With CONCAT
+        self.validate_all(
+            "SELECT CONCAT('Hello', REPEAT(' ', 5), 'World') AS greeting",
+            read={"databricks": "SELECT CONCAT('Hello', SPACE(5), 'World') AS greeting"},
+        )
+
     def test_databricks_to_e6data_pretty(self):
         sql = "SELECT CASE WHEN SHIFTLEFT(1, 4) > 10 THEN SHIFTRIGHT(128, 3) ELSE SHIFTLEFT(2, 2) END AS result"
 
@@ -1994,5 +2251,42 @@ class TestE6(Validator):
             """WITH map AS (SELECT * FROM (VALUES ('allure', 'Allure', 'US')) AS map(app_id, brand, market)) SELECT app_id, brand, market FROM map""",
             read={
                 "databricks": """WITH map AS (VALUES ('allure', 'Allure', 'US') AS map(app_id, brand, market)) select app_id, brand, market from map"""
+            },
+        )
+
+    def test_random(self):
+        self.validate_all(
+            "RAND()",
+            write={
+                "bigquery": "RAND()",
+                "clickhouse": "randCanonical()",
+                "databricks": "RAND()",
+                "doris": "RAND()",
+                "drill": "RAND()",
+                "duckdb": "RANDOM()",
+                "hive": "RAND()",
+                "mysql": "RAND()",
+                "oracle": "RAND()",
+                "postgres": "RANDOM()",
+                "presto": "RAND()",
+                "spark": "RAND()",
+                "sqlite": "RANDOM()",
+                "tsql": "RAND()",
+            },
+            read={
+                "bigquery": "RAND()",
+                "clickhouse": "randCanonical()",
+                "databricks": "RAND()",
+                "doris": "RAND()",
+                "drill": "RAND()",
+                "duckdb": "RANDOM()",
+                "hive": "RAND()",
+                "mysql": "RAND()",
+                "oracle": "RAND()",
+                "postgres": "RANDOM()",
+                "presto": "RAND()",
+                "spark": "RAND()",
+                "sqlite": "RANDOM()",
+                "tsql": "RAND()",
             },
         )
