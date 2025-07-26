@@ -548,7 +548,16 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "TO_JSON_STRING(X)",
+            "SELECT JSON_EXTRACT(c1, '$.item[1].price')",
+            read={"databricks": "SELECT GET_JSON_OBJECT(c1, '$.item[1].price')"},
+        )
+        self.validate_all(
+            "SELECT JSON_EXTRACT(c1, '$.box[1].price')",
+            read={"databricks": "SELECT c1:box[1].price"},
+        )
+
+        self.validate_all(
+            "TO_JSON(X)",
             read={
                 "presto": "JSON_FORMAT(CAST(X as JSON))",
             },
