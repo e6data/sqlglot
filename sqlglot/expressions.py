@@ -5643,10 +5643,6 @@ class ArrayPosition(Func):
     arg_types = {"this": True, "expression": True, "instance": False}
 
 
-class ArraySlice(Func):
-    arg_types = {"this": True, "fromIndex": True, "to": True}
-
-
 class ArrayConcat(Func):
     _sql_names = ["ARRAY_CONCAT", "ARRAY_CAT"]
     arg_types = {"this": True, "expressions": False}
@@ -5655,10 +5651,6 @@ class ArrayConcat(Func):
 
 class ArrayConcatAgg(AggFunc):
     pass
-
-
-class ArrayIntersect(Func):
-    arg_types = {"this": True, "expression": True}
 
 
 class ArrayConstructCompact(Func):
@@ -6883,12 +6875,6 @@ class Repeat(Func):
 # Some dialects like Snowflake support two argument replace
 class Replace(Func):
     arg_types = {"this": True, "expression": True, "replacement": False}
-
-
-class Space(Func):
-    """Returns a string with n spaces."""
-
-    arg_types = {"this": True}
 
 
 # https://learn.microsoft.com/en-us/sql/t-sql/functions/round-transact-sql?view=sql-server-ver16

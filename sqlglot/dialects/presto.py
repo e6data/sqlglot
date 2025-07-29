@@ -418,7 +418,6 @@ class Presto(Dialect):
             "STRPOS": lambda args: exp.StrPosition(
                 this=seq_get(args, 0), substr=seq_get(args, 1), occurrence=seq_get(args, 2)
             ),
-            "SLICE": exp.ArraySlice.from_arg_list,
             "TO_CHAR": _build_to_char,
             "TO_UNIXTIME": exp.TimeToUnix.from_arg_list,
             "TO_UTF8": lambda args: exp.Encode(

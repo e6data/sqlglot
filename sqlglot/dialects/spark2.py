@@ -274,7 +274,6 @@ class Spark2(Hive):
             "SHIFTRIGHT": binary_from_function(exp.BitwiseRightShift),
             "SLICE": _build_array_slice,
             "STRING": _build_as_cast("string"),
-            "SLICE": exp.ArraySlice.from_arg_list,
             "TIMESTAMP": _build_as_cast("timestamp"),
             "TO_TIMESTAMP": lambda args: (
                 _build_as_cast("timestamp")(args)
