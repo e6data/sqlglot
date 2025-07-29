@@ -4,14 +4,17 @@ import typing as t
 
 from sqlglot import exp
 from sqlglot.dialects.dialect import (
+    Version,
     rename_func,
     unit_to_var,
     timestampdiff_sql,
     build_date_delta,
+    groupconcat_sql,
 )
 from sqlglot.dialects.hive import _build_with_ignore_nulls
 from sqlglot.dialects.spark2 import Spark2, temporary_storage_provider, _build_as_cast
 from sqlglot.helper import ensure_list, seq_get
+from sqlglot.tokens import TokenType
 from sqlglot.transforms import (
     ctas_with_tmp_tables_to_create_tmp_view,
     remove_unique_constraints,
@@ -96,6 +99,17 @@ def _dateadd_sql(self: Spark.Generator, expression: exp.TsOrDsAdd | exp.Timestam
     return this
 
 
+def _groupconcat_sql(self: Spark.Generator, expression: exp.GroupConcat) -> str:
+    if self.dialect.version < Version("4.0.0"):
+        expr = exp.ArrayToString(
+            this=exp.ArrayAgg(this=expression.this),
+            expression=expression.args.get("separator") or exp.Literal.string(""),
+        )
+        return self.sql(expr)
+
+    return groupconcat_sql(self, expression)
+
+
 class Spark(Spark2):
     SUPPORTS_ORDER_BY_ALL = True
 
@@ -120,6 +134,7 @@ class Spark(Spark2):
             "TIMESTAMPDIFF": build_date_delta(exp.TimestampDiff),
             "DATEDIFF": _build_datediff,
             "DATE_DIFF": _build_datediff,
+            "LISTAGG": exp.GroupConcat.from_arg_list,
             "TIMESTAMP_LTZ": _build_as_cast("TIMESTAMP_LTZ"),
             "TIMESTAMP_NTZ": _build_as_cast("TIMESTAMP_NTZ"),
             "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
@@ -132,6 +147,16 @@ class Spark(Spark2):
                 safe=True,
             ),
         }
+
+        PLACEHOLDER_PARSERS = {
+            **Spark2.Parser.PLACEHOLDER_PARSERS,
+            TokenType.L_BRACE: lambda self: self._parse_query_parameter(),
+        }
+
+        def _parse_query_parameter(self) -> t.Optional[exp.Expression]:
+            this = self._parse_id_var()
+            self._match(TokenType.R_BRACE)
+            return self.expression(exp.Placeholder, this=this, widget=True)
 
         def _parse_generated_as_identity(
             self,
@@ -151,6 +176,7 @@ class Spark(Spark2):
         SUPPORTS_CONVERT_TIMEZONE = True
         SUPPORTS_MEDIAN = True
         SUPPORTS_UNIX_SECONDS = True
+        SUPPORTS_DECODE_CASE = True
 
         TYPE_MAPPING = {
             **Spark2.Generator.TYPE_MAPPING,
@@ -175,6 +201,8 @@ class Spark(Spark2):
                     move_partitioned_by_to_schema_columns,
                 ]
             ),
+            exp.GroupConcat: _groupconcat_sql,
+            exp.EndsWith: rename_func("ENDSWITH"),
             exp.Encode: rename_func("ENCODE"),
             exp.PartitionedByProperty: lambda self,
             e: f"PARTITIONED BY {self.wrap(self.expressions(sqls=[_normalize_partition(e) for e in e.this.expressions], skip_first=True))}",
@@ -212,3 +240,9 @@ class Spark(Spark2):
                 return self.func("DATEDIFF", unit_to_var(expression), start, end)
 
             return self.func("DATEDIFF", end, start)
+
+        def placeholder_sql(self, expression: exp.Placeholder) -> str:
+            if not expression.args.get("widget"):
+                return super().placeholder_sql(expression)
+
+            return f"{{{expression.name}}}"

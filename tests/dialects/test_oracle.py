@@ -16,6 +16,9 @@ class TestOracle(Validator):
         )
         self.parse_one("ALTER TABLE tbl_name DROP FOREIGN KEY fk_symbol").assert_is(exp.Alter)
 
+        self.validate_identity("DBMS_RANDOM.NORMAL")
+        self.validate_identity("DBMS_RANDOM.VALUE(low, high)").assert_is(exp.Rand)
+        self.validate_identity("DBMS_RANDOM.VALUE()").assert_is(exp.Rand)
         self.validate_identity("CAST(value AS NUMBER DEFAULT 0 ON CONVERSION ERROR)")
         self.validate_identity("SYSDATE")
         self.validate_identity("CREATE GLOBAL TEMPORARY TABLE t AS SELECT * FROM orders")
@@ -85,7 +88,7 @@ class TestOracle(Validator):
         )
         self.validate_identity(
             "SELECT CAST('January 15, 1989, 11:00 A.M.' AS DATE DEFAULT NULL ON CONVERSION ERROR, 'Month dd, YYYY, HH:MI A.M.') FROM DUAL",
-            "SELECT TO_DATE('January 15, 1989, 11:00 A.M.', 'Month dd, YYYY, HH12:MI P.M.') FROM DUAL",
+            "SELECT TO_DATE('January 15, 1989, 11:00 A.M.', 'Month dd, YYYY, HH12:MI A.M.') FROM DUAL",
         )
         self.validate_identity(
             "SELECT TRUNC(SYSDATE)",
@@ -120,6 +123,17 @@ class TestOracle(Validator):
             "SELECT * FROM t START WITH col CONNECT BY NOCYCLE PRIOR col1 = col2"
         )
 
+        self.validate_all(
+            "SELECT DBMS_RANDOM.VALUE()",
+            read={
+                "oracle": "SELECT DBMS_RANDOM.VALUE",
+                "postgres": "SELECT RANDOM()",
+            },
+            write={
+                "oracle": "SELECT DBMS_RANDOM.VALUE()",
+                "postgres": "SELECT RANDOM()",
+            },
+        )
         self.validate_all(
             "SELECT TRIM('|' FROM '||Hello ||| world||')",
             write={
@@ -218,8 +232,8 @@ class TestOracle(Validator):
         self.validate_all(
             "SELECT TO_CHAR(TIMESTAMP '1999-12-01 10:00:00')",
             write={
-                "oracle": "SELECT TO_CHAR(CAST('1999-12-01 10:00:00' AS TIMESTAMP), 'YYYY-MM-DD HH24:MI:SS')",
-                "postgres": "SELECT TO_CHAR(CAST('1999-12-01 10:00:00' AS TIMESTAMP), 'YYYY-MM-DD HH24:MI:SS')",
+                "oracle": "SELECT TO_CHAR(CAST('1999-12-01 10:00:00' AS TIMESTAMP))",
+                "postgres": "SELECT TO_CHAR(CAST('1999-12-01 10:00:00' AS TIMESTAMP))",
             },
         )
         self.validate_all(
@@ -324,6 +338,18 @@ class TestOracle(Validator):
         )
         self.validate_identity("CREATE OR REPLACE FORCE VIEW foo1.foo2")
         self.validate_identity("TO_TIMESTAMP('foo')")
+        self.validate_identity(
+            "SELECT TO_TIMESTAMP('05 Dec 2000 10:00 AM', 'DD Mon YYYY HH12:MI AM')"
+        )
+        self.validate_identity(
+            "SELECT TO_TIMESTAMP('05 Dec 2000 10:00 PM', 'DD Mon YYYY HH12:MI PM')"
+        )
+        self.validate_identity(
+            "SELECT TO_TIMESTAMP('05 Dec 2000 10:00 A.M.', 'DD Mon YYYY HH12:MI A.M.')"
+        )
+        self.validate_identity(
+            "SELECT TO_TIMESTAMP('05 Dec 2000 10:00 P.M.', 'DD Mon YYYY HH12:MI P.M.')"
+        )
 
     def test_join_marker(self):
         self.validate_identity("SELECT e1.x, e2.x FROM e e1, e e2 WHERE e1.y (+) = e2.y")
