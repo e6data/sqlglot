@@ -1963,3 +1963,6 @@ class TestE6(Validator):
                 "databricks": """WITH map AS (VALUES ('allure', 'Allure', 'US') AS map(app_id, brand, market)) select app_id, brand, market from map"""
             },
         )
+
+    def test_keywords(self):
+        self.validate_identity("""SELECT a."variant" FROM table AS a""")
