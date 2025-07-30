@@ -1012,6 +1012,22 @@ class BigQuery(Dialect):
         EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
         SUPPORTS_UNIX_SECONDS = True
 
+        def json_extract_sql(self, e: exp.JSONExtract) -> str:
+            if self.from_dialect == "bigquery":
+                dquote_escaping = "JSON_QUERY" in DQUOTES_ESCAPING_JSON_FUNCTIONS
+                if dquote_escaping:
+                    self._quote_json_path_key_using_brackets = False
+
+                sql = self.func("JSON_QUERY", e.this, e.expression)
+
+                if dquote_escaping:
+                    self._quote_json_path_key_using_brackets = True
+
+                return sql
+            else:
+                # For other dialects, use the default JSON_EXTRACT
+                return _json_extract_sql(self, e)
+
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
@@ -1040,6 +1056,7 @@ class BigQuery(Dialect):
             exp.DateSub: date_add_interval_sql("DATE", "SUB"),
             exp.DatetimeAdd: date_add_interval_sql("DATETIME", "ADD"),
             exp.DatetimeSub: date_add_interval_sql("DATETIME", "SUB"),
+            exp.EndsWith: rename_func("ENDS_WITH"),
             exp.FromTimeZone: lambda self, e: self.func(
                 "DATETIME", self.func("TIMESTAMP", e.this, e.args.get("zone")), "'UTC'"
             ),
@@ -1053,7 +1070,7 @@ class BigQuery(Dialect):
             exp.ILike: no_ilike_sql,
             exp.IntDiv: rename_func("DIV"),
             exp.Int64: rename_func("INT64"),
-            exp.JSONExtract: _json_extract_sql,
+            exp.JSONExtract: json_extract_sql,
             exp.JSONExtractArray: _json_extract_sql,
             exp.JSONExtractScalar: _json_extract_sql,
             exp.JSONFormat: rename_func("TO_JSON_STRING"),

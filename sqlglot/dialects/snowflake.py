@@ -1254,6 +1254,11 @@ class Snowflake(Dialect):
             exp.BitwiseXor: rename_func("BITXOR"),
             exp.BitwiseLeftShift: rename_func("BITSHIFTLEFT"),
             exp.BitwiseRightShift: rename_func("BITSHIFTRIGHT"),
+            exp.Bracket: lambda self, e: (
+                self.func("GET", e.this, seq_get(e.expressions, 0))
+                if e.args.get("safe") and e.args.get("offset") == 0
+                else self.bracket_sql(e)
+            ),
             exp.Create: transforms.preprocess([_flatten_structured_types_unless_iceberg]),
             exp.Coalesce: coalesce_sql,
             exp.Contains: rename_func("CONTAINS"),

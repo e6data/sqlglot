@@ -268,7 +268,7 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     """
     this = seq_get(args, 0)
     from_index = seq_get(args, 1)
-    to_index = seq_get(args, 2)
+    to = seq_get(args, 2)
 
     if this is None:
         raise ValueError("SLICE function requires a valid array to slice ('this').")
@@ -276,11 +276,11 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     if from_index is None:
         raise ValueError("SLICE function requires a valid 'fromIndex' argument.")
 
-    if to_index is None:
+    if to is None:
         raise ValueError("SLICE function requires a valid 'to' argument.")
 
     # Construct the ArraySlice expression
-    return exp.ArraySlice(this=this, fromIndex=from_index, to=to_index + from_index)
+    return exp.ArraySlice(this=this, from_index=from_index, to_index=to)
 
 
 class Presto(Dialect):
@@ -488,12 +488,11 @@ class Presto(Dialect):
             exp.ArraySlice: lambda self, e: self.func(
                 "SLICE",
                 e.args.get("this"),
-                e.args.get("fromIndex"),
-                e.args.get("to") - e.args.get("fromIndex"),
+                e.args.get("from_index"),
+                e.args.get("to_index") or (e.args.get("to") - e.args.get("from_index")),
             ),
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArrayUniqueAgg: rename_func("SET_AGG"),
-            exp.ArraySlice: rename_func("SLICE"),
             exp.AtTimeZone: rename_func("AT_TIMEZONE"),
             exp.BitwiseAnd: lambda self, e: self.func("BITWISE_AND", e.this, e.expression),
             exp.BitwiseLeftShift: lambda self, e: self.func(

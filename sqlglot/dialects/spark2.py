@@ -193,7 +193,7 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     """
     this = seq_get(args, 0)
     from_index = seq_get(args, 1)
-    to_index = seq_get(args, 2)
+    to = seq_get(args, 2)
 
     if this is None:
         raise ValueError("SLICE function requires a valid array to slice ('this').")
@@ -201,11 +201,11 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     if from_index is None:
         raise ValueError("SLICE function requires a valid 'fromIndex' argument.")
 
-    if to_index is None:
+    if to is None:
         raise ValueError("SLICE function requires a valid 'to' argument.")
 
     # Construct the ArraySlice expression
-    return exp.ArraySlice(this=this, fromIndex=from_index, to=to_index + from_index)
+    return exp.ArraySlice(this=this, from_index=from_index, to_index=to)
 
 
 class Spark2(Hive):
@@ -349,7 +349,6 @@ class Spark2(Hive):
             exp.ArraySum: lambda self,
             e: f"AGGREGATE({self.sql(e, 'this')}, 0, (acc, x) -> acc + x, acc -> acc)",
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
-            exp.ArraySlice: rename_func("SLICE"),
             exp.AtTimeZone: lambda self, e: self.func(
                 "FROM_UTC_TIMESTAMP", e.this, e.args.get("zone")
             ),
@@ -403,8 +402,8 @@ class Spark2(Hive):
             exp.ArraySlice: lambda self, e: self.func(
                 "SLICE",
                 e.args.get("this"),
-                e.args.get("fromIndex"),
-                e.args.get("to") - e.args.get("fromIndex"),
+                e.args.get("from_index"),
+                e.args.get("to_index") or (e.args.get("to") - e.args.get("from_index")),
             ),
             exp.StrToDate: _str_to_date,
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),

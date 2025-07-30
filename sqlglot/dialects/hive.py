@@ -619,6 +619,7 @@ class Hive(Dialect):
             exp.StrToUnix: _str_to_unix_sql,
             exp.StructExtract: struct_extract_sql,
             exp.StarMap: rename_func("MAP"),
+            exp.SubstringIndex: rename_func("SUBSTRING_INDEX"),
             exp.Table: transforms.preprocess([transforms.unnest_generate_series]),
             exp.TimeStrToDate: rename_func("TO_DATE"),
             exp.TimeStrToTime: timestrtotime_sql,
@@ -632,6 +633,7 @@ class Hive(Dialect):
             exp.TsOrDsDiff: _date_diff_sql,
             exp.TsOrDsToDate: _to_date_sql,
             exp.TryCast: no_trycast_sql,
+            exp.Typeof: rename_func("TYPEOF"),
             exp.Unicode: rename_func("ASCII"),
             exp.UnixToStr: lambda self, e: self.func(
                 "FROM_UNIXTIME", e.this, time_format("hive")(self, e)

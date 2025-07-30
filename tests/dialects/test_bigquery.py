@@ -1682,7 +1682,7 @@ WHERE
         self.validate_all(
             """SELECT INT64(JSON_QUERY(JSON '{"key": 2000}', '$.key'))""",
             write={
-                "bigquery": """SELECT INT64(JSON_EXTRACT(PARSE_JSON('{"key": 2000}'), '$.key'))""",
+                "bigquery": """SELECT INT64(JSON_QUERY(PARSE_JSON('{"key": 2000}'), '$.key'))""",
                 "duckdb": """SELECT CAST(JSON('{"key": 2000}') -> '$.key' AS BIGINT)""",
                 "snowflake": """SELECT CAST(GET_PATH(PARSE_JSON('{"key": 2000}'), 'key') AS BIGINT)""",
             },
@@ -2302,7 +2302,7 @@ OPTIONS (
         self.validate_all(
             """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
             write={
-                "bigquery": """SELECT JSON_EXTRACT('{"class": {"students": []}}', '$.class')""",
+                "bigquery": """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
                 "duckdb": """SELECT '{"class": {"students": []}}' -> '$.class'""",
                 "snowflake": """SELECT GET_PATH(PARSE_JSON('{"class": {"students": []}}'), 'class')""",
             },
