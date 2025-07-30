@@ -2440,6 +2440,7 @@ class E6(Dialect):
             "thursday",
             "friday",
             "saturday",
+            "variant"
         }
 
         UNSIGNED_TYPE_MAPPING = {
