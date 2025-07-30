@@ -2259,3 +2259,6 @@ class TestE6(Validator):
                 "tsql": "RAND()",
             },
         )
+
+    def test_keywords(self):
+        self.validate_identity("""SELECT a."variant" FROM table AS a""")
