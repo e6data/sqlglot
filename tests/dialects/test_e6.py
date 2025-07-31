@@ -393,6 +393,16 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT WIDTH_BUCKET(5.3, 0.2, 10.6, 5)",
+            read={
+                "databricks": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "snowflake": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "trino": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+                "athena": "SELECT width_bucket(5.3, 0.2, 10.6, 5)",
+            },
+        )
+
+        self.validate_all(
             "SELECT FROM_UNIXTIME(1674797653)",
             read={
                 "trino": "SELECT from_unixtime(1674797653)",
@@ -670,29 +680,6 @@ class TestE6(Validator):
                 },
             )
 
-        # FIND_IN_SET function tests - Databricks to E6 transpilation
-        self.validate_all(
-            "SELECT ARRAY_POSITION('ab', SPLIT('abc,b,ab,c,def', ','))",
-            read={
-                "databricks": "SELECT FIND_IN_SET('ab', 'abc,b,ab,c,def')",
-            },
-        )
-
-        self.validate_all(
-            "SELECT ARRAY_POSITION('test', SPLIT('hello,world,test', ','))",
-            read={
-                "databricks": "SELECT FIND_IN_SET('test', 'hello,world,test')",
-            },
-        )
-
-        # Test FIND_IN_SET with column references
-        self.validate_all(
-            "SELECT ARRAY_POSITION(search_col, SPLIT(list_col, ',')) FROM table1",
-            read={
-                "databricks": "SELECT FIND_IN_SET(search_col, list_col) FROM table1",
-            },
-        )
-
         self.validate_all(
             "SELECT CORR(c1, c2) FROM (VALUES (3, 2), (3, 3), (3, 3), (6, 4)) AS tab(c1, c2)",
             read={
@@ -713,6 +700,29 @@ class TestE6(Validator):
                 "databricks": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
                 "athena": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
                 "trino": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+            },
+        )
+
+        # FIND_IN_SET function tests - Databricks to E6 transpilation
+        self.validate_all(
+            "SELECT ARRAY_POSITION('ab', SPLIT('abc,b,ab,c,def', ','))",
+            read={
+                "databricks": "SELECT FIND_IN_SET('ab', 'abc,b,ab,c,def')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_POSITION('test', SPLIT('hello,world,test', ','))",
+            read={
+                "databricks": "SELECT FIND_IN_SET('test', 'hello,world,test')",
+            },
+        )
+
+        # Test FIND_IN_SET with column references
+        self.validate_all(
+            "SELECT ARRAY_POSITION(search_col, SPLIT(list_col, ',')) FROM table1",
+            read={
+                "databricks": "SELECT FIND_IN_SET(search_col, list_col) FROM table1",
             },
         )
 
@@ -2242,5 +2252,42 @@ class TestE6(Validator):
             """WITH map AS (SELECT * FROM (VALUES ('allure', 'Allure', 'US')) AS map(app_id, brand, market)) SELECT app_id, brand, market FROM map""",
             read={
                 "databricks": """WITH map AS (VALUES ('allure', 'Allure', 'US') AS map(app_id, brand, market)) select app_id, brand, market from map"""
+            },
+        )
+
+    def test_random(self):
+        self.validate_all(
+            "RAND()",
+            write={
+                "bigquery": "RAND()",
+                "clickhouse": "randCanonical()",
+                "databricks": "RAND()",
+                "doris": "RAND()",
+                "drill": "RAND()",
+                "duckdb": "RANDOM()",
+                "hive": "RAND()",
+                "mysql": "RAND()",
+                "oracle": "RAND()",
+                "postgres": "RANDOM()",
+                "presto": "RAND()",
+                "spark": "RAND()",
+                "sqlite": "RANDOM()",
+                "tsql": "RAND()",
+            },
+            read={
+                "bigquery": "RAND()",
+                "clickhouse": "randCanonical()",
+                "databricks": "RAND()",
+                "doris": "RAND()",
+                "drill": "RAND()",
+                "duckdb": "RANDOM()",
+                "hive": "RAND()",
+                "mysql": "RAND()",
+                "oracle": "RAND()",
+                "postgres": "RANDOM()",
+                "presto": "RAND()",
+                "spark": "RAND()",
+                "sqlite": "RANDOM()",
+                "tsql": "RAND()",
             },
         )
