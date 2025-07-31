@@ -123,6 +123,12 @@ class Spark(Spark2):
             "TYPEOF": lambda args: exp.TypeOf(this=seq_get(args, 0)),
             "TIMESTAMP_LTZ": _build_as_cast("TIMESTAMP_LTZ"),
             "TIMESTAMP_NTZ": _build_as_cast("TIMESTAMP_NTZ"),
+            "TIMESTAMP_MILLIS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.UnixToTime.MILLIS
+            ),
+            "TIMESTAMP_MICROS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.UnixToTime.MICROS
+            ),
             "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
                 this=seq_get(args, 0), scale=exp.Literal.string("seconds")
             ),
