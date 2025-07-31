@@ -788,21 +788,14 @@
         "COUNT_IF",
         "TRANSFORM",
         "ARRAY_INTERSECT"
-        "COUNT_IF",
         "WIDTH_BUCKET",
         "RAND",
         "CORR",
         "COVAR_POP",
         "URL_DECODE",
         "TYPEOF",
-        "COUNT_IF",
         "TIMEDIFF",
-        "COUNT_IF"
-        "COUNT_IF",
         "INTERVAL"
-
-        "COUNT_IF",
-        "TIMESTAMP_SECONDS"
     ],
     "databricks": [
          "ABS",
