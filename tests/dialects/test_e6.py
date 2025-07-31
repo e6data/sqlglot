@@ -50,6 +50,15 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT TYPEOF('hello')",
+            read={
+                "databricks": "SELECT TYPEOF('hello');",
+                "spark": "SELECT TYPEOF('hello');",
+                "spark2": "SELECT TYPEOF('hello');",
+                "snowflake": "SELECT TYPEOF('hello');",
+            },
+        )
+        self.validate_all(
             "SELECT ARRAY_INTERSECT(ARRAY[1, 2, 3], ARRAY[1, 3, 3, 5])",
             read={
                 "databricks": "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 3, 5))",
@@ -691,6 +700,29 @@ class TestE6(Validator):
                 "databricks": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
                 "athena": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
                 "trino": "SELECT URL_DECODE('http%3A%2F%2Fspark.apache.org%2Fpath%3Fquery%3D1')",
+            },
+        )
+
+        # FIND_IN_SET function tests - Databricks to E6 transpilation
+        self.validate_all(
+            "SELECT ARRAY_POSITION('ab', SPLIT('abc,b,ab,c,def', ','))",
+            read={
+                "databricks": "SELECT FIND_IN_SET('ab', 'abc,b,ab,c,def')",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_POSITION('test', SPLIT('hello,world,test', ','))",
+            read={
+                "databricks": "SELECT FIND_IN_SET('test', 'hello,world,test')",
+            },
+        )
+
+        # Test FIND_IN_SET with column references
+        self.validate_all(
+            "SELECT ARRAY_POSITION(search_col, SPLIT(list_col, ',')) FROM table1",
+            read={
+                "databricks": "SELECT FIND_IN_SET(search_col, list_col) FROM table1",
             },
         )
 

@@ -740,6 +740,7 @@
         "DISTINCT",
         "STDDEV",
         "FILTER_ARRAY",
+        "FIND_IN_SET",
         "TIMESTAMP",
         "REGEXP_CONTAINS",
         "CASE",
@@ -785,13 +786,15 @@
         "LAST_DAY_OF_MONTH",
         "FORMAT_DATETIME",
         "COUNT_IF",
+        "ARRAY_INTERSECT"
         "WIDTH_BUCKET",
         "RAND",
         "CORR",
         "COVAR_POP",
-        "URL_DECODE"
-        "TRANSFORM",
-        "ARRAY_INTERSECT"
+        "URL_DECODE",
+        "TYPEOF",
+        "TIMEDIFF",
+        "INTERVAL"
     ],
     "databricks": [
          "ABS",

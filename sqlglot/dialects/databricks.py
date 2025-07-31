@@ -105,6 +105,7 @@ class Databricks(Spark):
             "DATE_ADD": build_date_delta(exp.DateAdd),
             "DATEDIFF": build_date_delta(exp.DateDiff),
             "DATE_DIFF": build_date_delta(exp.DateDiff),
+            "FIND_IN_SET": exp.FindInSet.from_arg_list,
             "GETDATE": exp.CurrentTimestamp.from_arg_list,
             "GET_JSON_OBJECT": _build_json_extract,
             "TO_DATE": build_formatted_time(exp.TsOrDsToDate, "databricks"),
@@ -114,6 +115,9 @@ class Databricks(Spark):
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "TIMEDIFF": lambda args: exp.TimestampDiff(
                 unit=seq_get(args, 0), this=seq_get(args, 1), expression=seq_get(args, 2)
+            ),
+            "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
+                this=seq_get(args, 0), scale=exp.Literal.string("seconds")
             ),
         }
 

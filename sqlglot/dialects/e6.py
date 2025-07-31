@@ -1494,6 +1494,7 @@ class E6(Dialect):
             ),
             "TRUNC": date_trunc_to_time,
             "TRIM": lambda self: self._parse_trim(),
+            "TYPEOF": lambda args: exp.TypeOf(this=seq_get(args, 0)),
             "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),
             # TODO:: I have removed the _parse_unnest_sql, was it really required
             # It was added due to some requirements before but those were asked to remove afterwards so it should not matter now
@@ -2188,12 +2189,16 @@ class E6(Dialect):
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.Anonymous: anonymous_sql,
+            exp.FindInSet: lambda self, e: self.func(
+                "ARRAY_POSITION", e.this, self.func("SPLIT", e.expression, exp.Literal.string(","))
+            ),
             exp.AnyValue: rename_func("ARBITRARY"),
             exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
             exp.ApproxQuantile: rename_func("APPROX_PERCENTILE"),
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
             exp.Array: array_sql,
+            exp.TypeOf: rename_func("TYPEOF"),
             exp.ArrayAgg: rename_func("ARRAY_AGG"),
             exp.ArrayConcat: rename_func("ARRAY_CONCAT"),
             exp.ArrayIntersect: rename_func("ARRAY_INTERSECT"),
