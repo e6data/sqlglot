@@ -2275,6 +2275,43 @@ class TestE6(Validator):
             },
         )
 
+    def test_random(self):
+        self.validate_all(
+            "RAND()",
+            write={
+                "bigquery": "RAND()",
+                "clickhouse": "randCanonical()",
+                "databricks": "RAND()",
+                "doris": "RAND()",
+                "drill": "RAND()",
+                "duckdb": "RANDOM()",
+                "hive": "RAND()",
+                "mysql": "RAND()",
+                "oracle": "RAND()",
+                "postgres": "RANDOM()",
+                "presto": "RAND()",
+                "spark": "RAND()",
+                "sqlite": "RANDOM()",
+                "tsql": "RAND()",
+            },
+            read={
+                "bigquery": "RAND()",
+                "clickhouse": "randCanonical()",
+                "databricks": "RAND()",
+                "doris": "RAND()",
+                "drill": "RAND()",
+                "duckdb": "RANDOM()",
+                "hive": "RAND()",
+                "mysql": "RAND()",
+                "oracle": "RAND()",
+                "postgres": "RANDOM()",
+                "presto": "RAND()",
+                "spark": "RAND()",
+                "sqlite": "RANDOM()",
+                "tsql": "RAND()",
+            },
+        )
+
     def test_group_by_all(self):
         # Basic GROUP BY ALL test
         self.validate_all(

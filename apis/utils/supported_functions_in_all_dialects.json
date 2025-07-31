@@ -786,9 +786,16 @@
         "LAST_DAY_OF_MONTH",
         "FORMAT_DATETIME",
         "COUNT_IF",
+        "WIDTH_BUCKET",
+        "RAND",
+        "CORR",
+        "COVAR_POP",
         "COVAR_SAMP",
         "VARIANCE_SAMP",
-        "VAR_SAMP"
+        "VAR_SAMP",
+        "URL_DECODE",
+        "TRANSFORM",
+        "ARRAY_INTERSECT"
     ],
     "databricks": [
          "ABS",
