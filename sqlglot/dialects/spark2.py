@@ -193,7 +193,7 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     """
     this = seq_get(args, 0)
     from_index = seq_get(args, 1)
-    to_index = seq_get(args, 2)
+    length = seq_get(args, 2)
 
     if this is None:
         raise ValueError("SLICE function requires a valid array to slice ('this').")
@@ -201,11 +201,11 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     if from_index is None:
         raise ValueError("SLICE function requires a valid 'fromIndex' argument.")
 
-    if to_index is None:
+    if length is None:
         raise ValueError("SLICE function requires a valid 'to' argument.")
 
     # Construct the ArraySlice expression
-    return exp.ArraySlice(this=this, fromIndex=from_index, to=to_index + from_index)
+    return exp.ArraySlice(this=this, from_index=from_index, length=length, is_index=False)
 
 
 class Spark2(Hive):
@@ -334,6 +334,14 @@ class Spark2(Hive):
             exp.CollateProperty: exp.Properties.Location.UNSUPPORTED,
         }
 
+        TS_OR_DS_EXPRESSIONS = (
+            *Hive.Generator.TS_OR_DS_EXPRESSIONS,
+            exp.DayOfMonth,
+            exp.DayOfWeek,
+            exp.DayOfYear,
+            exp.WeekOfYear,
+        )
+
         TRANSFORMS = {
             **Hive.Generator.TRANSFORMS,
             exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
@@ -364,7 +372,6 @@ class Spark2(Hive):
             # (DAY_OF_WEEK(datetime) % 7) + 1 is equivalent to DAYOFWEEK_ISO(datetime)
             exp.DayOfWeekIso: lambda self, e: f"(({self.func('DAYOFWEEK', e.this)} % 7) + 1)",
             exp.DayOfYear: rename_func("DAYOFYEAR"),
-            exp.FileFormatProperty: lambda self, e: f"USING {e.name.upper()}",
             exp.From: transforms.preprocess([_unalias_pivot]),
             exp.FromTimeZone: lambda self, e: self.func(
                 "TO_UTC_TIMESTAMP", e.this, e.args.get("zone")
@@ -395,8 +402,10 @@ class Spark2(Hive):
             exp.ArraySlice: lambda self, e: self.func(
                 "SLICE",
                 e.args.get("this"),
-                e.args.get("fromIndex"),
-                e.args.get("to") - e.args.get("fromIndex"),
+                e.args.get("from_index"),
+                e.args.get("length")
+                if not e.args.get("is_index")
+                else e.args.get("length") - e.args.get("from_index"),
             ),
             exp.StrToDate: _str_to_date,
             exp.StrToTime: lambda self, e: self.func("TO_TIMESTAMP", e.this, self.format_time(e)),
@@ -440,13 +449,8 @@ class Spark2(Hive):
 
             return super(Hive.Generator, self).cast_sql(expression, safe_prefix=safe_prefix)
 
-        def columndef_sql(self, expression: exp.ColumnDef, sep: str = " ") -> str:
-            return super().columndef_sql(
-                expression,
-                sep=(
-                    ": "
-                    if isinstance(expression.parent, exp.DataType)
-                    and expression.parent.is_type("struct")
-                    else sep
-                ),
-            )
+        def fileformatproperty_sql(self, expression: exp.FileFormatProperty) -> str:
+            if expression.args.get("hive_format"):
+                return super().fileformatproperty_sql(expression)
+
+            return f"USING {expression.name.upper()}"

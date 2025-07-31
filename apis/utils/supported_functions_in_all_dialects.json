@@ -792,9 +792,9 @@
         "CORR",
         "COVAR_POP",
         "URL_DECODE",
+        "ARRAY_INTERSECT"
         "TYPEOF",
-        "TIMEDIFF",
-        "INTERVAL"
+        "TIMEDIFF"
     ],
     "databricks": [
          "ABS",

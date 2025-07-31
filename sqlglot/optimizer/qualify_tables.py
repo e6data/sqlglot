@@ -60,8 +60,11 @@ def qualify_tables(
                 table.set("catalog", catalog.copy())
 
     if (db or catalog) and not isinstance(expression, exp.Query):
+        with_ = expression.args.get("with") or exp.With()
+        cte_names = {cte.alias_or_name for cte in with_.expressions}
+
         for node in expression.walk(prune=lambda n: isinstance(n, exp.Query)):
-            if isinstance(node, exp.Table):
+            if isinstance(node, exp.Table) and node.name not in cte_names:
                 _qualify(node)
 
     for scope in traverse_scope(expression):
@@ -105,9 +108,10 @@ def qualify_tables(
                 )
 
                 if pivots:
-                    if not pivots[0].alias:
-                        pivot_alias = next_alias_name()
-                        pivots[0].set("alias", exp.TableAlias(this=exp.to_identifier(pivot_alias)))
+                    pivot = pivots[0]
+                    if not pivot.alias:
+                        pivot_alias = source.alias if pivot.unpivot else next_alias_name()
+                        pivot.set("alias", exp.TableAlias(this=exp.to_identifier(pivot_alias)))
 
                     # This case corresponds to a pivoted CTE, we don't want to qualify that
                     if isinstance(scope.sources.get(source.alias_or_name), Scope):
@@ -129,6 +133,14 @@ def qualify_tables(
                 table_alias = udtf.args.get("alias") or exp.TableAlias(
                     this=exp.to_identifier(next_alias_name())
                 )
+                if (
+                    isinstance(udtf, exp.Unnest)
+                    and dialect.UNNEST_COLUMN_ONLY
+                    and not table_alias.columns
+                ):
+                    table_alias.set("columns", [table_alias.this.copy()])
+                    table_alias.set("column_only", True)
+
                 udtf.set("alias", table_alias)
 
                 if not table_alias.name:

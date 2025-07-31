@@ -58,6 +58,10 @@ class TestDatabricks(Validator):
             "COPY INTO target FROM `s3://link` FILEFORMAT = AVRO VALIDATE = ALL FILES = ('file1', 'file2') FORMAT_OPTIONS ('opt1'='true', 'opt2'='test') COPY_OPTIONS ('mergeSchema'='true')"
         )
         self.validate_identity(
+            "SELECT * FROM t1, t2",
+            "SELECT * FROM t1 CROSS JOIN t2",
+        )
+        self.validate_identity(
             "SELECT TIMESTAMP '2025-04-29 18.47.18'::DATE",
             "SELECT CAST(CAST('2025-04-29 18.47.18' AS DATE) AS TIMESTAMP)",
         )
@@ -76,6 +80,30 @@ class TestDatabricks(Validator):
         self.validate_identity(
             "FROM_UTC_TIMESTAMP(x::TIMESTAMP, tz)",
             "FROM_UTC_TIMESTAMP(CAST(x AS TIMESTAMP), tz)",
+        )
+
+        self.validate_identity("SELECT SUBSTRING_INDEX(str, delim, count)")
+
+        self.validate_all(
+            "SELECT SUBSTRING_INDEX('a.b.c.d', '.', 2)",
+            write={
+                "databricks": "SELECT SUBSTRING_INDEX('a.b.c.d', '.', 2)",
+                "spark": "SELECT SUBSTRING_INDEX('a.b.c.d', '.', 2)",
+                "mysql": "SELECT SUBSTRING_INDEX('a.b.c.d', '.', 2)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT TYPEOF(1)",
+            read={
+                "databricks": "SELECT TYPEOF(1)",
+                "snowflake": "SELECT TYPEOF(1)",
+                "hive": "SELECT TYPEOF(1)",
+                "clickhouse": "SELECT toTypeName(1)",
+            },
+            write={
+                "clickhouse": "SELECT toTypeName(1)",
+            },
         )
 
         self.validate_all(
@@ -184,6 +212,14 @@ class TestDatabricks(Validator):
                 self.validate_identity(
                     f"CREATE TABLE t1 (foo BIGINT NOT NULL CONSTRAINT foo_c FOREIGN KEY REFERENCES t2{option})"
                 )
+        self.validate_identity(
+            "SELECT test, LISTAGG(email, '') AS Email FROM organizations GROUP BY test",
+        )
+
+        self.validate_identity(
+            "WITH t AS (VALUES ('foo_val') AS t(foo1)) SELECT foo1 FROM t",
+            "WITH t AS (SELECT * FROM VALUES ('foo_val') AS t(foo1)) SELECT foo1 FROM t",
+        )
 
     # https://docs.databricks.com/sql/language-manual/functions/colonsign.html
     def test_json(self):

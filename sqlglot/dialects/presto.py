@@ -8,6 +8,7 @@ from sqlglot.dialects.dialect import (
     NormalizationStrategy,
     binary_from_function,
     bool_xor_sql,
+    build_replace_with_optional_replacement,
     date_trunc_to_time,
     datestrtodate_sql,
     encode_decode_sql,
@@ -30,6 +31,7 @@ from sqlglot.dialects.dialect import (
     sequence_sql,
     build_regexp_extract,
     explode_to_unnest_sql,
+    space_sql,
 )
 from sqlglot.dialects.hive import Hive
 from sqlglot.dialects.mysql import MySQL
@@ -266,7 +268,7 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     """
     this = seq_get(args, 0)
     from_index = seq_get(args, 1)
-    to_index = seq_get(args, 2)
+    length = seq_get(args, 2)
 
     if this is None:
         raise ValueError("SLICE function requires a valid array to slice ('this').")
@@ -274,11 +276,11 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     if from_index is None:
         raise ValueError("SLICE function requires a valid 'fromIndex' argument.")
 
-    if to_index is None:
+    if length is None:
         raise ValueError("SLICE function requires a valid 'to' argument.")
 
     # Construct the ArraySlice expression
-    return exp.ArraySlice(this=this, fromIndex=from_index, to=to_index + from_index)
+    return exp.ArraySlice(this=this, from_index=from_index, length=length, is_index=False)
 
 
 class Presto(Dialect):
@@ -314,6 +316,11 @@ class Presto(Dialect):
         else self._set_type(e, exp.DataType.Type.DOUBLE),
     }
 
+    SUPPORTED_SETTINGS = {
+        *Dialect.SUPPORTED_SETTINGS,
+        "variant_extract_is_json_extract",
+    }
+
     class Tokenizer(tokens.Tokenizer):
         HEX_STRINGS = [("x'", "'"), ("X'", "'")]
         UNICODE_STRINGS = [
@@ -321,6 +328,8 @@ class Presto(Dialect):
             for q in t.cast(t.List[str], tokens.Tokenizer.QUOTES)
             for prefix in ("U&", "u&")
         ]
+
+        NESTED_COMMENTS = False
 
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
@@ -341,6 +350,7 @@ class Presto(Dialect):
 
     class Parser(parser.Parser):
         VALUES_FOLLOWED_BY_PAREN = False
+        ZONE_AWARE_TIMESTAMP_CONSTRUCTOR = True
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -398,6 +408,7 @@ class Presto(Dialect):
                 expression=seq_get(args, 1),
                 replacement=seq_get(args, 2) or exp.Literal.string(""),
             ),
+            "REPLACE": build_replace_with_optional_replacement,
             "ROW": exp.Struct.from_arg_list,
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SET_AGG": exp.ArrayUniqueAgg.from_arg_list,
@@ -477,8 +488,10 @@ class Presto(Dialect):
             exp.ArraySlice: lambda self, e: self.func(
                 "SLICE",
                 e.args.get("this"),
-                e.args.get("fromIndex"),
-                e.args.get("to") - e.args.get("fromIndex"),
+                e.args.get("from_index"),
+                e.args.get("length")
+                if not e.args.get("is_index")
+                else e.args.get("length") - e.args.get("from_index"),
             ),
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArrayUniqueAgg: rename_func("SET_AGG"),
@@ -511,7 +524,8 @@ class Presto(Dialect):
             exp.DiToDate: lambda self,
             e: f"CAST(DATE_PARSE(CAST({self.sql(e, 'this')} AS VARCHAR), {Presto.DATEINT_FORMAT}) AS DATE)",
             exp.Encode: lambda self, e: encode_decode_sql(self, e, "TO_UTF8"),
-            exp.FileFormatProperty: lambda self, e: f"FORMAT='{e.name.upper()}'",
+            exp.FileFormatProperty: lambda self,
+            e: f"format={self.sql(exp.Literal.string(e.name))}",
             exp.First: _first_last_sql,
             exp.FromTimeZone: lambda self,
             e: f"WITH_TIMEZONE({self.sql(e, 'this')}, {self.sql(e, 'zone')}) AT TIME ZONE 'UTC'",
@@ -547,6 +561,7 @@ class Presto(Dialect):
                     amend_exploded_column_table,
                 ]
             ),
+            exp.Space: space_sql,
             exp.SortArray: _no_sort_array,
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.StrPosition: lambda self, e: strposition_sql(self, e, supports_occurrence=True),

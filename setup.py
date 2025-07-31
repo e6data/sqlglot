@@ -29,6 +29,7 @@ setup(
             "types-pytz",
             "typing_extensions",
             "maturin>=1.4,<2.0",
+            "pyperf",
             "thrift==0.21.0",
             "fastapi==0.115.6",
             "python-multipart",

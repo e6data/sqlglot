@@ -39,6 +39,8 @@ class TokenType(AutoName):
     COLON = auto()
     DOTCOLON = auto()
     DCOLON = auto()
+    DCOLONDOLLAR = auto()
+    DCOLONPERCENT = auto()
     DQMARK = auto()
     SEMICOLON = auto()
     STAR = auto()
@@ -53,10 +55,13 @@ class TokenType(AutoName):
     NEQ = auto()
     NULLSAFE_EQ = auto()
     COLON_EQ = auto()
+    COLON_GT = auto()
+    NCOLON_GT = auto()
     AND = auto()
     OR = auto()
     AMP = auto()
     DPIPE = auto()
+    PIPE_GT = auto()
     PIPE = auto()
     PIPE_SLASH = auto()
     DPIPE_SLASH = auto()
@@ -182,6 +187,7 @@ class TokenType(AutoName):
     DATEMULTIRANGE = auto()
     UUID = auto()
     GEOGRAPHY = auto()
+    GEOGRAPHYPOINT = auto()
     NULLABLE = auto()
     GEOMETRY = auto()
     POINT = auto()
@@ -300,7 +306,6 @@ class TokenType(AutoName):
     HINT = auto()
     IGNORE = auto()
     ILIKE = auto()
-    ILIKE_ANY = auto()
     IN = auto()
     INDEX = auto()
     INNER = auto()
@@ -321,7 +326,6 @@ class TokenType(AutoName):
     LATERAL = auto()
     LEFT = auto()
     LIKE = auto()
-    LIKE_ANY = auto()
     LIMIT = auto()
     LIST = auto()
     LOAD = auto()
@@ -411,6 +415,7 @@ class TokenType(AutoName):
     USING = auto()
     VALUES = auto()
     VIEW = auto()
+    SEMANTIC_VIEW = auto()
     VOLATILE = auto()
     WHEN = auto()
     WHERE = auto()
@@ -425,6 +430,9 @@ class TokenType(AutoName):
     ANALYZE = auto()
     NAMESPACE = auto()
     EXPORT = auto()
+
+    # sentinel
+    HIVE_TOKEN_STREAM = auto()
 
 
 _ALL_TOKEN_TYPES = list(TokenType)
@@ -685,6 +693,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "==": TokenType.EQ,
         "::": TokenType.DCOLON,
         "||": TokenType.DPIPE,
+        "|>": TokenType.PIPE_GT,
         ">=": TokenType.GTE,
         "<=": TokenType.LTE,
         "<>": TokenType.NEQ,
@@ -1017,7 +1026,10 @@ class Tokenizer(metaclass=_Tokenizer):
     )
 
     def __init__(
-        self, dialect: DialectType = None, use_rs_tokenizer: t.Optional[bool] = None
+        self,
+        dialect: DialectType = None,
+        use_rs_tokenizer: t.Optional[bool] = None,
+        **opts: t.Any,
     ) -> None:
         from sqlglot.dialects import Dialect
 
@@ -1510,10 +1522,14 @@ class Tokenizer(metaclass=_Tokenizer):
         if not self._RS_TOKENIZER:
             raise SqlglotError("Rust tokenizer is not available")
 
-        try:
-            tokens = self._RS_TOKENIZER.tokenize(sql, self._rs_dialect_settings)
-            for token in tokens:
-                token.token_type = _ALL_TOKEN_TYPES[token.token_type_index]
-            return tokens
-        except Exception as e:
-            raise TokenError(str(e))
+        tokens, error_msg = self._RS_TOKENIZER.tokenize(sql, self._rs_dialect_settings)
+        for token in tokens:
+            token.token_type = _ALL_TOKEN_TYPES[token.token_type_index]
+
+        # Setting this here so partial token lists can be inspected even if there is a failure
+        self.tokens = tokens
+
+        if error_msg is not None:
+            raise TokenError(error_msg)
+
+        return tokens
