@@ -135,6 +135,7 @@ class Spark(Spark2):
             "DATEDIFF": _build_datediff,
             "DATE_DIFF": _build_datediff,
             "LISTAGG": exp.GroupConcat.from_arg_list,
+            "TYPEOF": lambda args: exp.TypeOf(this=seq_get(args, 0)),
             "TIMESTAMP_LTZ": _build_as_cast("TIMESTAMP_LTZ"),
             "TIMESTAMP_NTZ": _build_as_cast("TIMESTAMP_NTZ"),
             "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
