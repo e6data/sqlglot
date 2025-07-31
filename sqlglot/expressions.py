@@ -5495,6 +5495,10 @@ class ToArray(Func):
     pass
 
 
+class TypeOf(Func):
+    arg_types = {"this": True}
+
+
 # https://materialize.com/docs/sql/types/list/
 class List(Func):
     arg_types = {"expressions": False}
@@ -6856,6 +6860,21 @@ class StrPosition(Func):
         "position": False,
         "occurrence": False,
     }
+
+
+class FindInSet(Func):
+    """
+    FIND_IN_SET function that returns the position of a string within a comma-separated list of strings.
+
+    Returns:
+        The position (1-based) of searchExpr in sourceExpr, or 0 if not found or if searchExpr contains a comma.
+
+    Args:
+        this: The string to search for (searchExpr)
+        expression: The comma-separated list of strings to search in (sourceExpr)
+    """
+
+    arg_types = {"this": True, "expression": True}
 
 
 class StrToDate(Func):
