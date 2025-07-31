@@ -5494,6 +5494,7 @@ class Array(Func):
 class ToArray(Func):
     pass
 
+
 class TypeOf(Func):
     arg_types = {"this": True}
 

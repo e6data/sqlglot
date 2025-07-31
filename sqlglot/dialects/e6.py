@@ -1494,9 +1494,7 @@ class E6(Dialect):
             ),
             "TRUNC": date_trunc_to_time,
             "TRIM": lambda self: self._parse_trim(),
-            "TYPEOF": lambda args: exp.TypeOf(
-                this=seq_get(args, 0)
-            ),
+            "TYPEOF": lambda args: exp.TypeOf(this=seq_get(args, 0)),
             "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),
             # TODO:: I have removed the _parse_unnest_sql, was it really required
             # It was added due to some requirements before but those were asked to remove afterwards so it should not matter now
@@ -2160,7 +2158,7 @@ class E6(Dialect):
         def json_format_sql(self, expression: exp.JSONFormat) -> str:
             inner = expression.this
             if isinstance(inner, exp.Cast) and inner.to.this == exp.DataType.Type.JSON:
-                return self.func("TO_JSON_STRING", inner.this)
+                return self.func("TO_JSON", inner.this)
             return self.func("TO_JSON", inner)
 
         def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):

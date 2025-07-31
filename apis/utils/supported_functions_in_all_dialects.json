@@ -786,7 +786,6 @@
         "LAST_DAY_OF_MONTH",
         "FORMAT_DATETIME",
         "COUNT_IF",
-        "TRANSFORM",
         "ARRAY_INTERSECT"
         "WIDTH_BUCKET",
         "RAND",
