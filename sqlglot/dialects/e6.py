@@ -1483,7 +1483,6 @@ class E6(Dialect):
             # "TO_DATE":  _build_datetime("TO_DATE", exp.DataType.Type.DATE),
             "TO_HEX": exp.Hex.from_arg_list,
             "TO_JSON": exp.JSONFormat.from_arg_list,
-            "TO_JSON_STRING": exp.JSONFormat.from_arg_list,
             "TO_TIMESTAMP": _build_datetime("TO_TIMESTAMP", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_UTF8": lambda args: exp.Encode(
@@ -1704,31 +1703,38 @@ class E6(Dialect):
                 return interval_str
             elif expression.this and not expression.unit:
                 # Handle compound intervals like '5 minutes 30 seconds'
-                value = expression.this.name if hasattr(expression.this, 'name') else str(expression.this)
-                
+                value = (
+                    expression.this.name
+                    if hasattr(expression.this, "name")
+                    else str(expression.this)
+                )
+
                 # Parse compound interval and convert to E6 format
                 import re
+
                 # Pattern to match number-unit pairs in the compound interval
-                pattern = r'(\d+)\s*(year|month|week|day|hour|minute|second|microsecond|millisecond)s?'
+                pattern = (
+                    r"(\d+)\s*(year|month|week|day|hour|minute|second|microsecond|millisecond)s?"
+                )
                 matches = re.findall(pattern, value.lower())
-                
+
                 if matches:
                     # Convert compound interval to sum of individual intervals
                     interval_parts = []
                     for num, unit in matches:
                         # Convert plural to singular if needed
                         if not self.INTERVAL_ALLOWS_PLURAL_FORM:
-                            unit = self.TIME_PART_SINGULARS.get(unit.upper() + 'S', unit.upper())
+                            unit = self.TIME_PART_SINGULARS.get(unit.upper() + "S", unit.upper())
                         else:
                             unit = unit.upper()
                         interval_parts.append(f"INTERVAL '{num} {unit}'")
-                    
+
                     # Join with + operator
                     if len(interval_parts) > 1:
-                        return  ' + '.join(interval_parts)
+                        return " + ".join(interval_parts)
                     elif len(interval_parts) == 1:
                         return interval_parts[0]
-                
+
                 # If no pattern matches, return as-is with quotes
                 return f"INTERVAL '{value}'"
             else:
@@ -2151,14 +2157,17 @@ class E6(Dialect):
         def json_format_sql(self, expression: exp.JSONFormat) -> str:
             inner = expression.this
             if isinstance(inner, exp.Cast) and inner.to.this == exp.DataType.Type.JSON:
-                return self.func("TO_JSON_STRING", inner.this)
+                return self.func("TO_JSON", inner.this)
             return self.func("TO_JSON", inner)
 
         def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
             path = e.expression
             if self.from_dialect == "databricks":
-                path = "$." + path if not path.startswith("$") else path
-                path = add_single_quotes(path)
+                if not self.sql(path).startswith("'$."):
+                    path = add_single_quotes("$." + self.sql(path))
+                else:
+                    path = self.sql(path)
+
             return self.func("JSON_EXTRACT", e.this, path)
 
         def split_sql(self, expression: exp.Split | exp.RegexpSplit):
@@ -2431,6 +2440,7 @@ class E6(Dialect):
             "thursday",
             "friday",
             "saturday",
+            "variant"
         }
 
         UNSIGNED_TYPE_MAPPING = {

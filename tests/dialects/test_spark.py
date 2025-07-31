@@ -703,7 +703,7 @@ TBLPROPERTIES (
         # Test ARRAY_INTERSECT function
         self.validate_identity("SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 5))")
         self.validate_identity("SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3, 1), ARRAY(1, 3, 3, 5))")
-        
+
         self.validate_all(
             "SELECT ARRAY_INTERSECT(ARRAY(1, 2, 3), ARRAY(1, 3, 5))",
             write={
