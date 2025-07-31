@@ -5494,6 +5494,7 @@ class Array(Func):
 class ToArray(Func):
     pass
 
+
 class TypeOf(Func):
     arg_types = {"this": True}
 
@@ -6841,14 +6842,15 @@ class StrPosition(Func):
 class FindInSet(Func):
     """
     FIND_IN_SET function that returns the position of a string within a comma-separated list of strings.
-    
+
     Returns:
         The position (1-based) of searchExpr in sourceExpr, or 0 if not found or if searchExpr contains a comma.
-    
+
     Args:
         this: The string to search for (searchExpr)
         expression: The comma-separated list of strings to search in (sourceExpr)
     """
+
     arg_types = {"this": True, "expression": True}
 
 

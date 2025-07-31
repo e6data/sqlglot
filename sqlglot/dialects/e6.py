@@ -1495,9 +1495,7 @@ class E6(Dialect):
             ),
             "TRUNC": date_trunc_to_time,
             "TRIM": lambda self: self._parse_trim(),
-            "TYPEOF": lambda args: exp.TypeOf(
-                this=seq_get(args, 0)
-            ),
+            "TYPEOF": lambda args: exp.TypeOf(this=seq_get(args, 0)),
             "UNNEST": lambda args: exp.Explode(this=seq_get(args, 0)),
             # TODO:: I have removed the _parse_unnest_sql, was it really required
             # It was added due to some requirements before but those were asked to remove afterwards so it should not matter now
@@ -2140,25 +2138,8 @@ class E6(Dialect):
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.Anonymous: anonymous_sql,
-            # FIND_IN_SET transformation for E6 dialect
-            # 
-            # Databricks FIND_IN_SET(searchExpr, sourceExpr) documentation:
-            # - Returns the position of a string within a comma-separated list of strings
-            # - searchExpr: A STRING expression specifying the "word" to be searched
-            # - sourceExpr: A STRING expression with commas separating "words"  
-            # - Returns: An INTEGER (1-based position). Returns 0 if not found or searchExpr contains comma
-            # - Example: SELECT find_in_set('ab','abc,b,ab,c,def'); returns 3
-            #
-            # E6 Implementation Logic:
-            # - FIND_IN_SET('ab', 'abc,b,ab,c,def') becomes ARRAY_POSITION('ab', SPLIT('abc,b,ab,c,def', ','))
-            # - SPLIT('abc,b,ab,c,def', ',') creates ['abc', 'b', 'ab', 'c', 'def']
-            # - ARRAY_POSITION finds 1-based position of 'ab' in the array = 3
-            # - Note: E6's ARRAY_POSITION signature is (element, array) not (array, element)
-            # - This preserves exact same behavior: 1-based indexing, returns 0/NULL if not found
             exp.FindInSet: lambda self, e: self.func(
-                "ARRAY_POSITION", 
-                e.this,
-                self.func("SPLIT", e.expression, exp.Literal.string(","))
+                "ARRAY_POSITION", e.this, self.func("SPLIT", e.expression, exp.Literal.string(","))
             ),
             exp.AnyValue: rename_func("ARBITRARY"),
             exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),

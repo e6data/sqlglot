@@ -33,14 +33,14 @@ class TestE6(Validator):
             },
         )
 
-
-
         self.validate_all(
             "SELECT TYPEOF('hello')",
-        read={"databricks":"SELECT TYPEOF('hello');",
-              "spark":"SELECT TYPEOF('hello');",
-              "spark2":"SELECT TYPEOF('hello');",
-              "snowflake":"SELECT TYPEOF('hello');",}
+            read={
+                "databricks": "SELECT TYPEOF('hello');",
+                "spark": "SELECT TYPEOF('hello');",
+                "spark2": "SELECT TYPEOF('hello');",
+                "snowflake": "SELECT TYPEOF('hello');",
+            },
         )
 
         # Concat in dbr can accept many datatypes of args, but we map it to array_concat if type is of array. So we decided to put it as it is.
