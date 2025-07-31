@@ -2121,6 +2121,11 @@ class E6(Dialect):
             # If scale is milliseconds, use FROM_UNIXTIME_WITHUNIT
             if scale_expr and scale_expr.this == "milliseconds":
                 return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
+            if scale_expr and scale_expr.this == "microseconds":
+                # Convert microseconds to milliseconds by dividing by 1000
+                unix_expr_div = exp.Div(this=unix_expr, expression=exp.Literal.number(1000))
+                scale_expr = exp.Literal.string("milliseconds")
+                return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr_div, scale_expr)
 
             if not format_expr:
                 return self.func("FROM_UNIXTIME", unix_expr)
@@ -2445,7 +2450,7 @@ class E6(Dialect):
             "thursday",
             "friday",
             "saturday",
-            "variant"
+            "variant",
         }
 
         UNSIGNED_TYPE_MAPPING = {
