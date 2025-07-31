@@ -49,6 +49,16 @@ class TestE6(Validator):
             },
         )
 
+
+
+        self.validate_all(
+            "SELECT TYPEOF('hello')",
+        read={"databricks":"SELECT TYPEOF('hello');",
+              "spark":"SELECT TYPEOF('hello');",
+              "spark2":"SELECT TYPEOF('hello');",
+              "snowflake":"SELECT TYPEOF('hello');",}
+
+        )
         self.validate_all(
             "SELECT ARRAY_INTERSECT(ARRAY[1, 2, 3], ARRAY[1, 3, 3, 5])",
             read={
