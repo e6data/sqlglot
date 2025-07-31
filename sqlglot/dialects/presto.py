@@ -268,7 +268,7 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     """
     this = seq_get(args, 0)
     from_index = seq_get(args, 1)
-    to = seq_get(args, 2)
+    length = seq_get(args, 2)
 
     if this is None:
         raise ValueError("SLICE function requires a valid array to slice ('this').")
@@ -276,11 +276,11 @@ def _build_array_slice(args: list) -> exp.ArraySlice:
     if from_index is None:
         raise ValueError("SLICE function requires a valid 'fromIndex' argument.")
 
-    if to is None:
+    if length is None:
         raise ValueError("SLICE function requires a valid 'to' argument.")
 
     # Construct the ArraySlice expression
-    return exp.ArraySlice(this=this, from_index=from_index, to_index=to)
+    return exp.ArraySlice(this=this, from_index=from_index, length=length, is_index=False)
 
 
 class Presto(Dialect):
@@ -489,7 +489,9 @@ class Presto(Dialect):
                 "SLICE",
                 e.args.get("this"),
                 e.args.get("from_index"),
-                e.args.get("to_index") or (e.args.get("to") - e.args.get("from_index")),
+                e.args.get("length")
+                if not e.args.get("is_index")
+                else e.args.get("length") - e.args.get("from_index"),
             ),
             exp.ArrayToString: rename_func("ARRAY_JOIN"),
             exp.ArrayUniqueAgg: rename_func("SET_AGG"),

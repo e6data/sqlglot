@@ -1383,7 +1383,8 @@ class E6(Dialect):
             "ARRAY_SLICE": lambda args: exp.ArraySlice(
                 this=seq_get(args, 0),
                 from_index=seq_get(args, 1),
-                to=seq_get(args, 2),
+                length=seq_get(args, 2),
+                is_index=True,
             ),
             "ARRAY_POSITION": lambda args: exp.ArrayPosition(
                 this=seq_get(args, 1), expression=seq_get(args, 0)
@@ -2210,7 +2211,9 @@ class E6(Dialect):
                 "ARRAY_SLICE",
                 e.args.get("this"),
                 e.args.get("from_index"),
-                e.args.get("to") or (e.args.get("to_index") + e.args.get("from_index")),
+                e.args.get("length")
+                if e.args.get("is_index")
+                else e.args.get("length") + e.args.get("from_index"),
             ),
             exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),

@@ -789,7 +789,7 @@
         "RAND",
         "CORR",
         "COVAR_POP",
-        "URL_DECODE"
+        "URL_DECODE",
         "TRANSFORM",
         "ARRAY_INTERSECT"
     ],
