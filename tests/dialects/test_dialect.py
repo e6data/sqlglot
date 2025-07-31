@@ -64,6 +64,7 @@ class Validator(unittest.TestCase):
                         unsupported_level=ErrorLevel.IGNORE,
                         pretty=pretty,
                         identify=identify,
+                        from_dialect=read_dialect,
                     ),
                     sql,
                 )
