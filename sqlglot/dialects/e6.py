@@ -1757,14 +1757,23 @@ class E6(Dialect):
         def extract_sql(self: E6.Generator, expression: exp.Extract | exp.DayOfYear) -> str:
             unit = expression.this.name
             unit_mapped = E6.UNIT_PART_MAPPING.get(f"'{unit.lower()}'", unit)
-            expression_sql = self.sql(expression, "expression")
+            date_expr = (
+                expression.expression if isinstance(expression, exp.Extract) else expression.this
+            )
+
             if isinstance(expression, exp.DayOfYear):
                 unit_mapped = "DOY"
-                date_expr = expression.this
                 if isinstance(
                     date_expr, (exp.TsOrDsToDate, exp.TsOrDsToTimestamp, exp.TsOrDsToTime)
                 ):
                     date_expr = exp.Cast(this=date_expr.this, to=exp.DataType(this="TIMESTAMP"))
+                expression_sql = self.sql(date_expr)
+            if isinstance(expression, exp.Extract):
+                # For regular Extract operations, cast string literals and columns to TIMESTAMP for robust E6 syntax
+                if (isinstance(date_expr, exp.Literal) and date_expr.is_string) or isinstance(
+                    date_expr, exp.Column
+                ):
+                    date_expr = exp.Cast(this=date_expr, to=exp.DataType(this="DATE"))
                 expression_sql = self.sql(date_expr)
 
             extract_str = f"EXTRACT({unit_mapped} FROM {expression_sql})"
@@ -2282,6 +2291,9 @@ class E6(Dialect):
             exp.Mod: lambda self, e: self.func("MOD", e.this, e.expression),
             exp.Nullif: rename_func("NULLIF"),
             exp.Pow: rename_func("POWER"),
+            exp.Quarter: lambda self, e: self.extract_sql(
+                exp.Extract(this=exp.Var(this="QUARTER"), expression=e.this)
+            ),
             exp.RegexpExtract: rename_func("REGEXP_EXTRACT"),
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6

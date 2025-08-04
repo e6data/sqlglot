@@ -787,7 +787,7 @@
         "LAST_DAY_OF_MONTH",
         "FORMAT_DATETIME",
         "COUNT_IF",
-        "ARRAY_INTERSECT"
+        "ARRAY_INTERSECT",
         "WIDTH_BUCKET",
         "RAND",
         "CORR",
@@ -795,7 +795,7 @@
         "COVAR_SAMP",
         "VARIANCE_SAMP",
         "VAR_SAMP",
-        "URL_DECODE",,
+        "URL_DECODE",
         "TYPEOF",
         "TIMEDIFF",
         "INTERVAL"
