@@ -9,12 +9,6 @@ class TestDuckDB(Validator):
     dialect = "duckdb"
 
     def test_duckdb(self):
-        self.validate_identity("SELECT UUIDV7()")
-        self.validate_identity("SELECT TRY(LOG(0))")
-        self.validate_identity("x::timestamp", "CAST(x AS TIMESTAMP)")
-        self.validate_identity("x::timestamp without time zone", "CAST(x AS TIMESTAMP)")
-        self.validate_identity("x::timestamp with time zone", "CAST(x AS TIMESTAMPTZ)")
-
         with self.assertRaises(ParseError):
             parse_one("1 //", read="duckdb")
 
@@ -35,6 +29,20 @@ class TestDuckDB(Validator):
             "STRUCT(k TEXT, v STRUCT(v_str TEXT, v_int INT, v_int_arr INT[]))[]",
         )
 
+        self.validate_all(
+            "SELECT FIRST_VALUE(c IGNORE NULLS) OVER (PARTITION BY gb ORDER BY ob) FROM t",
+            write={
+                "duckdb": "SELECT FIRST_VALUE(c IGNORE NULLS) OVER (PARTITION BY gb ORDER BY ob) FROM t",
+                "sqlite": UnsupportedError,
+            },
+        )
+        self.validate_all(
+            "SELECT FIRST_VALUE(c RESPECT NULLS) OVER (PARTITION BY gb ORDER BY ob) FROM t",
+            write={
+                "duckdb": "SELECT FIRST_VALUE(c RESPECT NULLS) OVER (PARTITION BY gb ORDER BY ob) FROM t",
+                "sqlite": "SELECT FIRST_VALUE(c) OVER (PARTITION BY gb ORDER BY ob NULLS LAST) FROM t",
+            },
+        )
         self.validate_all(
             "CAST(x AS UUID)",
             write={
@@ -265,6 +273,23 @@ class TestDuckDB(Validator):
             "a // b",
         )
 
+        self.validate_identity(
+            "SELECT LIST_TRANSFORM([5, NULL, 6], (x, y) -> COALESCE(x, y, 0) + 1)"
+        )
+        self.validate_identity(
+            "SELECT LIST_TRANSFORM([5, NULL, 6], LAMBDA x, y : COALESCE(x, y, 0) + 1)"
+        )
+        self.validate_identity(
+            "SELECT LIST_TRANSFORM(LIST_FILTER([0, 1, 2, 3, 4, 5], LAMBDA x : x % 2 = 0), LAMBDA y : y * y)"
+        )
+        self.validate_identity("SELECT LIST_TRANSFORM([5, NULL, 6], LAMBDA x : COALESCE(x, 0) + 1)")
+        self.validate_identity("SELECT LIST_TRANSFORM(nbr, LAMBDA x : x + 1) FROM article AS a")
+        self.validate_identity("SELECT * FROM my_ducklake.demo AT (VERSION => 2)")
+        self.validate_identity("SELECT UUIDV7()")
+        self.validate_identity("SELECT TRY(LOG(0))")
+        self.validate_identity("x::timestamp", "CAST(x AS TIMESTAMP)")
+        self.validate_identity("x::timestamp without time zone", "CAST(x AS TIMESTAMP)")
+        self.validate_identity("x::timestamp with time zone", "CAST(x AS TIMESTAMPTZ)")
         self.validate_identity("CAST(x AS FOO)")
         self.validate_identity("SELECT UNNEST([1, 2])").selects[0].assert_is(exp.UDTF)
         self.validate_identity("'red' IN flags").args["field"].assert_is(exp.Column)
@@ -571,6 +596,9 @@ class TestDuckDB(Validator):
         )
         self.validate_all(
             "STRING_TO_ARRAY(x, 'a')",
+            read={
+                "snowflake": "STRTOK_TO_ARRAY(x, 'a')",
+            },
             write={
                 "duckdb": "STR_SPLIT(x, 'a')",
                 "presto": "SPLIT(x, 'a')",
@@ -950,6 +978,34 @@ class TestDuckDB(Validator):
             "SELECT CAST('2020-01-01' AS DATE) + INTERVAL '1' DAY",
         )
 
+        self.validate_identity("ARRAY_SLICE(x, 1, 3, 2)")
+        self.validate_identity("SELECT #2, #1 FROM (VALUES (1, 'foo'))")
+        self.validate_identity("SELECT #2 AS a, #1 AS b FROM (VALUES (1, 'foo'))")
+
+        self.validate_all(
+            "LIST_CONTAINS([1, 2, NULL], 1)",
+            write={
+                "duckdb": "ARRAY_CONTAINS([1, 2, NULL], 1)",
+                "postgres": "CASE WHEN 1 IS NULL THEN NULL ELSE COALESCE(1 = ANY(ARRAY[1, 2, NULL]), FALSE) END",
+            },
+        )
+        self.validate_all(
+            "LIST_CONTAINS([1, 2, NULL], NULL)",
+            write={
+                "duckdb": "ARRAY_CONTAINS([1, 2, NULL], NULL)",
+                "postgres": "CASE WHEN NULL IS NULL THEN NULL ELSE COALESCE(NULL = ANY(ARRAY[1, 2, NULL]), FALSE) END",
+            },
+        )
+        self.validate_all(
+            "LIST_HAS_ANY([1, 2, 3], [1,2])",
+            write={
+                "duckdb": "[1, 2, 3] && [1, 2]",
+                "postgres": "ARRAY[1, 2, 3] && ARRAY[1, 2]",
+            },
+        )
+        self.validate_identity("LISTAGG(x, ', ')")
+        self.validate_identity("STRING_AGG(x, ', ')", "LISTAGG(x, ', ')")
+
     def test_array_index(self):
         with self.assertLogs(helper_logger) as cm:
             self.validate_all(
@@ -1017,10 +1073,10 @@ class TestDuckDB(Validator):
         )
         self.validate_all(
             "SELECT INTERVAL '1 quarter'",
-            write={"duckdb": "SELECT (90 * INTERVAL '1' DAY)"},
+            write={"duckdb": "SELECT INTERVAL '1' QUARTER"},
         )
         self.validate_all(
-            "SELECT ((DATE_TRUNC('DAY', CAST(CAST(DATE_TRUNC('DAY', CURRENT_TIMESTAMP) AS DATE) AS TIMESTAMP) + INTERVAL (0 - ((ISODOW(CAST(CAST(DATE_TRUNC('DAY', CURRENT_TIMESTAMP) AS DATE) AS TIMESTAMP)) % 7) - 1 + 7) % 7) DAY) + (7 * INTERVAL (-5) DAY))) AS t1",
+            "SELECT ((DATE_TRUNC('DAY', CAST(CAST(DATE_TRUNC('DAY', CURRENT_TIMESTAMP) AS DATE) AS TIMESTAMP) + INTERVAL (0 - ((ISODOW(CAST(CAST(DATE_TRUNC('DAY', CURRENT_TIMESTAMP) AS DATE) AS TIMESTAMP)) % 7) - 1 + 7) % 7) DAY) + INTERVAL (-5) WEEK)) AS t1",
             read={
                 "presto": "SELECT ((DATE_ADD('week', -5, DATE_TRUNC('DAY', DATE_ADD('day', (0 - MOD((DAY_OF_WEEK(CAST(CAST(DATE_TRUNC('DAY', NOW()) AS DATE) AS TIMESTAMP)) % 7) - 1 + 7, 7)), CAST(CAST(DATE_TRUNC('DAY', NOW()) AS DATE) AS TIMESTAMP)))))) AS t1",
             },
@@ -1482,7 +1538,11 @@ class TestDuckDB(Validator):
 
         # DETACH
         self.validate_identity("DETACH new_database")
-        self.validate_identity("DETACH IF EXISTS file")
+
+        # when 'if exists' is set, the syntax is DETACH DATABASE, not DETACH
+        # ref: https://duckdb.org/docs/stable/sql/statements/attach.html#detach-syntax
+        self.validate_identity("DETACH IF EXISTS file", "DETACH DATABASE IF EXISTS file")
+        self.validate_identity("DETACH DATABASE IF EXISTS file", "DETACH DATABASE IF EXISTS file")
 
         self.validate_identity("DETACH DATABASE db", "DETACH db")
 
@@ -1640,3 +1700,45 @@ class TestDuckDB(Validator):
     def test_show_tables(self):
         self.validate_identity("SHOW TABLES").assert_is(exp.Show)
         self.validate_identity("SHOW ALL TABLES").assert_is(exp.Show)
+
+    def test_extract_date_parts(self):
+        for part in ("WEEK", "WEEKOFYEAR"):
+            # Both are synonyms for ISO week
+            self.validate_identity(f"EXTRACT({part} FROM foo)", "EXTRACT(WEEK FROM foo)")
+
+        for part in (
+            "WEEKDAY",
+            "ISOYEAR",
+            "ISODOW",
+            "YEARWEEK",
+            "TIMEZONE_HOUR",
+            "TIMEZONE_MINUTE",
+        ):
+            with self.subTest(f"Testing DuckDB EXTRACT({part} FROM foo)"):
+                # All of these should remain as is, they don't have synonyms
+                self.validate_identity(f"EXTRACT({part} FROM foo)")
+
+    def test_set_item(self):
+        self.validate_identity("SET memory_limit = '10GB'")
+        self.validate_identity("SET SESSION default_collation = 'nocase'")
+        self.validate_identity("SET GLOBAL sort_order = 'desc'")
+        self.validate_identity("SET VARIABLE my_var = 30")
+        self.validate_identity("SET VARIABLE location_map = (SELECT foo FROM bar)")
+
+        self.validate_identity("SET VARIABLE my_var TO 30", "SET VARIABLE my_var = 30")
+
+    def test_reset(self):
+        self.validate_identity("RESET threads", check_command_warning=True)
+        self.validate_identity("RESET memory_limit", check_command_warning=True)
+        self.validate_identity("RESET default_collation", check_command_warning=True)
+
+        # Test RESET with scope modifiers
+        self.validate_identity("RESET SESSION threads", check_command_warning=True)
+        self.validate_identity("RESET GLOBAL memory_limit", check_command_warning=True)
+        self.validate_identity("RESET LOCAL threads", check_command_warning=True)
+        self.validate_identity("RESET SESSION default_collation", check_command_warning=True)
+
+    def test_map_struct(self):
+        self.validate_identity("MAP {1: 'a', 2: 'b'}")
+        self.validate_identity("MAP {'1': 'a', '2': 'b'}")
+        self.validate_identity("MAP {[1, 2]: 'a', [3, 4]: 'b'}")

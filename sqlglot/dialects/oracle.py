@@ -44,6 +44,7 @@ class Oracle(Dialect):
     TABLESAMPLE_SIZE_IS_PERCENT = True
     NULL_ORDERING = "nulls_are_large"
     ON_CONDITION_EMPTY_BEFORE_ERROR = False
+    ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN = False
 
     # See section 8: https://docs.oracle.com/cd/A97630_01/server.920/a96540/sql_elements9a.htm
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
@@ -51,10 +52,6 @@ class Oracle(Dialect):
     # https://docs.oracle.com/database/121/SQLRF/sql_elements004.htm#SQLRF00212
     # https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
     TIME_MAPPING = {
-        "AM": "%p",  # Meridian indicator with or without periods
-        "A.M.": "%p",  # Meridian indicator with or without periods
-        "PM": "%p",  # Meridian indicator with or without periods
-        "P.M.": "%p",  # Meridian indicator with or without periods
         "D": "%u",  # Day of week (1-7)
         "DAY": "%A",  # name of day
         "DD": "%d",  # day of month (1-31)
@@ -104,7 +101,6 @@ class Oracle(Dialect):
         }
 
     class Parser(parser.Parser):
-        ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN = False
         WINDOW_BEFORE_PAREN_TOKENS = {TokenType.OVER, TokenType.KEEP}
         VALUES_FOLLOWED_BY_PAREN = False
 
@@ -128,6 +124,7 @@ class Oracle(Dialect):
             "NEXT": lambda self: self._parse_next_value_for(),
             "PRIOR": lambda self: self.expression(exp.Prior, this=self._parse_bitwise()),
             "SYSDATE": lambda self: self.expression(exp.CurrentTimestamp, sysdate=True),
+            "DBMS_RANDOM": lambda self: self._parse_dbms_random(),
         }
 
         FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
@@ -179,6 +176,19 @@ class Oracle(Dialect):
                 ("CHECK", "OPTION"),
             ),
         }
+
+        def _parse_dbms_random(self) -> t.Optional[exp.Expression]:
+            if self._match_text_seq(".", "VALUE"):
+                lower, upper = None, None
+                if self._match(TokenType.L_PAREN, advance=False):
+                    lower_upper = self._parse_wrapped_csv(self._parse_bitwise)
+                    if len(lower_upper) == 2:
+                        lower, upper = lower_upper
+
+                return exp.Rand(lower=lower, upper=upper)
+
+            self._retreat(self._index - 1)
+            return None
 
         def _parse_json_array(self, expr_type: t.Type[E], **kwargs) -> E:
             return self.expression(
@@ -271,6 +281,7 @@ class Oracle(Dialect):
         TZ_TO_WITH_TIME_ZONE = True
         SUPPORTS_WINDOW_EXCLUDE = True
         QUERY_HINT_SEP = " "
+        SUPPORTS_DECODE_CASE = True
 
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,
@@ -304,6 +315,7 @@ class Oracle(Dialect):
             exp.LogicalOr: rename_func("MAX"),
             exp.LogicalAnd: rename_func("MIN"),
             exp.Mod: rename_func("MOD"),
+            exp.Rand: rename_func("DBMS_RANDOM.VALUE"),
             exp.Select: transforms.preprocess(
                 [
                     transforms.eliminate_distinct_on,
@@ -346,11 +358,8 @@ class Oracle(Dialect):
         def offset_sql(self, expression: exp.Offset) -> str:
             return f"{super().offset_sql(expression)} ROWS"
 
-        def add_column_sql(self, expression: exp.Alter) -> str:
-            actions = self.expressions(expression, key="actions", flat=True)
-            if len(expression.args.get("actions", [])) > 1:
-                return f"ADD ({actions})"
-            return f"ADD {actions}"
+        def add_column_sql(self, expression: exp.Expression) -> str:
+            return f"ADD {self.sql(expression)}"
 
         def queryoption_sql(self, expression: exp.QueryOption) -> str:
             option = self.sql(expression, "this")

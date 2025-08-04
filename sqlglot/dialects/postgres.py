@@ -13,6 +13,7 @@ from sqlglot.dialects.dialect import (
     datestrtodate_sql,
     build_formatted_time,
     filter_array_using_unnest,
+    inline_array_sql,
     json_extract_segments,
     json_path_key_only_name,
     max_or_greatest,
@@ -35,6 +36,7 @@ from sqlglot.dialects.dialect import (
     strposition_sql,
     count_if_to_sum,
     groupconcat_sql,
+    Version,
 )
 from sqlglot.generator import unsupported_args
 from sqlglot.helper import is_int, seq_get
@@ -254,6 +256,15 @@ def _levenshtein_sql(self: Postgres.Generator, expression: exp.Levenshtein) -> s
     return rename_func(name)(self, expression)
 
 
+def _versioned_anyvalue_sql(self: Postgres.Generator, expression: exp.AnyValue) -> str:
+    # https://www.postgresql.org/docs/16/functions-aggregate.html
+    # https://www.postgresql.org/about/featurematrix/
+    if self.dialect.version < Version("16.0"):
+        return any_value_to_max_sql(self, expression)
+
+    return rename_func("ANY_VALUE")(self, expression)
+
+
 class Postgres(Dialect):
     INDEX_OFFSET = 1
     TYPED_DIVISION = True
@@ -263,8 +274,6 @@ class Postgres(Dialect):
     TABLESAMPLE_SIZE_IS_PERCENT = True
 
     TIME_MAPPING = {
-        "AM": "%p",
-        "PM": "%p",
         "d": "%u",  # 1-based day of week
         "D": "%u",  # 1-based day of week
         "dd": "%d",  # day of month
@@ -352,6 +361,7 @@ class Postgres(Dialect):
             "REGROLE": TokenType.OBJECT_IDENTIFIER,
             "REGTYPE": TokenType.OBJECT_IDENTIFIER,
             "FLOAT": TokenType.DOUBLE,
+            "XML": TokenType.XML,
         }
         KEYWORDS.pop("/*+")
         KEYWORDS.pop("DIV")
@@ -370,9 +380,14 @@ class Postgres(Dialect):
         }
         PROPERTY_PARSERS.pop("INPUT")
 
+        PLACEHOLDER_PARSERS = {
+            **parser.Parser.PLACEHOLDER_PARSERS,
+            TokenType.PLACEHOLDER: lambda self: self.expression(exp.Placeholder, jdbc=True),
+            TokenType.MOD: lambda self: self._parse_query_parameter(),
+        }
+
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
-            "ASCII": exp.Unicode.from_arg_list,
             "DATE_TRUNC": build_timestamp_trunc,
             "DIV": lambda args: exp.cast(
                 binary_from_function(exp.IntDiv)(args), exp.DataType.Type.DECIMAL
@@ -444,6 +459,15 @@ class Postgres(Dialect):
             )([this, path]),
         }
 
+        def _parse_query_parameter(self) -> t.Optional[exp.Expression]:
+            this = (
+                self._parse_wrapped(self._parse_id_var)
+                if self._match(TokenType.L_PAREN, advance=False)
+                else None
+            )
+            self._match_text_seq("S")
+            return self.expression(exp.Placeholder, this=this)
+
         def _parse_operator(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
             while True:
                 if not self._match(TokenType.L_PAREN):
@@ -502,6 +526,18 @@ class Postgres(Dialect):
 
             return this
 
+        def _parse_user_defined_type(
+            self, identifier: exp.Identifier
+        ) -> t.Optional[exp.Expression]:
+            udt_type: exp.Identifier | exp.Dot = identifier
+
+            while self._match(TokenType.DOT):
+                part = self._parse_id_var()
+                if part:
+                    udt_type = exp.Dot(this=udt_type, expression=part)
+
+            return exp.DataType.build(udt_type, udt=True)
+
     class Generator(generator.Generator):
         SINGLE_STRING_INTERVAL = True
         RENAME_TABLE_WITH_DB = False
@@ -511,6 +547,7 @@ class Postgres(Dialect):
         QUERY_HINTS = False
         NVL2_SUPPORTED = False
         PARAMETER_TOKEN = "$"
+        NAMED_PLACEHOLDER_TOKEN = "%"
         TABLESAMPLE_SIZE_IS_ROWS = False
         TABLESAMPLE_SEED_KEYWORD = "REPEATABLE"
         SUPPORTS_SELECT_INTO = True
@@ -524,6 +561,7 @@ class Postgres(Dialect):
         ARRAY_CONCAT_IS_VAR_LEN = False
         SUPPORTS_MEDIAN = False
         ARRAY_SIZE_DIM_REQUIRED = True
+        SUPPORTS_BETWEEN_FLAGS = True
 
         SUPPORTED_JSON_PATH_PARTS = {
             exp.JSONPathKey,
@@ -546,7 +584,7 @@ class Postgres(Dialect):
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
-            exp.AnyValue: any_value_to_max_sql,
+            exp.AnyValue: _versioned_anyvalue_sql,
             exp.ArrayConcat: lambda self, e: self.arrayconcat_sql(e, name="ARRAY_CAT"),
             exp.ArrayFilter: filter_array_using_unnest,
             exp.BitwiseXor: lambda self, e: self.binary(e, "#"),
@@ -637,6 +675,28 @@ class Postgres(Dialect):
             exp.TransientProperty: exp.Properties.Location.UNSUPPORTED,
             exp.VolatileProperty: exp.Properties.Location.UNSUPPORTED,
         }
+
+        def round_sql(self, expression: exp.Round) -> str:
+            this = self.sql(expression, "this")
+            decimals = self.sql(expression, "decimals")
+
+            if not decimals:
+                return self.func("ROUND", this)
+
+            if not expression.type:
+                from sqlglot.optimizer.annotate_types import annotate_types
+
+                expression = annotate_types(expression, dialect=self.dialect)
+
+            # ROUND(double precision, integer) is not permitted in Postgres
+            # so it's necessary to cast to decimal before rounding.
+            if expression.this.is_type(exp.DataType.Type.DOUBLE):
+                decimal_type = exp.DataType.build(
+                    exp.DataType.Type.DECIMAL, expressions=expression.expressions
+                )
+                this = self.sql(exp.Cast(this=this, to=decimal_type))
+
+            return self.func("ROUND", this, decimals)
 
         def schemacommentproperty_sql(self, expression: exp.SchemaCommentProperty) -> str:
             self.unsupported("Table comments are not supported in the CREATE statement")
@@ -729,11 +789,12 @@ class Postgres(Dialect):
 
         def array_sql(self, expression: exp.Array) -> str:
             exprs = expression.expressions
-            return (
-                f"{self.normalize_func('ARRAY')}({self.sql(exprs[0])})"
-                if isinstance(seq_get(exprs, 0), exp.Select)
-                else f"{self.normalize_func('ARRAY')}[{self.expressions(expression, flat=True)}]"
-            )
+            func_name = self.normalize_func("ARRAY")
+
+            if isinstance(seq_get(exprs, 0), exp.Select):
+                return f"{func_name}({self.sql(exprs[0])})"
+
+            return f"{func_name}{inline_array_sql(self, expression)}"
 
         def computedcolumnconstraint_sql(self, expression: exp.ComputedColumnConstraint) -> str:
             return f"GENERATED ALWAYS AS ({self.sql(expression, 'this')}) STORED"
@@ -753,3 +814,36 @@ class Postgres(Dialect):
                 expression.args["unit"].replace(exp.var("MONTH"))
 
             return super().interval_sql(expression)
+
+        def placeholder_sql(self, expression: exp.Placeholder) -> str:
+            if expression.args.get("jdbc"):
+                return "?"
+
+            this = f"({expression.name})" if expression.this else ""
+            return f"{self.NAMED_PLACEHOLDER_TOKEN}{this}s"
+
+        def arraycontains_sql(self, expression: exp.ArrayContains) -> str:
+            # Convert DuckDB's LIST_CONTAINS(array, value) to PostgreSQL
+            # DuckDB behavior:
+            #   - LIST_CONTAINS([1,2,3], 2) -> true
+            #   - LIST_CONTAINS([1,2,3], 4) -> false
+            #   - LIST_CONTAINS([1,2,NULL], 4) -> false (not NULL)
+            #   - LIST_CONTAINS([1,2,3], NULL) -> NULL
+            #
+            # PostgreSQL equivalent: CASE WHEN value IS NULL THEN NULL
+            #                            ELSE COALESCE(value = ANY(array), FALSE) END
+            value = expression.expression
+            array = expression.this
+
+            coalesce_expr = exp.Coalesce(
+                this=value.eq(exp.Any(this=exp.paren(expression=array, copy=False))),
+                expressions=[exp.false()],
+            )
+
+            case_expr = (
+                exp.Case()
+                .when(exp.Is(this=value, expression=exp.null()), exp.null(), copy=False)
+                .else_(coalesce_expr, copy=False)
+            )
+
+            return self.sql(case_expr)

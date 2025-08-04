@@ -275,6 +275,42 @@ class TestTransforms(unittest.TestCase):
                 == "SELECT a.id FROM a LEFT JOIN b ON a.id = b.id AND b.d = const"
             )
 
+            # validate parens
+            self.validate(
+                eliminate_join_marks,
+                "select t1.a, t2.b from t1, t2 where (1 = 1) and (t1.id = t2.id1 (+))",
+                "SELECT t1.a, t2.b FROM t1 LEFT JOIN t2 ON t1.id = t2.id1 WHERE (1 = 1)",
+                dialect,
+            )
+
+            # validate a CASE
+            self.validate(
+                eliminate_join_marks,
+                "select t1.a, t2.b from t1, t2 where t1.id = case when t2.id (+) = 'n/a' then null else t2.id (+) end",
+                "SELECT t1.a, t2.b FROM t1 LEFT JOIN t2 ON t1.id = CASE WHEN t2.id = 'n/a' THEN NULL ELSE t2.id END",
+                dialect,
+            )
+
+            # validate OR
+            self.validate(
+                eliminate_join_marks,
+                "select t1.a, t2.b from t1, t2 where t1.id = t2.id1 (+) or t1.id = t2.id2 (+)",
+                "SELECT t1.a, t2.b FROM t1 LEFT JOIN t2 ON t1.id = t2.id1 OR t1.id = t2.id2",
+                dialect,
+            )
+
+            # validate knockout
+            script = """
+                    SELECT c.customer_name,
+                            (SELECT MAX(o.order_date)
+                            FROM orders o
+                            WHERE o.customer_id(+) = c.customer_id) AS latest_order_date
+                    FROM customers c
+                    """
+            self.assertRaises(
+                AssertionError, eliminate_join_marks, parse_one(script, dialect=dialect)
+            )
+
     def test_eliminate_window_clause(self):
         self.validate(
             eliminate_window_clause,

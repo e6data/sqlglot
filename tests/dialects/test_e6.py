@@ -1410,8 +1410,8 @@ class TestE6(Validator):
 
         # In the following test case when argument "Some" is provided in databricks, space is removed after "Some" and it is treated as function
         self.validate_all(
-            "SELECT 'Spark' LIKE SOME('_park', '_ock')",
-            read={"databricks": "SELECT 'Spark' like SOME ('_park', '_ock')"},
+            "SELECT 'Spark' LIKE SOME ('_park', '_ock')",
+            read={"databricks": "SELECT 'Spark' LIKE SOME ('_park', '_ock')"},
         )
 
         self.validate_all(
@@ -2331,7 +2331,7 @@ class TestE6(Validator):
                 "duckdb": "RANDOM()",
                 "hive": "RAND()",
                 "mysql": "RAND()",
-                "oracle": "RAND()",
+                "oracle": "DBMS_RANDOM.VALUE()",
                 "postgres": "RANDOM()",
                 "presto": "RAND()",
                 "spark": "RAND()",
@@ -2347,7 +2347,7 @@ class TestE6(Validator):
                 "duckdb": "RANDOM()",
                 "hive": "RAND()",
                 "mysql": "RAND()",
-                "oracle": "RAND()",
+                "oracle": "DBMS_RANDOM.VALUE()",
                 "postgres": "RANDOM()",
                 "presto": "RAND()",
                 "spark": "RAND()",

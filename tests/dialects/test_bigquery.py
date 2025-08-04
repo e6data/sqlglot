@@ -17,6 +17,7 @@ from sqlglot.parser import logger as parser_logger
 from tests.dialects.test_dialect import Validator
 from sqlglot.optimizer.annotate_types import annotate_types
 from sqlglot.optimizer.qualify import qualify
+from sqlglot.optimizer.qualify_tables import qualify_tables
 
 
 class TestBigQuery(Validator):
@@ -42,6 +43,7 @@ class TestBigQuery(Validator):
         self.assertEqual(table.db, "x-0")
         self.assertEqual(table.name, "_y")
 
+        self.validate_identity("SAFE.SUBSTR('foo', 0, -2)").assert_is(exp.Dot)
         self.validate_identity("SELECT * FROM x-0.y")
         self.assertEqual(exp.to_table("`a.b`.`c.d`", dialect="bigquery").sql(), '"a"."b"."c"."d"')
         self.assertEqual(exp.to_table("`x`.`y.z`", dialect="bigquery").sql(), '"x"."y"."z"')
@@ -55,6 +57,11 @@ class TestBigQuery(Validator):
         select_with_quoted_udf = self.validate_identity("SELECT `p.d.UdF`(data) FROM `p.d.t`")
         self.assertEqual(select_with_quoted_udf.selects[0].name, "p.d.UdF")
 
+        self.validate_identity("DATE_TRUNC(x, @foo)").unit.assert_is(exp.Parameter)
+        self.validate_identity("ARRAY_CONCAT_AGG(x ORDER BY ARRAY_LENGTH(x) LIMIT 2)")
+        self.validate_identity("ARRAY_CONCAT_AGG(x LIMIT 2)")
+        self.validate_identity("ARRAY_CONCAT_AGG(x ORDER BY ARRAY_LENGTH(x))")
+        self.validate_identity("ARRAY_CONCAT_AGG(x)")
         self.validate_identity("PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*S%z', x)")
         self.validate_identity("SELECT ARRAY_CONCAT([1])")
         self.validate_identity("SELECT * FROM READ_CSV('bla.csv')")
@@ -182,6 +189,10 @@ class TestBigQuery(Validator):
             "ARRAY_AGG(v IGNORE NULLS) /* c */",
         )
         self.validate_identity(
+            "SELECT * FROM t1, t2",
+            "SELECT * FROM t1 CROSS JOIN t2",
+        )
+        self.validate_identity(
             'SELECT r"\\t"',
             "SELECT '\\\\t'",
         )
@@ -294,6 +305,23 @@ LANGUAGE js AS
         )
 
         self.validate_all(
+            "SELECT TRUE IS TRUE",
+            write={
+                "bigquery": "SELECT TRUE IS TRUE",
+                "snowflake": "SELECT TRUE",
+            },
+        )
+        self.validate_all(
+            "SELECT REPEAT(' ', 2)",
+            read={
+                "hive": "SELECT SPACE(2)",
+                "spark": "SELECT SPACE(2)",
+                "databricks": "SELECT SPACE(2)",
+                "trino": "SELECT REPEAT(' ', 2)",
+            },
+        )
+
+        self.validate_all(
             "SELECT purchases, LAST_VALUE(item) OVER item_window AS most_popular FROM Produce WINDOW item_window AS (PARTITION BY purchases ORDER BY purchases ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)",
             write={
                 "bigquery": "SELECT purchases, LAST_VALUE(item) OVER item_window AS most_popular FROM Produce WINDOW item_window AS (PARTITION BY purchases ORDER BY purchases ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)",
@@ -393,10 +421,17 @@ LANGUAGE js AS
             },
         )
         self.validate_all(
+            "SAFE_CAST(x AS TIMESTAMP)",
+            write={
+                "bigquery": "SAFE_CAST(x AS TIMESTAMP)",
+                "snowflake": "CAST(x AS TIMESTAMPTZ)",
+            },
+        )
+        self.validate_all(
             "SELECT t.c1, h.c2, s.c3 FROM t1 AS t, UNNEST(t.t2) AS h, UNNEST(h.t3) AS s",
             write={
-                "bigquery": "SELECT t.c1, h.c2, s.c3 FROM t1 AS t, UNNEST(t.t2) AS h, UNNEST(h.t3) AS s",
-                "duckdb": "SELECT t.c1, h.c2, s.c3 FROM t1 AS t, UNNEST(t.t2) AS _t0(h), UNNEST(h.t3) AS _t1(s)",
+                "bigquery": "SELECT t.c1, h.c2, s.c3 FROM t1 AS t CROSS JOIN UNNEST(t.t2) AS h CROSS JOIN UNNEST(h.t3) AS s",
+                "duckdb": "SELECT t.c1, h.c2, s.c3 FROM t1 AS t CROSS JOIN UNNEST(t.t2) AS _t0(h) CROSS JOIN UNNEST(h.t3) AS _t1(s)",
             },
         )
         self.validate_all(
@@ -409,15 +444,15 @@ LANGUAGE js AS
         self.validate_all(
             "SELECT results FROM Coordinates, Coordinates.position AS results",
             write={
-                "bigquery": "SELECT results FROM Coordinates, UNNEST(Coordinates.position) AS results",
-                "presto": "SELECT results FROM Coordinates, UNNEST(Coordinates.position) AS _t0(results)",
+                "bigquery": "SELECT results FROM Coordinates CROSS JOIN UNNEST(Coordinates.position) AS results",
+                "presto": "SELECT results FROM Coordinates CROSS JOIN UNNEST(Coordinates.position) AS _t0(results)",
             },
         )
         self.validate_all(
             "SELECT results FROM Coordinates, `Coordinates.position` AS results",
             write={
-                "bigquery": "SELECT results FROM Coordinates, `Coordinates.position` AS results",
-                "presto": 'SELECT results FROM Coordinates, "Coordinates"."position" AS results',
+                "bigquery": "SELECT results FROM Coordinates CROSS JOIN `Coordinates.position` AS results",
+                "presto": 'SELECT results FROM Coordinates CROSS JOIN "Coordinates"."position" AS results',
             },
         )
         self.validate_all(
@@ -427,9 +462,9 @@ LANGUAGE js AS
                 "redshift": "SELECT results FROM Coordinates AS c, c.position AS results",
             },
             write={
-                "bigquery": "SELECT results FROM Coordinates AS c, UNNEST(c.position) AS results",
-                "presto": "SELECT results FROM Coordinates AS c, UNNEST(c.position) AS _t0(results)",
-                "redshift": "SELECT results FROM Coordinates AS c, c.position AS results",
+                "bigquery": "SELECT results FROM Coordinates AS c CROSS JOIN UNNEST(c.position) AS results",
+                "presto": "SELECT results FROM Coordinates AS c CROSS JOIN UNNEST(c.position) AS _t0(results)",
+                "redshift": "SELECT results FROM Coordinates AS c CROSS JOIN c.position AS results",
             },
         )
         self.validate_all(
@@ -1230,7 +1265,7 @@ LANGUAGE js AS
                 "bigquery": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a INT64, struct_col_b STRING>)",
                 "duckdb": "CREATE TABLE db.example_table (col_a STRUCT(struct_col_a INT, struct_col_b TEXT))",
                 "presto": "CREATE TABLE db.example_table (col_a ROW(struct_col_a INTEGER, struct_col_b VARCHAR))",
-                "hive": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a INT, struct_col_b STRING>)",
+                "hive": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a: INT, struct_col_b: STRING>)",
                 "spark": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a: INT, struct_col_b: STRING>)",
             },
         )
@@ -1240,7 +1275,7 @@ LANGUAGE js AS
                 "bigquery": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a INT64, struct_col_b STRUCT<nested_col_a STRING, nested_col_b STRING>>)",
                 "duckdb": "CREATE TABLE db.example_table (col_a STRUCT(struct_col_a BIGINT, struct_col_b STRUCT(nested_col_a TEXT, nested_col_b TEXT)))",
                 "presto": "CREATE TABLE db.example_table (col_a ROW(struct_col_a BIGINT, struct_col_b ROW(nested_col_a VARCHAR, nested_col_b VARCHAR)))",
-                "hive": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a BIGINT, struct_col_b STRUCT<nested_col_a STRING, nested_col_b STRING>>)",
+                "hive": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a: BIGINT, struct_col_b: STRUCT<nested_col_a: STRING, nested_col_b: STRING>>)",
                 "spark": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a: BIGINT, struct_col_b: STRUCT<nested_col_a: STRING, nested_col_b: STRING>>)",
             },
         )
@@ -1373,8 +1408,10 @@ LANGUAGE js AS
         self.validate_all(
             "CURRENT_DATE('UTC')",
             write={
+                "bigquery": "CURRENT_DATE('UTC')",
                 "mysql": "CURRENT_DATE AT TIME ZONE 'UTC'",
                 "postgres": "CURRENT_DATE AT TIME ZONE 'UTC'",
+                "snowflake": "CAST(CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP()) AS DATE)",
             },
         )
         self.validate_all(
@@ -1534,20 +1571,6 @@ WHERE
             },
         )
         self.validate_all(
-            "SELECT GENERATE_DATE_ARRAY('2016-10-05', '2016-10-08')",
-            write={
-                "duckdb": "SELECT CAST(GENERATE_SERIES(CAST('2016-10-05' AS DATE), CAST('2016-10-08' AS DATE), INTERVAL '1' DAY) AS DATE[])",
-                "bigquery": "SELECT GENERATE_DATE_ARRAY('2016-10-05', '2016-10-08', INTERVAL '1' DAY)",
-            },
-        )
-        self.validate_all(
-            "SELECT GENERATE_DATE_ARRAY('2016-10-05', '2016-10-08', INTERVAL '1' MONTH)",
-            write={
-                "duckdb": "SELECT CAST(GENERATE_SERIES(CAST('2016-10-05' AS DATE), CAST('2016-10-08' AS DATE), INTERVAL '1' MONTH) AS DATE[])",
-                "bigquery": "SELECT GENERATE_DATE_ARRAY('2016-10-05', '2016-10-08', INTERVAL '1' MONTH)",
-            },
-        )
-        self.validate_all(
             "SELECT GENERATE_TIMESTAMP_ARRAY('2016-10-05 00:00:00', '2016-10-07 00:00:00', INTERVAL '1' DAY)",
             write={
                 "duckdb": "SELECT GENERATE_SERIES(CAST('2016-10-05 00:00:00' AS TIMESTAMP), CAST('2016-10-07 00:00:00' AS TIMESTAMP), INTERVAL '1' DAY)",
@@ -1659,7 +1682,7 @@ WHERE
         self.validate_all(
             """SELECT INT64(JSON_QUERY(JSON '{"key": 2000}', '$.key'))""",
             write={
-                "bigquery": """SELECT INT64(JSON_EXTRACT(PARSE_JSON('{"key": 2000}'), '$.key'))""",
+                "bigquery": """SELECT INT64(JSON_QUERY(PARSE_JSON('{"key": 2000}'), '$.key'))""",
                 "duckdb": """SELECT CAST(JSON('{"key": 2000}') -> '$.key' AS BIGINT)""",
                 "snowflake": """SELECT CAST(GET_PATH(PARSE_JSON('{"key": 2000}'), 'key') AS BIGINT)""",
             },
@@ -1708,8 +1731,8 @@ WHERE
                 "duckdb": 'SELECT * FROM t1, UNNEST("t1") "t1" ("col")',
             },
             write={
-                "bigquery": "SELECT * FROM t1, UNNEST(`t1`) AS `col`",
-                "redshift": 'SELECT * FROM t1, "t1" AS "col"',
+                "bigquery": "SELECT * FROM t1 CROSS JOIN UNNEST(`t1`) AS `col`",
+                "redshift": 'SELECT * FROM t1 CROSS JOIN "t1" AS "col"',
             },
         )
 
@@ -1719,8 +1742,8 @@ WHERE
                 "duckdb": 'SELECT * FROM t, UNNEST("t1"."t2"."t3") "t1" ("col")',
             },
             write={
-                "bigquery": "SELECT * FROM t, UNNEST(`t2`.`t3`) AS `col`",
-                "redshift": 'SELECT * FROM t, "t2"."t3" AS "col"',
+                "bigquery": "SELECT * FROM t CROSS JOIN UNNEST(`t2`.`t3`) AS `col`",
+                "redshift": 'SELECT * FROM t CROSS JOIN "t2"."t3" AS "col"',
             },
         )
 
@@ -1730,12 +1753,27 @@ WHERE
                 "duckdb": 'SELECT * FROM t1, UNNEST("t1"."t2"."t3"."t4") "t3" ("col")',
             },
             write={
-                "bigquery": "SELECT * FROM t1, UNNEST(`t1`.`t2`.`t3`.`t4`) AS `col`",
-                "redshift": 'SELECT * FROM t1, "t1"."t2"."t3"."t4" AS "col"',
+                "bigquery": "SELECT * FROM t1 CROSS JOIN UNNEST(`t1`.`t2`.`t3`.`t4`) AS `col`",
+                "redshift": 'SELECT * FROM t1 CROSS JOIN "t1"."t2"."t3"."t4" AS "col"',
+            },
+        )
+
+        self.validate_identity("ARRAY_FIRST(['a', 'b'])")
+        self.validate_identity("ARRAY_LAST(['a', 'b'])")
+        self.validate_identity("JSON_TYPE(PARSE_JSON('1'))")
+
+        self.validate_all(
+            "SELECT CAST(col AS STRUCT<fld1 STRUCT<fld2 INT>>).fld1.fld2",
+            write={
+                "bigquery": "SELECT CAST(col AS STRUCT<fld1 STRUCT<fld2 INT64>>).fld1.fld2",
+                "snowflake": "SELECT CAST(col AS OBJECT(fld1 OBJECT(fld2 INT))):fld1.fld2",
             },
         )
 
     def test_errors(self):
+        with self.assertRaises(ParseError):
+            self.parse_one("SELECT * FROM a - b.c.d2")
+
         with self.assertRaises(TokenError):
             transpile("'\\'", read="bigquery")
 
@@ -1761,12 +1799,6 @@ WHERE
             transpile("DATE_ADD(x, day)", read="bigquery")
 
     def test_warnings(self):
-        with self.assertLogs(parser_logger) as cm:
-            self.validate_identity(
-                "/* some comment */ DECLARE foo DATE DEFAULT DATE_SUB(current_date, INTERVAL 2 day)"
-            )
-            self.assertIn("contains unsupported syntax", cm.output[0])
-
         with self.assertLogs(helper_logger) as cm:
             self.validate_identity(
                 "WITH cte(c) AS (SELECT * FROM t) SELECT * FROM cte",
@@ -2197,6 +2229,28 @@ OPTIONS (
             },
         )
 
+    def test_qualified_unnest(self):
+        sql = """
+        SELECT x, ys, zs
+        FROM UNNEST([STRUCT('x' AS x, ['y1', 'y2', 'y3'] AS y, ['z1', 'z2', 'z3'] AS z)]),
+        UNNEST(y) AS ys,
+        UNNEST(z) AS zs
+        """
+        ast = qualify_tables(self.parse_one(sql), dialect="bigquery")
+
+        self.assertEqual(
+            ast.sql("bigquery"),
+            "SELECT x, ys, zs FROM UNNEST([STRUCT('x' AS x, ['y1', 'y2', 'y3'] AS y, ['z1', 'z2', 'z3'] AS z)]) AS _q_0 CROSS JOIN UNNEST(y) AS ys CROSS JOIN UNNEST(z) AS zs",
+        )
+        self.assertEqual(
+            ast.sql("duckdb"),
+            "SELECT x, ys, zs FROM (SELECT UNNEST([{'x': 'x', 'y': ['y1', 'y2', 'y3'], 'z': ['z1', 'z2', 'z3']}], max_depth => 2)) AS _q_0 CROSS JOIN UNNEST(y) AS _q_1(ys) CROSS JOIN UNNEST(z) AS _q_2(zs)",
+        )
+        self.assertEqual(
+            ast.sql("snowflake"),
+            "SELECT _q_0['x'] AS x, ys, zs FROM TABLE(FLATTEN(INPUT => [OBJECT_CONSTRUCT('x', 'x', 'y', ['y1', 'y2', 'y3'], 'z', ['z1', 'z2', 'z3'])])) AS _q_0(seq, key, path, index, _q_0, this) CROSS JOIN TABLE(FLATTEN(INPUT => _q_0['y'])) AS _q_1(seq, key, path, index, ys, this) CROSS JOIN TABLE(FLATTEN(INPUT => _q_0['z'])) AS _q_2(seq, key, path, index, zs, this)",
+        )
+
     def test_range_type(self):
         for type, value in (
             ("RANGE<DATE>", "'[2020-01-01, 2020-12-31)'"),
@@ -2248,9 +2302,17 @@ OPTIONS (
         self.validate_all(
             """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
             write={
-                "bigquery": """SELECT JSON_EXTRACT('{"class": {"students": []}}', '$.class')""",
+                "bigquery": """SELECT JSON_QUERY('{"class": {"students": []}}', '$.class')""",
                 "duckdb": """SELECT '{"class": {"students": []}}' -> '$.class'""",
                 "snowflake": """SELECT GET_PATH(PARSE_JSON('{"class": {"students": []}}'), 'class')""",
+            },
+        )
+
+        self.validate_all(
+            """SELECT JSON_QUERY(foo, '$.class')""",
+            write={
+                "bigquery": """SELECT JSON_QUERY(foo, '$.class')""",
+                "snowflake": """SELECT GET_PATH(PARSE_JSON(foo), 'class')""",
             },
         )
 
@@ -2504,7 +2566,7 @@ OPTIONS (
             with self.subTest(f"Testing {join_ops} in test_with_offset"):
                 self.validate_identity(
                     f"SELECT * FROM t1, UNNEST([1, 2]) AS hit WITH OFFSET {join_ops} JOIN foo",
-                    f"SELECT * FROM t1, UNNEST([1, 2]) AS hit WITH OFFSET AS offset {join_ops} JOIN foo",
+                    f"SELECT * FROM t1 CROSS JOIN UNNEST([1, 2]) AS hit WITH OFFSET AS offset {join_ops} JOIN foo",
                 )
 
     def test_identifier_meta(self):
@@ -2576,3 +2638,140 @@ OPTIONS (
             self.assertEqual(qualified.sql("bigquery"), "SELECT * FROM `P`.`D`.`T` AS `T`")
         finally:
             BigQuery.NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
+
+    def test_array_agg(self):
+        for distinct in ("", "DISTINCT "):
+            self.validate_all(
+                f"SELECT ARRAY_AGG({distinct}x ORDER BY x)",
+                write={
+                    "bigquery": f"SELECT ARRAY_AGG({distinct}x ORDER BY x)",
+                    "snowflake": f"SELECT ARRAY_AGG({distinct}x) WITHIN GROUP (ORDER BY x NULLS FIRST)",
+                },
+            )
+
+        for nulls in ("", " IGNORE NULLS", " RESPECT NULLS"):
+            self.validate_all(
+                f"SELECT ARRAY_AGG(x{nulls} ORDER BY col1 ASC, col2 DESC)",
+                write={
+                    "bigquery": f"SELECT ARRAY_AGG(x{nulls} ORDER BY col1 ASC, col2 DESC)",
+                    "snowflake": "SELECT ARRAY_AGG(x) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST, col2 DESC NULLS LAST)",
+                },
+            )
+
+    def test_select_as_struct(self):
+        self.validate_all(
+            "SELECT ARRAY(SELECT AS STRUCT x1 AS x1, x2 AS x2 FROM t) AS array_col",
+            write={
+                "bigquery": "SELECT ARRAY(SELECT AS STRUCT x1 AS x1, x2 AS x2 FROM t) AS array_col",
+                "snowflake": "SELECT (SELECT ARRAY_AGG(OBJECT_CONSTRUCT('x1', x1, 'x2', x2)) FROM t) AS array_col",
+            },
+        )
+
+        self.validate_all(
+            "WITH t1 AS (SELECT ARRAY(SELECT AS STRUCT x1 AS alias_x1, x2 /* test */ FROM t2) AS array_col) SELECT array_col[0].alias_x1, array_col[0].x2 FROM t1",
+            write={
+                "bigquery": "WITH t1 AS (SELECT ARRAY(SELECT AS STRUCT x1 AS alias_x1, x2 /* test */ FROM t2) AS array_col) SELECT array_col[0].alias_x1, array_col[0].x2 FROM t1",
+                "snowflake": "WITH t1 AS (SELECT (SELECT ARRAY_AGG(OBJECT_CONSTRUCT('alias_x1', x1, 'x2', x2 /* test */)) FROM t2) AS array_col) SELECT array_col[0].alias_x1, array_col[0].x2 FROM t1",
+            },
+        )
+
+        self.validate_all(
+            "WITH t1 AS (SELECT ARRAY(SELECT AS STRUCT 1 AS a, 2 AS b) AS array_col) SELECT array_col[0].a, array_col[0].b FROM t1",
+            write={
+                "bigquery": "WITH t1 AS (SELECT ARRAY(SELECT AS STRUCT 1 AS a, 2 AS b) AS array_col) SELECT array_col[0].a, array_col[0].b FROM t1",
+                "snowflake": "WITH t1 AS (SELECT (SELECT ARRAY_AGG(OBJECT_CONSTRUCT('a', 1, 'b', 2))) AS array_col) SELECT array_col[0].a, array_col[0].b FROM t1",
+            },
+        )
+
+        self.validate_all(
+            "WITH t1 AS (SELECT ARRAY(SELECT AS STRUCT x1 AS alias_x1, x2 /* test */ FROM t2 WHERE x2 = 4) AS array_col) SELECT array_col[0].alias_x1, array_col[0].x2 FROM t1",
+            write={
+                "bigquery": "WITH t1 AS (SELECT ARRAY(SELECT AS STRUCT x1 AS alias_x1, x2 /* test */ FROM t2 WHERE x2 = 4) AS array_col) SELECT array_col[0].alias_x1, array_col[0].x2 FROM t1",
+                "snowflake": "WITH t1 AS (SELECT (SELECT ARRAY_AGG(OBJECT_CONSTRUCT('alias_x1', x1, 'x2', x2 /* test */)) FROM t2 WHERE x2 = 4) AS array_col) SELECT array_col[0].alias_x1, array_col[0].x2 FROM t1",
+            },
+        )
+
+    def test_avoid_generating_nested_comment(self):
+        sql = """
+        select
+            id,
+            foo,
+            -- bar, /* the thing */
+        from facts
+        """
+        expected = "SELECT\n  id,\n  foo\n/* bar, /* the thing * / */\nFROM facts"
+        self.assertEqual(self.parse_one(sql).sql("bigquery", pretty=True), expected)
+
+    def test_unnest_with_offset(self):
+        for offset, alias in (("", "offset"), ("AS pos", "pos")):
+            self.validate_all(
+                f"SELECT * FROM tbl CROSS JOIN UNNEST(col) AS ref WITH OFFSET {offset}",
+                write={
+                    "bigquery": f"SELECT * FROM tbl CROSS JOIN UNNEST(col) AS ref WITH OFFSET AS {alias}",
+                    "hive": f"SELECT * FROM tbl LATERAL VIEW POSEXPLODE(col) AS {alias}, ref",
+                    "spark2": f"SELECT * FROM tbl LATERAL VIEW POSEXPLODE(col) AS {alias}, ref",
+                    "spark": f"SELECT * FROM tbl LATERAL VIEW POSEXPLODE(col) AS {alias}, ref",
+                    "databricks": f"SELECT * FROM tbl LATERAL VIEW POSEXPLODE(col) AS {alias}, ref",
+                },
+            )
+
+    def test_generate_date_array(self):
+        self.validate_all(
+            "SELECT GENERATE_DATE_ARRAY('2016-10-05', '2016-10-08')",
+            write={
+                "bigquery": "SELECT GENERATE_DATE_ARRAY('2016-10-05', '2016-10-08', INTERVAL '1' DAY)",
+                "duckdb": "SELECT CAST(GENERATE_SERIES(CAST('2016-10-05' AS DATE), CAST('2016-10-08' AS DATE), INTERVAL '1' DAY) AS DATE[])",
+            },
+        )
+        self.validate_all(
+            "SELECT GENERATE_DATE_ARRAY('2016-10-05', '2016-10-08', INTERVAL '1' MONTH)",
+            write={
+                "bigquery": "SELECT GENERATE_DATE_ARRAY('2016-10-05', '2016-10-08', INTERVAL '1' MONTH)",
+                "duckdb": "SELECT CAST(GENERATE_SERIES(CAST('2016-10-05' AS DATE), CAST('2016-10-08' AS DATE), INTERVAL '1' MONTH) AS DATE[])",
+            },
+        )
+        self.validate_all(
+            "SELECT id, mnth FROM t CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(start_month, DATE_TRUNC(CURRENT_DATE, MONTH), INTERVAL '1' MONTH)) AS mnth",
+            write={
+                "bigquery": "SELECT id, mnth FROM t CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(start_month, DATE_TRUNC(CURRENT_DATE, MONTH), INTERVAL '1' MONTH)) AS mnth",
+                "duckdb": "SELECT id, mnth FROM t CROSS JOIN UNNEST(CAST(GENERATE_SERIES(start_month, DATE_TRUNC('MONTH', CURRENT_DATE), INTERVAL '1' MONTH) AS DATE[])) AS _t0(mnth)",
+                "snowflake": "SELECT id, DATEADD(MONTH, CAST(mnth AS INT), CAST(start_month AS DATE)) AS mnth FROM t, LATERAL FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (DATEDIFF(MONTH, start_month, DATE_TRUNC('MONTH', CURRENT_DATE)) + 1 - 1) + 1)) AS _t0(seq, key, path, index, mnth, this)",
+            },
+        )
+        self.validate_all(
+            "SELECT id, mnth AS a_mnth FROM t CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(start_month, DATE_TRUNC(CURRENT_DATE, MONTH), INTERVAL '1' MONTH)) AS mnth",
+            write={
+                "bigquery": "SELECT id, mnth AS a_mnth FROM t CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(start_month, DATE_TRUNC(CURRENT_DATE, MONTH), INTERVAL '1' MONTH)) AS mnth",
+                "duckdb": "SELECT id, mnth AS a_mnth FROM t CROSS JOIN UNNEST(CAST(GENERATE_SERIES(start_month, DATE_TRUNC('MONTH', CURRENT_DATE), INTERVAL '1' MONTH) AS DATE[])) AS _t0(mnth)",
+                "snowflake": "SELECT id, DATEADD(MONTH, CAST(mnth AS INT), CAST(start_month AS DATE)) AS a_mnth FROM t, LATERAL FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (DATEDIFF(MONTH, start_month, DATE_TRUNC('MONTH', CURRENT_DATE)) + 1 - 1) + 1)) AS _t0(seq, key, path, index, mnth, this)",
+            },
+        )
+        self.validate_all(
+            "SELECT id, mnth + 1 AS a_mnth FROM t CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(start_month, DATE_TRUNC(CURRENT_DATE, MONTH), INTERVAL '1' MONTH)) AS mnth",
+            write={
+                "bigquery": "SELECT id, mnth + 1 AS a_mnth FROM t CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(start_month, DATE_TRUNC(CURRENT_DATE, MONTH), INTERVAL '1' MONTH)) AS mnth",
+                "duckdb": "SELECT id, mnth + 1 AS a_mnth FROM t CROSS JOIN UNNEST(CAST(GENERATE_SERIES(start_month, DATE_TRUNC('MONTH', CURRENT_DATE), INTERVAL '1' MONTH) AS DATE[])) AS _t0(mnth)",
+                "snowflake": "SELECT id, DATEADD(MONTH, CAST(mnth AS INT), CAST(start_month AS DATE)) + 1 AS a_mnth FROM t, LATERAL FLATTEN(INPUT => ARRAY_GENERATE_RANGE(0, (DATEDIFF(MONTH, start_month, DATE_TRUNC('MONTH', CURRENT_DATE)) + 1 - 1) + 1)) AS _t0(seq, key, path, index, mnth, this)",
+            },
+        )
+
+    def test_json_array(self):
+        self.validate_identity("JSON_ARRAY()")
+        self.validate_identity("JSON_ARRAY(10)")
+        self.validate_identity("JSON_ARRAY([])")
+        self.validate_identity("JSON_ARRAY(STRUCT(10 AS a, 'foo' AS b))")
+        self.validate_identity("JSON_ARRAY(10, ['foo', 'bar'], [20, 30])")
+
+    def test_declare(self):
+        # supported cases
+        self.validate_identity("DECLARE X INT64")
+        self.validate_identity("DECLARE X INT64 DEFAULT 1")
+        self.validate_identity("DECLARE X FLOAT64 DEFAULT 0.9")
+        self.validate_identity("DECLARE X INT64 DEFAULT (SELECT MAX(col) FROM foo)")
+        self.validate_identity("DECLARE X, Y, Z INT64")
+        self.validate_identity("DECLARE X, Y, Z INT64 DEFAULT 42")
+        self.validate_identity("DECLARE X, Y, Z INT64 DEFAULT (SELECT 42)")
+        self.validate_identity("DECLARE START_DATE DATE DEFAULT CURRENT_DATE - 1")
+        self.validate_identity(
+            "DECLARE TS TIMESTAMP DEFAULT CURRENT_TIMESTAMP() - INTERVAL '1' HOUR"
+        )
