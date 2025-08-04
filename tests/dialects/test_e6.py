@@ -580,10 +580,10 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT EXTRACT(fieldStr FROM date_expr)",
+            "SELECT EXTRACT(FIELDSTR FROM CAST(date_expr AS DATE))",
             read={
-                "databricks": "SELECT DATE_PART(fieldStr, date_expr)",
-                "e6": "SELECT DATEPART(fieldStr, date_expr)",
+                "databricks": "SELECT DATE_PART(FIELDSTR, date_expr)",
+                "e6": "SELECT EXTRACT(FIELDSTR FROM CAST(date_expr AS DATE))",
             },
         )
 
@@ -591,6 +591,18 @@ class TestE6(Validator):
             "SELECT A IS NOT NULL",
             read={"databricks": "SELECT ISNOTNULL(A)"},
             write={"databricks": "SELECT NOT A IS NULL"},
+        )
+
+        self.validate_all(
+            "SELECT EXTRACT(QUARTER FROM CAST('2016-08-31' AS DATE))",
+            read={"databricks": "SELECT QUARTER('2016-08-31')"},
+        )
+
+        self.validate_all(
+            "SELECT MIN(DATE) AS C1 FROM (SELECT DATE FROM cdr_adhoc_analysis.default.gr_3p_demand_ix_revenue WHERE (((mappedflag = 'mapped' AND parent_advertiser_name_clean = 'toronto-dominion bank (td bank group)') AND seller_defined = 'yes') AND COALESCE(YEAR(TO_DATE(DATE)), 0) = 2025) AND COALESCE(EXTRACT(QUARTER FROM CAST(DATE AS DATE)), 0) = 3) AS ITBL",
+            read={
+                "databricks": "SELECT MIN(DATE) AS C1 FROM (SELECT DATE FROM cdr_adhoc_analysis.default.gr_3p_demand_ix_revenue WHERE (((mappedflag = 'mapped' AND parent_advertiser_name_clean = 'toronto-dominion bank (td bank group)') AND seller_defined = 'yes') AND COALESCE(YEAR(DATE), 0) = 2025) AND COALESCE(QUARTER(DATE), 0) = 3) AS ITBL"
+            },
         )
 
         self.validate_all(
@@ -1977,14 +1989,14 @@ class TestE6(Validator):
                 "databricks": "SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (6), (6), (7), (9), (10) AS tab(col)"
             },
         )
-        
+
         # Additional STDDEV tests from multiple dialects
         self.validate_all(
             "SELECT STDDEV(col) FROM (VALUES (1), (2), (3), (4)) AS tab(col)",
             read={
                 "databricks": "SELECT stddev(col) FROM VALUES (1), (2), (3), (4) AS tab(col)",
                 "snowflake": "SELECT STDDEV(col) FROM VALUES (1), (2), (3), (4) AS tab(col)",
-                "postgres": "SELECT STDDEV(col) FROM VALUES (1), (2), (3), (4) AS tab(col)"
+                "postgres": "SELECT STDDEV(col) FROM VALUES (1), (2), (3), (4) AS tab(col)",
             },
         )
         self.validate_all(
@@ -1992,26 +2004,26 @@ class TestE6(Validator):
             read={
                 "databricks": "SELECT stddev_samp(col) FROM VALUES (1), (2), (3), (4) AS tab(col)",
                 "snowflake": "SELECT STDDEV_SAMP(col) FROM VALUES (1), (2), (3), (4) AS tab(col)",
-                "postgres": "SELECT STDDEV_SAMP(col) FROM VALUES (1), (2), (3), (4) AS tab(col)"
+                "postgres": "SELECT STDDEV_SAMP(col) FROM VALUES (1), (2), (3), (4) AS tab(col)",
             },
         )
-        
+
         # COVAR_SAMP tests from multiple dialects
         self.validate_all(
             "SELECT COVAR_SAMP(x, y) FROM (VALUES (1, 10), (2, 20), (3, 30)) AS tab(x, y)",
             read={
                 "databricks": "SELECT covar_samp(x, y) FROM VALUES (1, 10), (2, 20), (3, 30) AS tab(x, y)",
                 "snowflake": "SELECT COVAR_SAMP(x, y) FROM VALUES (1, 10), (2, 20), (3, 30) AS tab(x, y)",
-                "postgres": "SELECT COVAR_SAMP(x, y) FROM VALUES (1, 10), (2, 20), (3, 30) AS tab(x, y)"
+                "postgres": "SELECT COVAR_SAMP(x, y) FROM VALUES (1, 10), (2, 20), (3, 30) AS tab(x, y)",
             },
         )
-        
+
         # VARIANCE_SAMP tests from multiple dialects
         self.validate_all(
             "SELECT VARIANCE_SAMP(col) FROM (VALUES (1), (2), (3), (4), (5)) AS tab(col)",
             read={
                 "databricks": "SELECT variance_samp(col) FROM VALUES (1), (2), (3), (4), (5) AS tab(col)",
-                "snowflake": "SELECT VARIANCE_SAMP(col) FROM VALUES (1), (2), (3), (4), (5) AS tab(col)"
+                "snowflake": "SELECT VARIANCE_SAMP(col) FROM VALUES (1), (2), (3), (4), (5) AS tab(col)",
             },
         )
         self.validate_all(
@@ -2020,13 +2032,13 @@ class TestE6(Validator):
                 "databricks": "SELECT variance_samp(DISTINCT col) FROM VALUES (1), (2), (2), (3), (3), (3) AS tab(col)"
             },
         )
-        
+
         # VAR_SAMP tests from multiple dialects
         self.validate_all(
             "SELECT VAR_SAMP(col) FROM (VALUES (1), (2), (3), (4)) AS tab(col)",
             read={
                 "databricks": "SELECT var_samp(col) FROM VALUES (1), (2), (3), (4) AS tab(col)",
-                "snowflake": "SELECT VAR_SAMP(col) FROM VALUES (1), (2), (3), (4) AS tab(col)"
+                "snowflake": "SELECT VAR_SAMP(col) FROM VALUES (1), (2), (3), (4) AS tab(col)",
             },
         )
 
@@ -2350,7 +2362,7 @@ class TestE6(Validator):
             "SELECT category, brand, AVG(price) AS average_price FROM products GROUP BY ALL",
             read={
                 "databricks": "SELECT category, brand, AVG(price) AS average_price FROM products GROUP BY ALL"
-            }
+            },
         )
 
         # GROUP BY ALL with CTE
@@ -2358,7 +2370,7 @@ class TestE6(Validator):
             """WITH products AS (SELECT 'Electronics' AS category, 'BrandA' AS brand, 100 AS price UNION ALL SELECT 'Electronics' AS category, 'BrandA' AS brand, 150 AS price) SELECT category, brand, AVG(price) AS average_price FROM products GROUP BY ALL""",
             read={
                 "databricks": """WITH products AS (SELECT 'Electronics' AS category, 'BrandA' AS brand, 100 AS price UNION ALL SELECT 'Electronics' AS category, 'BrandA' AS brand, 150 AS price) SELECT category, brand, AVG(price) AS average_price FROM products GROUP BY ALL"""
-            }
+            },
         )
 
         # GROUP BY ALL with ORDER BY
@@ -2366,7 +2378,7 @@ class TestE6(Validator):
             "SELECT department, COUNT(*) AS employee_count FROM employees GROUP BY ALL ORDER BY employee_count DESC",
             read={
                 "databricks": "SELECT department, COUNT(*) AS employee_count FROM employees GROUP BY ALL ORDER BY employee_count DESC"
-            }
+            },
         )
 
         # GROUP BY ALL with HAVING clause
@@ -2374,7 +2386,7 @@ class TestE6(Validator):
             "SELECT region, SUM(sales) AS total_sales FROM sales_data GROUP BY ALL HAVING SUM(sales) > 1000",
             read={
                 "databricks": "SELECT region, SUM(sales) AS total_sales FROM sales_data GROUP BY ALL HAVING SUM(sales) > 1000"
-            }
+            },
         )
 
         # GROUP BY ALL with multiple aggregations
@@ -2382,7 +2394,7 @@ class TestE6(Validator):
             "SELECT product_category, COUNT(*) AS item_count, AVG(price) AS avg_price, MAX(price) AS max_price FROM inventory GROUP BY ALL",
             read={
                 "databricks": "SELECT product_category, COUNT(*) AS item_count, AVG(price) AS avg_price, MAX(price) AS max_price FROM inventory GROUP BY ALL"
-            }
+            },
         )
 
     def test_keywords(self):

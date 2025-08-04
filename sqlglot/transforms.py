@@ -945,6 +945,7 @@ def eliminate_join_marks(expression: exp.Expression) -> exp.Expression:
 
             joins_ons[left_join_table.pop()].append(cond)
 
+
         old_joins = {join.alias_or_name: join for join in joins}
         new_joins = {}
         query_from = query.args["from"]
@@ -971,6 +972,7 @@ def eliminate_join_marks(expression: exp.Expression) -> exp.Expression:
             assert (
                 len(only_old_joins) >= 1
             ), "Cannot determine which table to use in the new FROM clause"
+
 
             new_from_name = list(only_old_joins)[0]
             query.set("from", exp.From(this=old_joins[new_from_name].this))
