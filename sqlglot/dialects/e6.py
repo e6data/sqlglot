@@ -2056,33 +2056,36 @@ class E6(Dialect):
             if not args:
                 return "''"
             
-            # Process arguments: collect all individual elements
-            all_elements = []
+            # Collect all non-NULL expression nodes (flattening arrays)
+            array_expressions = []
             
             for arg in args:
                 if isinstance(arg, exp.Array):
-                    # For array arguments: extract individual elements and filter NULLs
-                    # array('S', 'Q', NULL, 'L') becomes individual elements 'S', 'Q', 'L'
+                    # For array arguments: add non-NULL elements
                     for element in arg.expressions:
                         if not isinstance(element, exp.Null):
-                            all_elements.append(self.sql(element))
+                            array_expressions.append(element)
                 else:
                     # For string arguments: add if not NULL
                     if not isinstance(arg, exp.Null):
-                        all_elements.append(self.sql(arg))
+                        array_expressions.append(arg)
             
             # If no elements after filtering, return empty string
-            if not all_elements:
+            if not array_expressions:
                 return "''"
             
-            if len(all_elements) == 1:
-                # Single element case
-                return all_elements[0]
+            # Single element case - just return the element
+            if len(array_expressions) == 1:
+                return self.sql(array_expressions[0])
             
             # Multiple elements: create array and join with separator
             # Build: ARRAY_TO_STRING(ARRAY[element1, element2, ...], separator)
-            elements_list = ", ".join(all_elements)
-            return f"ARRAY_TO_STRING(ARRAY[{elements_list}], {self.sql(separator)})"
+            # Create Array expression with the actual expression nodes
+            array_expr = exp.Array(expressions=array_expressions)
+            
+            # Use ARRAY_TO_STRING function directly instead of exp.ArrayToString
+            # to avoid the ARRAY_JOIN mapping in TRANSFORMS
+            return self.func("ARRAY_TO_STRING", array_expr, separator)
 
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
