@@ -936,53 +936,12 @@ def eliminate_join_marks(expression: exp.Expression) -> exp.Expression:
             if not left_join_table:
                 continue
 
-
-            predicate = column.find_ancestor(exp.Predicate, exp.Select)
-            assert isinstance(predicate, exp.Binary), (
-                "Columns can only be marked with (+) when involved in a binary operation"
-            )
-
-            predicate_parent = predicate.parent
-            join_predicate = predicate.pop()
-
-            left_columns = [
-                c for c in join_predicate.left.find_all(exp.Column) if c.args.get("join_mark")
-            ]
-            right_columns = [
-                c for c in join_predicate.right.find_all(exp.Column) if c.args.get("join_mark")
-            ]
-
-            assert not (left_columns and right_columns), (
-                "The (+) marker cannot appear in both sides of a binary predicate"
-            )
-
-            marked_column_tables = set()
-            for col in left_columns or right_columns:
-                table = col.table
-                assert table, f"Column {col} needs to be qualified with a table"
-
             assert not (
                 len(left_join_table) > 1
             ), "Cannot combine JOIN predicates from different tables"
 
-
             for col in join_cols:
                 col.set("join_mark", False)
-
-
-            assert len(marked_column_tables) == 1, (
-                "Columns of only a single table can be marked with (+) in a given binary predicate"
-            )
-
-            # Add predicate if join already copied, or add join if it is new
-            join_this = old_joins.get(col.table, query_from).this
-            existing_join = new_joins.get(join_this.alias_or_name)
-            if existing_join:
-                existing_join.set("on", exp.and_(existing_join.args["on"], join_predicate))
-            else:
-                new_joins[join_this.alias_or_name] = exp.Join(
-                    this=join_this.copy(), on=join_predicate.copy(), kind="LEFT"
-                )
 
             joins_ons[left_join_table.pop()].append(cond)
 
@@ -1009,11 +968,6 @@ def eliminate_join_marks(expression: exp.Expression) -> exp.Expression:
                     parent.pop()
 
         if query_from.alias_or_name in new_joins:
-
-            assert len(only_old_join_sources) >= 1, (
-                "Cannot determine which table to use in the new FROM clause"
-            )
-
             only_old_joins = old_joins.keys() - new_joins.keys()
             assert (
                 len(only_old_joins) >= 1
