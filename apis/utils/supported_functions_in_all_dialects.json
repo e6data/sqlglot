@@ -792,13 +792,14 @@
         "RAND",
         "CORR",
         "COVAR_POP",
+        "URL_DECODE",
+        "ARRAY_INTERSECT",
         "COVAR_SAMP",
         "VARIANCE_SAMP",
         "VAR_SAMP",
-        "URL_DECODE",,
+        "URL_DECODE",
         "TYPEOF",
-        "TIMEDIFF",
-        "INTERVAL"
+        "TIMEDIFF"
     ],
     "databricks": [
          "ABS",

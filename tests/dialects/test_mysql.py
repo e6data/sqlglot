@@ -92,6 +92,20 @@ class TestMySQL(Validator):
             "CREATE TABLE test_table (id INT AUTO_INCREMENT, PRIMARY KEY (id) USING HASH)"
         )
         self.validate_identity(
+            "CREATE TABLE test (a INT, b INT GENERATED ALWAYS AS (a + a) STORED)"
+        )
+        self.validate_identity(
+            "CREATE TABLE test (a INT, b INT GENERATED ALWAYS AS (a + a) VIRTUAL)"
+        )
+        self.validate_identity(
+            "CREATE TABLE test (a INT, b INT AS (a + a) STORED)",
+            "CREATE TABLE test (a INT, b INT GENERATED ALWAYS AS (a + a) STORED)",
+        )
+        self.validate_identity(
+            "CREATE TABLE test (a INT, b INT AS (a + a) VIRTUAL)",
+            "CREATE TABLE test (a INT, b INT GENERATED ALWAYS AS (a + a) VIRTUAL)",
+        )
+        self.validate_identity(
             "/*left*/ EXPLAIN SELECT /*hint*/ col FROM t1 /*right*/",
             "/* left */ DESCRIBE /* hint */ SELECT col FROM t1 /* right */",
         )
@@ -113,7 +127,7 @@ class TestMySQL(Validator):
         )
         self.validate_identity(
             "CREATE TABLE test (ts TIMESTAMP, ts_tz TIMESTAMPTZ, ts_ltz TIMESTAMPLTZ)",
-            "CREATE TABLE test (ts DATETIME, ts_tz TIMESTAMP, ts_ltz TIMESTAMP)",
+            "CREATE TABLE test (ts TIMESTAMP, ts_tz TIMESTAMP, ts_ltz TIMESTAMP)",
         )
         self.validate_identity(
             "ALTER TABLE test_table ALTER COLUMN test_column SET DATA TYPE LONGTEXT",
@@ -126,6 +140,10 @@ class TestMySQL(Validator):
         self.validate_identity(
             "CREATE TABLE `foo` (a VARCHAR(10), KEY idx_a (a DESC))",
             "CREATE TABLE `foo` (a VARCHAR(10), INDEX idx_a (a DESC))",
+        )
+        self.validate_identity(
+            "CREATE TABLE `foo` (a VARCHAR(10), UNIQUE INDEX idx_a (a))",
+            "CREATE TABLE `foo` (a VARCHAR(10), UNIQUE idx_a (a))",
         )
 
         self.validate_all(
@@ -285,6 +303,10 @@ class TestMySQL(Validator):
         self.validate_identity("SELECT @var1, @var2 := @var1")
         self.validate_identity("SELECT @var1 := COUNT(*) FROM t1")
 
+        self.validate_identity(
+            "SELECT DISTINCTROW tbl.col FROM tbl", "SELECT DISTINCT tbl.col FROM tbl"
+        )
+
     def test_types(self):
         for char_type in MySQL.Generator.CHAR_CAST_MAPPING:
             with self.subTest(f"MySQL cast into {char_type}"):
@@ -302,7 +324,7 @@ class TestMySQL(Validator):
         )
         self.validate_identity(
             "CAST(x AS TIMESTAMP)",
-            "CAST(x AS DATETIME)",
+            "TIMESTAMP(x)",
         )
         self.validate_identity(
             "CAST(x AS TIMESTAMPTZ)",
@@ -925,6 +947,7 @@ class TestMySQL(Validator):
                 "mysql": "GROUP_CONCAT(DISTINCT x ORDER BY y DESC SEPARATOR ',')",
                 "sqlite": "GROUP_CONCAT(DISTINCT x)",
                 "tsql": "STRING_AGG(x, ',') WITHIN GROUP (ORDER BY y DESC)",
+                "databricks": "LISTAGG(DISTINCT x, ',') WITHIN GROUP (ORDER BY y DESC)",
                 "postgres": "STRING_AGG(DISTINCT x, ',' ORDER BY y DESC NULLS LAST)",
             },
         )
@@ -934,6 +957,7 @@ class TestMySQL(Validator):
                 "mysql": "GROUP_CONCAT(x ORDER BY y SEPARATOR z)",
                 "sqlite": "GROUP_CONCAT(x, z)",
                 "tsql": "STRING_AGG(x, z) WITHIN GROUP (ORDER BY y)",
+                "databricks": "LISTAGG(x, z) WITHIN GROUP (ORDER BY y)",
                 "postgres": "STRING_AGG(x, z ORDER BY y NULLS FIRST)",
             },
         )
@@ -943,6 +967,7 @@ class TestMySQL(Validator):
                 "mysql": "GROUP_CONCAT(DISTINCT x ORDER BY y DESC SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(DISTINCT x, '')",
                 "tsql": "STRING_AGG(x, '') WITHIN GROUP (ORDER BY y DESC)",
+                "databricks": "LISTAGG(DISTINCT x, '') WITHIN GROUP (ORDER BY y DESC)",
                 "postgres": "STRING_AGG(DISTINCT x, '' ORDER BY y DESC NULLS LAST)",
             },
         )
@@ -953,6 +978,7 @@ class TestMySQL(Validator):
                 "sqlite": "GROUP_CONCAT(a || b || c, ',')",
                 "tsql": "STRING_AGG(CONCAT(a, b, c), ',')",
                 "postgres": "STRING_AGG(CONCAT(a, b, c), ',')",
+                "databricks": "LISTAGG(CONCAT(a, b, c), ',')",
                 "presto": "ARRAY_JOIN(ARRAY_AGG(CONCAT(CAST(a AS VARCHAR), CAST(b AS VARCHAR), CAST(c AS VARCHAR))), ',')",
             },
         )
@@ -962,6 +988,7 @@ class TestMySQL(Validator):
                 "mysql": "GROUP_CONCAT(CONCAT(a, b, c) SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(a || b || c, '')",
                 "tsql": "STRING_AGG(CONCAT(a, b, c), '')",
+                "databricks": "LISTAGG(CONCAT(a, b, c), '')",
                 "postgres": "STRING_AGG(CONCAT(a, b, c), '')",
             },
         )
@@ -971,6 +998,7 @@ class TestMySQL(Validator):
                 "mysql": "GROUP_CONCAT(DISTINCT CONCAT(a, b, c) SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(DISTINCT a || b || c, '')",
                 "tsql": "STRING_AGG(CONCAT(a, b, c), '')",
+                "databricks": "LISTAGG(DISTINCT CONCAT(a, b, c), '')",
                 "postgres": "STRING_AGG(DISTINCT CONCAT(a, b, c), '')",
             },
         )
@@ -980,6 +1008,7 @@ class TestMySQL(Validator):
                 "mysql": "GROUP_CONCAT(CONCAT(a, b, c) ORDER BY d SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(a || b || c, '')",
                 "tsql": "STRING_AGG(CONCAT(a, b, c), '') WITHIN GROUP (ORDER BY d)",
+                "databricks": "LISTAGG(CONCAT(a, b, c), '') WITHIN GROUP (ORDER BY d)",
                 "postgres": "STRING_AGG(CONCAT(a, b, c), '' ORDER BY d NULLS FIRST)",
             },
         )
@@ -989,6 +1018,7 @@ class TestMySQL(Validator):
                 "mysql": "GROUP_CONCAT(DISTINCT CONCAT(a, b, c) ORDER BY d SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(DISTINCT a || b || c, '')",
                 "tsql": "STRING_AGG(CONCAT(a, b, c), '') WITHIN GROUP (ORDER BY d)",
+                "databricks": "LISTAGG(DISTINCT CONCAT(a, b, c), '') WITHIN GROUP (ORDER BY d)",
                 "postgres": "STRING_AGG(DISTINCT CONCAT(a, b, c), '' ORDER BY d NULLS FIRST)",
             },
         )

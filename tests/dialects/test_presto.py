@@ -10,14 +10,18 @@ class TestPresto(Validator):
         self.validate_identity("DEALLOCATE PREPARE my_query", check_command_warning=True)
         self.validate_identity("DESCRIBE INPUT x", check_command_warning=True)
         self.validate_identity("DESCRIBE OUTPUT x", check_command_warning=True)
-        self.validate_identity(
-            "RESET SESSION hive.optimized_reader_enabled", check_command_warning=True
-        )
         self.validate_identity("SELECT * FROM x qualify", "SELECT * FROM x AS qualify")
         self.validate_identity("CAST(x AS IPADDRESS)")
         self.validate_identity("CAST(x AS IPPREFIX)")
         self.validate_identity("CAST(TDIGEST_AGG(1) AS TDIGEST)")
         self.validate_identity("CAST(x AS HYPERLOGLOG)")
+        self.validate_identity(
+            "RESET SESSION hive.optimized_reader_enabled", check_command_warning=True
+        )
+        self.validate_identity(
+            "TIMESTAMP '2025-06-20 11:22:29 Europe/Prague'",
+            "CAST('2025-06-20 11:22:29 Europe/Prague' AS TIMESTAMP WITH TIME ZONE)",
+        )
 
         self.validate_all(
             "CAST(x AS BOOLEAN)",
@@ -149,6 +153,37 @@ class TestPresto(Validator):
                 "presto": "CAST(x AS TIMESTAMP(9) WITH TIME ZONE)",
                 "hive": "CAST(x AS TIMESTAMP)",
                 "spark": "CAST(x AS TIMESTAMP)",
+            },
+        )
+
+    def test_replace(self):
+        self.validate_all(
+            "REPLACE(subject, pattern)",
+            write={
+                "bigquery": "REPLACE(subject, pattern, '')",
+                "duckdb": "REPLACE(subject, pattern, '')",
+                "hive": "REPLACE(subject, pattern, '')",
+                "snowflake": "REPLACE(subject, pattern, '')",
+                "spark": "REPLACE(subject, pattern, '')",
+                "presto": "REPLACE(subject, pattern, '')",
+            },
+        )
+        self.validate_all(
+            "REPLACE(subject, pattern, replacement)",
+            read={
+                "bigquery": "REPLACE(subject, pattern, replacement)",
+                "duckdb": "REPLACE(subject, pattern, replacement)",
+                "hive": "REPLACE(subject, pattern, replacement)",
+                "spark": "REPLACE(subject, pattern, replacement)",
+                "presto": "REPLACE(subject, pattern, replacement)",
+            },
+            write={
+                "bigquery": "REPLACE(subject, pattern, replacement)",
+                "duckdb": "REPLACE(subject, pattern, replacement)",
+                "hive": "REPLACE(subject, pattern, replacement)",
+                "snowflake": "REPLACE(subject, pattern, replacement)",
+                "spark": "REPLACE(subject, pattern, replacement)",
+                "presto": "REPLACE(subject, pattern, replacement)",
             },
         )
 
@@ -468,7 +503,7 @@ class TestPresto(Validator):
             "CREATE TABLE test WITH (FORMAT = 'PARQUET') AS SELECT 1",
             write={
                 "duckdb": "CREATE TABLE test AS SELECT 1",
-                "presto": "CREATE TABLE test WITH (FORMAT='PARQUET') AS SELECT 1",
+                "presto": "CREATE TABLE test WITH (format='PARQUET') AS SELECT 1",
                 "hive": "CREATE TABLE test STORED AS PARQUET AS SELECT 1",
                 "spark": "CREATE TABLE test USING PARQUET AS SELECT 1",
             },
@@ -477,16 +512,16 @@ class TestPresto(Validator):
             "CREATE TABLE test STORED AS 'PARQUET' AS SELECT 1",
             write={
                 "duckdb": "CREATE TABLE test AS SELECT 1",
-                "presto": "CREATE TABLE test WITH (FORMAT='PARQUET') AS SELECT 1",
+                "presto": "CREATE TABLE test WITH (format='PARQUET') AS SELECT 1",
                 "hive": "CREATE TABLE test STORED AS PARQUET AS SELECT 1",
-                "spark": "CREATE TABLE test USING PARQUET AS SELECT 1",
+                "spark": "CREATE TABLE test STORED AS PARQUET AS SELECT 1",
             },
         )
         self.validate_all(
             "CREATE TABLE test WITH (FORMAT = 'PARQUET', X = '1', Z = '2') AS SELECT 1",
             write={
                 "duckdb": "CREATE TABLE test AS SELECT 1",
-                "presto": "CREATE TABLE test WITH (FORMAT='PARQUET', X='1', Z='2') AS SELECT 1",
+                "presto": "CREATE TABLE test WITH (format='PARQUET', X='1', Z='2') AS SELECT 1",
                 "hive": "CREATE TABLE test STORED AS PARQUET TBLPROPERTIES ('X'='1', 'Z'='2') AS SELECT 1",
                 "spark": "CREATE TABLE test USING PARQUET TBLPROPERTIES ('X'='1', 'Z'='2') AS SELECT 1",
             },
@@ -514,7 +549,7 @@ class TestPresto(Validator):
             write={
                 "duckdb": "CREATE TABLE db.example_table (col_a STRUCT(struct_col_a INT, struct_col_b TEXT))",
                 "presto": "CREATE TABLE db.example_table (col_a ROW(struct_col_a INTEGER, struct_col_b VARCHAR))",
-                "hive": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a INT, struct_col_b STRING>)",
+                "hive": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a: INT, struct_col_b: STRING>)",
                 "spark": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a: INT, struct_col_b: STRING>)",
             },
         )
@@ -523,7 +558,7 @@ class TestPresto(Validator):
             write={
                 "duckdb": "CREATE TABLE db.example_table (col_a STRUCT(struct_col_a INT, struct_col_b STRUCT(nested_col_a TEXT, nested_col_b TEXT)))",
                 "presto": "CREATE TABLE db.example_table (col_a ROW(struct_col_a INTEGER, struct_col_b ROW(nested_col_a VARCHAR, nested_col_b VARCHAR)))",
-                "hive": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a INT, struct_col_b STRUCT<nested_col_a STRING, nested_col_b STRING>>)",
+                "hive": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a: INT, struct_col_b: STRUCT<nested_col_a: STRING, nested_col_b: STRING>>)",
                 "spark": "CREATE TABLE db.example_table (col_a STRUCT<struct_col_a: INT, struct_col_b: STRUCT<nested_col_a: STRING, nested_col_b: STRING>>)",
             },
         )
@@ -782,7 +817,7 @@ class TestPresto(Validator):
                 "hive": "FIRST(x)",
                 "mysql": "ANY_VALUE(x)",
                 "oracle": "ANY_VALUE(x)",
-                "postgres": "MAX(x)",
+                "postgres": "ANY_VALUE(x)",
                 "presto": "ARBITRARY(x)",
                 "redshift": "ANY_VALUE(x)",
                 "snowflake": "ANY_VALUE(x)",

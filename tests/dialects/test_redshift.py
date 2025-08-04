@@ -40,11 +40,16 @@ class TestRedshift(Validator):
             "LISTAGG(sellerid, ', ')",
             read={
                 "duckdb": "STRING_AGG(sellerid, ', ')",
+                "databricks": "STRING_AGG(sellerid, ', ')",
             },
             write={
                 # GROUP_CONCAT, LISTAGG and STRING_AGG are aliases in DuckDB
                 "duckdb": "LISTAGG(sellerid, ', ')",
                 "redshift": "LISTAGG(sellerid, ', ')",
+                "spark, version=3.0.0": "ARRAY_JOIN(COLLECT_LIST(sellerid), ', ')",
+                "spark, version=4.0.0": "LISTAGG(sellerid, ', ')",
+                "spark": "LISTAGG(sellerid, ', ')",
+                "databricks": "LISTAGG(sellerid, ', ')",
             },
         )
         self.validate_all(
@@ -249,11 +254,12 @@ class TestRedshift(Validator):
         self.validate_all(
             "DECODE(x, a, b, c, d)",
             write={
-                "": "CASE WHEN x = a OR (x IS NULL AND a IS NULL) THEN b WHEN x = c OR (x IS NULL AND c IS NULL) THEN d END",
-                "oracle": "CASE WHEN x = a OR (x IS NULL AND a IS NULL) THEN b WHEN x = c OR (x IS NULL AND c IS NULL) THEN d END",
-                "redshift": "CASE WHEN x = a OR (x IS NULL AND a IS NULL) THEN b WHEN x = c OR (x IS NULL AND c IS NULL) THEN d END",
-                "snowflake": "CASE WHEN x = a OR (x IS NULL AND a IS NULL) THEN b WHEN x = c OR (x IS NULL AND c IS NULL) THEN d END",
-                "spark": "CASE WHEN x = a OR (x IS NULL AND a IS NULL) THEN b WHEN x = c OR (x IS NULL AND c IS NULL) THEN d END",
+                "": "DECODE(x, a, b, c, d)",
+                "duckdb": "CASE WHEN x = a OR (x IS NULL AND a IS NULL) THEN b WHEN x = c OR (x IS NULL AND c IS NULL) THEN d END",
+                "oracle": "DECODE(x, a, b, c, d)",
+                "redshift": "DECODE(x, a, b, c, d)",
+                "snowflake": "DECODE(x, a, b, c, d)",
+                "spark": "DECODE(x, a, b, c, d)",
             },
         )
         self.validate_all(
