@@ -1604,6 +1604,49 @@ class TestE6(Validator):
             read={"databricks": "SELECT to_varchar(x'537061726b2053514c', 'hex')"},
         )
 
+        # CONCAT_WS tests - based on Databricks documentation
+        # Basic string concatenation: concat_ws(' ', 'Spark', 'SQL') -> 'Spark SQL'
+        self.validate_all(
+            "SELECT ARRAY_TO_STRING(ARRAY['Spark', 'SQL'], ' ')",
+            read={"databricks": "SELECT concat_ws(' ', 'Spark', 'SQL')"},
+        )
+
+        # Only separator provided: concat_ws('s') -> ''
+        self.validate_all(
+            "SELECT ''",
+            read={"databricks": "SELECT concat_ws('s')"},
+        )
+
+        # Mixed strings, arrays and NULLs: concat_ws(',', 'Spark', array('S', 'Q', NULL, 'L'), NULL) -> 'Spark,S,Q,L'
+        self.validate_all(
+            "SELECT ARRAY_TO_STRING(ARRAY['Spark', 'S', 'Q', 'L'], ',')",
+            read={"databricks": "SELECT concat_ws(',', 'Spark', array('S', 'Q', NULL, 'L'), NULL)"},
+        )
+
+        # Single string argument with separator
+        self.validate_all(
+            "SELECT 'test'",
+            read={"databricks": "SELECT concat_ws('-', 'test')"},
+        )
+
+        # Multiple string arguments
+        self.validate_all(
+            "SELECT ARRAY_TO_STRING(ARRAY['a', 'b', 'c'], '-')",
+            read={"databricks": "SELECT concat_ws('-', 'a', 'b', 'c')"},
+        )
+
+        # Empty separator
+        self.validate_all(
+            "SELECT ARRAY_TO_STRING(ARRAY['hello', 'world'], '')",
+            read={"databricks": "SELECT concat_ws('', 'hello', 'world')"},
+        )
+
+        # Array with all valid elements (no NULLs)
+        self.validate_all(
+            "SELECT ARRAY_TO_STRING(ARRAY['x', 'y', 'z'], '|')",
+            read={"databricks": "SELECT concat_ws('|', array('x', 'y', 'z'))"},
+        )
+
     def test_to_utf(self):
         self.validate_all(
             "TO_UTF8(x)",
