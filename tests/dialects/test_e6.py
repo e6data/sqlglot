@@ -2442,3 +2442,124 @@ class TestE6(Validator):
 
     def test_keywords(self):
         self.validate_identity("""SELECT a."variant" FROM table AS a""")
+
+    def test_odbc_datetime_literals(self):
+        """Test ODBC datetime literal parsing for Databricks queries."""
+
+        # Test basic ODBC date literal
+        self.validate_all(
+            "SELECT DATE('2025-05-31')",
+            read={
+                "databricks": "SELECT {d '2025-05-31'}",
+            },
+            write={
+                "databricks": "SELECT DATE('2025-05-31')",
+                "e6": "SELECT DATE('2025-05-31')",
+                "spark": "SELECT DATE('2025-05-31')",
+            },
+        )
+
+        # Test ODBC date literal in WHERE clause
+        self.validate_all(
+            "SELECT * FROM t WHERE d = DATE('2025-05-31')",
+            read={
+                "databricks": "SELECT * FROM t WHERE d = {d '2025-05-31'}",
+            },
+            write={
+                "databricks": "SELECT * FROM t WHERE d = DATE('2025-05-31')",
+                "e6": "SELECT * FROM t WHERE d = DATE('2025-05-31')",
+            },
+        )
+
+        # Test ODBC date literal in IN clause (single value)
+        self.validate_all(
+            "SELECT * FROM t WHERE d IN (DATE('2025-05-31'))",
+            read={
+                "databricks": "SELECT * FROM t WHERE d IN ({d '2025-05-31'})",
+            },
+            write={
+                "databricks": "SELECT * FROM t WHERE d IN (DATE('2025-05-31'))",
+                "e6": "SELECT * FROM t WHERE d IN (DATE('2025-05-31'))",
+            },
+        )
+
+        # Test ODBC date literals in IN clause (multiple values)
+        self.validate_all(
+            "SELECT * FROM t WHERE d IN (DATE('2025-05-31'), DATE('2025-06-01'), DATE('2025-06-02'))",
+            read={
+                "databricks": "SELECT * FROM t WHERE d IN ({d '2025-05-31'}, {d '2025-06-01'}, {d '2025-06-02'})",
+            },
+            write={
+                "databricks": "SELECT * FROM t WHERE d IN (DATE('2025-05-31'), DATE('2025-06-01'), DATE('2025-06-02'))",
+                "e6": "SELECT * FROM t WHERE d IN (DATE('2025-05-31'), DATE('2025-06-01'), DATE('2025-06-02'))",
+            },
+        )
+
+        # Test ODBC time literal
+        self.validate_all(
+            "SELECT TIME('14:30:45')",
+            read={
+                "databricks": "SELECT {t '14:30:45'}",
+            },
+            write={
+                "databricks": "SELECT TIME('14:30:45')",
+                "e6": "SELECT TIME('14:30:45')",
+            },
+        )
+
+        # Test ODBC timestamp literal
+        self.validate_all(
+            "SELECT TIMESTAMP('2025-05-31 14:30:45')",
+            read={
+                "databricks": "SELECT {ts '2025-05-31 14:30:45'}",
+            },
+            write={
+                "databricks": "SELECT TIMESTAMP('2025-05-31 14:30:45')",
+                "e6": "SELECT TIMESTAMP('2025-05-31 14:30:45')",
+            },
+        )
+
+        # Test ODBC timestamp literals in IN clause
+        self.validate_all(
+            "SELECT * FROM t WHERE ts IN (TIMESTAMP('2025-05-31 14:30:45'), TIMESTAMP('2025-06-01 09:15:00'))",
+            read={
+                "databricks": "SELECT * FROM t WHERE ts IN ({ts '2025-05-31 14:30:45'}, {ts '2025-06-01 09:15:00'})",
+            },
+            write={
+                "databricks": "SELECT * FROM t WHERE ts IN (TIMESTAMP('2025-05-31 14:30:45'), TIMESTAMP('2025-06-01 09:15:00'))",
+                "e6": "SELECT * FROM t WHERE ts IN (TIMESTAMP('2025-05-31 14:30:45'), TIMESTAMP('2025-06-01 09:15:00'))",
+            },
+        )
+
+        # Test complex query with many ODBC date literals (similar to the original failing query)
+        self.validate_all(
+            "SELECT inventory_source_name, SUM(CAST(bid AS DOUBLE)) AS C1 FROM trader_db WHERE event_time IN (DATE('2025-05-31'), DATE('2025-06-14'), DATE('2025-07-11'), DATE('2025-06-01'), DATE('2025-06-15')) GROUP BY inventory_source_name",
+            read={
+                "databricks": "SELECT inventory_source_name, SUM(CAST(bid AS DOUBLE)) AS C1 FROM trader_db WHERE event_time IN ({d '2025-05-31'}, {d '2025-06-14'}, {d '2025-07-11'}, {d '2025-06-01'}, {d '2025-06-15'}) GROUP BY inventory_source_name",
+            },
+            write={
+                "e6": "SELECT inventory_source_name, SUM(CAST(bid AS DOUBLE)) AS C1 FROM trader_db WHERE event_time IN (DATE('2025-05-31'), DATE('2025-06-14'), DATE('2025-07-11'), DATE('2025-06-01'), DATE('2025-06-15')) GROUP BY inventory_source_name",
+            },
+        )
+
+        # Test mixed date and time literals
+        self.validate_all(
+            "SELECT * FROM events WHERE event_date = DATE('2025-05-31') AND event_time = TIME('14:30:00')",
+            read={
+                "databricks": "SELECT * FROM events WHERE event_date = {d '2025-05-31'} AND event_time = {t '14:30:00'}",
+            },
+            write={
+                "e6": "SELECT * FROM events WHERE event_date = DATE('2025-05-31') AND event_time = TIME('14:30:00')",
+            },
+        )
+
+        # Test ODBC literals in BETWEEN clause
+        self.validate_all(
+            "SELECT * FROM orders WHERE order_date BETWEEN DATE('2025-01-01') AND DATE('2025-12-31')",
+            read={
+                "databricks": "SELECT * FROM orders WHERE order_date BETWEEN {d '2025-01-01'} AND {d '2025-12-31'}",
+            },
+            write={
+                "e6": "SELECT * FROM orders WHERE order_date BETWEEN DATE('2025-01-01') AND DATE('2025-12-31')",
+            },
+        )

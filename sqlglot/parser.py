@@ -5810,6 +5810,19 @@ class Parser(metaclass=_Parser):
         if self._match_pair(TokenType.DOT, TokenType.NUMBER):
             return exp.Literal.number(f"0.{self._prev.text}")
 
+        # Check for ODBC datetime literals {d '...'}, {t '...'}, {ts '...'}
+        # Must match exact pattern: L_BRACE, VAR (d/t/ts), STRING, R_BRACE
+        if (
+            self._match(TokenType.L_BRACE, advance=False)
+            and self._next
+            and self._next.token_type == TokenType.VAR
+            and self._next.text.lower() in self.ODBC_DATETIME_LITERALS
+            and len(self._tokens) > self._index + 2
+            and self._tokens[self._index + 2].token_type == TokenType.STRING
+        ):
+            self._advance()  # consume L_BRACE
+            return self._parse_odbc_datetime_literal()
+
         return self._parse_paren()
 
     def _parse_field(

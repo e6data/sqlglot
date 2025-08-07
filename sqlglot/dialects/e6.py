@@ -2036,7 +2036,7 @@ class E6(Dialect):
         def concat_ws_sql(self: E6.Generator, expression: exp.ConcatWs) -> str:
             """
             Generate the SQL for the CONCAT_WS function in E6.
-            
+
             Implements Databricks CONCAT_WS behavior:
             - If sep is NULL the result is NULL (handled by e6 engine)
             - exprN that are NULL are ignored
@@ -2047,18 +2047,18 @@ class E6(Dialect):
             """
             if not expression.expressions:
                 return "''"
-            
+
             # Extract separator and arguments
             separator = expression.expressions[0]
             args = expression.expressions[1:] if len(expression.expressions) > 1 else []
-            
+
             # If no arguments provided (only separator), return empty string
             if not args:
                 return "''"
-            
+
             # Collect all non-NULL expression nodes (flattening arrays)
             array_expressions = []
-            
+
             for arg in args:
                 if isinstance(arg, exp.Array):
                     # For array arguments: add non-NULL elements
@@ -2069,20 +2069,20 @@ class E6(Dialect):
                     # For string arguments: add if not NULL
                     if not isinstance(arg, exp.Null):
                         array_expressions.append(arg)
-            
+
             # If no elements after filtering, return empty string
             if not array_expressions:
                 return "''"
-            
+
             # Single element case - just return the element
             if len(array_expressions) == 1:
                 return self.sql(array_expressions[0])
-            
+
             # Multiple elements: create array and join with separator
             # Build: ARRAY_TO_STRING(ARRAY[element1, element2, ...], separator)
             # Create Array expression with the actual expression nodes
             array_expr = exp.Array(expressions=array_expressions)
-            
+
             # Use ARRAY_TO_STRING function directly instead of exp.ArrayToString
             # to avoid the ARRAY_JOIN mapping in TRANSFORMS
             return self.func("ARRAY_TO_STRING", array_expr, separator)
