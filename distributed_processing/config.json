@@ -1,0 +1,61 @@
+{
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "password": null,
+    "socket_timeout": 5,
+    "connection_pool_kwargs": {
+      "max_connections": 50,
+      "retry_on_timeout": true
+    }
+  },
+  "celery": {
+    "broker_url": "redis://localhost:6379/0",
+    "result_backend": "redis://localhost:6379/0",
+    "task_serializer": "json",
+    "accept_content": ["json"],
+    "result_serializer": "json",
+    "timezone": "UTC",
+    "enable_utc": true,
+    "task_track_started": true,
+    "task_time_limit": 7200,
+    "task_soft_time_limit": 7000,
+    "worker_prefetch_multiplier": 1,
+    "worker_max_tasks_per_child": 10,
+    "result_expires": 86400,
+    "task_acks_late": true,
+    "worker_send_task_events": true,
+    "task_send_sent_event": true,
+    "task_default_queue": "parquet_processing",
+    "task_default_exchange": "parquet_exchange",
+    "task_default_routing_key": "parquet.process",
+    "worker_concurrency": 4,
+    "worker_log_format": "[%(asctime)s: %(levelname)s/%(processName)s] %(message)s",
+    "worker_task_log_format": "[%(asctime)s: %(levelname)s/%(processName)s][%(task_name)s(%(task_id)s)] %(message)s"
+  },
+  "api": {
+    "base_url": "http://localhost:8080",
+    "timeout": 7200,
+    "max_retries": 3,
+    "retry_backoff": 60
+  },
+  "processing": {
+    "memory_threshold_mb": 500,
+    "batch_size": 50000,
+    "default_from_sql": "snowflake",
+    "default_to_sql": "e6",
+    "feature_flags": {
+      "PRETTY_PRINT": true,
+      "USE_TWO_PHASE_QUALIFICATION_SCHEME": false,
+      "SKIP_E6_TRANSPILATION": false
+    }
+  },
+  "monitoring": {
+    "enable_metrics": true,
+    "metrics_port": 9090,
+    "log_level": "INFO",
+    "session_ttl_hours": 24,
+    "result_ttl_hours": 24
+  }
+}
