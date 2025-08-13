@@ -757,6 +757,9 @@ async def batch_statistics_s3(
         
         # Create S3 filesystem to check file size
         s3fs = fs.S3FileSystem(
+            access_key=os.environ.get('AWS_ACCESS_KEY_ID'),
+            secret_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+            session_token=os.environ.get('AWS_SESSION_TOKEN'),
             region='us-east-1',
             connect_timeout=30,
             request_timeout=60
@@ -1077,6 +1080,185 @@ async def batch_statistics_s3(
             "error": True,
             "error_message": str(e),
             "log_records": log_records
+        }
+
+
+@app.post("/validate-s3-bucket")
+async def validate_s3_bucket(
+    s3_path: str = Form(...),
+):
+    """
+    Validate S3 bucket connection and identify query columns in parquet files.
+    Handles both individual files and directories.
+    
+    Args:
+        s3_path: S3 path like 's3://bucket/path/to/directory/' or 's3://bucket/path/to/file.parquet'
+    
+    Returns:
+        - authenticated: Whether connection succeeded
+        - format: File format (parquet, delta, iceberg)
+        - files_found: Number of parquet files found
+        - columns: Common columns across all files
+        - query_column: Identified query column (if found)
+        - response: "Yes" if query column found, "No" otherwise
+    """
+    
+    try:
+        # Parse S3 path
+        if not s3_path.startswith('s3://'):
+            return {
+                "authenticated": False,
+                "error": "Invalid S3 path format. Must start with 's3://'"
+            }
+        
+        bucket = s3_path.split('/')[2]
+        key_prefix = '/'.join(s3_path.split('/')[3:])
+        
+        # Ensure key_prefix ends with / for directory scanning
+        if key_prefix and not key_prefix.endswith('/'):
+            key_prefix = key_prefix + '/'
+        
+        # Create S3 filesystem
+        try:
+            s3fs = fs.S3FileSystem(
+                access_key=os.environ.get('AWS_ACCESS_KEY_ID'),
+                secret_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                session_token=os.environ.get('AWS_SESSION_TOKEN'),
+                region='us-east-1',
+                connect_timeout=30,
+                request_timeout=60
+            )
+        except Exception as e:
+            return {
+                "authenticated": False,
+                "error": f"S3 authentication failed: {str(e)}",
+                "response": "No"
+            }
+        
+        # List all parquet files in the directory
+        try:
+            # Use get_file_info to check if it's a file or directory
+            path = f"{bucket}/{key_prefix}" if key_prefix else bucket
+            file_info = s3fs.get_file_info(path)
+            
+            parquet_files = []
+            
+            if file_info.type == fs.FileType.File:
+                # Single file provided
+                if path.endswith('.parquet'):
+                    parquet_files = [path]
+            else:
+                # Directory provided - list all parquet files
+                from pyarrow.fs import FileSelector
+                selector = FileSelector(path, recursive=True)
+                file_infos = s3fs.get_file_info(selector)
+                
+                for finfo in file_infos:
+                    if finfo.type == fs.FileType.File and finfo.path.endswith('.parquet'):
+                        parquet_files.append(finfo.path)
+            
+            if not parquet_files:
+                return {
+                    "authenticated": True,
+                    "error": f"No parquet files found in: {s3_path}",
+                    "files_found": 0,
+                    "response": "No"
+                }
+            
+            logger.info(f"Found {len(parquet_files)} parquet files")
+            
+            # Simple analysis - just get columns from first file and look for query columns
+            all_columns = []
+            query_column = None
+            total_size_mb = 0
+            
+            # Common query column names to look for (prioritized order)
+            query_patterns = ['hashed_query', 'query', 'sql', 'statement_text', 'sql_query', 'command']
+            
+            # Just read the first parquet file to get schema
+            try:
+                first_file = parquet_files[0]
+                parquet_file = pq.ParquetFile(first_file, filesystem=s3fs)
+                schema = parquet_file.schema
+                
+                # Get all column names
+                all_columns = [field.name for field in schema]
+                
+                # Look for query column by name (prioritize exact matches)
+                # First check for exact matches
+                for pattern in query_patterns:
+                    for col in all_columns:
+                        if col.lower() == pattern.lower():
+                            query_column = col
+                            break
+                    if query_column:
+                        break
+                
+                # If no exact match, look for partial matches
+                if not query_column:
+                    for pattern in query_patterns:
+                        for col in all_columns:
+                            if pattern.lower() in col.lower():
+                                query_column = col
+                                break
+                        if query_column:
+                            break
+                
+                # Get total size of all files
+                for file_path in parquet_files[:10]:  # Check first 10 files for size
+                    try:
+                        finfo = s3fs.get_file_info(file_path)
+                        total_size_mb += finfo.size / (1024**2)
+                    except:
+                        pass
+                
+                files_analyzed = len(parquet_files)
+                
+            except Exception as e:
+                logger.error(f"Error reading parquet file: {e}")
+                return {
+                    "authenticated": True,
+                    "error": f"Could not read parquet files: {str(e)}",
+                    "files_found": len(parquet_files),
+                    "response": "No"
+                }
+            
+            if files_analyzed == 0:
+                return {
+                    "authenticated": True,
+                    "error": "Could not read schema from any parquet files",
+                    "files_found": len(parquet_files),
+                    "response": "No"
+                }
+            
+            response = "Yes" if query_column else "No"
+            
+            return {
+                "authenticated": True,
+                "format": "parquet",
+                "files_found": len(parquet_files),
+                "files_analyzed": files_analyzed,
+                "total_size_mb": round(total_size_mb, 2),
+                "common_columns": sorted(list(all_columns)),
+                "query_column": query_column,
+                "response": response,
+                "message": f"Found query column '{query_column}' across {len(parquet_files)} files" if query_column else f"No query column identified in {len(parquet_files)} files. Please specify manually.",
+                "sample_files": parquet_files[:5]  # Show first 5 files as sample
+            }
+            
+        except Exception as e:
+            return {
+                "authenticated": True,
+                "error": f"Error scanning directory: {str(e)}",
+                "response": "No"
+            }
+        
+    except Exception as e:
+        logger.error(f"Error in validate_s3_bucket: {str(e)}", exc_info=True)
+        return {
+            "authenticated": False,
+            "error": f"Validation failed: {str(e)}",
+            "response": "No"
         }
 
 

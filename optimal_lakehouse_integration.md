@@ -35,6 +35,62 @@
                                                 │ stored here      │
                                                 └──────────────────┘
 ```
+One API call from UI.
+
+One API authenticating connection with S3 bucket.
+-authentication connection 
+-figure out the format present in the S3 bucket(Example parquet file , iceberg or delta file)
+-Checking what all columns are there.
+-Finding which column is the query column 
+
+reponse Yes or no . If yes the column
+
+
+/batch_transpiler
+
+-Might be needed to implementing the authentication.
+
+
+request 
+{
+   "user_session": UUID123,
+   "S3_path" : "s3://customers-sampledata/inmobi/queries/*" 
+   "from_sql" : "databricks"
+   "to_sql" : "e6"
+   "query_column" : "hashed_query"
+   "columns_need" : []
+   "batch_size" : 50000
+   "email" : ["pranjal@e6data.com" , tanay] default [tanay]
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 **Flow Explanation:**
 1. **Continuous Loop**: Process queries one by one from S3 parquet
