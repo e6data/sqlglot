@@ -1,123 +1,112 @@
 """
-Minimal Redis Manager for Celery job management
+Simple Redis Manager - One session per parquet file
 """
 import redis
 import json
-import logging
-from typing import Dict, Any, List, Optional
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
-
-
-class RedisJobManager:
-    """Minimal Redis manager for Celery job tracking"""
+class RedisManager:
+    """Simple Redis manager for per-file session tracking"""
     
-    def __init__(self, config_path: str = "config.json"):
-        """Initialize Redis connection"""
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        
-        redis_config = config['redis']
+    def __init__(self):
         self.client = redis.Redis(
-            host=redis_config['host'],
-            port=redis_config['port'],
-            db=redis_config['db'],
-            password=redis_config.get('password'),
+            host='localhost',
+            port=6379,
+            db=0,
             decode_responses=True
         )
-        
-        # Test connection
-        self.client.ping()
-        logger.info(f"Connected to Redis at {redis_config['host']}:{redis_config['port']}")
+        self.client.ping()  # Test connection
     
-    def create_session(self, files: List[str], query_column: str) -> str:
-        """Create a new job session"""
-        session_id = str(uuid.uuid4())
+    def create_file_session(self, file_path: str, query_column: str) -> str:
+        """Create a session for a single parquet file"""
+        session_id = str(uuid.uuid4())[:8]  # Shorter IDs for simplicity
         
-        # Store basic session info
-        self.client.hset(f"session:{session_id}", mapping={
-            'total_files': len(files),
+        session_data = {
+            'session_id': session_id,
+            'file_path': file_path,
+            'file_name': file_path.split('/')[-1],
             'query_column': query_column,
+            'status': 'pending',
             'created_at': datetime.now().isoformat(),
-            'status': 'created'
-        })
+            'worker_id': '',
+            'task_id': ''
+        }
         
-        # Store file list
-        if files:
-            self.client.rpush(f"session:{session_id}:files", *files)
+        # Store session
+        self.client.hset(f"session:{session_id}", mapping=session_data)
+        
+        # Add to pending queue
+        self.client.sadd("sessions:pending", session_id)
         
         return session_id
     
-    def add_job(self, session_id: str, task_id: str, file_path: str) -> None:
-        """Add a job to session"""
-        self.client.hset(f"job:{task_id}", mapping={
-            'session_id': session_id,
-            'file_path': file_path,
-            'status': 'pending',
-            'created_at': datetime.now().isoformat()
+    def assign_worker_to_session(self, session_id: str, worker_id: str, task_id: str):
+        """Assign a worker to process a session"""
+        # Update session
+        self.client.hset(f"session:{session_id}", mapping={
+            'worker_id': worker_id,
+            'task_id': task_id,
+            'status': 'processing',
+            'started_at': datetime.now().isoformat()
         })
         
-        # Add to session's job list
-        self.client.sadd(f"session:{session_id}:jobs", task_id)
+        # Move from pending to processing
+        self.client.srem("sessions:pending", session_id)
+        self.client.sadd("sessions:processing", session_id)
     
-    def update_job_status(self, task_id: str, status: str, result: Optional[Dict] = None) -> None:
-        """Update job status"""
+    def update_session_status(self, session_id: str, status: str, result: Optional[Dict] = None):
+        """Update session status"""
         updates = {
             'status': status,
             'updated_at': datetime.now().isoformat()
         }
         
+        if status == 'completed' or status == 'failed':
+            updates['finished_at'] = datetime.now().isoformat()
+            
+            # Move from processing to completed/failed
+            self.client.srem("sessions:processing", session_id)
+            self.client.sadd(f"sessions:{status}", session_id)
+        
         if result:
             updates['result'] = json.dumps(result)
         
-        self.client.hset(f"job:{task_id}", mapping=updates)
+        self.client.hset(f"session:{session_id}", mapping=updates)
     
-    def get_session_status(self, session_id: str) -> Dict[str, Any]:
-        """Get session status with all jobs"""
-        session_info = self.client.hgetall(f"session:{session_id}")
-        if not session_info:
-            return {'error': 'Session not found'}
-        
-        # Get all job IDs
-        job_ids = self.client.smembers(f"session:{session_id}:jobs")
-        
-        # Get job statuses
-        jobs = []
-        for job_id in job_ids:
-            job_data = self.client.hgetall(f"job:{job_id}")
-            if job_data:
-                if 'result' in job_data:
-                    job_data['result'] = json.loads(job_data['result'])
-                jobs.append(job_data)
-        
-        # Calculate summary
-        total = len(jobs)
-        completed = sum(1 for j in jobs if j.get('status') == 'completed')
-        failed = sum(1 for j in jobs if j.get('status') == 'failed')
-        pending = sum(1 for j in jobs if j.get('status') == 'pending')
-        processing = sum(1 for j in jobs if j.get('status') == 'processing')
+    def get_session(self, session_id: str) -> Dict[str, Any]:
+        """Get session details"""
+        session = self.client.hgetall(f"session:{session_id}")
+        if session and 'result' in session:
+            session['result'] = json.loads(session['result'])
+        return session
+    
+    def get_all_sessions_status(self) -> Dict[str, Any]:
+        """Get status of all sessions"""
+        pending = list(self.client.smembers("sessions:pending"))
+        processing = list(self.client.smembers("sessions:processing"))
+        completed = list(self.client.smembers("sessions:completed"))
+        failed = list(self.client.smembers("sessions:failed"))
         
         return {
-            'session_id': session_id,
-            'session_info': session_info,
             'summary': {
-                'total': total,
-                'completed': completed,
-                'failed': failed,
+                'total': len(pending) + len(processing) + len(completed) + len(failed),
+                'pending': len(pending),
+                'processing': len(processing),
+                'completed': len(completed),
+                'failed': len(failed)
+            },
+            'sessions': {
                 'pending': pending,
                 'processing': processing,
-                'progress': (completed + failed) / total * 100 if total > 0 else 0
-            },
-            'jobs': jobs
+                'completed': completed,
+                'failed': failed
+            }
         }
     
-    def cleanup_old_data(self, hours: int = 24) -> None:
-        """Clean up old sessions and jobs"""
-        # This is a simple cleanup - in production you'd want more sophisticated logic
-        for key in self.client.scan_iter("session:*"):
-            self.client.expire(key, hours * 3600)
-        
-        for key in self.client.scan_iter("job:*"):
-            self.client.expire(key, hours * 3600)
+    def cleanup(self, hours: int = 24):
+        """Clean up old sessions"""
+        for pattern in ["session:*", "sessions:*"]:
+            for key in self.client.scan_iter(pattern):
+                self.client.expire(key, hours * 3600)

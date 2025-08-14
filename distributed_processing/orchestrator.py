@@ -1,151 +1,258 @@
 """
-Orchestrator for distributed parquet processing
-This script coordinates the validation and distributed processing workflow
+Simplified Orchestrator - One session per parquet file
+Coordinates the distributed processing workflow using actual API endpoints
 """
 import json
 import logging
 import requests
-from typing import List, Dict, Any, Optional
 import sys
 import time
-from redis_manager import RedisJobManager
-from celery_worker import process_parquet_file, check_session_status
+from typing import List, Dict, Any, Optional
+from pathlib import Path
+from celery_worker import app, process_parquet_session
+from redis_manager import RedisManager
+from tqdm import tqdm
 
-logging.basicConfig(level=logging.INFO)
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Load configuration
-with open('config.json', 'r') as f:
+import os
+config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+with open(config_path, 'r') as f:
     config = json.load(f)
 
-
 class ParquetOrchestrator:
-    """Orchestrates distributed parquet processing"""
+    """Orchestrates distributed parquet processing with one session per file"""
     
     def __init__(self):
-        self.redis_manager = RedisJobManager()
-        self.api_base_url = config['api']['base_url']
+        self.redis_manager = RedisManager()
+        self.api_config = config['api']
         self.processing_config = config['processing']
-    
-    def validate_s3_bucket(self, s3_path: str) -> Dict[str, Any]:
+        
+    def validate_s3_path(self, s3_path: str) -> Dict[str, Any]:
         """
-        Call validate-s3-bucket API to get parquet files and columns
+        Validate S3 path using the /validate-s3-bucket endpoint
         
         Args:
-            s3_path: S3 path to validate
+            s3_path: S3 path to validate (file or directory)
         
         Returns:
-            Validation results including files and columns
+            Validation results with file list and columns
         """
-        endpoint = f"{self.api_base_url}/validate-s3-bucket"
+        endpoint = f"{self.api_config['base_url']}/validate-s3-bucket"
         
         logger.info(f"Validating S3 path: {s3_path}")
         
         try:
-            response = requests.post(endpoint, data={'s3_path': s3_path})
+            response = requests.post(
+                endpoint, 
+                data={'s3_path': s3_path},
+                timeout=30
+            )
             response.raise_for_status()
             result = response.json()
             
             if result.get('authenticated'):
-                logger.info(f"Found {result.get('files_found', 0)} parquet files")
-                if result.get('query_column'):
-                    logger.info(f"Auto-detected query column: {result['query_column']}")
-                else:
-                    logger.info("No query column auto-detected")
-                    if result.get('common_columns'):
-                        logger.info(f"Available columns: {', '.join(result['common_columns'][:5])}")
+                logger.info(f"Validation successful")
+                logger.info(f"Files found: {result.get('files_found', 0)}")
+                logger.info(f"Query column: {result.get('query_column', 'Not detected')}")
+                logger.info(f"Total size: {result.get('total_size_mb', 0)} MB")
+            else:
+                logger.error(f"S3 authentication failed: {result.get('error')}")
             
             return result
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Validation failed: {e}")
-            return {'error': str(e)}
+            logger.error(f"Validation API call failed: {e}")
+            return {'error': str(e), 'authenticated': False}
     
-    def submit_distributed_jobs(
+    def get_parquet_files_from_s3(self, s3_path: str) -> List[str]:
+        """
+        Get list of parquet files from S3 path using validation endpoint
+        
+        Args:
+            s3_path: S3 path (file or directory)
+        
+        Returns:
+            List of S3 parquet file paths
+        """
+        # If it's a single parquet file, return it directly
+        if s3_path.endswith('.parquet'):
+            return [s3_path]
+        
+        # For directories, use validation endpoint to get file list
+        validation = self.validate_s3_path(s3_path)
+        
+        if not validation.get('authenticated'):
+            logger.error(f"Failed to authenticate with S3: {validation.get('error')}")
+            return []
+        
+        # Get sample files from validation response
+        sample_files = validation.get('sample_files', [])
+        
+        if sample_files:
+            # Convert to full S3 paths if needed
+            files = []
+            for file_path in sample_files:
+                if file_path.startswith('s3://'):
+                    files.append(file_path)
+                else:
+                    # Construct full S3 path
+                    if file_path.startswith(s3_path.split('/')[2]):
+                        # File path includes bucket name
+                        files.append(f"s3://{file_path}")
+                    else:
+                        # File path is relative to the directory
+                        base_path = s3_path.rstrip('/')
+                        files.append(f"{base_path}/{file_path}")
+            return files
+        
+        return []
+    
+    def submit_file_for_processing(
         self,
-        parquet_files: List[str],
+        file_path: str,
         query_column: str,
         from_sql: str = None,
         to_sql: str = None,
         feature_flags: Optional[Dict] = None
-    ) -> str:
+    ) -> Dict[str, str]:
         """
-        Submit parquet files for distributed processing
+        Submit a single parquet file for processing
+        Each file gets its own unique session ID
         
         Args:
-            parquet_files: List of S3 paths to process
+            file_path: S3 path to parquet file
             query_column: Column containing queries
             from_sql: Source SQL dialect
             to_sql: Target SQL dialect
-            feature_flags: Optional feature flags
+            feature_flags: Optional feature flags dict
         
         Returns:
-            Session ID for tracking
+            Dict with session_id, task_id, and file_path
         """
         # Use defaults from config if not provided
         if not from_sql:
             from_sql = self.processing_config.get('default_from_sql', 'snowflake')
         if not to_sql:
             to_sql = self.processing_config.get('default_to_sql', 'e6')
+        if not feature_flags:
+            feature_flags = self.processing_config.get('feature_flags', {})
         
-        # Create session
-        session_id = self.redis_manager.create_session(parquet_files, query_column)
-        logger.info(f"Created session: {session_id}")
+        # Create unique session for this specific file
+        session_id = self.redis_manager.create_file_session(file_path, query_column)
         
-        # Submit tasks
-        task_ids = []
-        for file_path in parquet_files:
-            # Submit Celery task
-            task = process_parquet_file.apply_async(
-                args=[session_id, file_path, query_column, from_sql, to_sql, feature_flags],
-                queue='parquet_processing'
-            )
-            
-            # Track in Redis
-            self.redis_manager.add_job(session_id, task.id, file_path)
-            task_ids.append(task.id)
-            
-            logger.info(f"Submitted job {task.id} for {file_path}")
+        # Submit to Celery with the session ID
+        task = process_parquet_session.apply_async(
+            args=[session_id, file_path, query_column, from_sql, to_sql, feature_flags],
+            queue='parquet_queue'
+        )
         
-        logger.info(f"Submitted {len(task_ids)} jobs for processing")
+        logger.info(f"Submitted file: {file_path.split('/')[-1]}")
+        logger.info(f"  Session ID: {session_id}")
+        logger.info(f"  Task ID: {task.id}")
         
-        return session_id
+        return {
+            'session_id': session_id,
+            'task_id': task.id,
+            'file_path': file_path,
+            'file_name': file_path.split('/')[-1]
+        }
     
-    def monitor_session(self, session_id: str, poll_interval: int = 5) -> Dict[str, Any]:
+    def submit_batch(
+        self,
+        parquet_files: List[str],
+        query_column: str,
+        from_sql: str = None,
+        to_sql: str = None,
+        feature_flags: Optional[Dict] = None
+    ) -> List[Dict[str, str]]:
         """
-        Monitor session progress
+        Submit multiple parquet files for processing
+        Each file gets its own session ID for independent tracking
         
         Args:
-            session_id: Session to monitor
-            poll_interval: Seconds between status checks
+            parquet_files: List of S3 paths
+            query_column: Column containing queries
+            from_sql: Source SQL dialect
+            to_sql: Target SQL dialect
+            feature_flags: Optional feature flags
         
         Returns:
-            Final session status
+            List of submission results with session IDs
         """
-        logger.info(f"Monitoring session {session_id}")
+        submissions = []
+        
+        logger.info(f"Submitting {len(parquet_files)} files for distributed processing")
+        logger.info(f"Each file will have its own session ID")
+        
+        for i, file_path in enumerate(parquet_files, 1):
+            result = self.submit_file_for_processing(
+                file_path, query_column, from_sql, to_sql, feature_flags
+            )
+            submissions.append(result)
+            
+            # Log progress for large batches
+            if i % 10 == 0:
+                logger.info(f"Progress: {i}/{len(parquet_files)} files submitted")
+        
+        logger.info(f"All {len(submissions)} files submitted with individual sessions")
+        
+        return submissions
+    
+    def monitor_sessions(self, session_ids: List[str] = None, poll_interval: int = 5) -> None:
+        """
+        Monitor progress of sessions
+        
+        Args:
+            session_ids: Specific session IDs to monitor (None for all)
+            poll_interval: Seconds between status checks
+        """
+        logger.info("Monitoring session progress...")
+        
+        last_status = None
+        start_time = time.time()
         
         while True:
-            status = self.redis_manager.get_session_status(session_id)
+            status = self.redis_manager.get_all_sessions_status()
+            summary = status['summary']
             
-            if 'error' in status:
-                logger.error(f"Session error: {status['error']}")
-                return status
+            # Only log if status changed
+            if summary != last_status:
+                elapsed = int(time.time() - start_time)
+                logger.info(
+                    f"[{elapsed:3d}s] "
+                    f"Pending: {summary['pending']} | "
+                    f"Processing: {summary['processing']} | "
+                    f"Completed: {summary['completed']} | "
+                    f"Failed: {summary['failed']}"
+                )
+                last_status = summary
             
-            summary = status.get('summary', {})
-            progress = summary.get('progress', 0)
-            
-            logger.info(
-                f"Progress: {progress:.1f}% | "
-                f"Completed: {summary.get('completed', 0)} | "
-                f"Failed: {summary.get('failed', 0)} | "
-                f"Processing: {summary.get('processing', 0)} | "
-                f"Pending: {summary.get('pending', 0)}"
-            )
-            
-            # Check if all jobs are done
-            if summary.get('pending', 0) == 0 and summary.get('processing', 0) == 0:
-                logger.info("All jobs completed!")
-                return status
+            # Check if all done
+            if summary['pending'] == 0 and summary['processing'] == 0:
+                logger.info("All sessions completed!")
+                
+                # Show final results
+                if summary['completed'] > 0:
+                    logger.info(f"✓ {summary['completed']} files processed successfully")
+                if summary['failed'] > 0:
+                    logger.warning(f"✗ {summary['failed']} files failed")
+                    
+                    # Show failed sessions
+                    for session_id in status['sessions']['failed']:
+                        session = self.redis_manager.get_session(session_id)
+                        logger.error(f"  Failed: {session.get('file_name', session_id)}")
+                        if session.get('result'):
+                            error = session['result'].get('error', 'Unknown error')
+                            logger.error(f"    Error: {error}")
+                
+                break
             
             time.sleep(poll_interval)
     
@@ -155,74 +262,132 @@ class ParquetOrchestrator:
         query_column: Optional[str] = None,
         from_sql: str = None,
         to_sql: str = None,
+        feature_flags: Optional[Dict] = None,
         monitor: bool = True
     ) -> Dict[str, Any]:
         """
-        Complete workflow: validate, submit, and optionally monitor
+        Complete workflow for processing S3 directory or file
         
         Args:
             s3_path: S3 path to process
-            query_column: Query column (auto-detected if not provided)
+            query_column: Query column (auto-detect if not provided)
             from_sql: Source SQL dialect
             to_sql: Target SQL dialect
+            feature_flags: Optional feature flags
             monitor: Whether to monitor until completion
         
         Returns:
-            Processing results
+            Processing results with session IDs
         """
-        # Step 1: Validate S3 bucket
-        validation = self.validate_s3_bucket(s3_path)
+        # Step 1: Validate and get files
+        logger.info(f"Starting distributed processing for: {s3_path}")
         
-        if validation.get('error') or not validation.get('authenticated'):
-            logger.error("Validation failed")
-            return validation
+        validation = self.validate_s3_path(s3_path)
+        
+        if not validation.get('authenticated'):
+            logger.error("S3 validation failed")
+            return {'error': 'S3 validation failed', 'details': validation}
         
         # Get parquet files
-        # For directory processing, we'd need to modify validate_s3_bucket to return file list
-        # For now, assume single file
-        parquet_files = [s3_path] if s3_path.endswith('.parquet') else []
+        parquet_files = self.get_parquet_files_from_s3(s3_path)
         
         if not parquet_files:
-            # If directory, extract files from validation
-            if 'sample_files' in validation:
-                parquet_files = validation['sample_files']
-            else:
+            # Try to get from validation response
+            if 'sample_files' in validation and validation['sample_files']:
+                parquet_files = []
+                for file in validation['sample_files']:
+                    if file.startswith('s3://'):
+                        parquet_files.append(file)
+                    else:
+                        # Construct full path
+                        bucket = s3_path.split('/')[2]
+                        parquet_files.append(f"s3://{file}")
+            
+            if not parquet_files:
                 logger.error("No parquet files found")
-                return {'error': 'No parquet files found'}
+                return {'error': 'No parquet files found', 'path': s3_path}
         
-        # Step 2: Determine query column
+        logger.info(f"Found {len(parquet_files)} parquet files to process")
+        
+        # Step 2: Determine query column if not provided
         if not query_column:
             query_column = validation.get('query_column')
             
             if not query_column:
-                if validation.get('common_columns'):
-                    logger.error(f"Please specify query column from: {validation['common_columns']}")
-                    return {'error': 'Query column required', 'available_columns': validation['common_columns']}
-                else:
-                    return {'error': 'No columns found'}
+                # Try common column names
+                common_names = ['query_string', 'query', 'sql_query', 'sql', 'hashed_query']
+                available_columns = validation.get('common_columns', [])
+                
+                for col_name in common_names:
+                    if col_name in available_columns:
+                        query_column = col_name
+                        logger.info(f"Auto-selected query column: {query_column}")
+                        break
+                
+                if not query_column:
+                    logger.error("Could not determine query column")
+                    return {
+                        'error': 'Query column required',
+                        'available_columns': available_columns,
+                        'suggestion': 'Please specify query_column parameter'
+                    }
         
-        # Step 3: Submit for distributed processing
-        session_id = self.submit_distributed_jobs(
-            parquet_files=parquet_files,
-            query_column=query_column,
-            from_sql=from_sql,
-            to_sql=to_sql
+        logger.info(f"Using query column: {query_column}")
+        
+        # Step 3: Submit all files with individual sessions
+        submissions = self.submit_batch(
+            parquet_files, query_column, from_sql, to_sql, feature_flags
         )
         
-        result = {'session_id': session_id, 'files_submitted': len(parquet_files)}
+        result = {
+            'total_files': len(submissions),
+            'submissions': submissions,
+            'query_column': query_column,
+            'from_sql': from_sql or self.processing_config.get('default_from_sql'),
+            'to_sql': to_sql or self.processing_config.get('default_to_sql')
+        }
         
         # Step 4: Monitor if requested
         if monitor:
-            final_status = self.monitor_session(session_id)
-            result['final_status'] = final_status
+            self.monitor_sessions()
+            
+            # Get final status
+            final_status = self.redis_manager.get_all_sessions_status()
+            result['final_summary'] = final_status['summary']
+            
+            # Add detailed results for each session
+            result['session_results'] = []
+            for submission in submissions:
+                session = self.redis_manager.get_session(submission['session_id'])
+                result['session_results'].append({
+                    'file': submission['file_name'],
+                    'session_id': submission['session_id'],
+                    'status': session.get('status'),
+                    'worker_id': session.get('worker_id'),
+                    'processing_time': session.get('result', {}).get('processing_time') if session.get('result') else None,
+                    'total_queries': session.get('result', {}).get('total_queries') if session.get('result') else None,
+                    'success_rate': session.get('result', {}).get('success_rate') if session.get('result') else None
+                })
         
         return result
+    
+    def get_session_details(self, session_id: str) -> Dict[str, Any]:
+        """Get detailed information about a specific session"""
+        return self.redis_manager.get_session(session_id)
+    
+    def get_all_status(self) -> Dict[str, Any]:
+        """Get status of all sessions"""
+        return self.redis_manager.get_all_sessions_status()
 
 
 def main():
     """Main entry point for command-line usage"""
     if len(sys.argv) < 2:
         print("Usage: python orchestrator.py <s3_path> [query_column] [from_sql] [to_sql]")
+        print("\nExamples:")
+        print("  python orchestrator.py s3://bucket/file.parquet")
+        print("  python orchestrator.py s3://bucket/directory/ query_string")
+        print("  python orchestrator.py s3://bucket/directory/ query_string snowflake e6")
         sys.exit(1)
     
     s3_path = sys.argv[1]
@@ -232,6 +397,7 @@ def main():
     
     orchestrator = ParquetOrchestrator()
     
+    # Process the directory/file
     result = orchestrator.process_s3_directory(
         s3_path=s3_path,
         query_column=query_column,
@@ -240,8 +406,45 @@ def main():
         monitor=True
     )
     
-    print("\nFinal Result:")
-    print(json.dumps(result, indent=2))
+    # Print summary
+    print("\n" + "="*60)
+    print("DISTRIBUTED PROCESSING COMPLETE")
+    print("="*60)
+    
+    if 'error' in result:
+        print(f"Error: {result['error']}")
+        if 'details' in result:
+            print(f"Details: {result.get('details')}")
+    else:
+        summary = result.get('final_summary', {})
+        print(f"Total Files Submitted: {result['total_files']}")
+        print(f"Successfully Completed: {summary.get('completed', 0)}")
+        print(f"Failed: {summary.get('failed', 0)}")
+        print(f"Query Column: {result['query_column']}")
+        print(f"Transpilation: {result['from_sql']} → {result['to_sql']}")
+        
+        # Show session details
+        if 'session_results' in result:
+            print("\n" + "-"*60)
+            print("Session Results:")
+            print("-"*60)
+            for session_result in result['session_results'][:10]:  # Show first 10
+                print(f"\nFile: {session_result['file']}")
+                print(f"  Session ID: {session_result['session_id']}")
+                print(f"  Status: {session_result['status']}")
+                if session_result['status'] == 'completed':
+                    print(f"  Total Queries: {session_result.get('total_queries', 'N/A')}")
+                    print(f"  Success Rate: {session_result.get('success_rate', 'N/A')}")
+                    print(f"  Processing Time: {session_result.get('processing_time', 0):.2f}s")
+            
+            if len(result['session_results']) > 10:
+                print(f"\n... and {len(result['session_results']) - 10} more files")
+        
+        print("\n" + "="*60)
+        print("Use Redis to query individual session details:")
+        print(f"  python -c \"from redis_manager import RedisManager; import json;")
+        print(f"  m = RedisManager(); print(json.dumps(m.get_session('<session_id>'), indent=2))\"")
+        print("="*60)
 
 
 if __name__ == "__main__":
