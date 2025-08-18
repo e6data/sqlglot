@@ -1456,9 +1456,9 @@ async def validate_s3_bucket(
         # Create S3 filesystem
         try:
             s3fs = fs.S3FileSystem(
-                access_key="ASIAZYHN7XI6ZTX3KJEJ",
-                secret_key="hOcG+e5bwquMnbhzks12/K1PhVMgTZgySlQVN9iu",
-                session_token="FwoGZXIvYXdzEGcaDHJyp+cRWXtq0YgroyLWAQ7Bf70u6cz6kpqa5uWj/+x7iVOkN/VAtnTn7JRVsQbi7XECSF7xhqwbsO8xzV36+XJvw1LywWBmPbUm+vvHx/HYl9+FndnKGbgLHO1lo7cfeOvJ7VwqrOYh8m6jG5bKvBX32BcgWnQJ3wPhaNWsc83WVGfJzBawO2fHJywXObIzc0G3wi7HSKmKe2GE1nRi53F2LEIdi18Ko9SC6he54vepZjGyXz9FClwJ9RoM2nvH5ig8Ky8fEQRW8Q6icozI9Faxvm1/PnwWFBIEdB28upHQUvkzGbco2fOKxQYyM0OzLVe+PoLAC3uat5q57wCfNPV96sg6JGET/pMgmqF/BQ3kxw1QX1hwYtH3XcTyexL+Ng==",
+                access_key=os.environ.get("AWS_ACCESS_KEY_ID"),
+                secret_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                session_token=os.environ.get("AWS_SESSION_TOKEN"),
                 region='us-east-1',
                 connect_timeout=30,
                 request_timeout=60
