@@ -25,8 +25,9 @@ def process_parquet_directory_handler(
     from_dialect: str,
     to_dialect: str = "e6",
     batch_size: int = 10000,
-    use_batch_processing: bool = True,
-    query_column: str = "hashed_query"
+    query_column: str = "hashed_query",
+    query_hash: str = "query_hash",
+    feature_flags: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Handler for /process-parquet-directory endpoint
@@ -74,7 +75,7 @@ def process_parquet_directory_handler(
         for file_path in parquet_files:
             try:
                 # Use the batch_processor pre-scan function
-                scan_result = calculate_optimal_batches(file_path, query_column, batch_size)
+                scan_result = calculate_optimal_batches(file_path, query_hash, batch_size)
                 
                 if scan_result.get("error"):
                     logger.error(f"Error scanning {Path(file_path).name}: {scan_result['error']}")
@@ -140,8 +141,10 @@ def process_parquet_directory_handler(
                         "remainder": remainder,
                         "total_batches": num_batches,
                         "query_column": query_column,
+                        "query_hash": query_hash,
                         "from_dialect": from_dialect,
                         "to_dialect": to_dialect,
+                        "feature_flags": feature_flags,
                         "estimated_unique_per_batch": file_stat["queries_per_batch"]
                     }
                     
@@ -254,8 +257,10 @@ def retry_batch_handler(batch_id: str) -> Dict[str, Any]:
             "remainder": batch_details["remainder"],
             "total_batches": batch_details["total_batches"],
             "query_column": "hashed_query",  # Default
+            "query_hash": "query_Hash",  # Default
             "from_dialect": session_status["from_dialect"],
             "to_dialect": session_status["to_dialect"],
+            "feature_flags": None,  # Default
             "estimated_unique_per_batch": 0
         }
         

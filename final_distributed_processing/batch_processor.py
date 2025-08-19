@@ -7,7 +7,11 @@ import hashlib
 import logging
 import time
 from typing import Dict, List, Tuple, Any, Optional
+import re
+import json
 from pathlib import Path
+
+from fastapi import HTTPException
 
 # Setup logging
 logging.basicConfig(
@@ -31,14 +35,14 @@ def hash_query(query_text: str) -> int:
     return int(sha256_hash[:8], 16)
 
 
-def calculate_optimal_batches(file_path: str, query_column: str, target_batch_size: int = 10000) -> Dict[str, Any]:
+def calculate_optimal_batches(file_path: str, query_hash: str, target_batch_size: int = 10000) -> Dict[str, Any]:
     """
     Pre-scan file to count unique queries and determine optimal batch count.
     Fast scan since we only need to count unique values.
     
     Args:
         file_path: Path to parquet file
-        query_column: Column containing queries
+        query_hash: Column containing hashes
         target_batch_size: Target number of unique queries per batch
         
     Returns:
@@ -48,16 +52,16 @@ def calculate_optimal_batches(file_path: str, query_column: str, target_batch_si
     
     try:
         # Fast scan - read only the query column
-        df_queries = pd.read_parquet(file_path, columns=[query_column])
+        df_queries = pd.read_parquet(file_path, columns=[query_hash])
         
         # Count unique queries
-        unique_count = df_queries[query_column].nunique()
+        unique_count = df_queries[query_hash].nunique()
         total_count = len(df_queries)
         
         scan_time = time.time() - start_time
         
         # Calculate optimal batches based on unique count
-        num_batches = max(1, unique_count // target_batch_size)
+        num_batches = max(1, (unique_count // target_batch_size)+1)
         queries_per_batch = unique_count // num_batches if num_batches > 0 else unique_count
         
         logger.info(f"Pre-scan completed for {Path(file_path).name}:")
@@ -89,6 +93,7 @@ def calculate_optimal_batches(file_path: str, query_column: str, target_batch_si
 def create_modulo_batch(
     file_path: str, 
     query_column: str,
+    query_hash: str,
     remainder: int, 
     total_batches: int,
     chunk_size: int = 50000
@@ -98,6 +103,7 @@ def create_modulo_batch(
     Workers create batches on-the-fly without storing them.
     
     Args:
+        query_hash: Column containing hashes
         file_path: Path to parquet file
         query_column: Column containing queries
         remainder: Modulo remainder for this batch (0 to total_batches-1)
@@ -115,20 +121,21 @@ def create_modulo_batch(
     try:
         # Read the entire parquet file (parquet doesn't support chunking like CSV)
         df = pd.read_parquet(file_path)
-        
+
         for _, row in df.iterrows():
             query_text = str(row[query_column])
-            
+            hash_text = str(row[query_hash])
+
             if query_text and query_text.strip():
-                # Calculate hash and check modulo condition
-                query_hash = hash_query(query_text)
-                
-                if query_hash % total_batches == remainder:
+                # Convert hex hash to 64-bit integer (first 16 chars to fit in long)
+                query_hash_int = hash_query(query_text)
+
+                if query_hash_int % total_batches == remainder:
                     # This query belongs to this batch
-                    batch_dict[str(query_hash)] = query_text
-            
+                    batch_dict[str(query_hash_int)] = query_text
+
             processed_rows += 1
-            
+
             # Log progress for large files
             if processed_rows % 100000 == 0:
                 logger.info(f"Processed {processed_rows} rows, found {len(batch_dict)} queries for batch {remainder}")
@@ -146,7 +153,8 @@ def process_batch_queries(
     batch_dict: Dict[str, str],
     from_dialect: str,
     to_dialect: str,
-    batch_id: str
+    batch_id: str,
+    feature_flags: str,
 ) -> List[Dict[str, Any]]:
     """
     Process all queries in a batch dictionary using the existing converter logic
@@ -156,6 +164,7 @@ def process_batch_queries(
         from_dialect: Source SQL dialect
         to_dialect: Target SQL dialect
         batch_id: Identifier for this batch
+        feature_flags: Optional feature flag
         
     Returns:
         List of processing results for each query
@@ -180,12 +189,19 @@ def process_batch_queries(
             extract_cte_n_subquery_list, set_cte_names_case_sensitively,
             unsupported_functionality_identifiers
         )
+
+        flags_dict = {}
+        if feature_flags:
+            try:
+                flags_dict = json.loads(feature_flags)
+            except json.JSONDecodeError as je:
+                return HTTPException(status_code=500, detail=str(je))
+
         from sqlglot import parse_one
         from sqlglot.optimizer.qualify_columns import quote_identifiers
         
         # Load supported functions for analysis
         supported_functions_in_target = load_supported_functions(to_dialect)
-        from_dialect_functions = load_supported_functions(from_dialect)
         
         functions_as_keywords = [
             "LIKE", "ILIKE", "RLIKE", "AT TIME ZONE", "||", "DISTINCT", "QUALIFY"
@@ -198,7 +214,9 @@ def process_batch_queries(
         ]
         
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
-        keyword_pattern = r"\b(?:" + "|".join([f"\\b{func}\\b" for func in functions_as_keywords]) + r")\b"
+        keyword_pattern = (
+                r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
+        )
         
     except ImportError as e:
         logger.error(f"Failed to import converter utilities: {str(e)}")
@@ -222,7 +240,11 @@ def process_batch_queries(
                 all_functions, supported_functions_in_target, functions_as_keywords
             )
 
+            from_dialect_functions = load_supported_functions(from_dialect)
             udf_list, unsupported = extract_udfs(unsupported, from_dialect_functions)
+
+            executable = "YES"
+            error_flag = False
 
             # Parse and analyze original query
             original_ast = parse_one(query_text, read=from_dialect)
@@ -237,31 +259,37 @@ def process_batch_queries(
             # Transpile query
             tree = parse_one(normalized_query, read=from_dialect, error_level=None)
             tree2 = quote_identifiers(tree, dialect=to_dialect)
-            values_ensured = ensure_select_from_values(tree2)
-            cte_checked = set_cte_names_case_sensitively(values_ensured)
-            converted_query = cte_checked.sql(
-                dialect=to_dialect, from_dialect=from_dialect, pretty=True
+            double_quotes_added_query = tree2.sql(
+                dialect=to_dialect, from_dialect=from_dialect, pretty=flags_dict.get("PRETTY_PRINT", True)
             )
-            converted_query = replace_struct_in_query(converted_query)
-            converted_query = add_comment_to_query(converted_query, comment)
+
+            double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+            double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
             
             # Analyze converted query
-            all_functions_converted = extract_functions_from_query(
-                converted_query, function_pattern, keyword_pattern, exclusion_list
+            all_functions_converted_query = extract_functions_from_query(
+                double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
             )
-            supported_in_converted, unsupported_in_converted = categorize_functions(
-                all_functions_converted, supported_functions_in_target, functions_as_keywords
+            supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
+                categorize_functions(
+                    all_functions_converted_query, supported_functions_in_target, functions_as_keywords
+                )
             )
-            
-            converted_ast = parse_one(converted_query, read=to_dialect)
-            supported_in_converted, unsupported_in_converted = unsupported_functionality_identifiers(
-                converted_ast, unsupported_in_converted, supported_in_converted
+
+            double_quote_ast = parse_one(double_quotes_added_query, read=to_dialect)
+            supported_in_converted, unsupported_in_converted = (
+                unsupported_functionality_identifiers(
+                    double_quote_ast,
+                    unsupported_functions_in_converted_query,
+                    supported_functions_in_converted_query,
+                )
             )
             
             joins_list = extract_joins_from_query(original_ast)
             cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
-            
-            executable = "NO" if unsupported_in_converted else "YES"
+            if unsupported_in_converted:
+                executable = "NO"
             
             processing_time_ms = int((time.time() - query_start_time) * 1000)
             
@@ -272,7 +300,7 @@ def process_batch_queries(
                 "from_dialect": from_dialect,
                 "to_dialect": to_dialect,
                 "original_query": query_text,
-                "converted_query": converted_query,
+                "converted_query": double_quotes_added_query,
                 "supported_functions": list(supported),
                 "unsupported_functions": list(unsupported),
                 "udf_list": list(udf_list),
@@ -346,7 +374,7 @@ def store_batch_results_to_iceberg(results: List[Dict[str, Any]], batch_id: str)
         
         for i, result in enumerate(results):
             iceberg_data = {
-                "query_id": i + 1,
+                "query_id": int(result["query_hash"][:12], 16),
                 "batch_id": batch_id,
                 "timestamp": datetime.now(),
                 "status": result["status"],
@@ -355,10 +383,10 @@ def store_batch_results_to_iceberg(results: List[Dict[str, Any]], batch_id: str)
                 "to_dialect": result["to_dialect"],
                 "original_query": result["original_query"],
                 "converted_query": result["converted_query"],
-                "supported_functions": set(result["supported_functions"]),
-                "unsupported_functions": set(result["unsupported_functions"]),
-                "udf_list": set(result["udf_list"]),
-                "tables_list": set(result["tables_list"]),
+                "supported_functions": result["supported_functions"],  # Keep as list
+                "unsupported_functions": result["unsupported_functions"],  # Keep as list
+                "udf_list": result["udf_list"],  # Keep as list
+                "tables_list": result["tables_list"],  # Keep as list
                 "processing_time_ms": result["processing_time_ms"],
                 "error_message": result["error_message"]
             }
@@ -377,12 +405,14 @@ def store_batch_results_to_iceberg(results: List[Dict[str, Any]], batch_id: str)
 def process_modulo_batch_complete(
     file_path: str,
     query_column: str,
+    query_hash: str,
     remainder: int,
     total_batches: int,
     from_dialect: str,
     to_dialect: str,
     session_id: str,
-    task_id: str
+    task_id: str,
+    feature_flags: str,
 ) -> Dict[str, Any]:
     """
     Complete modulo batch processing workflow:
@@ -391,6 +421,7 @@ def process_modulo_batch_complete(
     3. Store results to Iceberg
     
     Args:
+        query_hash: Column containing hashes
         file_path: Path to parquet file
         query_column: Column containing queries
         remainder: Modulo remainder (0 to total_batches-1)
@@ -399,6 +430,7 @@ def process_modulo_batch_complete(
         to_dialect: Target SQL dialect
         session_id: Session identifier
         task_id: Celery task identifier
+        feature_flags: Optional feature flag
         
     Returns:
         Processing results summary
@@ -413,7 +445,7 @@ def process_modulo_batch_complete(
     
     try:
         # Step 1: Create batch dictionary
-        batch_dict = create_modulo_batch(file_path, query_column, remainder, total_batches)
+        batch_dict = create_modulo_batch(file_path, query_column, query_hash, remainder, total_batches)
         
         if not batch_dict:
             logger.warning(f"No queries found for batch {batch_id}")
@@ -428,7 +460,7 @@ def process_modulo_batch_complete(
             }
         
         # Step 2: Process all queries in the batch
-        results = process_batch_queries(batch_dict, from_dialect, to_dialect, batch_id)
+        results = process_batch_queries(batch_dict, from_dialect, to_dialect, batch_id, feature_flags)
         
         # Step 3: Store results to Iceberg
         storage_success = store_batch_results_to_iceberg(results, batch_id)

@@ -2,6 +2,7 @@
 Celery Worker for Modulo Batch Processing
 Implements the process_modulo_batch task for hash-based batch distribution
 """
+from PIL.features import features
 from celery import Celery, current_task
 import logging
 from datetime import datetime
@@ -68,8 +69,10 @@ def process_modulo_batch(
     remainder = task_data['remainder']
     total_batches = task_data['total_batches']
     query_column = task_data['query_column']
+    query_hash = task_data['query_hash']
     from_dialect = task_data['from_dialect']
     to_dialect = task_data['to_dialect']
+    feature_flags = task_data['feature_flags']
     
     worker_id = f"{self.request.hostname}:{self.request.id[:8]}"
     task_id = self.request.id
@@ -113,12 +116,14 @@ def process_modulo_batch(
         result = process_modulo_batch_complete(
             file_path=file_path,
             query_column=query_column,
+            query_hash=query_hash,
             remainder=remainder,
             total_batches=total_batches,
             from_dialect=from_dialect,
             to_dialect=to_dialect,
             session_id=session_id,
-            task_id=task_id
+            task_id=task_id,
+            feature_flags=feature_flags,
         )
         
         # Update task status to completed
