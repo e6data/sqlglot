@@ -22,8 +22,10 @@ COPY . .
 
 # Make port 8100 available to the world outside this container
 USER e6
+EXPOSE 8100
 
 HEALTHCHECK none
 
 # Run the FastAPI app using Uvicorn
-CMD ["uvicorn", "converter_api:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "5"]
+# Workers will be calculated dynamically based on CPU cores
+CMD ["python", "converter_api.py"]
