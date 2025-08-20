@@ -652,4 +652,4 @@ if __name__ == "__main__":
     
     logger.info(f"Detected {cpu_cores} CPU cores, using {workers} workers")
     
-    uvicorn.run("converter_api:app", host="localhost", port=8100, proxy_headers=True, workers=workers)
+    uvicorn.run("converter_api:app", host="0.0.0.0", port=8100, proxy_headers=True, workers=workers)

@@ -5,8 +5,7 @@ WORKDIR /app
 
 # Install dependencies required for building certain packages, including pyarrow
 RUN apk add --no-cache gcc g++ cmake make libxml2-dev libxslt-dev \
-    && apk add --no-cache py3-pyarrow openssl && \
-    adduser --home /app e6 --disabled-password
+    && apk add --no-cache py3-pyarrow openssl
 
 # Copy the requirements file into the container
 COPY requirements.txt .
@@ -20,14 +19,11 @@ RUN pip install fastapi==0.115.4 uvicorn==0.32.0 python-multipart
 # Copy the rest of the application code into the container
 COPY . .
 
-# Make entrypoint script executable
-RUN chmod +x entrypoint.sh
-
 # Make port 8100 available to the world outside this container
-USER e6
+EXPOSE 8100
 
 HEALTHCHECK none
 
 # Run the FastAPI app using Uvicorn
 # Workers will be calculated dynamically based on CPU cores
-CMD ["./entrypoint.sh"]
+CMD ["python", "converter_api.py"]
