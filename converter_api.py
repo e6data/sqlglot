@@ -59,11 +59,6 @@ app = FastAPI()
 
 logger = logging.getLogger(__name__)
 
-# Import Iceberg handler from final_distributed_processing
-from final_distributed_processing.iceberg_handler import (
-    store_query_in_iceberg,
-    get_iceberg_table_stats
-)
 
 if ENABLE_GUARDRAIL.lower() == "true":
     logger.info("Storage Engine URL: ", STORAGE_ENGINE_URL)
@@ -656,558 +651,131 @@ async def guardstats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Import the parquet reader functions from bucket-reader directory
-import sys
-import os
-# Add the bucket-reader directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'bucket-reader'))
-
-
-@app.post("/batch-statistics-s3")
-async def batch_statistics_s3(
-    # s3_path: str = Form(...),
-    local_path: str = Form(...), #Commented out for local testing
-    query_column: str = Form("hashed_query"),  # Default to 'query' column
-    from_sql: str = Form("databricks"),  # Default source dialect
-    to_sql: Optional[str] = Form("e6"),
-    feature_flags: Optional[str] = Form(None),
-    memory_threshold_mb: Optional[int] = Form(500),
-    batch_size: Optional[int] = Form(50000),
-):
-    """
-    Process SQL queries from local parquet file with full statistics like the /statistics endpoint.
-    Uses the test_queries.parquet file for testing Iceberg implementation.
-    
-    Args:
-        query_column: Column name containing SQL queries (default 'query')
-        from_sql: Source SQL dialect (default 'mysql')
-        to_sql: Target SQL dialect
-        feature_flags: JSON string of feature flags
-        memory_threshold_mb: File size threshold (default 500MB) - files larger than this will be streamed
-        batch_size: Rows per batch when streaming (default 50000)
-    """
-    timestamp = datetime.now().isoformat()
-    to_sql = to_sql.lower()
-    
-    # Use local parquet file for testing
-    local_parquet_path = local_path
-
-    logger.info(f"Batch statistics from local parquet AT {timestamp} FROM {from_sql.upper()}")
-    
-    # Parse feature flags
-    flags_dict = {}
-    if feature_flags and feature_flags.strip():
-        try:
-            flags_dict = json.loads(feature_flags)
-        except json.JSONDecodeError as je:
-            raise HTTPException(status_code=400, detail=f"Invalid feature_flags JSON: {str(je)}")
-    
-    # Load supported functions
-    supported_functions_in_e6 = load_supported_functions(to_sql)
-    from_dialect_function_list = load_supported_functions(from_sql)
-    
-    functions_as_keywords = [
-        "LIKE", "ILIKE", "RLIKE", "AT TIME ZONE", "||", "DISTINCT", "QUALIFY"
-    ]
-    
-    exclusion_list = [
-        "AS", "AND", "THEN", "OR", "ELSE", "WHEN", "WHERE", "FROM", 
-        "JOIN", "OVER", "ON", "ALL", "NOT", "BETWEEN", "UNION", 
-        "SELECT", "BY", "GROUP", "EXCEPT", "SETS"
-    ]
-    
-    function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
-    keyword_pattern = r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
-    
-    # Results aggregation
-    batch_results = []
-    total_processed = 0
-    total_successful = 0
-    total_failed = 0
-    
-    # Aggregate statistics
-    all_supported_functions = set()
-    all_unsupported_functions = set()
-    all_udf_list = set()
-    all_tables = set()
-    all_joins = []
-    all_unsupported_after_transpilation = set()
-    
-    # Initialize PyArrow table for efficient storage and eventual Iceberg/Delta integration
-    results_schema = pa.schema([
-        ('query_id', pa.int64()),
-        ('status', pa.string()),
-        ('executable', pa.string()),
-        ('original_query', pa.string()),
-        ('converted_query', pa.string()),
-        ('supported_functions', pa.list_(pa.string())),
-        ('unsupported_functions', pa.list_(pa.string())),
-        ('udf_list', pa.list_(pa.string())),
-        ('tables_list', pa.list_(pa.string())),
-        ('error_message', pa.string())
-    ])
-    
-    # Initialize empty PyArrow table with proper empty arrays for each column
-    empty_arrays = [
-        pa.array([], type=pa.int64()),           # query_id
-        pa.array([], type=pa.string()),          # status
-        pa.array([], type=pa.string()),          # executable
-        pa.array([], type=pa.string()),          # original_query
-        pa.array([], type=pa.string()),          # converted_query
-        pa.array([], type=pa.list_(pa.string())),  # supported_functions
-        pa.array([], type=pa.list_(pa.string())),  # unsupported_functions
-        pa.array([], type=pa.list_(pa.string())),  # udf_list
-        pa.array([], type=pa.list_(pa.string())),  # tables_list
-        pa.array([], type=pa.string())           # error_message
-    ]
-    results_table = pa.table(empty_arrays, schema=results_schema)
-    
-    try:
-        # Check if l`ocal parquet file exists
-        import os
-        if not os.path.exists(local_parquet_path):
-            raise HTTPException(status_code=404, detail=f"Test parquet file not found: {local_parquet_path}")
-        
-        # Get file size
-        file_size_mb = os.path.getsize(local_parquet_path) / (1024**2)
-        
-        logger.info(f"Local file size: {file_size_mb:.1f} MB, threshold: {memory_threshold_mb} MB")
-        
-        # Choose processing method based on file size (for testing, we'll use direct read)
-        use_streaming = file_size_mb > memory_threshold_mb
-        
-        def process_query(query_str, query_id):
-            """Process a single query and return statistics"""
-            if not query_str or not query_str.strip():
-                return None
-            
-            try:
-                query_str = normalize_unicode_spaces(query_str)
-                item = "condenast"
-                query_str, comment = strip_comment(query_str, item)
-                
-                # Extract functions
-                all_functions = extract_functions_from_query(
-                    query_str, function_pattern, keyword_pattern, exclusion_list
-                )
-                supported, unsupported = categorize_functions(
-                    all_functions, supported_functions_in_e6, functions_as_keywords
-                )
-                
-                udf_list, unsupported = extract_udfs(unsupported, from_dialect_function_list)
-                
-                # Parse and analyze
-                original_ast = parse_one(query_str, read=from_sql)
-                tables_list = extract_db_and_Table_names(original_ast)
-                supported, unsupported = unsupported_functionality_identifiers(
-                    original_ast, unsupported, supported
-                )
-                values_ensured_ast = ensure_select_from_values(original_ast)
-                cte_names_equivalence_ast = set_cte_names_case_sensitively(values_ensured_ast)
-                query_str = cte_names_equivalence_ast.sql(from_sql)
-                
-                # Transpile
-                tree = sqlglot.parse_one(query_str, read=from_sql, error_level=None)
-                
-                if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
-                    if flags_dict.get("SKIP_E6_TRANSPILATION", False):
-                        converted = transform_catalog_schema_only(query_str, from_sql)
-                        converted = add_comment_to_query(converted, comment)
-                    else:
-                        tree = transform_table_part(tree)
-                        tree2 = quote_identifiers(tree, dialect=to_sql)
-                        values_ensured = ensure_select_from_values(tree2)
-                        cte_checked = set_cte_names_case_sensitively(values_ensured)
-                        converted = cte_checked.sql(
-                            dialect=to_sql, from_dialect=from_sql, 
-                            pretty=flags_dict.get("PRETTY_PRINT", True)
-                        )
-                        converted = replace_struct_in_query(converted)
-                        converted = add_comment_to_query(converted, comment)
-                else:
-                    tree2 = quote_identifiers(tree, dialect=to_sql)
-                    values_ensured = ensure_select_from_values(tree2)
-                    cte_checked = set_cte_names_case_sensitively(values_ensured)
-                    converted = cte_checked.sql(
-                        dialect=to_sql, from_dialect=from_sql,
-                        pretty=flags_dict.get("PRETTY_PRINT", True)
-                    )
-                    converted = replace_struct_in_query(converted)
-                    converted = add_comment_to_query(converted, comment)
-                
-                # Analyze converted query
-                all_functions_converted = extract_functions_from_query(
-                    converted, function_pattern, keyword_pattern, exclusion_list
-                )
-                supported_in_converted, unsupported_in_converted = categorize_functions(
-                    all_functions_converted, supported_functions_in_e6, functions_as_keywords
-                )
-                
-                converted_ast = parse_one(converted, read=to_sql)
-                supported_in_converted, unsupported_in_converted = unsupported_functionality_identifiers(
-                    converted_ast, unsupported_in_converted, supported_in_converted
-                )
-                
-                joins_list = extract_joins_from_query(original_ast)
-                cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
-                
-                executable = "NO" if unsupported_in_converted else "YES"
-                
-                return {
-                    "supported_functions": supported,
-                    "unsupported_functions": set(unsupported),
-                    "udf_list": set(udf_list),
-                    "converted_query": converted,
-                    "unsupported_after_transpilation": set(unsupported_in_converted),
-                    "executable": executable,
-                    "tables_list": set(tables_list),
-                    "joins_list": joins_list,
-                    "cte_values_subquery_list": cte_values_subquery_list,
-                    "error": False
-                }
-                
-            except Exception as e:
-                logger.debug(f"Error processing query {query_id}: {str(e)}")
-                return {
-                    "error": True,
-                    "error_message": str(e),
-                    "supported_functions": [],
-                    "unsupported_functions": set(),
-                    "udf_list": set(),
-                    "unsupported_after_transpilation": set(),
-                    "tables_list": set(),
-                    "joins_list": [],
-                    "cte_values_subquery_list": []
-                }
-        
-        # Process queries based on file size
-        if use_streaming:
-            logger.info(f"Using STREAMING for large file ({file_size_mb:.1f} MB)")
-            
-            # For local file streaming, we'll use pandas chunking
-            batch_num = 0
-
-            # Read in chunks for streaming
-            for chunk_df in pd.read_parquet(local_parquet_path, chunksize=batch_size):
-                batch_num += 1
-                batch_start = time.time()
-                batch_success = 0
-                batch_fail = 0
-                
-                for idx, query in enumerate(chunk_df[query_column].dropna()):
-                    query_id = f"batch_{batch_num}_row_{idx}"
-                    result = process_query(str(query), query_id)
-                    
-                    if result:
-                        # Store query result in Iceberg table
-                        processing_start_time = batch_start
-                        processing_time_ms = int((time.time() - processing_start_time) * 1000)
-
-                        iceberg_data = {
-                            "query_id": idx + (batch_num - 1) * batch_size,
-                            "batch_id": f"batch_{batch_num}",
-                            "timestamp": datetime.now(),
-                            "status": "success" if not result.get("error") else "failed",
-                            "executable": result.get("executable", "NO"),
-                            "from_dialect": from_sql,
-                            "to_dialect": to_sql,
-                            "original_query": str(query),
-                            "converted_query": result.get("converted_query", ""),
-                            "supported_functions": result.get("supported_functions", set()),
-                            "unsupported_functions": result.get("unsupported_functions", set()),
-                            "udf_list": result.get("udf_list", set()),
-                            "tables_list": result.get("tables_list", set()),
-                            "processing_time_ms": processing_time_ms,
-                            "error_message": result.get("error_message", "") if result.get("error") else ""
-                        }
-
-                        # Store in Iceberg
-                        store_query_in_iceberg(iceberg_data)
-
-                        if not result.get("error"):
-                            batch_success += 1
-                            all_supported_functions.update(result["supported_functions"])
-                            all_unsupported_functions.update(result["unsupported_functions"])
-                            all_udf_list.update(result["udf_list"])
-                            all_tables.update(result["tables_list"])
-                            all_joins.extend(result["joins_list"])
-                            all_unsupported_after_transpilation.update(result["unsupported_after_transpilation"])
-                        else:
-                            batch_fail += 1
-                    
-                    # Log progress every 100 queries with Iceberg stats
-                    if (batch_success + batch_fail) % 100 == 0:
-                        iceberg_stats = get_iceberg_table_stats()
-                        logger.info(f"\n{'='*60}")
-                        logger.info(f"PROGRESS REPORT - Every 100 queries processed")
-                        logger.info(f"{'='*60}")
-                        logger.info(f"Batch {batch_num}: {batch_success + batch_fail} queries processed ({batch_success} successful, {batch_fail} failed)")
-                        logger.info(f"Iceberg Table Stats: {iceberg_stats}")
-                        logger.info(f"Latest Query ID: {query_id}")
-                        logger.info(f"Query Status: {'SUCCESS' if not result.get('error') else 'FAILED'}")
-                        logger.info(f"Executable: {result.get('executable', 'NO')}")
-                        logger.info(f"{'='*60}\n")
-                
-                batch_time = time.time() - batch_start
-                batch_results.append({
-                    "batch_number": batch_num,
-                    "rows_processed": len(chunk_df),
-                    "successful": batch_success,
-                    "failed": batch_fail,
-                    "processing_time": batch_time
-                })
-                
-                total_processed += len(chunk_df)
-                total_successful += batch_success
-                total_failed += batch_fail
-                
-                logger.info(f"Batch {batch_num}: {batch_success} successful, {batch_fail} failed in {batch_time:.2f}s")
-        
-        else:
-            logger.info(f"Using DIRECT READ for small file ({file_size_mb:.1f} MB)")
-            
-            # Read the local parquet file directly
-            df = pd.read_parquet(local_parquet_path)
-            
-            batch_start = time.time()
-            for idx, query in enumerate(df[query_column].dropna()):
-                query_id = f"row_{idx}"
-                result = process_query(str(query), query_id)
-                
-                if result:
-                    # Store query result in Iceberg table
-                    processing_time_ms = int((time.time() - batch_start) * 1000)
-
-                    iceberg_data = {
-                        "query_id": idx + 1,
-                        "batch_id": "direct_processing",
-                        "timestamp": datetime.now(),
-                        "status": "success" if not result.get("error") else "failed",
-                        "executable": result.get("executable", "NO"),
-                        "from_dialect": from_sql,
-                        "to_dialect": to_sql,
-                        "original_query": str(query),  # FULL QUERY - NO TRUNCATION
-                        "converted_query": result.get("converted_query", ""),
-                        "supported_functions": result.get("supported_functions", set()),
-                        "unsupported_functions": result.get("unsupported_functions", set()),
-                        "udf_list": result.get("udf_list", set()),
-                        "tables_list": result.get("tables_list", set()),
-                        "processing_time_ms": processing_time_ms,
-                        "error_message": result.get("error_message", "") if result.get("error") else ""
-                    }
-
-                    # Store in Iceberg
-                    store_query_in_iceberg(iceberg_data)
-
-                    # Add individual query result to results array (NO TRUNCATION)
-                    individual_result = {
-                        "query_id": idx + 1,
-                        "original_query": str(query),  # FULL QUERY - NO TRUNCATION
-                        "status": "success" if not result.get("error") else "failed",
-                        "converted_query": result.get("converted_query", ""),
-                        "executable": result.get("executable", "NO"),
-                        "supported_functions": list(result.get("supported_functions", [])),
-                        "unsupported_functions": list(result.get("unsupported_functions", [])),
-                        "udf_list": list(result.get("udf_list", [])),
-                        "tables_list": list(result.get("tables_list", [])),
-                        "joins_list": result.get("joins_list", []),
-                        "error_message": result.get("error_message", "") if result.get("error") else ""
-                    }
-                    
-                    # Add to PyArrow table for efficient storage
-                    new_row_data = [
-                        [individual_result["query_id"]],
-                        [individual_result["status"]], 
-                        [individual_result["executable"]],
-                        [individual_result["original_query"]],
-                        [individual_result["converted_query"]],
-                        [individual_result["supported_functions"]],
-                        [individual_result["unsupported_functions"]],
-                        [individual_result["udf_list"]],
-                        [individual_result["tables_list"]],
-                        [individual_result["error_message"]]
-                    ]
-                    
-                    new_row_table = pa.table(new_row_data, schema=results_schema)
-                    results_table = pa.concat_tables([results_table, new_row_table])
-                    
-                    # Display log and Iceberg stats every 100 queries processed
-                    if (idx + 1) % 100 == 0:
-                        iceberg_stats = get_iceberg_table_stats()
-                        
-                        logger.info(f"\n{'='*80}")
-                        logger.info(f"BATCH PROCESSING - {idx + 1} queries processed and stored in Iceberg")
-                        logger.info(f"{'='*80}")
-                        logger.info(f"Iceberg Table Statistics:")
-                        for key, value in iceberg_stats.items():
-                            logger.info(f"  {key}: {value}")
-
-                        logger.info(f"\nLast 5 queries processed:")
-                        # Show last 5 queries in the table
-                        start_idx = max(0, results_table.num_rows - 5)
-                        for i in range(start_idx, results_table.num_rows):
-                            query_id_val = results_table['query_id'][i].as_py()
-                            status_val = results_table['status'][i].as_py()
-                            executable_val = results_table['executable'][i].as_py()
-                            original_val = results_table['original_query'][i].as_py()
-                            converted_val = results_table['converted_query'][i].as_py()
-                            error_msg_val = results_table['error_message'][i].as_py()
-                            
-                            logger.info(f"\n--- QUERY #{query_id_val} ---")
-                            logger.info(f"Status: {status_val} | Executable: {executable_val}")
-                            logger.info(f"Original: {original_val[:100]}..." if len(str(original_val)) > 100 else f"Original: {original_val}")
-                            logger.info(f"Converted: {converted_val[:100]}..." if len(str(converted_val)) > 100 else f"Converted: {converted_val}")
-                            if error_msg_val:
-                                logger.info(f"Error: {error_msg_val}")
-                            logger.info(f"{'-'*40}")
-                        
-                        logger.info(f"\n{'='*80}\n")
-                    
-                    if not result.get("error"):
-                        total_successful += 1
-                        all_supported_functions.update(result["supported_functions"])
-                        all_unsupported_functions.update(result["unsupported_functions"])
-                        all_udf_list.update(result["udf_list"])
-                        all_tables.update(result["tables_list"])
-                        all_joins.extend(result["joins_list"])
-                        all_unsupported_after_transpilation.update(result["unsupported_after_transpilation"])
-                    else:
-                        total_failed += 1
-                
-            
-            total_processed = len(df)
-            batch_time = time.time() - batch_start
-            
-            batch_results.append({
-                "batch_number": 1,
-                "rows_processed": total_processed,
-                "successful": total_successful,
-                "failed": total_failed,
-                "processing_time": batch_time
-            })
-        
-        processing_time = (datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()
-        
-        # Get final Iceberg statistics
-        final_iceberg_stats = get_iceberg_table_stats()
-
-        logger.info(f"\n{'='*100}")
-        logger.info(f"BATCH PROCESSING COMPLETE - FINAL SUMMARY")
-        logger.info(f"{'='*100}")
-        logger.info(
-            f"Processing completed in {processing_time:.2f}s: "
-            f"{total_processed} rows, {total_successful} successful, {total_failed} failed"
-        )
-        logger.info(f"\nFinal Iceberg Table Statistics:")
-        for key, value in final_iceberg_stats.items():
-            logger.info(f"  {key}: {value}")
-        logger.info(f"{'='*100}\n")
-
-        return {
-            "local_path": local_parquet_path,
-            "file_size_mb": file_size_mb,
-            "processing_method": "streaming" if use_streaming else "direct",
-            "total_rows_processed": total_processed,
-            "total_successful": total_successful,
-            "total_failed": total_failed,
-            "success_rate": f"{(total_successful / total_processed * 100):.2f}%" if total_processed > 0 else "0%",
-            "processing_time_seconds": processing_time,
-            "batch_results": batch_results,
-            "aggregate_statistics": {
-                "supported_functions": list(all_supported_functions),
-                "unsupported_functions": list(all_unsupported_functions),
-                "udf_list": list(all_udf_list),
-                "unsupported_after_transpilation": list(all_unsupported_after_transpilation),
-                "tables_list": list(all_tables),
-                "unique_joins_count": len(set(map(str, all_joins))),
-                "executable_count": total_successful - len([x for x in all_unsupported_after_transpilation if x])
-            },
-            "iceberg_table_stats": final_iceberg_stats,
-            "iceberg_warehouse_path": "/Users/niranjgaurav/PycharmProjects/sqlglot/distributed_processing/iceberg_warehouse",
-            "log_records": log_records
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in batch statistics: {str(e)}", exc_info=True)
-        return {
-            "error": True,
-            "error_message": str(e),
-            "log_records": log_records
-        }
-
-
-@app.get("/iceberg-stats")
-async def get_iceberg_statistics():
-    """Get statistics about the local Iceberg table storing batch statistics"""
-    try:
-        stats = get_iceberg_table_stats()
-        return {
-            "success": True,
-            "warehouse_path": "/Users/niranjgaurav/PycharmProjects/sqlglot/distributed_processing/iceberg_warehouse",
-            "catalog_name": "local_catalog",
-            "table_stats": stats
-        }
-    except Exception as e:
-        logger.error(f"Error getting Iceberg statistics: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-
 # Import distributed processing modules
 import sys
 sys.path.append('./final_distributed_processing')
-from final_distributed_processing.api_endpoints import (
-    process_parquet_directory_handler,
-    get_session_status_handler,
-    get_batch_status_handler,
-    retry_batch_handler
-)
+sys.path.append('./automated_processing')
+from automated_processing.orchestrator import orchestrate_processing, get_processing_status, get_task_result
 
 
-@app.post("/process-parquet-directory")
-async def process_parquet_directory(
-    directory_path: str = Form(...),
-    from_dialect: str = Form(...),
-    to_dialect: Optional[str] = Form("e6"),
-    batch_size: int = Form(10000),
-    query_column: str = Form("hashed_query"),
-    query_hash: str = Form("query_Hash"),
-    feature_flags: Optional[str] = Form(None),
+@app.post("/process-parquet-directory-automated")
+async def process_parquet_directory_automated(
+    directory_path: str = Form(..., description="Path to directory containing parquet files"),
+    company_name: str = Form(..., description="Company identifier for Iceberg partitioning"),
+    from_dialect: str = Form(..., description="Source SQL dialect (e.g., snowflake, bigquery)"),
+    to_dialect: str = Form("e6", description="Target SQL dialect"),
+    query_column: str = Form(..., description="Column name containing SQL queries"),
+    batch_size: int = Form(10000, description="Number of queries per batch"),
+    filters: Optional[str] = Form(None, description="JSON string of column filters e.g. '{\"statement_type\": \"SELECT\", \"client_application\": \"PowerBI\"}'")
 ):
     """
-    Single entry point for batch processing entire directories of parquet files
-    Implements hash-based modulo distribution as per architecture
+    Batch processing endpoint for parquet files containing SQL queries.
+    
+    Processes queries through SQLGlot transpilation using Celery distributed workers.
+    Results are stored in Iceberg table with partitioning by company_name and event_date.
     """
-    return process_parquet_directory_handler(
-        directory_path=directory_path,
-        from_dialect=from_dialect,
-        to_dialect=to_dialect,
-        batch_size=batch_size,
-        query_column=query_column,
-        query_hash=query_hash,
-        feature_flags=feature_flags,
-    )
+    
+    logger.info(f"🚀 Starting FULLY AUTONOMOUS processing: {directory_path} ({from_dialect} -> {to_dialect})")
+    
+    try:
+        # Validate inputs first
+        if not directory_path or not directory_path.strip():
+            raise HTTPException(status_code=400, detail="directory_path is required")
+        
+        if not query_column or not query_column.strip():
+            raise HTTPException(status_code=400, detail="query_column is required")
+        
+        if batch_size <= 0:
+            raise HTTPException(status_code=400, detail="batch_size must be positive")
+        
+        # Parse filters if provided
+        filter_dict = {}
+        if filters and filters.strip():
+            try:
+                filter_dict = json.loads(filters)
+                logger.info(f"Parsed filters: {filter_dict}")
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON format for filters parameter")
+        
+        # Use the new simplified orchestrator
+        logger.info("🔧 Starting processing with Celery orchestrator...")
+        
+        # Call the orchestrator which returns immediately
+        result = orchestrate_processing(
+            directory_path=directory_path.strip(),
+            company_name=company_name.strip(),
+            from_dialect=from_dialect.lower().strip(),
+            to_dialect=to_dialect.lower().strip(),
+            query_column=query_column.strip(),
+            batch_size=batch_size,
+            filters=filter_dict
+        )
+        
+        # Check if there was an error
+        if 'error' in result:
+            logger.error(f"❌ Orchestration failed: {result['error']}")
+            raise HTTPException(status_code=500, detail=result['error'])
+        
+        logger.info(f"✅ Processing started with session {result['session_id']}")
+        
+        # Fixed Iceberg storage structure
+        event_date = datetime.now().strftime('%Y-%m-%d')
+        iceberg_structure = f"company_name={company_name}/event_date={event_date}/"
+        
+        logger.info(f"📂 Iceberg structure: {iceberg_structure}")
+        
+        return {
+            "session_id": result['session_id'],
+            "total_files": result.get('total_files', 0),
+            "total_batches": result.get('total_batches', 0),
+            "task_ids": result.get('task_ids', []),
+            "status": result.get('status', 'processing'),
+            "created_at": result.get('created_at'),
+            "status_url": f"/processing-status/{result['session_id']}",
+            "configuration": {
+                "directory_path": directory_path,
+                "company_name": company_name,
+                "query_column": query_column,
+                "batch_size": batch_size,
+                "dialect_conversion": f"{from_dialect} -> {to_dialect}"
+            },
+            "iceberg_storage": {
+                "table": "default.batch_statistics",
+                "partition_structure": iceberg_structure,
+                "storage_pattern": f"{iceberg_structure}session_{result['session_id']}_batch_{{batch_id}}.parquet"
+            },
+            "message": "Processing initiated! Monitor progress at the status_url."
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error in autonomous processing: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start autonomous processing: {str(e)}")
 
 
-@app.get("/status/{session_id}")
-async def get_session_status(session_id: str):
-    """Get status of a batch processing session"""
-    return get_session_status_handler(session_id)
+@app.get("/processing-status/{session_id}")
+async def get_processing_session_status(session_id: str):
+    """Get status of automated processing session"""
+    try:
+        # Let the orchestrator handle task discovery from Redis
+        result = get_processing_status(session_id, [])
+        return result
+    except Exception as e:
+        logger.error(f"❌ Error getting session status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get session status: {str(e)}")
 
 
-@app.get("/batch/{batch_id}/status")
-async def get_batch_status(batch_id: str):
-    """Get status of a specific batch"""
-    return get_batch_status_handler(batch_id)
-
-
-@app.post("/retry/{batch_id}")
-async def retry_batch(batch_id: str):
-    """Retry a failed batch"""
-    return retry_batch_handler(batch_id)
-
+@app.get("/task-result/{task_id}")
+async def get_individual_task_result(task_id: str):
+    """Get result of a specific task"""
+    try:
+        result = get_task_result(task_id)
+        return result
+    except Exception as e:
+        logger.error(f"❌ Error getting task result: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get task result: {str(e)}")
 
 @app.post("/validate-s3-bucket")
 async def validate_s3_bucket(
@@ -1249,7 +817,7 @@ async def validate_s3_bucket(
             s3fs = fs.S3FileSystem(
                 access_key=os.environ.get("AWS_ACCESS_KEY_ID"),
                 secret_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-                session_token=os.environ.get("AWS_SESSION_TOKEN"),
+                session_token=os.environ.get("AWS_SESSION_TOK"),
                 region='us-east-1',
                 connect_timeout=30,
                 request_timeout=60
@@ -1293,7 +861,7 @@ async def validate_s3_bucket(
             
             logger.info(f"Found {len(parquet_files)} parquet files")
             
-            # Simple analysis - just get columns from first file and look for query columns
+            # Metadata-only analysis - no data loading required
             all_columns = []
             query_column = None
             total_size_mb = 0
@@ -1301,13 +869,16 @@ async def validate_s3_bucket(
             # Common query column names to look for (prioritized order)
             query_patterns = ['hashed_query', 'query', 'sql', 'statement_text', 'sql_query', 'command']
             
-            # Just read the first parquet file to get schema
+            # Read metadata from first parquet file to get schema
             try:
                 first_file = parquet_files[0]
                 parquet_file = pq.ParquetFile(first_file, filesystem=s3fs)
-                schema = parquet_file.schema
                 
-                # Get all column names
+                # Get schema from metadata only (no data loading)
+                schema = parquet_file.schema
+                metadata = parquet_file.metadata
+                
+                # Get all column names from schema
                 all_columns = [field.name for field in schema]
                 
                 # Look for query column by name (prioritize exact matches)
@@ -1330,15 +901,17 @@ async def validate_s3_bucket(
                         if query_column:
                             break
                 
-                # Get total size of all files
-                for file_path in parquet_files[:10]:  # Check first 10 files for size
+                # Get file sizes from metadata (much faster than file system calls)
+                for file_path in parquet_files[:20]:  # Check first 20 files for size estimation
                     try:
-                        finfo = s3fs.get_file_info(file_path)
-                        total_size_mb += finfo.size / (1024**2)
-                    except:
-                        pass
+                        file_info = s3fs.get_file_info(file_path)
+                        if hasattr(file_info, 'size'):
+                            total_size_mb += file_info.size / (1024**2)
+                    except Exception:
+                        # Fallback: estimate based on first file
+                        continue
                 
-                files_analyzed = len(parquet_files)
+                files_analyzed = min(len(parquet_files), 20)  # We analyzed up to 20 files
                 
             except Exception as e:
                 logger.error(f"Error reading parquet file: {e}")
