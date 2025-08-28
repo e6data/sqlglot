@@ -667,7 +667,8 @@ async def process_parquet_directory_automated(
     to_dialect: str = Form("e6", description="Target SQL dialect"),
     query_column: str = Form(..., description="Column name containing SQL queries"),
     batch_size: int = Form(10000, description="Number of queries per batch"),
-    filters: Optional[str] = Form(None, description="JSON string of column filters e.g. '{\"statement_type\": \"SELECT\", \"client_application\": \"PowerBI\"}'")
+    filters: Optional[str] = Form(None, description="JSON string of column filters e.g. '{\"statement_type\": \"SELECT\", \"client_application\": \"PowerBI\"}'"),
+    name: Optional[str] = Form(None, description="Optional custom name to append to session ID")
 ):
     """
     Batch processing endpoint for parquet files containing SQL queries.
@@ -715,7 +716,8 @@ async def process_parquet_directory_automated(
             to_dialect=to_dialect.lower().strip(),
             query_column=query_column.strip(),
             batch_size=batch_size,
-            filters=filter_dict
+            filters=filter_dict,
+            name=name.strip() if name else None
         )
         
         # Check if there was an error
@@ -733,6 +735,7 @@ async def process_parquet_directory_automated(
         
         return {
             "session_id": result['session_id'],
+            "session_name": name.strip() if name else None,
             "total_files": result.get('total_files', 0),
             "total_batches": result.get('total_batches', 0),
             "task_ids": result.get('task_ids', []),
@@ -744,7 +747,8 @@ async def process_parquet_directory_automated(
                 "company_name": company_name,
                 "query_column": query_column,
                 "batch_size": batch_size,
-                "dialect_conversion": f"{from_dialect} -> {to_dialect}"
+                "dialect_conversion": f"{from_dialect} -> {to_dialect}",
+                "custom_name": name.strip() if name else None
             },
             "iceberg_storage": {
                 "table": "default.batch_statistics",

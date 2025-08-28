@@ -11,6 +11,7 @@ interface ProcessingResultsProps {
 export default function ProcessingResults({ sessionId, refreshTrigger }: ProcessingResultsProps) {
   const [status, setStatus] = useState<ProcessingStatus | null>(null)
   const [loading, setLoading] = useState(false)
+  const [sessionName, setSessionName] = useState<string | null>(null)
 
   const fetchStatus = useCallback(async () => {
     if (!sessionId) return
@@ -32,10 +33,26 @@ export default function ProcessingResults({ sessionId, refreshTrigger }: Process
   useEffect(() => {
     if (sessionId) {
       fetchStatus()
-      const interval = setInterval(fetchStatus, 5000) // Poll every 5 seconds
-      return () => clearInterval(interval)
+      
+      // Only set up polling if session is not in a final state
+      const shouldPoll = !status || (status.overall_status !== 'completed' && status.overall_status !== 'failed')
+      
+      if (shouldPoll) {
+        const interval = setInterval(fetchStatus, 5000) // Poll every 5 seconds
+        return () => clearInterval(interval)
+      }
     }
-  }, [sessionId, refreshTrigger, fetchStatus])
+  }, [sessionId, refreshTrigger, fetchStatus, status?.overall_status])
+
+  useEffect(() => {
+    if (sessionId) {
+      // Load session name from localStorage
+      const sessionNames = JSON.parse(localStorage.getItem('session_names') || '{}')
+      setSessionName(sessionNames[sessionId] || null)
+    } else {
+      setSessionName(null)
+    }
+  }, [sessionId])
 
   if (!sessionId) {
     return (
@@ -59,9 +76,14 @@ export default function ProcessingResults({ sessionId, refreshTrigger }: Process
         <h2 className="text-xl font-semibold text-gray-800">
           <span className="mr-2">📊</span>
           Processing Results
+          {sessionName && (
+            <span className="text-lg font-medium text-blue-600 ml-2">
+              ({sessionName})
+            </span>
+          )}
         </h2>
         <p className="text-sm text-gray-500 mt-1">
-          Session: <span className="font-mono text-gray-700">{sessionId}</span>
+          Session ID: <span className="font-mono text-gray-700">{sessionId}</span>
         </p>
       </div>
 
@@ -109,6 +131,12 @@ export default function ProcessingResults({ sessionId, refreshTrigger }: Process
           <div className="mb-6">
             <h3 className="font-semibold text-gray-800 mb-3">Session Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
+              {sessionName && (
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <div className="font-medium text-blue-600">Session Name</div>
+                  <div className="text-blue-800 font-medium">{sessionName}</div>
+                </div>
+              )}
               <div className="bg-gray-50 rounded-lg p-3">
                 <div className="font-medium text-gray-600">Session ID</div>
                 <div className="text-gray-800 text-xs">{sessionId}</div>

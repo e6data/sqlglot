@@ -3,10 +3,11 @@ Simplified Orchestrator using Celery's built-in features
 No explicit Redis management needed - Celery handles it all
 """
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 import uuid
 import hashlib
+import re
 import numpy as np
 from datetime import datetime
 import dateutil.parser
@@ -81,7 +82,26 @@ def extract_unique_queries_from_file(
         
         for filter_col, filter_value in filters.items():
             if filter_col in table.schema.names:
-                filter_conditions.append(pc.equal(table[filter_col], filter_value))
+                try:
+                    # Support both single values and multiple values (lists)
+                    if isinstance(filter_value, list):
+                        if len(filter_value) > 0:  # Only apply filter if list is not empty
+                            # Use PyArrow's is_in for multiple values (IN operator)
+                            logger.info(f"Applying multi-value filter: {filter_col} IN {filter_value}")
+                            filter_conditions.append(pc.is_in(table[filter_col], pa.array(filter_value)))
+                        else:
+                            logger.warning(f"Empty list provided for filter column '{filter_col}', skipping filter")
+                    else:
+                        # Single value - use exact match (backward compatible)
+                        logger.info(f"Applying single-value filter: {filter_col} = {filter_value}")
+                        filter_conditions.append(pc.equal(table[filter_col], filter_value))
+                except Exception as e:
+                    logger.error(f"Error applying filter for column '{filter_col}' with value {filter_value}: {str(e)}")
+                    logger.error(f"Column '{filter_col}' data type: {table[filter_col].type}")
+                    # Skip this filter and continue with others
+                    continue
+            else:
+                logger.warning(f"Filter column '{filter_col}' not found in parquet file. Available columns: {table.schema.names}")
         
         if filter_conditions:
             combined_filter = filter_conditions[0]
@@ -225,7 +245,8 @@ def orchestrate_processing(
     to_dialect: str,
     query_column: str,
     batch_size: int = 10000,
-    filters: Dict[str, Any] = None
+    filters: Dict[str, Any] = None,
+    name: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Orchestrate the entire processing pipeline using Celery with optimized file reading
@@ -234,7 +255,18 @@ def orchestrate_processing(
     Returns immediately with task group ID that can be monitored
     Following TestDriven.io pattern - let Celery handle all the complexity
     """
-    session_id = f"session_{uuid.uuid4().hex[:8]}"
+    if name and name.strip():
+        # Use custom name with fallback to short UUID
+        clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name.strip())[:20]  # Sanitize and limit length
+        clean_name = clean_name.strip('_')  # Remove leading/trailing underscores
+        # if clean_name and not clean_name[0].isalnum():  # Ensure it starts with alphanumeric
+        #     clean_name = 'n_' + clean_name
+        # if not clean_name:  # Fallback if name becomes empty after cleaning
+        #     clean_name = 'custom'
+        session_id = f"session_{clean_name}_{uuid.uuid4().hex[:8]}"
+    else:
+        # Default behavior
+        session_id = f"session_{uuid.uuid4().hex[:8]}"
     
     logger.info(f"🚀 Starting orchestration for session {session_id}")
     logger.info(f"📂 Processing path: {directory_path}")
@@ -360,9 +392,48 @@ def get_processing_status(session_id: str, task_ids: List[str] = None) -> Dict[s
     """
     Get status of processing session using Celery's AsyncResult
     If no task_ids provided, search Redis for tasks matching session pattern
+    Special case: if session_id is 'discover_all', return all unique session IDs
     """
     from celery.result import AsyncResult
     import redis
+    
+    # Special case: discover all active sessions
+    if session_id == 'discover_all':
+        try:
+            r = redis.Redis(host='localhost', port=6379, db=0)
+            keys = r.keys('celery-task-meta-*')
+            discovered_sessions = set()
+            
+            for key in keys:
+                task_id = key.decode().replace('celery-task-meta-', '')
+                # Extract session ID from task ID (format: session_xxx_batch_xxx)
+                if task_id.startswith('session_'):
+                    # Split by '_batch_' to get session part
+                    parts = task_id.split('_batch_')
+                    if len(parts) >= 2:
+                        session_part = parts[0]  # Everything before '_batch_'
+                        discovered_sessions.add(session_part)
+            
+            # Also check for session metadata keys
+            session_meta_keys = r.keys('session_meta_*')
+            for key in session_meta_keys:
+                session_meta_id = key.decode().replace('session_meta_', '')
+                discovered_sessions.add(session_meta_id)
+            
+            logger.info(f"Discovered {len(discovered_sessions)} unique sessions in Redis")
+            return {
+                'session_id': 'discover_all',
+                'discovered_sessions': list(discovered_sessions),
+                'total_discovered': len(discovered_sessions)
+            }
+        except Exception as e:
+            logger.error(f"Failed to discover sessions from Redis: {e}")
+            return {
+                'session_id': 'discover_all',
+                'discovered_sessions': [],
+                'total_discovered': 0,
+                'error': str(e)
+            }
     
     if not task_ids:
         # Search Redis for completed tasks matching session pattern

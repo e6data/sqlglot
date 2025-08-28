@@ -1,6 +1,7 @@
 export interface SessionData {
   id: string
   session_id?: string
+  session_name?: string
   company_name: string
   status: 'processing' | 'completed' | 'failed'
   completed_tasks?: number
@@ -13,6 +14,7 @@ export interface SessionData {
 
 export interface ProcessingStatus {
   session_id: string
+  session_name?: string
   total_tasks: number
   total_batches: number
   completed: number

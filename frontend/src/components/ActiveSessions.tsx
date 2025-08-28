@@ -18,46 +18,81 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
     fetchSessions()
   }, [refreshTrigger])
 
+  const clearAllSessions = () => {
+    if (confirm('Clear browser storage? Sessions will reload from Redis automatically.')) {
+      localStorage.removeItem('processing_sessions')
+      localStorage.removeItem('session_names')
+      
+      // Immediately refresh from Redis to show current state
+      fetchSessions()
+    }
+  }
+
+  const discoverSessionsFromRedis = async () => {
+    try {
+      // Use the special 'discover_all' session ID to get all active sessions from Redis
+      const response = await fetch(`/api/processing-status/discover_all`)
+      if (response.ok) {
+        const data = await response.json()
+        return data.discovered_sessions || []
+      } else {
+        console.error('Failed to discover sessions from Redis')
+        return []
+      }
+    } catch (error) {
+      console.error('Error discovering sessions from Redis:', error)
+      return []
+    }
+  }
+
   const fetchSessions = async () => {
     setLoading(true)
     try {
-      // Get sessions from localStorage (client-side session tracking)
-      const storedSessions = localStorage.getItem('processing_sessions')
-      if (storedSessions) {
-        const sessionIds = JSON.parse(storedSessions)
-        const sessionPromises = sessionIds.map(async (sessionId: string) => {
-          try {
-            const response = await fetch(`/api/processing-status/${sessionId}`)
-            if (response.ok) {
-              const status = await response.json()
-              return {
-                id: sessionId,
-                company_name: 'Processing Session',
-                status: status.overall_status === 'completed' ? 'completed' : 
-                        status.failed > 0 ? 'failed' : 'processing',
-                completed_tasks: status.completed,
-                total_tasks: status.total_tasks,
-                created_at: sessionId, // Use session ID as timestamp
-                currentStatus: status
-              }
-            }
-          } catch (error) {
+      // Discover active sessions from Redis (not localStorage)
+      const activeSessionIds = await discoverSessionsFromRedis()
+      
+      if (activeSessionIds.length === 0) {
+        setSessions([])
+        return
+      }
+      
+      // Fetch status for each discovered session
+      const sessionPromises = activeSessionIds.map(async (sessionId: string) => {
+        try {
+          const response = await fetch(`/api/processing-status/${sessionId}`)
+          if (response.ok) {
+            const status = await response.json()
             return {
               id: sessionId,
               company_name: 'Processing Session',
-              status: 'failed' as const,
-              completed_tasks: 0,
-              total_tasks: 0,
-              created_at: sessionId
+              status: status.overall_status === 'completed' ? 'completed' : 
+                      status.failed > 0 ? 'failed' : 'processing',
+              completed_tasks: status.completed,
+              total_tasks: status.total_tasks,
+              created_at: status.start_time || sessionId,
+              currentStatus: status
             }
           }
-        })
-        
-        const sessionsData = await Promise.all(sessionPromises)
-        setSessions(sessionsData.filter(Boolean) as SessionData[])
-      }
+          return null
+        } catch (error) {
+          console.warn(`Failed to get status for session ${sessionId}:`, error)
+          return null
+        }
+      })
+      
+      const sessionsData = await Promise.all(sessionPromises)
+      const validSessions = sessionsData.filter(Boolean) as SessionData[]
+      
+      setSessions(validSessions)
+      
+      // Update localStorage to match Redis reality (keep in sync but Redis is source of truth)
+      const redisSessionIds = validSessions.map(s => s.id)
+      localStorage.setItem('processing_sessions', JSON.stringify(redisSessionIds))
+      
     } catch (error) {
-      console.error('Failed to fetch sessions:', error)
+      console.error('Failed to discover sessions from Redis:', error)
+      // Fallback: clear sessions if discovery fails
+      setSessions([])
     } finally {
       setLoading(false)
     }
@@ -71,15 +106,25 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
             <span className="mr-2">📋</span>
             Select Session
           </h2>
-          <p className="text-sm text-gray-500 mt-1">Click on a session to view details</p>
+          <p className="text-sm text-gray-500 mt-1">Click on a session to view detailed batch status</p>
         </div>
-        <button
-          onClick={onRefresh}
-          className="p-2 text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-          disabled={loading}
-        >
-          <span className={loading ? 'animate-spin' : ''}>🔄</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={clearAllSessions}
+            className="px-3 py-1 text-sm text-red-600 border border-red-300 rounded-md hover:bg-red-50"
+            title="Clear all sessions from browser storage"
+          >
+            Clear All
+          </button>
+          <button
+            onClick={onRefresh}
+            className="p-2 text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+            disabled={loading}
+            title="Refresh sessions"
+          >
+            <span className={loading ? 'animate-spin' : ''}>🔄</span>
+          </button>
+        </div>
       </div>
 
       <div className="max-h-96 overflow-y-auto">
@@ -133,6 +178,15 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
                   }`}>
                     <div>Tasks: {session.completed_tasks || 0}/{session.total_tasks || 0}</div>
                     <div>Started: {session.created_at}</div>
+                    {session.currentStatus && (
+                      <div className="mt-1">
+                        Progress: {session.currentStatus.progress_percentage}%
+                        {session.currentStatus.duration && ` • Duration: ${session.currentStatus.duration}`}
+                        {session.currentStatus.failed > 0 && (
+                          <span className="text-red-600 ml-2">• {session.currentStatus.failed} failed batches</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )

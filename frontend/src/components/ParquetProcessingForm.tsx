@@ -19,7 +19,8 @@ export default function ParquetProcessingForm({
     to_dialect: 'e6',
     query_column: '',
     batch_size: 10000,
-    filters: ''
+    filters: '',
+    name: ''
   })
 
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
@@ -97,6 +98,13 @@ export default function ParquetProcessingForm({
         localStorage.setItem('processing_sessions', JSON.stringify(existingSessions))
       }
       
+      // Store session_name if provided for display purposes
+      if (result.session_name) {
+        const sessionNames = JSON.parse(localStorage.getItem('session_names') || '{}')
+        sessionNames[result.session_id] = result.session_name
+        localStorage.setItem('session_names', JSON.stringify(sessionNames))
+      }
+      
       onProcessingStart(result.session_id)
     } catch (error) {
       console.error('Processing error:', error)
@@ -148,6 +156,21 @@ export default function ParquetProcessingForm({
             />
             <p className="text-xs text-gray-500 mt-1">Used for Iceberg partitioning</p>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Session Name (Optional)
+          </label>
+          <input
+            type="text"
+            name="name"
+            value={formData.name}
+            onChange={handleInputChange}
+            placeholder="e.g., production_migration"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">Custom name for easier session identification</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -237,11 +260,17 @@ export default function ParquetProcessingForm({
             name="filters"
             value={formData.filters}
             onChange={handleInputChange}
-            rows={2}
-            placeholder='{"statement_type": "SELECT", "client_application": "PowerBI"}'
+            rows={3}
+            placeholder='{"statement_type": ["SELECT", "INSERT"], "client_application": "PowerBI"}'
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Optional column filters</p>
+          <div className="text-xs text-gray-500 mt-1">
+            <p>Optional column filters. Supports both single values and lists:</p>
+            <div className="mt-1 space-y-1 font-mono text-xs">
+              <div>Single: <span className="bg-gray-100 px-1 rounded">{`{"statement_type": "SELECT"}`}</span></div>
+              <div>Multi: <span className="bg-gray-100 px-1 rounded">{`{"statement_type": ["SELECT", "INSERT"]}`}</span></div>
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-3">

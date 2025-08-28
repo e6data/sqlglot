@@ -125,22 +125,36 @@ def process_query_batch(self, batch_data: Dict[str, Any]) -> Dict[str, Any]:
                     
                     query_ids.append(query_id)
                     statuses.append('success' if not analysis.get('error') else 'failed')
-                    original_queries.append(query_text)
-                    converted_queries.append(analysis.get('converted-query', ''))
-                    executables.append(analysis.get('executable', 'NO'))
-                    supported_functions_lists.append(analysis.get('supported_functions', []))
-                    unsupported_functions_lists.append(list(set(analysis.get('unsupported_functions', []))))
-                    unsupported_functions_after_transpilation_lists.append(analysis.get('unsupported_functions_after_transpilation', []))
-                    joins_lists.append(analysis.get('joins_list', []))
-                    udf_lists.append(analysis.get('udf_list', []))
-                    tables_lists.append(analysis.get('tables_list', []))
+                    original_queries.append(str(query_text))
+                    converted_queries.append(str(analysis.get('converted-query', '')))
+                    executables.append(str(analysis.get('executable', 'NO')))
+                    
+                    # Ensure all list elements are strings and handle None values
+                    supported_funcs = analysis.get('supported_functions', []) or []
+                    supported_functions_lists.append([str(f) for f in supported_funcs if f is not None])
+                    
+                    unsupported_funcs = analysis.get('unsupported_functions', []) or []
+                    unsupported_functions_lists.append([str(f) for f in set(unsupported_funcs) if f is not None])
+                    
+                    unsupported_after_funcs = analysis.get('unsupported_functions_after_transpilation', []) or []
+                    unsupported_functions_after_transpilation_lists.append([str(f) for f in unsupported_after_funcs if f is not None])
+                    
+                    joins = analysis.get('joins_list', []) or []
+                    joins_lists.append([str(j) for j in joins if j is not None])
+                    
+                    udfs = analysis.get('udf_list', []) or []
+                    udf_lists.append([str(u) for u in udfs if u is not None])
+                    
+                    tables = analysis.get('tables_list', []) or []
+                    tables_lists.append([str(t) for t in tables if t is not None])
+                    
                     processing_times.append(100)
                     error_messages.append('')
                     
                 except Exception as e:
                     query_ids.append(query_id)
                     statuses.append('failed')
-                    original_queries.append(query_text)
+                    original_queries.append(str(query_text))
                     converted_queries.append('')
                     executables.append('NO')
                     supported_functions_lists.append([])
@@ -226,86 +240,120 @@ def store_results_table_to_iceberg(results_table: pa.Table, batch_data: Dict[str
     """
     Store PyArrow results table directly to Iceberg (OPTIMIZED APPROACH)
     Avoids dict->list->PyArrow conversions by working with Arrow tables throughout
+    Includes retry logic for handling concurrent writes
     """
     if len(results_table) == 0:
         return True
     
+    # Retry configuration for concurrent write conflicts
+    max_retries = 3
+    retry_delay = 1  # seconds
+    
+    # Try to import iceberg_handler from current directory (automated_processing)
     try:
-        # Try to import iceberg_handler from current directory (automated_processing)
-        try:
-            import sys
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            if current_dir not in sys.path:
-                sys.path.insert(0, current_dir)
+        import sys
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if current_dir not in sys.path:
+            sys.path.insert(0, current_dir)
+        
+        import iceberg_handler as ih
+        
+        # Initialize catalog if not already done
+        if not hasattr(ih, 'iceberg_catalog') or not ih.iceberg_catalog:
+            logger.info("Initializing Iceberg catalog...")
+            ih.initialize_iceberg_catalog()
             
-            import iceberg_handler as ih
-            
-            # Initialize catalog if not already done
-            if not hasattr(ih, 'iceberg_catalog') or not ih.iceberg_catalog:
-                logger.info("Initializing Iceberg catalog...")
-                ih.initialize_iceberg_catalog()
-                
-            if not ih.iceberg_catalog:
-                logger.warning("Iceberg catalog not available - skipping Iceberg storage")
-                return False
-                
-        except ImportError as e:
-            logger.warning(f"iceberg_handler not available: {e} - skipping Iceberg storage")
+        if not ih.iceberg_catalog:
+            logger.warning("Iceberg catalog not available - skipping Iceberg storage")
             return False
-        
-        # Load existing batch_statistics table
-        table = ih.iceberg_catalog.load_table("default.batch_statistics")
-        
-        # Prepare metadata using PyArrow compute functions (vectorized)
-        current_time = datetime.now()
-        event_date = current_time.strftime("%Y-%m-%d")
-        num_rows = len(results_table)
-        
-        # Create metadata columns using simple PyArrow arrays (avoid complex compute functions)
-        query_id_seq = pa.array(list(range(1, num_rows + 1)), type=pa.int64())  # 1-based indexing
-        batch_id_full = f"{batch_data['session_id']}_{batch_data['batch_id']}"
-        
-        # Create constant arrays using simple array creation (more reliable)
-        batch_ids = pa.array([batch_id_full] * num_rows, type=pa.string())
-        company_names = pa.array([batch_data.get('company_name', 'unknown')] * num_rows, type=pa.string())
-        event_dates = pa.array([event_date] * num_rows, type=pa.string())
-        batch_numbers = pa.array([batch_data.get('batch_idx', 0)] * num_rows, type=pa.int32())
-        timestamps = pa.array([current_time] * num_rows, type=pa.timestamp('us'))
-        from_dialects = pa.array([batch_data.get('from_dialect', '')] * num_rows, type=pa.string())
-        to_dialects = pa.array([batch_data.get('to_dialect', '')] * num_rows, type=pa.string())
-        # Create empty list arrays
-        empty_string_lists = pa.array([[] for _ in range(num_rows)], type=pa.list_(pa.string()))
-        
-        # Combine results table with metadata (vectorized column operations)
-        iceberg_table = pa.table({
-            "query_id": query_id_seq,
-            "batch_id": batch_ids,
-            "company_name": company_names,
-            "event_date": event_dates,
-            "batch_number": batch_numbers,
-            "timestamp": timestamps,
-            "status": results_table['status'],
-            "executable": results_table['executable'],
-            "from_dialect": from_dialects,
-            "to_dialect": to_dialects,
-            "original_query": results_table['original_query'],
-            "converted_query": results_table['converted_query'],
-            "supported_functions": results_table['supported_functions'],
-            "unsupported_functions": results_table['unsupported_functions'],
-            "udf_list": results_table['udf_list'] if 'udf_list' in results_table.column_names else empty_string_lists,
-            "tables_list": results_table['tables_list'] if 'tables_list' in results_table.column_names else empty_string_lists,
-            "processing_time_ms": results_table['processing_time_ms'],
-            "error_message": results_table['error_message'],
-            "unsupported_functions_after_transpilation": results_table['unsupported_functions_after_transpilation'] if 'unsupported_functions_after_transpilation' in results_table.column_names else empty_string_lists,
-            "joins_list": results_table['joins_list'] if 'joins_list' in results_table.column_names else empty_string_lists
-        })
-        
-        # Append to Iceberg table (single operation)
-        table.append(iceberg_table)
-        
-        logger.info(f"Stored {num_rows} results to Iceberg batch_statistics table using vectorized operations")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Failed to store to Iceberg: {str(e)}")
+            
+    except ImportError as e:
+        logger.warning(f"iceberg_handler not available: {e} - skipping Iceberg storage")
         return False
+    
+    for attempt in range(max_retries + 1):
+        try:
+            # Load existing batch_statistics table
+            table = ih.iceberg_catalog.load_table("default.batch_statistics")
+            
+            # Prepare metadata using PyArrow compute functions (vectorized)
+            current_time = datetime.now()
+            event_date = current_time.strftime("%Y-%m-%d")
+            num_rows = len(results_table)
+            
+            # Create metadata columns using simple PyArrow arrays (avoid complex compute functions)
+            query_id_seq = pa.array(list(range(1, num_rows + 1)), type=pa.int64())  # 1-based indexing
+            batch_id_full = f"{batch_data['session_id']}_{batch_data['batch_id']}"
+            
+            # Create constant arrays using simple array creation (more reliable)
+            batch_ids = pa.array([batch_id_full] * num_rows, type=pa.string())
+            company_names = pa.array([batch_data.get('company_name', 'unknown')] * num_rows, type=pa.string())
+            event_dates = pa.array([event_date] * num_rows, type=pa.string())
+            batch_numbers = pa.array([batch_data.get('batch_idx', 0)] * num_rows, type=pa.int32())
+            timestamps = pa.array([current_time] * num_rows, type=pa.timestamp('us'))
+            from_dialects = pa.array([batch_data.get('from_dialect', '')] * num_rows, type=pa.string())
+            to_dialects = pa.array([batch_data.get('to_dialect', '')] * num_rows, type=pa.string())
+            # Create empty list arrays
+            empty_string_lists = pa.array([[] for _ in range(num_rows)], type=pa.list_(pa.string()))
+            
+            # Combine results table with metadata (vectorized column operations)
+            iceberg_table = pa.table({
+                "query_id": query_id_seq,
+                "batch_id": batch_ids,
+                "company_name": company_names,
+                "event_date": event_dates,
+                "batch_number": batch_numbers,
+                "timestamp": timestamps,
+                "status": results_table['status'],
+                "executable": results_table['executable'],
+                "from_dialect": from_dialects,
+                "to_dialect": to_dialects,
+                "original_query": results_table['original_query'],
+                "converted_query": results_table['converted_query'],
+                "supported_functions": results_table['supported_functions'],
+                "unsupported_functions": results_table['unsupported_functions'],
+                "udf_list": results_table['udf_list'] if 'udf_list' in results_table.column_names else empty_string_lists,
+                "tables_list": results_table['tables_list'] if 'tables_list' in results_table.column_names else empty_string_lists,
+                "processing_time_ms": results_table['processing_time_ms'],
+                "error_message": results_table['error_message'],
+                "unsupported_functions_after_transpilation": results_table['unsupported_functions_after_transpilation'] if 'unsupported_functions_after_transpilation' in results_table.column_names else empty_string_lists,
+                "joins_list": results_table['joins_list'] if 'joins_list' in results_table.column_names else empty_string_lists
+            })
+            
+            # Append to Iceberg table (single operation)
+            table.append(iceberg_table)
+            
+            logger.info(f"✅ Stored {num_rows} results to Iceberg batch_statistics table (attempt {attempt + 1})")
+            return True
+            
+        except Exception as e:
+            error_msg = str(e)
+            
+            # Check if it's a concurrent write conflict (multiple error patterns)
+            is_concurrent_conflict = (
+                "branch main has changed" in error_msg or 
+                "expected id" in error_msg or
+                "Table has been updated by another process" in error_msg or
+                "updated by another process" in error_msg
+            )
+            
+            if is_concurrent_conflict:
+                if attempt < max_retries:
+                    import time
+                    import random
+                    # Add jitter to avoid thundering herd
+                    jitter = random.uniform(0, 0.5)
+                    sleep_time = retry_delay * (2 ** attempt) + jitter
+                    logger.warning(f"🔄 Iceberg concurrency conflict (attempt {attempt + 1}/{max_retries + 1}). Retrying in {sleep_time:.2f}s...")
+                    time.sleep(sleep_time)
+                    continue
+                else:
+                    logger.error(f"❌ Failed to store to Iceberg after {max_retries + 1} attempts due to concurrency conflicts: {error_msg}")
+                    return False
+            else:
+                # Non-retryable error
+                logger.error(f"❌ Failed to store to Iceberg (non-retryable): {error_msg}")
+                return False
+    
+    # Should not reach here
+    return False
