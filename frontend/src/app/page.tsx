@@ -17,7 +17,7 @@ export default function Home() {
   const [currentSession, setCurrentSession] = useState<string | null>(null)
   const [connectionStatus] = useState('Connected')
   
-  // Auto-refresh sessions every 30 seconds
+  // Trigger for manual refreshes only (no auto-refresh)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   
   // Load selected session from localStorage on page load
@@ -28,13 +28,7 @@ export default function Home() {
     }
   }, [])
   
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRefreshTrigger(prev => prev + 1)
-    }, 30000)
-    
-    return () => clearInterval(interval)
-  }, [])
+  // Removed auto-refresh interval - components now handle their own intelligent polling
 
   const handleProcessingStart = (sessionId: string) => {
     setCurrentSession(sessionId)

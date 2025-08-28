@@ -13,36 +13,52 @@ export default function ProcessingResults({ sessionId, refreshTrigger }: Process
   const [loading, setLoading] = useState(false)
   const [sessionName, setSessionName] = useState<string | null>(null)
 
-  const fetchStatus = useCallback(async () => {
-    if (!sessionId) return
-    
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/processing-status/${sessionId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setStatus(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch status:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [sessionId])
-
+  // Polling and fetch management in a single effect
   useEffect(() => {
-    if (sessionId) {
-      fetchStatus()
+    if (!sessionId) return
+
+    let intervalId: NodeJS.Timeout | null = null
+    let isMounted = true
+
+    const fetchStatus = async () => {
+      if (!isMounted) return
       
-      // Only set up polling if session is not in a final state
-      const shouldPoll = !status || (status.overall_status !== 'completed' && status.overall_status !== 'failed')
-      
-      if (shouldPoll) {
-        const interval = setInterval(fetchStatus, 5000) // Poll every 5 seconds
-        return () => clearInterval(interval)
+      setLoading(true)
+      try {
+        const response = await fetch(`/api/processing-status/${sessionId}`)
+        if (response.ok && isMounted) {
+          const data = await response.json()
+          setStatus(data)
+          
+          // Check if we should continue polling
+          const isCompleted = data.overall_status === 'completed' || data.overall_status === 'failed'
+          
+          if (!isCompleted && isMounted) {
+            // Schedule next poll only if not completed
+            intervalId = setTimeout(fetchStatus, 5000)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch status:', error)
+        // Don't continue polling on error to avoid spam
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
-  }, [sessionId, refreshTrigger, fetchStatus, status?.overall_status])
+
+    // Start initial fetch
+    fetchStatus()
+
+    // Cleanup function
+    return () => {
+      isMounted = false
+      if (intervalId) {
+        clearTimeout(intervalId)
+      }
+    }
+  }, [sessionId, refreshTrigger])
 
   useEffect(() => {
     if (sessionId) {

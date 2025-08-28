@@ -558,7 +558,7 @@ def get_processing_status(session_id: str, task_ids: List[str] = None) -> Dict[s
         'successful_batches': successful_batches,  # Add this field
         'progress_percentage': round(progress_percentage, 1),
         'task_details': results,  # Return all task details
-        'overall_status': 'completed' if completed + failed >= total_tasks else 'processing',
+        'overall_status': 'completed' if completed + failed >= actual_total_batches else 'processing',
         'start_time': session_start_time,
         'end_time': session_end_time,
         'duration': total_duration

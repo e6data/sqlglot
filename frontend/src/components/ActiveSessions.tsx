@@ -15,7 +15,89 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetchSessions()
+    let intervalId: NodeJS.Timeout | null = null
+    let isMounted = true
+    
+    const fetchSessionsWithPolling = async () => {
+      if (!isMounted) return
+      
+      setLoading(true)
+      try {
+        // Discover active sessions from Redis (not localStorage)
+        const activeSessionIds = await discoverSessionsFromRedis()
+        
+        if (activeSessionIds.length === 0) {
+          setSessions([])
+          return
+        }
+        
+        // Fetch status for each discovered session
+        const sessionPromises = activeSessionIds.map(async (sessionId: string) => {
+          try {
+            const response = await fetch(`/api/processing-status/${sessionId}`)
+            if (response.ok) {
+              const status = await response.json()
+              return {
+                id: sessionId,
+                company_name: 'Processing Session',
+                status: status.overall_status === 'completed' ? 'completed' : 
+                        status.failed > 0 ? 'failed' : 'processing',
+                completed_tasks: status.completed,
+                total_tasks: status.total_tasks,
+                created_at: status.start_time || sessionId,
+                currentStatus: status
+              }
+            }
+            return null
+          } catch (error) {
+            console.warn(`Failed to get status for session ${sessionId}:`, error)
+            return null
+          }
+        })
+        
+        const sessionsData = await Promise.all(sessionPromises)
+        const validSessions = sessionsData.filter(Boolean) as SessionData[]
+        
+        if (isMounted) {
+          setSessions(validSessions)
+          
+          // Update localStorage to match Redis reality (keep in sync but Redis is source of truth)
+          const redisSessionIds = validSessions.map(s => s.id)
+          localStorage.setItem('processing_sessions', JSON.stringify(redisSessionIds))
+          
+          // Check if any session is still processing
+          const hasActiveSession = validSessions.some(s => 
+            s.status === 'processing' || 
+            (s.currentStatus && s.currentStatus.overall_status === 'processing')
+          )
+          
+          // Schedule next poll only if there are active sessions
+          if (hasActiveSession && isMounted) {
+            intervalId = setTimeout(fetchSessionsWithPolling, 10000)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to discover sessions from Redis:', error)
+        if (isMounted) {
+          setSessions([])
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+    
+    // Start initial fetch
+    fetchSessionsWithPolling()
+    
+    // Cleanup
+    return () => {
+      isMounted = false
+      if (intervalId) {
+        clearTimeout(intervalId)
+      }
+    }
   }, [refreshTrigger])
 
   const clearAllSessions = () => {
@@ -23,8 +105,8 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
       localStorage.removeItem('processing_sessions')
       localStorage.removeItem('session_names')
       
-      // Immediately refresh from Redis to show current state
-      fetchSessions()
+      // Trigger a refresh by updating refreshTrigger
+      onRefresh()
     }
   }
 
@@ -45,58 +127,6 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
     }
   }
 
-  const fetchSessions = async () => {
-    setLoading(true)
-    try {
-      // Discover active sessions from Redis (not localStorage)
-      const activeSessionIds = await discoverSessionsFromRedis()
-      
-      if (activeSessionIds.length === 0) {
-        setSessions([])
-        return
-      }
-      
-      // Fetch status for each discovered session
-      const sessionPromises = activeSessionIds.map(async (sessionId: string) => {
-        try {
-          const response = await fetch(`/api/processing-status/${sessionId}`)
-          if (response.ok) {
-            const status = await response.json()
-            return {
-              id: sessionId,
-              company_name: 'Processing Session',
-              status: status.overall_status === 'completed' ? 'completed' : 
-                      status.failed > 0 ? 'failed' : 'processing',
-              completed_tasks: status.completed,
-              total_tasks: status.total_tasks,
-              created_at: status.start_time || sessionId,
-              currentStatus: status
-            }
-          }
-          return null
-        } catch (error) {
-          console.warn(`Failed to get status for session ${sessionId}:`, error)
-          return null
-        }
-      })
-      
-      const sessionsData = await Promise.all(sessionPromises)
-      const validSessions = sessionsData.filter(Boolean) as SessionData[]
-      
-      setSessions(validSessions)
-      
-      // Update localStorage to match Redis reality (keep in sync but Redis is source of truth)
-      const redisSessionIds = validSessions.map(s => s.id)
-      localStorage.setItem('processing_sessions', JSON.stringify(redisSessionIds))
-      
-    } catch (error) {
-      console.error('Failed to discover sessions from Redis:', error)
-      // Fallback: clear sessions if discovery fails
-      setSessions([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
