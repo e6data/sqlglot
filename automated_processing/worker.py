@@ -4,21 +4,15 @@ Following patterns from TestDriven.io FastAPI+Celery guide
 Run with: celery -A worker.celery worker --loglevel=info
 """
 from celery import Celery
-import pyarrow.dataset as ds
-import pyarrow.compute as pc
 import pyarrow as pa
-import numpy as np
+import pyarrow.compute as pc
 import logging
 import sys
 import os
-import hashlib
 from datetime import datetime
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+from typing import Dict, Any
 from tqdm import tqdm
-import s3fs
 
-# Minimal logging setup
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
@@ -65,27 +59,154 @@ if parent_dir not in sys.path:
 @celery.task(bind=True, name='process_query_batch', max_retries=3)
 def process_query_batch(self, batch_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Process a pre-loaded list of queries (NEW OPTIMIZED APPROACH)
-    No file reading needed - queries are provided directly from orchestrator
+    Consolidated function - Process PyArrow table of queries using vectorized operations
+    Combines functionality from process_query_table, process_queries_vectorized, and process_chunk_pure_arrow
     """
+    from automated_processing.statistics import analyze_sql_functions
+    
     session_id = batch_data['session_id']
     batch_id = batch_data['batch_id']
-    queries = batch_data['queries']  # Pre-loaded query list
+    queries_list = batch_data.get('queries_table')  # Now a Python list
+    query_column = batch_data.get('query_column', 'query')
+    batch_idx = batch_data.get('batch_idx', 0)
+    total_batches = batch_data.get('total_batches', 1)
+    from_dialect = batch_data.get('from_dialect', 'snowflake')
+    to_dialect = batch_data.get('to_dialect', 'e6')
     
     worker_id = f"{self.request.hostname}:{self.request.id[:8]}"
     
     try:
-        # Process the pre-loaded queries directly
-        result = process_query_list(batch_data, self)
+        num_queries = len(queries_list)
+        logger.info(f"Processing {num_queries:,} queries in batch {batch_idx}/{total_batches-1}")
         
-        # Store to Iceberg
-        iceberg_success = store_batch_to_iceberg(result['queries'], batch_data)
+        # Convert list to PyArrow array for processing
+        queries_array = pa.array(queries_list, type=pa.string())
         
-        result['iceberg_success'] = iceberg_success
-        result['worker_id'] = worker_id
-        result['completed_at'] = datetime.now().isoformat()
+        # Process in smaller chunks to maintain Arrow format
+        chunk_size = 1000
+        result_chunks = []
         
-        return result
+        progress_desc = f"Batch {batch_idx}/{total_batches-1}"
+        
+        for chunk_start in tqdm(range(0, num_queries, chunk_size), desc=progress_desc, unit="chunks"):
+            chunk_end = min(chunk_start + chunk_size, num_queries)
+            # Use PyArrow slice
+            chunk_queries = queries_array[chunk_start:chunk_end]
+            
+            # Convert chunk to Python list only for SQL processing (unavoidable for SQLGlot)
+            chunk_queries_list = chunk_queries.to_pylist()
+            
+            # Process all queries in chunk
+            query_ids = []
+            statuses = []
+            original_queries = []
+            converted_queries = []
+            executables = []
+            supported_functions_lists = []
+            unsupported_functions_lists = []
+            unsupported_functions_after_transpilation_lists = []
+            joins_lists = []
+            udf_lists = []
+            tables_lists = []
+            processing_times = []
+            error_messages = []
+            
+            # Process queries (this part still needs Python iteration due to SQL analysis)
+            for i, query_text in enumerate(chunk_queries_list):
+                query_id = f"batch_{batch_idx}_query_{chunk_start + i + 1}"
+                
+                try:
+                    analysis = analyze_sql_functions(
+                        query=query_text,
+                        from_sql=from_dialect,
+                        query_id=query_id,
+                        to_sql=to_dialect
+                    )
+                    
+                    query_ids.append(query_id)
+                    statuses.append('success' if not analysis.get('error') else 'failed')
+                    original_queries.append(query_text)
+                    converted_queries.append(analysis.get('converted-query', ''))
+                    executables.append(analysis.get('executable', 'NO'))
+                    supported_functions_lists.append(analysis.get('supported_functions', []))
+                    unsupported_functions_lists.append(list(set(analysis.get('unsupported_functions', []))))
+                    unsupported_functions_after_transpilation_lists.append(analysis.get('unsupported_functions_after_transpilation', []))
+                    joins_lists.append(analysis.get('joins_list', []))
+                    udf_lists.append(analysis.get('udf_list', []))
+                    tables_lists.append(analysis.get('tables_list', []))
+                    processing_times.append(100)
+                    error_messages.append('')
+                    
+                except Exception as e:
+                    query_ids.append(query_id)
+                    statuses.append('failed')
+                    original_queries.append(query_text)
+                    converted_queries.append('')
+                    executables.append('NO')
+                    supported_functions_lists.append([])
+                    unsupported_functions_lists.append([])
+                    unsupported_functions_after_transpilation_lists.append([])
+                    joins_lists.append([])
+                    udf_lists.append([])
+                    tables_lists.append([])
+                    processing_times.append(0)
+                    error_messages.append(str(e))
+            
+            # Create PyArrow table from results (vectorized)
+            chunk_results = pa.table({
+                'query_id': pa.array(query_ids, type=pa.string()),
+                'status': pa.array(statuses, type=pa.string()),
+                'original_query': pa.array(original_queries, type=pa.string()),
+                'converted_query': pa.array(converted_queries, type=pa.string()),
+                'executable': pa.array(executables, type=pa.string()),
+                'supported_functions': pa.array(supported_functions_lists, type=pa.list_(pa.string())),
+                'unsupported_functions': pa.array(unsupported_functions_lists, type=pa.list_(pa.string())),
+                'unsupported_functions_after_transpilation': pa.array(unsupported_functions_after_transpilation_lists, type=pa.list_(pa.string())),
+                'joins_list': pa.array(joins_lists, type=pa.list_(pa.string())),
+                'udf_list': pa.array(udf_lists, type=pa.list_(pa.string())),
+                'tables_list': pa.array(tables_lists, type=pa.list_(pa.string())),
+                'processing_time_ms': pa.array(processing_times, type=pa.int64()),
+                'error_message': pa.array(error_messages, type=pa.string())
+            })
+            result_chunks.append(chunk_results)
+        
+        # Concatenate all chunks using PyArrow (vectorized)
+        if result_chunks:
+            results_table = pa.concat_tables(result_chunks)
+        else:
+            # Empty table with correct schema
+            results_table = pa.table({
+                'query_id': pa.array([], type=pa.string()),
+                'status': pa.array([], type=pa.string()),
+                'original_query': pa.array([], type=pa.string()),
+                'converted_query': pa.array([], type=pa.string()),
+                'executable': pa.array([], type=pa.string()),
+                'supported_functions': pa.array([], type=pa.list_(pa.string())),
+                'unsupported_functions': pa.array([], type=pa.list_(pa.string())),
+                'unsupported_functions_after_transpilation': pa.array([], type=pa.list_(pa.string())),
+                'joins_list': pa.array([], type=pa.list_(pa.string())),
+                'udf_list': pa.array([], type=pa.list_(pa.string())),
+                'tables_list': pa.array([], type=pa.list_(pa.string())),
+                'processing_time_ms': pa.array([], type=pa.int64()),
+                'error_message': pa.array([], type=pa.string())
+            })
+        
+        # Calculate success count using PyArrow compute
+        success_mask = pc.equal(results_table['status'], 'success')
+        successful_count = pc.sum(pc.cast(success_mask, pa.int64())).as_py()
+        
+        # Store to Iceberg using PyArrow table directly
+        iceberg_success = store_results_table_to_iceberg(results_table, batch_data)
+        
+        return {
+            'batch_id': batch_data['batch_id'],
+            'processed_count': num_queries,
+            'successful_count': successful_count,
+            'iceberg_success': iceberg_success,
+            'worker_id': worker_id,
+            'completed_at': datetime.now().isoformat(),
+            'status': 'completed'
+        }
         
     except Exception as exc:
         # Retry with exponential backoff (TestDriven.io pattern)
@@ -101,342 +222,88 @@ def process_query_batch(self, batch_data: Dict[str, Any]) -> Dict[str, Any]:
             }
 
 
-# S3 credential helpers (used by both old and new approaches)
-def get_s3_filesystem_credentials() -> Dict[str, str]:
-    """Return S3 credentials for s3fs filesystem creation"""
-    return {
-        "access_key": "ASIAZYHN7XI6UIUBDZKV",
-        "secret_key": "Je9sw4Vg+i4WBzRQQD6lYPnwo6o/jxIOorSQhosu", 
-        "session_token": "FwoGZXIvYXdzEBAaDHaGtaOADz6xDXuDbSLWAQ5qTNEw+lcm9CfpOE3oGaFOE0Gsmc0qzD4NFZIcVzt3e3B8MScMq1mhP6mp3//xDJSqeK+3oPDwdsc2iAik0xga9yloWwjU1Wvzvi+GWNrNCOcFLbkdPZ+dvlC8KrFlyE61ZozQrFDK/1V8+ipYHfNXPOX2MYeJKEZ0+pKe7Ij6hh7qlG2rYl3uX5+6WKjnjw9ez1+VQ7IFTnpgV87EEDm/5SmEjJo9AhXf0aUgBDdbsV5UvUuVcncnfwHAK1TK+P8Mu5wio4GVmCYtRl8HJ5eP236GqRAojPuvxQYyM3o8RsOb0KjLEX9kjogwpiZ4D6pKZbbsTr02nzpZML4LUzXRUEdqra3nCYmKeoTvh5vCpg==",
-        "region": "us-east-1"
-    }
-
-def create_s3fs_filesystem_in_task(credentials: Dict[str, str]) -> s3fs.S3FileSystem:
-    """Create s3fs filesystem inside task (multiprocessing-friendly)"""
-    try:
-        s3fs_fs = s3fs.S3FileSystem(
-            key=credentials["access_key"],
-            secret=credentials["secret_key"], 
-            token=credentials["session_token"],
-            client_kwargs={'region_name': credentials["region"]},
-            config_kwargs={'connect_timeout': 30, 'read_timeout': 60}
-        )
-        return s3fs_fs
-    except Exception as e:
-        logger.error(f"❌ Failed to create s3fs filesystem: {str(e)}")
-        raise
-
-def process_batch_queries(batch_data: Dict[str, Any], task_instance=None) -> Dict[str, Any]:
+def store_results_table_to_iceberg(results_table: pa.Table, batch_data: Dict[str, Any]) -> bool:
     """
-    Process queries from parquet file using memory-efficient selective column loading
-    Supports both local files and S3 paths with temporary credentials
-    Only loads required columns and filters data before deduplication
+    Store PyArrow results table directly to Iceberg (OPTIMIZED APPROACH)
+    Avoids dict->list->PyArrow conversions by working with Arrow tables throughout
     """
-    file_path = batch_data['file_path']
-    query_column = batch_data['query_column']
-    batch_idx = batch_data.get('batch_idx', 0)
-    total_batches = batch_data.get('total_batches', 1)
-    filters = batch_data.get('filters', {})
-    available_columns = batch_data.get('available_columns', [])
-    
-    # Import statistics function from local module
-    from automated_processing.statistics import analyze_sql_functions
-    
-    # Selective column loading - only load what we need
-    columns_to_read = [query_column]  # Always need the query column
-    
-    # Only add filter columns that actually exist and are needed
-    active_filter_columns = []
-    if filters:
-        for filter_col, filter_value in filters.items():
-            if filter_col in available_columns:
-                active_filter_columns.append(filter_col)
-                columns_to_read.append(filter_col)
-    
-    logger.info(f"Loading only columns: {columns_to_read} from {file_path}")
-    
-    # Create PyArrow dataset with filesystem support
-    # Use direct parquet reading to avoid dataset API issues
-    try:
-        if file_path.startswith('s3://'):
-            # S3 path - use s3fs (multiprocessing-friendly) with PyArrow
-            import pyarrow.parquet as pq
-            
-            credentials = get_s3_filesystem_credentials()
-            s3fs_fs = create_s3fs_filesystem_in_task(credentials)
-            
-            logger.info(f"📖 Reading parquet from S3: {file_path}")
-            
-            # Read from S3 using s3fs filesystem with PyArrow
-            table = pq.read_table(
-                file_path,
-                filesystem=s3fs_fs,
-                columns=columns_to_read
-            )
-        else:
-            # Local path - use dataset API
-            logger.info(f"Creating dataset from local path: {file_path}")
-            dataset = ds.dataset(file_path, format="parquet")
-            table = dataset.to_table(columns=columns_to_read)
-    except Exception as e:
-        logger.error(f"Failed to read parquet file: {str(e)}")
-        raise ValueError(f"Cannot access parquet file: {str(e)}")
-    
-    # Apply filters to the loaded table
-    logger.info(f"Table loaded with {len(table):,} rows")
-    
-    # Apply filters using PyArrow compute
-    filter_conditions = []
-    filter_conditions.append(pc.is_valid(table[query_column]))
-    filter_conditions.append(pc.not_equal(table[query_column], ""))
-    
-    for filter_col, filter_value in filters.items():
-        if filter_col in active_filter_columns:
-            filter_conditions.append(pc.equal(table[filter_col], filter_value))
-    
-    if filter_conditions:
-        combined_filter = filter_conditions[0]
-        for condition in filter_conditions[1:]:
-            combined_filter = pc.and_kleene(combined_filter, condition)
-        
-        table = table.filter(combined_filter)
-        logger.info(f"After filtering: {len(table):,} rows")
-    
-    # Early exit if no data after filtering
-    if len(table) == 0:
-        logger.info(f"No data remaining after filtering for batch {batch_idx}")
-        return {
-            'batch_id': batch_data['batch_id'],
-            'processed_count': 0,
-            'successful_count': 0,
-            'queries': [],
-            'status': 'completed'
-        }
-    
-    # Deduplicate using only query column
-    unique_table = table.select([query_column]).group_by([query_column]).aggregate([])
-    logger.info(f"Deduplicated to {len(unique_table):,} unique queries")
-    
-    # Cast to large_string to prevent overflow for long queries
-    for i, field in enumerate(unique_table.schema):
-        if field.type == pa.string():
-            unique_table = unique_table.set_column(
-                i, field.name,
-                pc.cast(unique_table.column(i), pa.large_string())
-            )
-    
-    # Hash-based SHA256 distribution for consistent batch assignment
-    query_array = unique_table[query_column].to_numpy(zero_copy_only=False)
-    
-    def sha256_hash_to_batch(query_text, num_batches):
-        hash_bytes = hashlib.sha256(str(query_text).encode('utf-8')).digest()
-        hash_int = int.from_bytes(hash_bytes[:8], byteorder='big')
-        return hash_int % num_batches
-    
-    # Vectorized hash calculation
-    hash_values = np.array([sha256_hash_to_batch(x, total_batches) for x in query_array])
-    batch_mask = (hash_values == batch_idx)
-    batch_indices = np.where(batch_mask)[0]
-    
-    # Get queries for this specific batch
-    batch_table = unique_table.take(batch_indices)
-    queries = batch_table[query_column].to_pylist()
-    
-    logger.info(f"Processing {len(queries):,} queries for batch {batch_idx}/{total_batches-1}")
-    
-    # Process queries with progress tracking
-    results = []
-    from_dialect = batch_data.get('from_dialect', 'snowflake')
-    to_dialect = batch_data.get('to_dialect', 'e6')
-    
-    progress_desc = f"Batch {batch_idx}/{total_batches-1}"
-    for i, query_text in enumerate(tqdm(queries, desc=progress_desc, unit="queries")):
-        query_id = f"batch_{batch_idx}_query_{i+1}"
-        
-        try:
-            analysis = analyze_sql_functions(
-                query=query_text,
-                from_sql=from_dialect,
-                query_id=query_id,
-                to_sql=to_dialect
-            )
-            
-            results.append({
-                'query_id': query_id,
-                'status': 'success' if not analysis.get('error') else 'failed',
-                'original_query': query_text,
-                'converted_query': analysis.get('converted-query', ''),
-                'executable': analysis.get('executable', 'NO'),
-                'supported_functions': analysis.get('supported_functions', []),
-                'unsupported_functions': list(set(analysis.get('unsupported_functions', []))),
-                'processing_time_ms': 100
-            })
-            
-        except Exception as e:
-            results.append({
-                'query_id': query_id,
-                'status': 'failed',
-                'original_query': query_text,
-                'error': str(e)
-            })
-    
-    return {
-        'batch_id': batch_data['batch_id'],
-        'processed_count': len(results),
-        'successful_count': len([r for r in results if r['status'] == 'success']),
-        'queries': results,
-        'status': 'completed'
-    }
-
-
-def process_query_list(batch_data: Dict[str, Any], task_instance=None) -> Dict[str, Any]:
-    """
-    Process pre-loaded list of queries (NEW OPTIMIZED APPROACH)
-    No file reading needed - queries provided directly from orchestrator
-    """
-    queries = batch_data['queries']  # Pre-loaded query list
-    batch_idx = batch_data.get('batch_idx', 0)
-    total_batches = batch_data.get('total_batches', 1)
-    
-    # Import statistics function from local module
-    from automated_processing.statistics import analyze_sql_functions
-    
-    logger.info(f"Processing {len(queries):,} pre-loaded queries for batch {batch_idx}/{total_batches-1}")
-    
-    # Process queries with progress tracking
-    results = []
-    from_dialect = batch_data.get('from_dialect', 'snowflake')
-    to_dialect = batch_data.get('to_dialect', 'e6')
-    
-    progress_desc = f"Batch {batch_idx}/{total_batches-1}"
-    for i, query_text in enumerate(tqdm(queries, desc=progress_desc, unit="queries")):
-        query_id = f"batch_{batch_idx}_query_{i+1}"
-        
-        try:
-            analysis = analyze_sql_functions(
-                query=query_text,
-                from_sql=from_dialect,
-                query_id=query_id,
-                to_sql=to_dialect
-            )
-            
-            results.append({
-                'query_id': query_id,
-                'status': 'success' if not analysis.get('error') else 'failed',
-                'original_query': query_text,
-                'converted_query': analysis.get('converted-query', ''),
-                'executable': analysis.get('executable', 'NO'),
-                'supported_functions': analysis.get('supported_functions', []),
-                'unsupported_functions': list(set(analysis.get('unsupported_functions', []))),
-                'processing_time_ms': 100
-            })
-            
-        except Exception as e:
-            results.append({
-                'query_id': query_id,
-                'status': 'failed',
-                'original_query': query_text,
-                'error': str(e)
-            })
-    
-    return {
-        'batch_id': batch_data['batch_id'],
-        'processed_count': len(results),
-        'successful_count': len([r for r in results if r['status'] == 'success']),
-        'queries': results,
-        'status': 'completed'
-    }
-
-
-def store_batch_to_iceberg(queries: List[Dict], batch_data: Dict[str, Any]) -> bool:
-    """
-    Store batch results to existing batch_statistics Iceberg table
-    """
-    if not queries:
+    if len(results_table) == 0:
         return True
     
     try:
-        from automated_processing.iceberg_handler import iceberg_catalog
-        
-        if not iceberg_catalog:
-            logger.error("Iceberg catalog not available")
+        # Try to import iceberg_handler from current directory (automated_processing)
+        try:
+            import sys
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            if current_dir not in sys.path:
+                sys.path.insert(0, current_dir)
+            
+            import iceberg_handler as ih
+            
+            # Initialize catalog if not already done
+            if not hasattr(ih, 'iceberg_catalog') or not ih.iceberg_catalog:
+                logger.info("Initializing Iceberg catalog...")
+                ih.initialize_iceberg_catalog()
+                
+            if not ih.iceberg_catalog:
+                logger.warning("Iceberg catalog not available - skipping Iceberg storage")
+                return False
+                
+        except ImportError as e:
+            logger.warning(f"iceberg_handler not available: {e} - skipping Iceberg storage")
             return False
         
         # Load existing batch_statistics table
-        table = iceberg_catalog.load_table("default.batch_statistics")
+        table = ih.iceberg_catalog.load_table("default.batch_statistics")
         
-        # Prepare data for PyArrow table
+        # Prepare metadata using PyArrow compute functions (vectorized)
         current_time = datetime.now()
         event_date = current_time.strftime("%Y-%m-%d")
+        num_rows = len(results_table)
         
-        # Create arrays for each column
-        data = {
-            "query_id": [],
-            "batch_id": [],
-            "company_name": [],
-            "event_date": [],
-            "batch_number": [],
-            "timestamp": [],
-            "status": [],
-            "executable": [],
-            "from_dialect": [],
-            "to_dialect": [],
-            "original_query": [],
-            "converted_query": [],
-            "supported_functions": [],
-            "unsupported_functions": [],
-            "udf_list": [],
-            "tables_list": [],
-            "processing_time_ms": [],
-            "error_message": []
-        }
+        # Create metadata columns using simple PyArrow arrays (avoid complex compute functions)
+        query_id_seq = pa.array(list(range(1, num_rows + 1)), type=pa.int64())  # 1-based indexing
+        batch_id_full = f"{batch_data['session_id']}_{batch_data['batch_id']}"
         
-        for i, query in enumerate(queries):
-            data["query_id"].append(i + 1)
-            data["batch_id"].append(f"{batch_data['session_id']}_{batch_data['batch_id']}")
-            data["company_name"].append(batch_data.get('company_name', 'unknown'))
-            data["event_date"].append(event_date)
-            data["batch_number"].append(batch_data.get('batch_idx', 0))
-            data["timestamp"].append(current_time)
-            data["status"].append(query.get('status', 'unknown'))
-            data["executable"].append(query.get('executable', 'NO'))
-            data["from_dialect"].append(batch_data.get('from_dialect', ''))
-            data["to_dialect"].append(batch_data.get('to_dialect', ''))
-            data["original_query"].append(query.get('original_query', ''))
-            data["converted_query"].append(query.get('converted_query', ''))
-            data["supported_functions"].append(query.get('supported_functions', []))
-            data["unsupported_functions"].append(query.get('unsupported_functions', []))
-            data["udf_list"].append([])  # Empty for now
-            data["tables_list"].append([])  # Empty for now
-            data["processing_time_ms"].append(query.get('processing_time_ms', 0))
-            data["error_message"].append(query.get('error', ''))
+        # Create constant arrays using simple array creation (more reliable)
+        batch_ids = pa.array([batch_id_full] * num_rows, type=pa.string())
+        company_names = pa.array([batch_data.get('company_name', 'unknown')] * num_rows, type=pa.string())
+        event_dates = pa.array([event_date] * num_rows, type=pa.string())
+        batch_numbers = pa.array([batch_data.get('batch_idx', 0)] * num_rows, type=pa.int32())
+        timestamps = pa.array([current_time] * num_rows, type=pa.timestamp('us'))
+        from_dialects = pa.array([batch_data.get('from_dialect', '')] * num_rows, type=pa.string())
+        to_dialects = pa.array([batch_data.get('to_dialect', '')] * num_rows, type=pa.string())
+        # Create empty list arrays
+        empty_string_lists = pa.array([[] for _ in range(num_rows)], type=pa.list_(pa.string()))
         
-        # Create PyArrow table
-        arrow_table = pa.table({
-            "query_id": pa.array(data["query_id"], type=pa.int64()),
-            "batch_id": pa.array(data["batch_id"], type=pa.string()),
-            "company_name": pa.array(data["company_name"], type=pa.string()),
-            "event_date": pa.array(data["event_date"], type=pa.string()),
-            "batch_number": pa.array(data["batch_number"], type=pa.int32()),
-            "timestamp": pa.array(data["timestamp"], type=pa.timestamp('us')),
-            "status": pa.array(data["status"], type=pa.string()),
-            "executable": pa.array(data["executable"], type=pa.string()),
-            "from_dialect": pa.array(data["from_dialect"], type=pa.string()),
-            "to_dialect": pa.array(data["to_dialect"], type=pa.string()),
-            "original_query": pa.array(data["original_query"], type=pa.string()),
-            "converted_query": pa.array(data["converted_query"], type=pa.string()),
-            "supported_functions": pa.array(data["supported_functions"], type=pa.list_(pa.string())),
-            "unsupported_functions": pa.array(data["unsupported_functions"], type=pa.list_(pa.string())),
-            "udf_list": pa.array(data["udf_list"], type=pa.list_(pa.string())),
-            "tables_list": pa.array(data["tables_list"], type=pa.list_(pa.string())),
-            "processing_time_ms": pa.array(data["processing_time_ms"], type=pa.int64()),
-            "error_message": pa.array(data["error_message"], type=pa.string())
+        # Combine results table with metadata (vectorized column operations)
+        iceberg_table = pa.table({
+            "query_id": query_id_seq,
+            "batch_id": batch_ids,
+            "company_name": company_names,
+            "event_date": event_dates,
+            "batch_number": batch_numbers,
+            "timestamp": timestamps,
+            "status": results_table['status'],
+            "executable": results_table['executable'],
+            "from_dialect": from_dialects,
+            "to_dialect": to_dialects,
+            "original_query": results_table['original_query'],
+            "converted_query": results_table['converted_query'],
+            "supported_functions": results_table['supported_functions'],
+            "unsupported_functions": results_table['unsupported_functions'],
+            "udf_list": results_table['udf_list'] if 'udf_list' in results_table.column_names else empty_string_lists,
+            "tables_list": results_table['tables_list'] if 'tables_list' in results_table.column_names else empty_string_lists,
+            "processing_time_ms": results_table['processing_time_ms'],
+            "error_message": results_table['error_message'],
+            "unsupported_functions_after_transpilation": results_table['unsupported_functions_after_transpilation'] if 'unsupported_functions_after_transpilation' in results_table.column_names else empty_string_lists,
+            "joins_list": results_table['joins_list'] if 'joins_list' in results_table.column_names else empty_string_lists
         })
         
-        # Append to Iceberg table
-        table.append(arrow_table)
+        # Append to Iceberg table (single operation)
+        table.append(iceberg_table)
         
-        logger.info(f"Stored {len(queries)} results to Iceberg batch_statistics table")
+        logger.info(f"Stored {num_rows} results to Iceberg batch_statistics table using vectorized operations")
         return True
         
     except Exception as e:

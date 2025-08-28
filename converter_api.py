@@ -451,6 +451,7 @@ async def stats_api(
             unsupported_in_converted = []
             executable = "NO"
 
+
         return {
             "supported_functions": supported,
             "unsupported_functions": set(unsupported),
@@ -660,7 +661,7 @@ from automated_processing.orchestrator import orchestrate_processing, get_proces
 
 @app.post("/process-parquet-directory-automated")
 async def process_parquet_directory_automated(
-    directory_path: str = Form(..., description="Path to directory containing parquet files"),
+    directory_path: str = Form(..., description="Path to directory containing parquet files OR path to a single parquet file"),
     company_name: str = Form(..., description="Company identifier for Iceberg partitioning"),
     from_dialect: str = Form(..., description="Source SQL dialect (e.g., snowflake, bigquery)"),
     to_dialect: str = Form("e6", description="Target SQL dialect"),
@@ -670,6 +671,12 @@ async def process_parquet_directory_automated(
 ):
     """
     Batch processing endpoint for parquet files containing SQL queries.
+    
+    Accepts either:
+    - Path to a directory containing parquet files (e.g., "/path/to/parquet_files/")
+    - Path to a single parquet file (e.g., "/path/to/file.parquet")
+    - S3 directory path (e.g., "s3://bucket/path/to/directory/")
+    - S3 single file path (e.g., "s3://bucket/path/to/file.parquet")
     
     Processes queries through SQLGlot transpilation using Celery distributed workers.
     Results are stored in Iceberg table with partitioning by company_name and event_date.
@@ -815,9 +822,9 @@ async def validate_s3_bucket(
         # Create S3 filesystem
         try:
             s3fs = fs.S3FileSystem(
-                access_key=os.environ.get("AWS_ACCESS_KEY_ID"),
-                secret_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-                session_token=os.environ.get("AWS_SESSION_TOK"),
+                access_key="ASIAZYHN7XI64V6RB3JE",
+                secret_key="ivFKpPAYVeLxKVAHzwBm5UvUw95jI2eOuXoWop5t",
+                session_token="FwoGZXIvYXdzEFYaDJYO/Msc2RGRhHkyNCLWAVEJ/q5S2bfCV6fYnnOO8AbEP0PdPyEKpE5xxFiJ2CC8ocmffBUUf59VUk0JQiEbljmqsyg7aOUkwm4zHUk4NYidd/2fSakcuawYV0QnL6ZbKMOjPN1wlCaXJYsDPXCvcuGXKP5FWXvJsmLcrLG0YQeLzC3DWfxjacAPinZAKOKrA/YkzXwVslYqM+hDK+fjqwiVK3BHFFXn4kUkI3uBrtJW94hueIG5dvSMYL4C7A/7I9wHLIC+zVEYCd3Tch95X1x8K+VBt4ayFdtiaAHY0oJ6K+zhTWEok8K/xQYyM84wjGOZFVNzChrNGcUhY1ph1KmVh5kYc58relyWJ992BU0WdNNW4T9VuFttIbwxnbv6Kw==",
                 region='us-east-1',
                 connect_timeout=30,
                 request_timeout=60

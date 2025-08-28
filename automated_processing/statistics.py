@@ -76,7 +76,7 @@ def analyze_sql_functions(query: str, from_sql: str, query_id: str, to_sql: str 
         
         # Extract UDFs
         from_dialect_functions = load_supported_functions(from_sql)
-        udf_list, unsupported = extract_udfs(unsupported, from_dialect_functions, tables_list)
+        udf_list, unsupported = extract_udfs(unsupported, from_dialect_functions)
         
         # Default values
         executable = "YES"
@@ -111,7 +111,7 @@ def analyze_sql_functions(query: str, from_sql: str, query_id: str, to_sql: str 
             )
             
             # Filter UDFs from converted query analysis
-            _, unsupported_converted = extract_udfs(unsupported_converted, from_dialect_functions, tables_list)
+            _, unsupported_converted = extract_udfs(unsupported_converted, from_dialect_functions)
             
             # Check converted query AST for unsupported functionality
             converted_ast = parse_one(converted_query, read=to_sql)

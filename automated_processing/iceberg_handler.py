@@ -65,7 +65,9 @@ def initialize_iceberg_catalog():
             NestedField(15, "udf_list", ListType(element_id=22, element_type=StringType(), element_required=False), required=False),
             NestedField(16, "tables_list", ListType(element_id=23, element_type=StringType(), element_required=False), required=False),
             NestedField(17, "processing_time_ms", LongType(), required=False),
-            NestedField(18, "error_message", StringType(), required=False)
+            NestedField(18, "error_message", StringType(), required=False),
+            NestedField(19, "unsupported_functions_after_transpilation", ListType(element_id=24, element_type=StringType(), element_required=False), required=False),
+            NestedField(20, "joins_list", ListType(element_id=25, element_type=StringType(), element_required=False), required=False)
         )
 
         # Define partition specification for company_name and event_date
@@ -88,9 +90,9 @@ def initialize_iceberg_catalog():
             batch_statistics_table = iceberg_catalog.load_table(table_identifier)
             logger.info(f"Loaded existing Iceberg table: {table_identifier}")
             
-            # Check if table has the new schema with company_name and event_date
+            # Check if table has the new schema with all required columns
             existing_columns = [field.name for field in batch_statistics_table.schema().fields]
-            required_columns = ["company_name", "event_date", "batch_number"]
+            required_columns = ["company_name", "event_date", "batch_number", "unsupported_functions_after_transpilation", "joins_list"]
             missing_columns = [col for col in required_columns if col not in existing_columns]
             
             if missing_columns:
