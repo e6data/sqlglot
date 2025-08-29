@@ -666,7 +666,8 @@ async def process_parquet_directory_automated(
     to_dialect: str = Form("e6", description="Target SQL dialect"),
     query_column: str = Form(..., description="Column name containing SQL queries"),
     batch_size: int = Form(10000, description="Number of queries per batch"),
-    filters: Optional[str] = Form(None, description="JSON string of column filters e.g. '{\"statement_type\": \"SELECT\", \"client_application\": \"PowerBI\"}'")
+    filters: Optional[str] = Form(None, description="JSON string of column filters e.g. '{\"statement_type\": \"SELECT\", \"client_application\": \"PowerBI\"}'"),
+    session_name: Optional[str] = Form(None, description="Custom session name for identification")
 ):
     """
     Batch processing endpoint for parquet files containing SQL queries.
@@ -714,7 +715,8 @@ async def process_parquet_directory_automated(
             to_dialect=to_dialect.lower().strip(),
             query_column=query_column.strip(),
             batch_size=batch_size,
-            filters=filter_dict
+            filters=filter_dict,
+            name=session_name.strip() if session_name else None
         )
         
         # Check if there was an error
