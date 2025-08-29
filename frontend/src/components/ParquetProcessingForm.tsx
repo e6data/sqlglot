@@ -20,7 +20,7 @@ export default function ParquetProcessingForm({
     query_column: '',
     batch_size: 10000,
     filters: '',
-    name: ''
+    session_name: ''
   })
 
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
@@ -164,13 +164,17 @@ export default function ParquetProcessingForm({
           </label>
           <input
             type="text"
-            name="name"
-            value={formData.name}
+            name="session_name"
+            value={formData.session_name}
             onChange={handleInputChange}
             placeholder="e.g., production_migration"
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Custom name for easier session identification</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Custom name for easier session identification
+            <br />
+            <span className="text-red-500">Note: Cannot contain the word "batch"</span>
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

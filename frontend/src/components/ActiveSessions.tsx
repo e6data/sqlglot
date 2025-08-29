@@ -13,6 +13,7 @@ interface ActiveSessionsProps {
 export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSelect, selectedSession }: ActiveSessionsProps) {
   const [sessions, setSessions] = useState<SessionData[]>([])
   const [loading, setLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null
@@ -37,11 +38,23 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
             const response = await fetch(`/api/processing-status/${sessionId}`)
             if (response.ok) {
               const status = await response.json()
+              
+              // Robust status determination with fallback checks
+              let sessionStatus = 'processing'
+              if (status.overall_status && status.overall_status.toLowerCase().trim() === 'completed') {
+                sessionStatus = 'completed'
+              } else if (status.failed > 0) {
+                sessionStatus = 'failed'
+              } else if (status.completed >= status.total_batches && status.total_batches > 0) {
+                // Fallback: if all batches are completed, mark as completed
+                sessionStatus = 'completed'
+              }
+              
               return {
                 id: sessionId,
-                company_name: 'Processing Session',
-                status: status.overall_status === 'completed' ? 'completed' : 
-                        status.failed > 0 ? 'failed' : 'processing',
+                company_name: sessionStatus === 'completed' ? 'Completed Session' : 
+                             sessionStatus === 'failed' ? 'Failed Session' : 'Processing Session',
+                status: sessionStatus,
                 completed_tasks: status.completed,
                 total_tasks: status.total_tasks,
                 created_at: status.start_time || sessionId,
@@ -100,15 +113,6 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
     }
   }, [refreshTrigger])
 
-  const clearAllSessions = () => {
-    if (confirm('Clear browser storage? Sessions will reload from Redis automatically.')) {
-      localStorage.removeItem('processing_sessions')
-      localStorage.removeItem('session_names')
-      
-      // Trigger a refresh by updating refreshTrigger
-      onRefresh()
-    }
-  }
 
   const discoverSessionsFromRedis = async () => {
     try {
@@ -127,6 +131,17 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
     }
   }
 
+  // Filter sessions based on search term
+  const filteredSessions = sessions.filter((session) => {
+    if (!searchTerm.trim()) return true
+    
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      session.id.toLowerCase().includes(searchLower) ||
+      session.company_name.toLowerCase().includes(searchLower) ||
+      session.status.toLowerCase().includes(searchLower)
+    )
+  })
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -140,13 +155,6 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
         </div>
         <div className="flex gap-2">
           <button
-            onClick={clearAllSessions}
-            className="px-3 py-1 text-sm text-red-600 border border-red-300 rounded-md hover:bg-red-50"
-            title="Clear all sessions from browser storage"
-          >
-            Clear All
-          </button>
-          <button
             onClick={onRefresh}
             className="p-2 text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
             disabled={loading}
@@ -157,15 +165,56 @@ export default function ActiveSessions({ refreshTrigger, onRefresh, onSessionSel
         </div>
       </div>
 
+      {/* Search Box */}
+      <div className="mb-4">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search sessions by name, ID, or status..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <span className="text-gray-400">🔍</span>
+          </div>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        {searchTerm && (
+          <p className="text-sm text-gray-500 mt-2">
+            Showing {filteredSessions.length} of {sessions.length} sessions
+          </p>
+        )}
+      </div>
+
       <div className="max-h-96 overflow-y-auto">
         {sessions.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <div className="text-4xl mb-2">⏳</div>
             <p>No active sessions</p>
           </div>
+        ) : filteredSessions.length === 0 ? (
+          <div className="text-center text-gray-500 py-8">
+            <div className="text-4xl mb-2">🔍</div>
+            <p>No sessions match your search</p>
+            <button
+              onClick={() => setSearchTerm('')}
+              className="mt-2 px-3 py-1 text-sm text-blue-600 hover:text-blue-800"
+            >
+              Clear search
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
-            {sessions.map((session: SessionData) => {
+            {filteredSessions.map((session: SessionData) => {
               const isSelected = selectedSession === session.id
               return (
                 <div 
