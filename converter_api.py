@@ -381,7 +381,6 @@ async def stats_api(
             # Step 2: Transpile the Query
             # ------------------------------
             tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-
             tree2 = quote_identifiers(tree, dialect=to_sql)
 
             double_quotes_added_query = tree2.sql(
@@ -667,8 +666,7 @@ async def process_parquet_directory_automated(
     to_dialect: str = Form("e6", description="Target SQL dialect"),
     query_column: str = Form(..., description="Column name containing SQL queries"),
     batch_size: int = Form(10000, description="Number of queries per batch"),
-    filters: Optional[str] = Form(None, description="JSON string of column filters e.g. '{\"statement_type\": \"SELECT\", \"client_application\": \"PowerBI\"}'"),
-    name: Optional[str] = Form(None, description="Optional custom name to append to session ID")
+    filters: Optional[str] = Form(None, description="JSON string of column filters e.g. '{\"statement_type\": \"SELECT\", \"client_application\": \"PowerBI\"}'")
 ):
     """
     Batch processing endpoint for parquet files containing SQL queries.
@@ -716,8 +714,7 @@ async def process_parquet_directory_automated(
             to_dialect=to_dialect.lower().strip(),
             query_column=query_column.strip(),
             batch_size=batch_size,
-            filters=filter_dict,
-            name=name.strip() if name else None
+            filters=filter_dict
         )
         
         # Check if there was an error
@@ -735,7 +732,6 @@ async def process_parquet_directory_automated(
         
         return {
             "session_id": result['session_id'],
-            "session_name": name.strip() if name else None,
             "total_files": result.get('total_files', 0),
             "total_batches": result.get('total_batches', 0),
             "task_ids": result.get('task_ids', []),
@@ -747,8 +743,7 @@ async def process_parquet_directory_automated(
                 "company_name": company_name,
                 "query_column": query_column,
                 "batch_size": batch_size,
-                "dialect_conversion": f"{from_dialect} -> {to_dialect}",
-                "custom_name": name.strip() if name else None
+                "dialect_conversion": f"{from_dialect} -> {to_dialect}"
             },
             "iceberg_storage": {
                 "table": "default.batch_statistics",
@@ -792,184 +787,48 @@ async def get_individual_task_result(task_id: str):
 async def validate_s3_bucket(
     s3_path: str = Form(...),
 ):
-    """
-    Validate S3 bucket connection and identify query columns in parquet files.
-    Handles both individual files and directories.
-    
-    Args:
-        s3_path: S3 path like 's3://bucket/path/to/directory/' or 's3://bucket/path/to/file.parquet'
-    
-    Returns:
-        - authenticated: Whether connection succeeded
-        - format: File format (parquet, delta, iceberg)
-        - files_found: Number of parquet files found
-        - columns: Common columns across all files
-        - query_column: Identified query column (if found)
-        - response: "Yes" if query column found, "No" otherwise
-    """
-    
     try:
-        # Parse S3 path
         if not s3_path.startswith('s3://'):
-            return {
-                "authenticated": False,
-                "error": "Invalid S3 path format. Must start with 's3://'"
-            }
+            return {"authenticated": False, "error": "Invalid S3 path"}
         
         bucket = s3_path.split('/')[2]
         key_prefix = '/'.join(s3_path.split('/')[3:])
         
-        # Ensure key_prefix ends with / for directory scanning
-        if key_prefix and not key_prefix.endswith('/'):
-            key_prefix = key_prefix + '/'
-        
-        # Create S3 filesystem
         try:
             s3fs = fs.S3FileSystem(
-                access_key="ASIAZYHN7XI64V6RB3JE",
-                secret_key="ivFKpPAYVeLxKVAHzwBm5UvUw95jI2eOuXoWop5t",
-                session_token="FwoGZXIvYXdzEFYaDJYO/Msc2RGRhHkyNCLWAVEJ/q5S2bfCV6fYnnOO8AbEP0PdPyEKpE5xxFiJ2CC8ocmffBUUf59VUk0JQiEbljmqsyg7aOUkwm4zHUk4NYidd/2fSakcuawYV0QnL6ZbKMOjPN1wlCaXJYsDPXCvcuGXKP5FWXvJsmLcrLG0YQeLzC3DWfxjacAPinZAKOKrA/YkzXwVslYqM+hDK+fjqwiVK3BHFFXn4kUkI3uBrtJW94hueIG5dvSMYL4C7A/7I9wHLIC+zVEYCd3Tch95X1x8K+VBt4ayFdtiaAHY0oJ6K+zhTWEok8K/xQYyM84wjGOZFVNzChrNGcUhY1ph1KmVh5kYc58relyWJ992BU0WdNNW4T9VuFttIbwxnbv6Kw==",
-                region='us-east-1',
-                connect_timeout=30,
-                request_timeout=60
+                access_key="ASIAZYHN7XI67YRBNYPP",
+                secret_key="WXTpR6kPAmEqta34aQ7ESYruhV3ZlC+HeTUkZ31e",
+                session_token="FwoGZXIvYXdzEFcaDO0W1wbT3Xgl+L2ntCLUAcwCfpCKg6UxC0Ue7l/SsTfhY3xIEy5DYfqo0BOHZF1L+Hk57CQE5VFPyjbZddSNk8azmQzCd0+q7n7T4wkr1jWEqry+7LpubLK3xnxbRq+dQfs84hKqP9W6dprD57tspbb0Ra1zAjOwcvfhUp5PtGJH68+1BbRhkF3RRtibp6tCxv1BHrtd6k6+EnSBu3K917PRUhAC2nUh6+XFJmGDRoSr0UU1GMTgrtBgiyknidnSqOqA1SmZYo4wfGdhNrMWMDiEprJE0NXaELjnclrduEnTWRLDKOjVv8UGMjPZAHOJS2SW6QdD08CgBGbUv0ZrpaH858GV0Odv4l+f9uk8VqTsbQjP695oVMAp8sxM5ac=",
+                region='us-east-1'
             )
         except Exception as e:
-            return {
-                "authenticated": False,
-                "error": f"S3 authentication failed: {str(e)}",
-                "response": "No"
-            }
+            return {"authenticated": False, "error": f"S3 auth failed: {str(e)}"}
         
-        # List all parquet files in the directory
-        try:
-            # Use get_file_info to check if it's a file or directory
-            path = f"{bucket}/{key_prefix}" if key_prefix else bucket
-            file_info = s3fs.get_file_info(path)
-            
-            parquet_files = []
-            
-            if file_info.type == fs.FileType.File:
-                # Single file provided
-                if path.endswith('.parquet'):
-                    parquet_files = [path]
-            else:
-                # Directory provided - list all parquet files
-                from pyarrow.fs import FileSelector
-                selector = FileSelector(path, recursive=True)
-                file_infos = s3fs.get_file_info(selector)
-                
-                for finfo in file_infos:
-                    if finfo.type == fs.FileType.File and finfo.path.endswith('.parquet'):
-                        parquet_files.append(finfo.path)
-            
-            if not parquet_files:
-                return {
-                    "authenticated": True,
-                    "error": f"No parquet files found in: {s3_path}",
-                    "files_found": 0,
-                    "response": "No"
-                }
-            
-            logger.info(f"Found {len(parquet_files)} parquet files")
-            
-            # Metadata-only analysis - no data loading required
-            all_columns = []
-            query_column = None
-            total_size_mb = 0
-            
-            # Common query column names to look for (prioritized order)
-            query_patterns = ['hashed_query', 'query', 'sql', 'statement_text', 'sql_query', 'command']
-            
-            # Read metadata from first parquet file to get schema
-            try:
-                first_file = parquet_files[0]
-                parquet_file = pq.ParquetFile(first_file, filesystem=s3fs)
-                
-                # Get schema from metadata only (no data loading)
-                schema = parquet_file.schema
-                metadata = parquet_file.metadata
-                
-                # Get all column names from schema
-                all_columns = [field.name for field in schema]
-                
-                # Look for query column by name (prioritize exact matches)
-                # First check for exact matches
-                for pattern in query_patterns:
-                    for col in all_columns:
-                        if col.lower() == pattern.lower():
-                            query_column = col
-                            break
-                    if query_column:
-                        break
-                
-                # If no exact match, look for partial matches
-                if not query_column:
-                    for pattern in query_patterns:
-                        for col in all_columns:
-                            if pattern.lower() in col.lower():
-                                query_column = col
-                                break
-                        if query_column:
-                            break
-                
-                # Get file sizes from metadata (much faster than file system calls)
-                for file_path in parquet_files[:20]:  # Check first 20 files for size estimation
-                    try:
-                        file_info = s3fs.get_file_info(file_path)
-                        if hasattr(file_info, 'size'):
-                            total_size_mb += file_info.size / (1024**2)
-                    except Exception:
-                        # Fallback: estimate based on first file
-                        continue
-                
-                files_analyzed = min(len(parquet_files), 20)  # We analyzed up to 20 files
-                
-            except Exception as e:
-                logger.error(f"Error reading parquet file: {e}")
-                return {
-                    "authenticated": True,
-                    "error": f"Could not read parquet files: {str(e)}",
-                    "files_found": len(parquet_files),
-                    "response": "No"
-                }
-            
-            if files_analyzed == 0:
-                return {
-                    "authenticated": True,
-                    "error": "Could not read schema from any parquet files",
-                    "files_found": len(parquet_files),
-                    "response": "No"
-                }
-            
-            response = "Yes" if query_column else "No"
-            
-            return {
-                "authenticated": True,
-                "format": "parquet",
-                "files_found": len(parquet_files),
-                "files_analyzed": files_analyzed,
-                "total_size_mb": round(total_size_mb, 2),
-                "common_columns": sorted(list(all_columns)),
-                "query_column": query_column,
-                "response": response,
-                "message": f"Found query column '{query_column}' across {len(parquet_files)} files" if query_column else f"No query column identified in {len(parquet_files)} files. Please specify manually.",
-                "sample_files": parquet_files[:5]  # Show first 5 files as sample
-            }
-            
-        except Exception as e:
-            return {
-                "authenticated": True,
-                "error": f"Error scanning directory: {str(e)}",
-                "response": "No"
-            }
+        path = f"{bucket}/{key_prefix}" if key_prefix else bucket
+        file_info = s3fs.get_file_info(path)
+        
+        parquet_files = []
+        if file_info.type == fs.FileType.File and path.endswith('.parquet'):
+            parquet_files = [path]
+        else:
+            from pyarrow.fs import FileSelector
+            selector = FileSelector(path, recursive=True)
+            file_infos = s3fs.get_file_info(selector)
+            parquet_files = [f.path for f in file_infos if f.type == fs.FileType.File and f.path.endswith('.parquet')]
+        
+        if not parquet_files:
+            return {"authenticated": True, "error": "No parquet files found"}
+        
+        parquet_file = pq.ParquetFile(parquet_files[0], filesystem=s3fs)
+        all_columns = [field.name for field in parquet_file.schema]
+        
+        return {
+            "authenticated": True,
+            "columns": all_columns
+        }
         
     except Exception as e:
-        logger.error(f"Error in validate_s3_bucket: {str(e)}", exc_info=True)
-        return {
-            "authenticated": False,
-            "error": f"Validation failed: {str(e)}",
-            "response": "No"
-        }
+        return {"authenticated": False, "error": f"Validation failed: {str(e)}"}
 
 
 if __name__ == "__main__":

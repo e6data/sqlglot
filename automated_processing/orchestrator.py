@@ -3,6 +3,7 @@ Simplified Orchestrator using Celery's built-in features
 No explicit Redis management needed - Celery handles it all
 """
 import logging
+import os
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import uuid
@@ -13,7 +14,7 @@ from datetime import datetime
 import dateutil.parser
 from celery import group, chord, signature
 from .worker import celery as celery_app
-from .tasks import discover_parquet_files
+from .tasks import discover_parquet_files, extract_unique_queries_from_file, create_query_batch_configs
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pyarrow.compute as pc
@@ -37,205 +38,6 @@ def format_duration(seconds: float) -> str:
         minutes = int((seconds % 3600) // 60)
         remaining_seconds = int(seconds % 60)
         return f"{hours}h {minutes}m {remaining_seconds}s"
-
-
-def extract_unique_queries_from_file(
-    file_path: str, 
-    query_column: str, 
-    filters: Dict[str, Any]
-) -> pa.Table:
-    """
-    Read file once and extract unique queries with filtering - returns PyArrow Table
-    This replaces the repetitive file reading in workers and avoids Python list conversions
-    """
-    try:
-        if file_path.startswith('s3://'):
-            # S3 file reading using s3fs
-            credentials = {
-                "access_key":"ASIAZYHN7XI64V6RB3JE",
-                "secret_key":"ivFKpPAYVeLxKVAHzwBm5UvUw95jI2eOuXoWop5t",
-                "session_token":"FwoGZXIvYXdzEFYaDJYO/Msc2RGRhHkyNCLWAVEJ/q5S2bfCV6fYnnOO8AbEP0PdPyEKpE5xxFiJ2CC8ocmffBUUf59VUk0JQiEbljmqsyg7aOUkwm4zHUk4NYidd/2fSakcuawYV0QnL6ZbKMOjPN1wlCaXJYsDPXCvcuGXKP5FWXvJsmLcrLG0YQeLzC3DWfxjacAPinZAKOKrA/YkzXwVslYqM+hDK+fjqwiVK3BHFFXn4kUkI3uBrtJW94hueIG5dvSMYL4C7A/7I9wHLIC+zVEYCd3Tch95X1x8K+VBt4ayFdtiaAHY0oJ6K+zhTWEok8K/xQYyM84wjGOZFVNzChrNGcUhY1ph1KmVh5kYc58relyWJ992BU0WdNNW4T9VuFttIbwxnbv6Kw==",
-                "region": "us-east-1"
-            }
-            
-            s3fs_fs = s3fs.S3FileSystem(
-                key=credentials["access_key"],
-                secret=credentials["secret_key"], 
-                token=credentials["session_token"],
-                client_kwargs={'region_name': credentials["region"]},
-                config_kwargs={'connect_timeout': 30, 'read_timeout': 60}
-            )
-            
-            logger.info(f"📖 Reading S3 file: {file_path}")
-            table = pq.read_table(file_path, filesystem=s3fs_fs)
-        else:
-            # Local file reading
-            logger.info(f"📖 Reading local file: {file_path}")
-            table = pq.read_table(file_path)
-        
-        logger.info(f"Loaded {len(table):,} rows from file")
-        
-        # Apply filters using PyArrow compute functions (vectorized)
-        filter_conditions = []
-        filter_conditions.append(pc.is_valid(table[query_column]))
-        filter_conditions.append(pc.not_equal(table[query_column], ""))
-        
-        for filter_col, filter_value in filters.items():
-            if filter_col in table.schema.names:
-                try:
-                    # Support both single values and multiple values (lists)
-                    if isinstance(filter_value, list):
-                        if len(filter_value) > 0:  # Only apply filter if list is not empty
-                            # Use PyArrow's is_in for multiple values (IN operator)
-                            logger.info(f"Applying multi-value filter: {filter_col} IN {filter_value}")
-                            filter_conditions.append(pc.is_in(table[filter_col], pa.array(filter_value)))
-                        else:
-                            logger.warning(f"Empty list provided for filter column '{filter_col}', skipping filter")
-                    else:
-                        # Single value - use exact match (backward compatible)
-                        logger.info(f"Applying single-value filter: {filter_col} = {filter_value}")
-                        filter_conditions.append(pc.equal(table[filter_col], filter_value))
-                except Exception as e:
-                    logger.error(f"Error applying filter for column '{filter_col}' with value {filter_value}: {str(e)}")
-                    logger.error(f"Column '{filter_col}' data type: {table[filter_col].type}")
-                    # Skip this filter and continue with others
-                    continue
-            else:
-                logger.warning(f"Filter column '{filter_col}' not found in parquet file. Available columns: {table.schema.names}")
-        
-        if filter_conditions:
-            combined_filter = filter_conditions[0]
-            for condition in filter_conditions[1:]:
-                combined_filter = pc.and_kleene(combined_filter, condition)
-            
-            table = table.filter(combined_filter)
-            logger.info(f"After filtering: {len(table):,} rows")
-        
-        # Deduplicate queries using PyArrow group_by (vectorized)
-        if len(table) == 0:
-            return pa.table({query_column: pa.array([], type=pa.string())})
-        
-        unique_table = table.select([query_column]).group_by([query_column]).aggregate([])
-        
-        logger.info(f"Extracted {len(unique_table):,} unique queries")
-        return unique_table
-        
-    except Exception as e:
-        logger.error(f"Failed to extract queries from {file_path}: {str(e)}")
-        return pa.table({query_column: pa.array([], type=pa.string())})
-
-
-def create_query_batch_configs(
-    unique_table: pa.Table,
-    session_id: str,
-    company_name: str,
-    from_dialect: str,
-    to_dialect: str,
-    query_column: str,
-    batch_size: int,
-    file_config: Dict[str, Any]
-) -> List[Dict[str, Any]]:
-    """
-    Create batch configurations with PyArrow table (optimized for memory and speed)
-    Uses hash-based distribution for consistent batching with vectorized operations
-    """
-    if len(unique_table) == 0:
-        return []
-    
-    # Calculate number of batches needed
-    num_queries = len(unique_table)
-    num_batches = max(1, (num_queries + batch_size - 1) // batch_size)
-    
-    # SHA-256 hash-based distribution using Python hashlib (universally available)
-    # Convert queries to Python list for hashing
-    query_list = unique_table[query_column].to_pylist()
-    
-    # Use SHA-256 for consistent hash distribution
-    hash_values = []
-    for query in query_list:
-        # Create SHA-256 hash of query string
-        hash_obj = hashlib.sha256(query.encode('utf-8'))
-        # Convert first 8 bytes to integer for batch assignment
-        hash_int = int.from_bytes(hash_obj.digest()[:8], 'big')
-        batch_id = hash_int % num_batches
-        hash_values.append(batch_id)
-    
-    # Convert back to PyArrow array
-    batch_ids = pa.array(hash_values, type=pa.int32())
-    
-    # Add batch_id column to table
-    table_with_batch = unique_table.append_column('batch_id', batch_ids)
-    
-    # Create configurations using PyArrow operations (eliminate Python lists)
-    # Get unique batch IDs that actually have data
-    unique_batch_ids = pc.unique(table_with_batch['batch_id'])
-    num_actual_batches = len(unique_batch_ids)
-    
-    # Create batch config table using PyArrow operations
-    batch_config_data = {
-        'batch_id': [],
-        'session_id': [],
-        'file_name': [],
-        'batch_idx': [],
-        'total_batches': [],
-        'company_name': [],
-        'from_dialect': [],
-        'to_dialect': [],
-        'query_column': [],
-        'queries_table': [],
-        'query_count': []
-    }
-    
-    # Process each batch using vectorized operations
-    for batch_idx_scalar in unique_batch_ids.to_pylist():  # Only convert scalars
-        batch_idx = int(batch_idx_scalar)
-        
-        # Filter table for this batch (vectorized)
-        batch_mask = pc.equal(table_with_batch['batch_id'], batch_idx)
-        batch_table = table_with_batch.filter(batch_mask)
-        
-        if len(batch_table) == 0:  # Skip empty batches
-            continue
-        
-        # Remove the batch_id column before storing
-        batch_queries_table = batch_table.select([query_column])
-        
-        # Convert PyArrow table to serializable format for Celery
-        queries_list = batch_queries_table[query_column].to_pylist()
-        
-        # Collect batch config data (convert to serializable format)
-        batch_config_data['batch_id'].append(f"batch_{session_id}_{batch_idx}")
-        batch_config_data['session_id'].append(session_id)
-        batch_config_data['file_name'].append(file_config['file_name'])
-        batch_config_data['batch_idx'].append(batch_idx)
-        batch_config_data['total_batches'].append(num_batches)
-        batch_config_data['company_name'].append(company_name)
-        batch_config_data['from_dialect'].append(from_dialect)
-        batch_config_data['to_dialect'].append(to_dialect)
-        batch_config_data['query_column'].append(query_column)
-        batch_config_data['queries_table'].append(queries_list)  # Convert to Python list for serialization
-        batch_config_data['query_count'].append(len(queries_list))
-    
-    # Convert to list of dicts (needed for Celery serialization)
-    batch_configs = []
-    for i in range(len(batch_config_data['batch_id'])):
-        batch_config = {
-            'batch_id': batch_config_data['batch_id'][i],
-            'session_id': batch_config_data['session_id'][i],
-            'file_name': batch_config_data['file_name'][i],
-            'batch_idx': batch_config_data['batch_idx'][i],
-            'total_batches': batch_config_data['total_batches'][i],
-            'company_name': batch_config_data['company_name'][i],
-            'from_dialect': batch_config_data['from_dialect'][i],
-            'to_dialect': batch_config_data['to_dialect'][i],
-            'query_column': batch_config_data['query_column'][i],
-            'queries_table': batch_config_data['queries_table'][i],  # Python list now
-            'query_count': batch_config_data['query_count'][i]
-        }
-        batch_configs.append(batch_config)
-    
-    logger.info(f"Created {len(batch_configs)} batches from {num_queries} queries using vectorized operations")
-    return batch_configs
 
 
 def orchestrate_processing(
@@ -277,40 +79,40 @@ def orchestrate_processing(
         logger.info("📦 Using S3 filesystem with temporary credentials")
     
     try:
-        # Discover and validate files (now supports S3)
-        file_configs = discover_parquet_files(
+        # Discover parquet files
+        file_paths = discover_parquet_files(
             directory_path,
             query_column
         )
         
-        if not file_configs:
+        if not file_paths:
             return {
                 'error': f'No valid parquet files found in {directory_path}',
                 'session_id': session_id
             }
         
-        # NEW APPROACH: Read files and extract queries in orchestrator using PyArrow
+        # Process all files and collect batch configs
         all_batch_configs = []
         
-        # Process all files and collect batch configs
-        for file_config in file_configs:
-            logger.info(f"📖 Reading and processing file: {file_config['file_name']}")
+        for file_path in file_paths:
+            file_name = os.path.basename(file_path)
+            logger.info(f"📖 Reading and processing file: {file_name}")
             
             # Extract unique queries from this file as PyArrow table
             unique_table = extract_unique_queries_from_file(
-                file_config['file_path'],
+                file_path,
                 query_column,
                 filters or {}
             )
             
             if len(unique_table) == 0:
-                logger.warning(f"No queries found in {file_config['file_name']}")
+                logger.warning(f"No queries found in {file_name}")
                 continue
             
-            logger.info(f"✅ Extracted {len(unique_table):,} unique queries from {file_config['file_name']}")
+            logger.info(f"✅ Extracted {len(unique_table):,} unique queries from {file_name}")
             
-            # Create batch configurations with PyArrow table
-            file_batch_configs = create_query_batch_configs(
+            # Create batch configurations - get PyArrow table + metadata
+            batch_table, metadata = create_query_batch_configs(
                 unique_table,
                 session_id,
                 company_name,
@@ -318,11 +120,19 @@ def orchestrate_processing(
                 to_dialect,
                 query_column,
                 batch_size,
-                file_config
+                {'file_path': file_path, 'file_name': file_name}
             )
             
-            # Extend configs (still need this for Celery task creation)
-            all_batch_configs.extend(file_batch_configs)
+            # Each row is a job - extract queries as Python list for JSON serialization
+            for i in range(len(batch_table)):
+                batch_id = batch_table['batch_id'][i].as_py()  # Extract batch ID
+                queries_array = batch_table['queries_array'][i].as_py()  # Extract queries as Python list
+                
+                all_batch_configs.append({
+                    'batch_id': batch_id,
+                    'queries_list': queries_array,  # Python list (JSON serializable)
+                    'metadata': metadata
+                })
         
         if not all_batch_configs:
             return {
@@ -330,15 +140,14 @@ def orchestrate_processing(
                 'session_id': session_id
             }
         
-        logger.info(f"📦 Created {len(all_batch_configs)} batch configurations with pre-loaded queries")
+        logger.info(f"📦 Created {len(all_batch_configs)} PyArrow jobs using table slicing")
         
-        # Create a Celery group for parallel processing
-        # Each batch now contains actual queries, not file paths
+        # Create a Celery group - each job gets one sliced PyArrow row
         job = group(
             celery_app.signature(
-                'process_query_batch',  # New task for processing query lists
+                'process_query_batch',
                 args=[config],
-                task_id=f"{session_id}_{config['batch_id']}"  # Custom task ID for tracking
+                task_id=f"{session_id}_batch_{config['batch_id']}"  # Fixed task ID generation
             )
             for config in all_batch_configs
         )
@@ -365,9 +174,9 @@ def orchestrate_processing(
             'session_id': session_id,
             'group_id': group_result.id if hasattr(group_result, 'id') else session_id,
             'status': 'processing',
-            'total_files': len(file_configs),
+            'total_files': len(file_paths),
             'total_batches': len(all_batch_configs),
-            'task_ids': [f"{session_id}_{config['batch_id']}" for config in all_batch_configs],
+            'task_ids': [f"{session_id}_batch_{config['batch_id']}" for config in all_batch_configs],
             'created_at': start_time,
             'start_time': start_time,  # Include start time immediately
             'configuration': {
@@ -386,6 +195,119 @@ def orchestrate_processing(
             'session_id': session_id,
             'status': 'failed'
         }
+
+
+# def create_query_batch_configs(
+#     unique_table: pa.Table,
+#     session_id: str,
+#     company_name: str,
+#     from_dialect: str,
+#     to_dialect: str,
+#     query_column: str,
+#     batch_size: int,
+#     file_config: Dict[str, Any]
+# ) -> List[Dict[str, Any]]:
+#     """
+#     Create batch configurations with PyArrow table (optimized for memory and speed)
+#     Uses hash-based distribution for consistent batching with vectorized operations
+#     """
+#     if len(unique_table) == 0:
+#         return []
+    
+#     # Calculate number of batches needed
+#     num_queries = len(unique_table)
+#     num_batches = max(1, (num_queries + batch_size - 1) // batch_size)
+    
+#     # SHA-256 hash-based distribution using Python hashlib (universally available)
+#     # Convert queries to Python list for hashing
+#     query_list = unique_table[query_column].to_pylist()
+    
+#     # Use SHA-256 for consistent hash distribution
+#     hash_values = []
+#     for query in query_list:
+#         # Create SHA-256 hash of query string
+#         hash_obj = hashlib.sha256(query.encode('utf-8'))
+#         # Convert first 8 bytes to integer for batch assignment
+#         hash_int = int.from_bytes(hash_obj.digest()[:8], 'big')
+#         batch_id = hash_int % num_batches
+#         hash_values.append(batch_id)
+    
+#     # Convert back to PyArrow array
+#     batch_ids = pa.array(hash_values, type=pa.int32())
+    
+#     # Add batch_id column to table
+#     table_with_batch = unique_table.append_column('batch_id', batch_ids)
+    
+#     # Create configurations using PyArrow operations (eliminate Python lists)
+#     # Get unique batch IDs that actually have data
+#     unique_batch_ids = pc.unique(table_with_batch['batch_id'])
+#     num_actual_batches = len(unique_batch_ids)
+    
+#     # Create batch config table using PyArrow operations
+#     batch_config_data = {
+#         'batch_id': [],
+#         'session_id': [],
+#         'file_name': [],
+#         'batch_idx': [],
+#         'total_batches': [],
+#         'company_name': [],
+#         'from_dialect': [],
+#         'to_dialect': [],
+#         'query_column': [],
+#         'queries_table': [],
+#         'query_count': []
+#     }
+    
+#     # Process each batch using vectorized operations
+#     for batch_idx_scalar in unique_batch_ids.to_pylist():  # Only convert scalars
+#         batch_idx = int(batch_idx_scalar)
+        
+#         # Filter table for this batch (vectorized)
+#         batch_mask = pc.equal(table_with_batch['batch_id'], batch_idx)
+#         batch_table = table_with_batch.filter(batch_mask)
+        
+#         if len(batch_table) == 0:  # Skip empty batches
+#             continue
+        
+#         # Remove the batch_id column before storing
+#         batch_queries_table = batch_table.select([query_column])
+        
+#         # Convert PyArrow table to serializable format for Celery
+#         queries_list = batch_queries_table[query_column].to_pylist()
+        
+#         # Collect batch config data (convert to serializable format)
+#         batch_config_data['batch_id'].append(f"batch_{session_id}_{batch_idx}")
+#         batch_config_data['session_id'].append(session_id)
+#         batch_config_data['file_name'].append(file_config['file_name'])
+#         batch_config_data['batch_idx'].append(batch_idx)
+#         batch_config_data['total_batches'].append(num_batches)
+#         batch_config_data['company_name'].append(company_name)
+#         batch_config_data['from_dialect'].append(from_dialect)
+#         batch_config_data['to_dialect'].append(to_dialect)
+#         batch_config_data['query_column'].append(query_column)
+#         batch_config_data['queries_table'].append(queries_list)  # Convert to Python list for serialization
+#         batch_config_data['query_count'].append(len(queries_list))
+    
+#     # Convert to list of dicts (needed for Celery serialization)
+#     batch_configs = []
+#     for i in range(len(batch_config_data['batch_id'])):
+#         batch_config = {
+#             'batch_id': batch_config_data['batch_id'][i],
+#             'session_id': batch_config_data['session_id'][i],
+#             'file_name': batch_config_data['file_name'][i],
+#             'batch_idx': batch_config_data['batch_idx'][i],
+#             'total_batches': batch_config_data['total_batches'][i],
+#             'company_name': batch_config_data['company_name'][i],
+#             'from_dialect': batch_config_data['from_dialect'][i],
+#             'to_dialect': batch_config_data['to_dialect'][i],
+#             'query_column': batch_config_data['query_column'][i],
+#             'queries_table': batch_config_data['queries_table'][i],  # Python list now
+#             'query_count': batch_config_data['query_count'][i]
+#         }
+#         batch_configs.append(batch_config)
+    
+#     logger.info(f"Created {len(batch_configs)} batches from {num_queries} queries using vectorized operations")
+#     return batch_configs
 
 
 def get_processing_status(session_id: str, task_ids: List[str] = None) -> Dict[str, Any]:

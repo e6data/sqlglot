@@ -12,6 +12,7 @@ import os
 from datetime import datetime
 from typing import Dict, Any
 from tqdm import tqdm
+import iceberg_handler as ih
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -57,21 +58,25 @@ if parent_dir not in sys.path:
 
 
 @celery.task(bind=True, name='process_query_batch', max_retries=3)
-def process_query_batch(self, batch_data: Dict[str, Any]) -> Dict[str, Any]:
+def process_query_batch(self, job_config: Dict[str, Any]) -> Dict[str, Any]:
     """
     Consolidated function - Process PyArrow table of queries using vectorized operations
-    Combines functionality from process_query_table, process_queries_vectorized, and process_chunk_pure_arrow
+    Handles new PyArrow job format where each job gets one batch row
     """
     from automated_processing.statistics import analyze_sql_functions
     
-    session_id = batch_data['session_id']
-    batch_id = batch_data['batch_id']
-    queries_list = batch_data.get('queries_table')  # Now a Python list
-    query_column = batch_data.get('query_column', 'query')
-    batch_idx = batch_data.get('batch_idx', 0)
-    total_batches = batch_data.get('total_batches', 1)
-    from_dialect = batch_data.get('from_dialect', 'snowflake')
-    to_dialect = batch_data.get('to_dialect', 'e6')
+    # Extract batch data and metadata from job config (now JSON serializable)
+    batch_id = job_config['batch_id']        # Integer batch ID
+    queries_list = job_config['queries_list']  # Python list of queries (JSON serializable)
+    metadata = job_config['metadata']        # Dictionary with session info
+    
+    # Extract metadata
+    session_id = metadata['session_id']
+    query_column = metadata.get('query_column', 'query')
+    from_dialect = metadata.get('from_dialect', 'snowflake')
+    to_dialect = metadata.get('to_dialect', 'e6')
+    total_batches = metadata.get('total_batches', 1)
+    batch_idx = batch_id  # Use batch_id as batch index
     
     worker_id = f"{self.request.hostname}:{self.request.id[:8]}"
     
@@ -210,10 +215,10 @@ def process_query_batch(self, batch_data: Dict[str, Any]) -> Dict[str, Any]:
         successful_count = pc.sum(pc.cast(success_mask, pa.int64())).as_py()
         
         # Store to Iceberg using PyArrow table directly
-        iceberg_success = store_results_table_to_iceberg(results_table, batch_data)
+        iceberg_success = store_results_table_to_iceberg(results_table, metadata, batch_id)
         
         return {
-            'batch_id': batch_data['batch_id'],
+            'batch_id': batch_id,
             'processed_count': num_queries,
             'successful_count': successful_count,
             'iceberg_success': iceberg_success,
@@ -236,7 +241,7 @@ def process_query_batch(self, batch_data: Dict[str, Any]) -> Dict[str, Any]:
             }
 
 
-def store_results_table_to_iceberg(results_table: pa.Table, batch_data: Dict[str, Any]) -> bool:
+def store_results_table_to_iceberg(results_table: pa.Table, metadata: Dict[str, Any], batch_id: int) -> bool:
     """
     Store PyArrow results table directly to Iceberg (OPTIMIZED APPROACH)
     Avoids dict->list->PyArrow conversions by working with Arrow tables throughout
@@ -256,7 +261,6 @@ def store_results_table_to_iceberg(results_table: pa.Table, batch_data: Dict[str
         if current_dir not in sys.path:
             sys.path.insert(0, current_dir)
         
-        import iceberg_handler as ih
         
         # Initialize catalog if not already done
         if not hasattr(ih, 'iceberg_catalog') or not ih.iceberg_catalog:
@@ -283,16 +287,16 @@ def store_results_table_to_iceberg(results_table: pa.Table, batch_data: Dict[str
             
             # Create metadata columns using simple PyArrow arrays (avoid complex compute functions)
             query_id_seq = pa.array(list(range(1, num_rows + 1)), type=pa.int64())  # 1-based indexing
-            batch_id_full = f"{batch_data['session_id']}_{batch_data['batch_id']}"
+            batch_id_full = f"{metadata['session_id']}_{batch_id}"
             
             # Create constant arrays using simple array creation (more reliable)
             batch_ids = pa.array([batch_id_full] * num_rows, type=pa.string())
-            company_names = pa.array([batch_data.get('company_name', 'unknown')] * num_rows, type=pa.string())
+            company_names = pa.array([metadata.get('company_name', 'unknown')] * num_rows, type=pa.string())
             event_dates = pa.array([event_date] * num_rows, type=pa.string())
-            batch_numbers = pa.array([batch_data.get('batch_idx', 0)] * num_rows, type=pa.int32())
+            batch_numbers = pa.array([batch_id] * num_rows, type=pa.int32())
             timestamps = pa.array([current_time] * num_rows, type=pa.timestamp('us'))
-            from_dialects = pa.array([batch_data.get('from_dialect', '')] * num_rows, type=pa.string())
-            to_dialects = pa.array([batch_data.get('to_dialect', '')] * num_rows, type=pa.string())
+            from_dialects = pa.array([metadata.get('from_dialect', '')] * num_rows, type=pa.string())
+            to_dialects = pa.array([metadata.get('to_dialect', '')] * num_rows, type=pa.string())
             # Create empty list arrays
             empty_string_lists = pa.array([[] for _ in range(num_rows)], type=pa.list_(pa.string()))
             

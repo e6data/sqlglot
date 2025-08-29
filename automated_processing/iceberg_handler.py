@@ -19,8 +19,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
-ICEBERG_WAREHOUSE_PATH = os.getenv("ICEBERG_WAREHOUSE_PATH", "/Users/niranjgaurav/PycharmProjects/sqlglot/automated_processing/iceberg_warehouse")
+# Configuration - use absolute path and ensure directory exists
+ICEBERG_WAREHOUSE_PATH = os.getenv("ICEBERG_WAREHOUSE_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "iceberg_warehouse"))
 ICEBERG_CATALOG_NAME = os.getenv("ICEBERG_CATALOG_NAME", "local_catalog")
 
 # Global variables
