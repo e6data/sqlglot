@@ -20,7 +20,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration - use absolute path and ensure directory exists
-ICEBERG_WAREHOUSE_PATH = os.getenv("ICEBERG_WAREHOUSE_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "iceberg_warehouse"))
+# Force absolute path to be independent of working directory
+_current_file_dir = os.path.dirname(os.path.abspath(__file__))
+ICEBERG_WAREHOUSE_PATH = os.getenv("ICEBERG_WAREHOUSE_PATH", os.path.join(_current_file_dir, "iceberg_warehouse"))
 ICEBERG_CATALOG_NAME = os.getenv("ICEBERG_CATALOG_NAME", "local_catalog")
 
 # Global variables
@@ -36,15 +38,35 @@ def initialize_iceberg_catalog():
         # Create warehouse directory if it doesn't exist
         warehouse_path = Path(ICEBERG_WAREHOUSE_PATH).absolute()
         warehouse_path.mkdir(parents=True, exist_ok=True)
+        
+        # Ensure proper permissions on warehouse directory
+        try:
+            os.chmod(warehouse_path, 0o755)
+        except:
+            pass  # Might not be needed on all systems
+        
+        logger.info(f"Using Iceberg warehouse path: {warehouse_path}")
 
         # SQLite database for catalog metadata
         catalog_db = warehouse_path / "catalog.db"
+        
+        # Ensure catalog.db has proper permissions if it exists
+        if catalog_db.exists():
+            try:
+                os.chmod(catalog_db, 0o644)
+                logger.info(f"Using existing catalog database: {catalog_db}")
+            except:
+                pass
+        else:
+            logger.info(f"Will create new catalog database: {catalog_db}")
 
         iceberg_catalog = SqlCatalog(
             name=ICEBERG_CATALOG_NAME,
             uri=f"sqlite:///{catalog_db}",
             warehouse=f"file://{warehouse_path}"
         )
+        
+        logger.info(f"Iceberg catalog initialized with URI: sqlite:///{catalog_db}")
 
         # Define batch statistics table schema with partitioning fields
         batch_stats_schema = Schema(

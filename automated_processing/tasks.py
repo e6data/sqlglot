@@ -22,11 +22,11 @@ def get_filesystem(path: str) -> Optional[fs.FileSystem]:
     Get appropriate filesystem based on path (S3 or local)
     """
     if path.startswith('s3://'):
-        # Updated AWS credentials
+        # AWS credentials - Replace with your actual credentials
         s3fs = fs.S3FileSystem(
-            access_key="ASIAZYHN7XI64V6RB3JE",
-            secret_key="ivFKpPAYVeLxKVAHzwBm5UvUw95jI2eOuXoWop5t",
-            session_token="FwoGZXIvYXdzEFYaDJYO/Msc2RGRhHkyNCLWAVEJ/q5S2bfCV6fYnnOO8AbEP0PdPyEKpE5xxFiJ2CC8ocmffBUUf59VUk0JQiEbljmqsyg7aOUkwm4zHUk4NYidd/2fSakcuawYV0QnL6ZbKMOjPN1wlCaXJYsDPXCvcuGXKP5FWXvJsmLcrLG0YQeLzC3DWfxjacAPinZAKOKrA/YkzXwVslYqM+hDK+fjqwiVK3BHFFXn4kUkI3uBrtJW94hueIG5dvSMYL4C7A/7I9wHLIC+zVEYCd3Tch95X1x8K+VBt4ayFdtiaAHY0oJ6K+zhTWEok8K/xQYyM84wjGOZFVNzChrNGcUhY1ph1KmVh5kYc58relyWJ992BU0WdNNW4T9VuFttIbwxnbv6Kw==",
+            access_key=os.getenv("AWS_ACCESS_KEY_ID", "YOUR_ACCESS_KEY_ID"),
+            secret_key=os.getenv("AWS_SECRET_ACCESS_KEY", "YOUR_SECRET_ACCESS_KEY"), 
+            session_token=os.getenv("AWS_SESSION_TOKEN", "YOUR_SESSION_TOKEN"),
             region="us-east-1",
             connect_timeout=30,
             request_timeout=60
@@ -103,9 +103,9 @@ def extract_unique_queries_from_file(
         # Create dataset
         if file_path.startswith('s3://'):
             s3fs_fs = s3fs.S3FileSystem(
-                key="ASIAZYHN7XI64V6RB3JE",
-                secret="ivFKpPAYVeLxKVAHzwBm5UvUw95jI2eOuXoWop5t",
-                token="FwoGZXIvYXdzEFYaDJYO/Msc2RGRhHkyNCLWAVEJ/q5S2bfCV6fYnnOO8AbEP0PdPyEKpE5xxFiJ2CC8ocmffBUUf59VUk0JQiEbljmqsyg7aOUkwm4zHUk4NYidd/2fSakcuawYV0QnL6ZbKMOjPN1wlCaXJYsDPXCvcuGXKP5FWXvJsmLcrLG0YQeLzC3DWfxjacAPinZAKOKrA/YkzXwVslYqM+hDK+fjqwiVK3BHFFXn4kUkI3uBrtJW94hueIG5dvSMYL4C7A/7I9wHLIC+zVEYCd3Tch95X1x8K+VBt4ayFdtiaAHY0oJ6K+zhTWEok8K/xQYyM84wjGOZFVNzChrNGcUhY1ph1KmVh5kYc58relyWJ992BU0WdNNW4T9VuFttIbwxnbv6Kw==",
+                key=os.getenv("AWS_ACCESS_KEY_ID", "YOUR_ACCESS_KEY_ID"),
+                secret=os.getenv("AWS_SECRET_ACCESS_KEY", "YOUR_SECRET_ACCESS_KEY"),
+                token=os.getenv("AWS_SESSION_TOKEN", "YOUR_SESSION_TOKEN"),
                 client_kwargs={'region_name': 'us-east-1'},
                 config_kwargs={'connect_timeout': 30, 'read_timeout': 60}
             )

@@ -59,7 +59,7 @@ def orchestrate_processing(
     """
     if name and name.strip():
         # Use custom name with fallback to short UUID
-        clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name.strip())[:20]  # Sanitize and limit length
+        clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name.strip())  # Sanitize and limit length
         clean_name = clean_name.strip('_')  # Remove leading/trailing underscores
         # if clean_name and not clean_name[0].isalnum():  # Ensure it starts with alphanumeric
         #     clean_name = 'n_' + clean_name

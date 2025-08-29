@@ -798,10 +798,10 @@ async def validate_s3_bucket(
         
         try:
             s3fs = fs.S3FileSystem(
-                access_key="ASIAZYHN7XI67YRBNYPP",
-                secret_key="WXTpR6kPAmEqta34aQ7ESYruhV3ZlC+HeTUkZ31e",
-                session_token="FwoGZXIvYXdzEFcaDO0W1wbT3Xgl+L2ntCLUAcwCfpCKg6UxC0Ue7l/SsTfhY3xIEy5DYfqo0BOHZF1L+Hk57CQE5VFPyjbZddSNk8azmQzCd0+q7n7T4wkr1jWEqry+7LpubLK3xnxbRq+dQfs84hKqP9W6dprD57tspbb0Ra1zAjOwcvfhUp5PtGJH68+1BbRhkF3RRtibp6tCxv1BHrtd6k6+EnSBu3K917PRUhAC2nUh6+XFJmGDRoSr0UU1GMTgrtBgiyknidnSqOqA1SmZYo4wfGdhNrMWMDiEprJE0NXaELjnclrduEnTWRLDKOjVv8UGMjPZAHOJS2SW6QdD08CgBGbUv0ZrpaH858GV0Odv4l+f9uk8VqTsbQjP695oVMAp8sxM5ac=",
-                region='us-east-1'
+                access_key=os.getenv("AWS_ACCESS_KEY_ID", "YOUR_ACCESS_KEY_ID"),
+                secret_key=os.getenv("AWS_SECRET_ACCESS_KEY", "YOUR_SECRET_ACCESS_KEY"),
+                session_token=os.getenv("AWS_SESSION_TOKEN", "YOUR_SESSION_TOKEN"),
+                region=os.getenv("AWS_DEFAULT_REGION", "us-east-1")
             )
         except Exception as e:
             return {"authenticated": False, "error": f"S3 auth failed: {str(e)}"}
