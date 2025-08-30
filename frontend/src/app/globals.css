@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Make all text black */
+* {
+  color: #000000 !important;
+}
+
+/* Make placeholder text gray */
+::placeholder {
+  color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+input::placeholder {
+  color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+textarea::placeholder {
+  color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+select::placeholder {
+  color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+/* Ensure form inputs have black text when filled */
+input:not(:placeholder-shown) {
+  color: #000000 !important;
+}
+
+textarea:not(:placeholder-shown) {
+  color: #000000 !important;
+}
+
+select:not(:placeholder-shown) {
+  color: #000000 !important;
+}
+
+/* Keep certain elements their original colors */
+.bg-blue-500, .bg-green-500, .bg-red-500, .bg-yellow-500, .bg-purple-500 {
+  color: white !important;
+}
+
+.text-white {
+  color: white !important;
+}
+
+.text-green-800 {
+  color: #166534 !important;
+}
+
+.text-red-800 {
+  color: #991b1b !important;
+}
+
+.text-yellow-800 {
+  color: #92400e !important;
+}
+
+.text-blue-800 {
+  color: #1e40af !important;
+}
+
+.text-gray-800 {
+  color: #1f2937 !important;
+}
+
+.text-gray-600 {
+  color: #4b5563 !important;
+}
+
+.text-gray-500 {
+  color: #6b7280 !important;
+}
