@@ -1,16 +1,16 @@
 """
-Iceberg Handler Module
-Manages Iceberg table initialization and statistics
+PyIceberg with AWS Glue Catalog - No Partitions
+Simple implementation without partitioning to avoid SIGSEGV
 """
 
 import logging
 import os
-from typing import Dict, Any
-from pathlib import Path
-from pyiceberg.catalog.sql import SqlCatalog
-from pyiceberg.schema import Schema, NestedField
-from pyiceberg.types import StringType, IntegerType, TimestampType, ListType, LongType
-from pyiceberg.partitioning import PartitionSpec, PartitionField
+import time
+import pyarrow as pa
+from pyiceberg.catalog import load_catalog
+from pyiceberg.exceptions import CommitFailedException
+from pyiceberg.schema import Schema
+from pyiceberg.types import *
 
 # Setup logging
 logging.basicConfig(
@@ -19,11 +19,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration - use absolute path and ensure directory exists
-# Force absolute path to be independent of working directory
-_current_file_dir = os.path.dirname(os.path.abspath(__file__))
-ICEBERG_WAREHOUSE_PATH = os.getenv("ICEBERG_WAREHOUSE_PATH", os.path.join(_current_file_dir, "iceberg_warehouse"))
-ICEBERG_CATALOG_NAME = os.getenv("ICEBERG_CATALOG_NAME", "local_catalog")
+# AWS Credentials - Hardcoded
+os.environ["AWS_ACCESS_KEY_ID"] = "YOUR_ACCESS_KEY_ID"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "YOUR_SECRET_ACCESS_KEY"
+os.environ["AWS_SESSION_TOKEN"] = "YOUR_SESSION_TOKEN"
+os.environ["AWS_REGION"] = "us-east-1"
+
+# Configuration
+S3_BUCKET = "batch-transpiler"
+S3_PREFIX = "testing-batch-processing"
+GLUE_DATABASE = "batch_processing_db"
+GLUE_TABLE = "batch_statistics"
 
 # Global variables
 iceberg_catalog = None
@@ -31,129 +37,203 @@ batch_statistics_table = None
 
 
 def initialize_iceberg_catalog():
-    """Initialize Iceberg catalog and create tables if they don't exist"""
+    """Initialize PyIceberg with Glue Catalog"""
     global iceberg_catalog, batch_statistics_table
-
+    
+    # Check if already initialized
+    if iceberg_catalog is not None and batch_statistics_table is not None:
+        logger.debug("PyIceberg already initialized, skipping")
+        return True
+    
     try:
-        # Create warehouse directory if it doesn't exist
-        warehouse_path = Path(ICEBERG_WAREHOUSE_PATH).absolute()
-        warehouse_path.mkdir(parents=True, exist_ok=True)
+        # Load Glue catalog only if not already loaded
+        if iceberg_catalog is None:
+            iceberg_catalog = load_catalog(
+                "glue",
+                **{
+                    "type": "glue",
+                    "aws_access_key_id": os.environ["AWS_ACCESS_KEY_ID"],
+                    "aws_secret_access_key": os.environ["AWS_SECRET_ACCESS_KEY"],
+                    "aws_session_token": os.environ["AWS_SESSION_TOKEN"],
+                    "region_name": os.environ["AWS_REGION"]
+                }
+            )
+            logger.info("✅ PyIceberg Glue catalog loaded")
         
-        # Ensure proper permissions on warehouse directory
-        try:
-            os.chmod(warehouse_path, 0o755)
-        except:
-            pass  # Might not be needed on all systems
-        
-        logger.info(f"Using Iceberg warehouse path: {warehouse_path}")
-
-        # SQLite database for catalog metadata
-        catalog_db = warehouse_path / "catalog.db"
-        
-        # Ensure catalog.db has proper permissions if it exists
-        if catalog_db.exists():
+        # Try to load table only if not already loaded
+        if batch_statistics_table is None:
+            table_identifier = f"{GLUE_DATABASE}.{GLUE_TABLE}"
             try:
-                os.chmod(catalog_db, 0o644)
-                logger.info(f"Using existing catalog database: {catalog_db}")
+                batch_statistics_table = iceberg_catalog.load_table(table_identifier)
+                logger.info(f"✅ Loaded existing table: {table_identifier}")
             except:
-                pass
-        else:
-            logger.info(f"Will create new catalog database: {catalog_db}")
-
-        iceberg_catalog = SqlCatalog(
-            name=ICEBERG_CATALOG_NAME,
-            uri=f"sqlite:///{catalog_db}",
-            warehouse=f"file://{warehouse_path}"
-        )
-        
-        logger.info(f"Iceberg catalog initialized with URI: sqlite:///{catalog_db}")
-
-        # Define batch statistics table schema with partitioning fields
-        batch_stats_schema = Schema(
-            NestedField(1, "query_id", LongType(), required=False),
-            NestedField(2, "batch_id", StringType(), required=False),
-            NestedField(3, "company_name", StringType(), required=False),  # Partition field
-            NestedField(4, "event_date", StringType(), required=False),  # Partition field (format: YYYY-MM-DD)
-            NestedField(5, "batch_number", IntegerType(), required=False),  # Batch number for file naming
-            NestedField(6, "timestamp", TimestampType(), required=False),
-            NestedField(7, "status", StringType(), required=False),
-            NestedField(8, "executable", StringType(), required=False),
-            NestedField(9, "from_dialect", StringType(), required=False),
-            NestedField(10, "to_dialect", StringType(), required=False),
-            NestedField(11, "original_query", StringType(), required=False),
-            NestedField(12, "converted_query", StringType(), required=False),
-            NestedField(13, "supported_functions", ListType(element_id=20, element_type=StringType(), element_required=False), required=False),
-            NestedField(14, "unsupported_functions", ListType(element_id=21, element_type=StringType(), element_required=False), required=False),
-            NestedField(15, "udf_list", ListType(element_id=22, element_type=StringType(), element_required=False), required=False),
-            NestedField(16, "tables_list", ListType(element_id=23, element_type=StringType(), element_required=False), required=False),
-            NestedField(17, "processing_time_ms", LongType(), required=False),
-            NestedField(18, "error_message", StringType(), required=False),
-            NestedField(19, "unsupported_functions_after_transpilation", ListType(element_id=24, element_type=StringType(), element_required=False), required=False),
-            NestedField(20, "joins_list", ListType(element_id=25, element_type=StringType(), element_required=False), required=False)
-        )
-
-        # Define partition specification for company_name and event_date
-        partition_spec = PartitionSpec(
-            PartitionField(source_id=3, field_id=1000, transform="identity", name="company_name"),
-            PartitionField(source_id=4, field_id=1001, transform="identity", name="event_date")
-        )
-
-        # Create namespace if it doesn't exist
-        namespace = "default"
-        try:
-            iceberg_catalog.create_namespace(namespace)
-        except:
-            pass  # Namespace might already exist
-
-        # Create batch statistics table - try to load existing first
-        table_identifier = f"{namespace}.batch_statistics"
-        try:
-            # First try to load existing table
-            batch_statistics_table = iceberg_catalog.load_table(table_identifier)
-            logger.info(f"Loaded existing Iceberg table: {table_identifier}")
-            
-            # Check if table has the new schema with all required columns
-            existing_columns = [field.name for field in batch_statistics_table.schema().fields]
-            required_columns = ["company_name", "event_date", "batch_number", "unsupported_functions_after_transpilation", "joins_list"]
-            missing_columns = [col for col in required_columns if col not in existing_columns]
-            
-            if missing_columns:
-                logger.info(f"Table missing required columns: {missing_columns}. Dropping and recreating table...")
+                # Create new table without partitions
+                schema = Schema(
+                    NestedField(1, "query_id", LongType(), required=True),
+                    NestedField(2, "batch_id", StringType(), required=True),
+                    NestedField(3, "company_name", StringType(), required=True),
+                    NestedField(4, "event_date", StringType(), required=True),
+                    NestedField(5, "batch_number", IntegerType(), required=True),
+                    NestedField(6, "timestamp", TimestampType(), required=True),
+                    NestedField(7, "status", StringType(), required=True),
+                    NestedField(8, "executable", StringType(), required=True),
+                    NestedField(9, "from_dialect", StringType(), required=True),
+                    NestedField(10, "to_dialect", StringType(), required=True),
+                    NestedField(11, "original_query", StringType(), required=True),
+                    NestedField(12, "converted_query", StringType(), required=True),
+                    NestedField(13, "supported_functions", ListType(element_id=101, element_type=StringType(), element_required=False), required=True),
+                    NestedField(14, "unsupported_functions", ListType(element_id=102, element_type=StringType(), element_required=False), required=True),
+                    NestedField(15, "udf_list", ListType(element_id=103, element_type=StringType(), element_required=False), required=True),
+                    NestedField(16, "tables_list", ListType(element_id=104, element_type=StringType(), element_required=False), required=True),
+                    NestedField(17, "processing_time_ms", LongType(), required=True),
+                    NestedField(18, "error_message", StringType(), required=True),
+                    NestedField(19, "unsupported_functions_after_transpilation", ListType(element_id=105, element_type=StringType(), element_required=False), required=True),
+                    NestedField(20, "joins_list", ListType(element_id=106, element_type=StringType(), element_required=False), required=True)
+                )
+                
+                # Create namespace if needed
                 try:
-                    # Drop the existing table
-                    iceberg_catalog.drop_table(table_identifier)
-                    logger.info(f"Dropped existing table: {table_identifier}")
-                    
-                    # Create new table with updated schema and partitioning
-                    batch_statistics_table = iceberg_catalog.create_table(
-                        identifier=table_identifier,
-                        schema=batch_stats_schema,
-                        partition_spec=partition_spec
-                    )
-                    logger.info(f"Created new Iceberg table with updated schema: {table_identifier}")
-                except Exception as recreate_error:
-                    logger.error(f"Failed to recreate table: {str(recreate_error)}")
-
-        except Exception as e:
-            # Table doesn't exist, create a new one
-            try:
+                    iceberg_catalog.create_namespace(GLUE_DATABASE)
+                except:
+                    pass
+                
+                # Create table WITHOUT partitions
+                location = f"s3://{S3_BUCKET}/{S3_PREFIX}/{GLUE_TABLE}/"
                 batch_statistics_table = iceberg_catalog.create_table(
                     identifier=table_identifier,
-                    schema=batch_stats_schema,
-                    partition_spec=partition_spec
+                    schema=schema,
+                    location=location
+                    # NO partition_spec parameter
                 )
-                logger.info(f"Created new Iceberg table: {table_identifier}")
-            except Exception as create_error:
-                logger.error(f"Failed to create Iceberg table: {str(create_error)}")
-                batch_statistics_table = None
-
-        logger.info("Iceberg catalog and tables initialized successfully")
+                logger.info(f"✅ Created new table without partitions: {table_identifier}")
+        
         return True
-
+    
     except Exception as e:
-        logger.error(f"Failed to initialize Iceberg catalog: {str(e)}")
+        logger.error(f"❌ Failed to initialize PyIceberg: {e}")
         return False
 
 
-# Initialize Iceberg catalog on module import
+def write_to_iceberg_with_retry(data, max_retries=3):
+    """Write to PyIceberg Glue table with retry logic"""
+    global batch_statistics_table
+    
+    if batch_statistics_table is None:
+        if not initialize_iceberg_catalog():
+            raise Exception("Failed to initialize Iceberg catalog")
+    
+    for attempt in range(max_retries):
+        try:
+            with batch_statistics_table.append() as write:
+                write.write_dataframe(data)
+            logger.info(f"✅ Successfully wrote data to Iceberg table")
+            return  # Success
+        except CommitFailedException as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff
+                logger.warning(f"Commit failed, retrying in {wait_time} seconds... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+                continue
+            logger.error(f"❌ Failed to write to Iceberg after {max_retries} attempts: {e}")
+            raise
+
+
+def write_to_iceberg(results_table, batch_data, max_retries=3):
+    """Write to PyIceberg Glue table"""
+    global batch_statistics_table
+    
+    if len(results_table) == 0:
+        return True
+    
+    if batch_statistics_table is None:
+        if not initialize_iceberg_catalog():
+            return False
+    
+    try:
+        # Add metadata columns
+        enriched_table = _add_metadata_columns(results_table, batch_data)
+        
+        # Write to Iceberg table with retry logic
+        for attempt in range(max_retries):
+            try:
+                batch_statistics_table.append(enriched_table)
+                logger.info(f"✅ Wrote {len(results_table)} rows to PyIceberg table")
+                return True
+            except CommitFailedException as e:
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # Exponential backoff
+                    logger.warning(f"Commit failed, retrying in {wait_time} seconds... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                logger.error(f"❌ PyIceberg write failed after {max_retries} attempts: {e}")
+                return False
+    
+    except Exception as e:
+        logger.error(f"❌ PyIceberg write failed: {e}")
+        return False
+
+
+def _add_metadata_columns(results_table, batch_data):
+    """Add metadata columns to results table"""
+    from datetime import datetime
+    
+    current_time = datetime.now()
+    event_date = current_time.strftime("%Y-%m-%d")
+    num_rows = len(results_table)
+    
+    # Handle missing columns
+    empty_list = pa.array([[] for _ in range(num_rows)], type=pa.list_(pa.string()))
+    
+    # Create arrays and define schema with non-nullable fields
+    arrays = [
+        pa.array(list(range(1, num_rows + 1)), type=pa.int64()),
+        pa.array([f"{batch_data['session_id']}_{batch_data['batch_id']}"] * num_rows),
+        pa.array([batch_data.get('company_name', 'unknown')] * num_rows),
+        pa.array([event_date] * num_rows),
+        pa.array([batch_data.get('batch_idx', 0)] * num_rows, type=pa.int32()),
+        pa.array([current_time] * num_rows, type=pa.timestamp('us')),
+        results_table['status'],
+        results_table['executable'],
+        pa.array([batch_data.get('from_dialect', '')] * num_rows),
+        pa.array([batch_data.get('to_dialect', '')] * num_rows),
+        results_table['original_query'],
+        results_table['converted_query'],
+        results_table['supported_functions'],
+        results_table['unsupported_functions'],
+        results_table['udf_list'] if 'udf_list' in results_table.column_names else empty_list,
+        results_table['tables_list'] if 'tables_list' in results_table.column_names else empty_list,
+        results_table['processing_time_ms'],
+        results_table['error_message'],
+        results_table['unsupported_functions_after_transpilation'] if 'unsupported_functions_after_transpilation' in results_table.column_names else empty_list,
+        results_table['joins_list'] if 'joins_list' in results_table.column_names else empty_list
+    ]
+    
+    # Define schema with non-nullable fields
+    schema = pa.schema([
+        pa.field("query_id", pa.int64(), nullable=False),
+        pa.field("batch_id", pa.string(), nullable=False),
+        pa.field("company_name", pa.string(), nullable=False),
+        pa.field("event_date", pa.string(), nullable=False),
+        pa.field("batch_number", pa.int32(), nullable=False),
+        pa.field("timestamp", pa.timestamp('us'), nullable=False),
+        pa.field("status", pa.string(), nullable=False),
+        pa.field("executable", pa.string(), nullable=False),
+        pa.field("from_dialect", pa.string(), nullable=False),
+        pa.field("to_dialect", pa.string(), nullable=False),
+        pa.field("original_query", pa.string(), nullable=False),
+        pa.field("converted_query", pa.string(), nullable=False),
+        pa.field("supported_functions", pa.list_(pa.string()), nullable=False),
+        pa.field("unsupported_functions", pa.list_(pa.string()), nullable=False),
+        pa.field("udf_list", pa.list_(pa.string()), nullable=False),
+        pa.field("tables_list", pa.list_(pa.string()), nullable=False),
+        pa.field("processing_time_ms", pa.int64(), nullable=False),
+        pa.field("error_message", pa.string(), nullable=False),
+        pa.field("unsupported_functions_after_transpilation", pa.list_(pa.string()), nullable=False),
+        pa.field("joins_list", pa.list_(pa.string()), nullable=False)
+    ])
+    
+    return pa.table(arrays, schema=schema)
+
+
+# Initialize on import
 initialize_iceberg_catalog()

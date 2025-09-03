@@ -11,6 +11,12 @@ from typing import Dict, Any, List, Optional
 import pyarrow as pa
 import pyarrow.fs as fs
 
+# Set AWS credentials
+os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("AWS_ACCESS_KEY_ID", "YOUR_ACCESS_KEY_ID")
+os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("AWS_SECRET_ACCESS_KEY", "YOUR_SECRET_ACCESS_KEY")
+os.environ["AWS_SESSION_TOKEN"] = os.getenv("AWS_SESSION_TOKEN", "YOUR_SESSION_TOKEN")
+os.environ["AWS_REGION"] = os.getenv("AWS_REGION", "us-east-1")
+
 # Minimal logging
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
