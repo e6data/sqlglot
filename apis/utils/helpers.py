@@ -12,7 +12,7 @@ import typing as t
 from sqlglot.dialects.e6 import E6
 from curses.ascii import isascii
 
-FUNCTIONS_FILE = "./apis/utils/supported_functions_in_all_dialects.json"
+FUNCTIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "supported_functions_in_all_dialects.json")
 logger = logging.getLogger(__name__)
 
 
