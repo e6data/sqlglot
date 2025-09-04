@@ -2563,3 +2563,126 @@ class TestE6(Validator):
                 "e6": "SELECT * FROM orders WHERE order_date BETWEEN DATE('2025-01-01') AND DATE('2025-12-31')",
             },
         )
+
+    def test_interval_cast_transformation(self):
+        """Test interval cast transformations for ::INTERVAL casting"""
+        
+        # Test plural to singular conversion - hours to hour
+        self.validate_all(
+            "INTERVAL col1 'hour'",
+            read={
+                "databricks": "(col1 || ' hours')::INTERVAL",
+            },
+        )
+
+        # Test plural to singular conversion - minutes to minute
+        self.validate_all(
+            "INTERVAL col1 'minute'",
+            read={
+                "databricks": "((col1) || ' minutes')::INTERVAL",
+            },
+        )
+
+        # Test plural to singular conversion - days to day
+        self.validate_all(
+            "INTERVAL (col1 + col2) 'day'",
+            read={
+                "databricks": "((col1 + col2) || ' days')::INTERVAL",
+            },
+        )
+
+        # Test plural to singular conversion - seconds to second
+        self.validate_all(
+            "INTERVAL (col1 * 2 + col2 / 3) 'second'",
+            read={
+                "databricks": "((col1 * 2 + col2 / 3) || ' seconds')::INTERVAL",
+            },
+        )
+
+        # Test plural to singular conversion - weeks to week
+        self.validate_all(
+            "INTERVAL (ROUND(col1, 2)) 'week'",
+            read={
+                "databricks": "(ROUND(col1, 2) || ' weeks')::INTERVAL",
+            },
+        )
+
+        # Test plural to singular conversion - months to month
+        self.validate_all(
+            "INTERVAL col1 'month'",
+            read={
+                "databricks": "(col1 || ' months')::INTERVAL",
+            },
+        )
+
+        # Test plural to singular conversion - years to year
+        self.validate_all(
+            "INTERVAL col1 'year'",
+            read={
+                "databricks": "(col1 || ' years')::INTERVAL",
+            },
+        )
+
+        # Test singular units remain singular - hour stays hour
+        self.validate_all(
+            "INTERVAL col1 'hour'",
+            read={
+                "databricks": "(col1 || ' hour')::INTERVAL",
+            },
+        )
+
+        # Test singular units remain singular - day stays day
+        self.validate_all(
+            "INTERVAL col1 'day'",
+            read={
+                "databricks": "(col1 || ' day')::INTERVAL",
+            },
+        )
+
+        # Test with invalid/non-standard time units (should still work)
+        self.validate_all(
+            "INTERVAL col1 'invalid_unit'",
+            read={
+                "databricks": "(col1 || ' invalid_unit')::INTERVAL",
+            },
+        )
+
+        # Test with quoted identifiers and plural conversion
+        self.validate_all(
+            "INTERVAL ('time_col') 'hour'",
+            read={
+                "databricks": "(\"time_col\" || ' hours')::INTERVAL",
+            },
+        )
+
+        # Test multiple interval expressions with plural conversion
+        self.validate_all(
+            "SELECT INTERVAL col1 'hour', INTERVAL col2 'minute'",
+            read={
+                "databricks": "SELECT (col1 || ' hours')::INTERVAL, (col2 || ' minutes')::INTERVAL",
+            },
+        )
+
+        # Test in WHERE clause with plural conversion
+        self.validate_all(
+            "SELECT * FROM events WHERE duration > INTERVAL col1 'hour'",
+            read={
+                "databricks": "SELECT * FROM events WHERE duration > (col1 || ' hours')::INTERVAL",
+            },
+        )
+
+        # Test case insensitive plural conversion - HOURS to hour
+        self.validate_all(
+            "INTERVAL col1 'hour'",
+            read={
+                "databricks": "(col1 || ' HOURS')::INTERVAL",
+            },
+        )
+
+        # Test microseconds to microsecond conversion
+        self.validate_all(
+            "INTERVAL col1 'microsecond'",
+            read={
+                "databricks": "(col1 || ' microseconds')::INTERVAL",
+            },
+        )
