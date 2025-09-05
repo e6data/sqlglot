@@ -1654,6 +1654,10 @@ class E6(Dialect):
             Returns:
                 str: The SQL string for the CAST operation.
             """
+            # Check for ::INTERVAL pattern first
+            if expression.is_type(exp.DataType.Type.INTERVAL):
+                return self.double_colon_interval_sql(expression)
+
             # Extract the target type from the CAST expression
             target_type = expression.to.this
 
@@ -2257,6 +2261,46 @@ class E6(Dialect):
             ):
                 return f"{this}"
             return rename_func("SPLIT")(self, expression)
+
+        def double_colon_interval_sql(self, expression: exp.Cast) -> str:
+            """
+            Handle ::INTERVAL casting for column concatenation patterns.
+            Transform ((expr) || 'unit')::INTERVAL to INTERVAL expr 'unit'
+            """
+            # Check if this is an INTERVAL cast with pipe concatenation
+            dpipe = expression.find(exp.DPipe)
+
+            if (
+                expression.is_type(exp.DataType.Type.INTERVAL)
+                and dpipe
+                and dpipe.expression.is_string
+            ):
+                # Get the left expression, handling parentheses
+                left_expr = dpipe.this.unalias()
+                if isinstance(left_expr, exp.Paren):
+                    left_expr = left_expr.this.unalias()
+
+                # Transform any (expr || 'string')::INTERVAL pattern
+                unit_str = dpipe.expression.this.strip()
+                
+                # Convert plural units to singular using TIME_PART_SINGULARS
+                unit_upper = unit_str.upper()
+                if unit_upper in self.TIME_PART_SINGULARS:
+                    unit_str = self.TIME_PART_SINGULARS[unit_upper].lower()
+
+                # Generate INTERVAL expr 'unit' format
+                left_sql = self.sql(left_expr)
+                # Add parentheses for complex expressions
+                if not isinstance(left_expr, exp.Column):
+                    left_sql = f"({left_sql})"
+
+                unit_literal = exp.Literal.string(unit_str)
+                unit_sql = self.sql(unit_literal)
+
+                return f"INTERVAL {left_sql} {unit_sql}"
+
+            # Not our target pattern - use normal cast
+            return super().cast_sql(expression)
 
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
