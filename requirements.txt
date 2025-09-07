@@ -20,7 +20,7 @@ packaging==24.1
 pandas==2.2.2
 pillow==10.4.0
 protobuf==5.27.2
-# pyarrow==17.0.0
+pyarrow  # Let pip choose compatible version
 pydeck==0.9.1
 Pygments==2.18.0
 python-dateutil==2.9.0.post0
@@ -43,3 +43,13 @@ tornado==6.4.2
 typing_extensions==4.12.2
 tzdata==2024.1
 urllib3==2.2.2
+
+# Additional dependencies from automated_processing
+celery[redis]==5.3.4
+redis==4.6.0
+pyiceberg==0.5.1
+sqlalchemy  # Required by pyiceberg
+s3fs  # Required by automated_processing
+tqdm==4.66.1
+# uvicorn==0.24.0  # Already installed in Dockerfile
+python-multipart  # Required for FastAPI Form handling

@@ -2282,7 +2282,7 @@ class E6(Dialect):
 
                 # Transform any (expr || 'string')::INTERVAL pattern
                 unit_str = dpipe.expression.this.strip()
-                
+
                 # Convert plural units to singular using TIME_PART_SINGULARS
                 unit_upper = unit_str.upper()
                 if unit_upper in self.TIME_PART_SINGULARS:

@@ -1,5 +1,7 @@
 import unittest
 
+from typing import Optional
+
 from sqlglot import (
     Dialect,
     Dialects,
@@ -16,7 +18,7 @@ from sqlglot.parser import logger as parser_logger
 
 
 class Validator(unittest.TestCase):
-    dialect = None
+    dialect: Optional[str] = None
 
     def parse_one(self, sql, **kwargs):
         return parse_one(sql, read=self.dialect, **kwargs)
