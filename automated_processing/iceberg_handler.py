@@ -13,16 +13,15 @@ from pyiceberg.types import StringType, IntegerType, TimestampType, ListType, Lo
 from pyiceberg.partitioning import PartitionSpec, PartitionField
 
 # Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Configuration - use absolute path and ensure directory exists
 # Force absolute path to be independent of working directory
 _current_file_dir = os.path.dirname(os.path.abspath(__file__))
-ICEBERG_WAREHOUSE_PATH = os.getenv("ICEBERG_WAREHOUSE_PATH", os.path.join(_current_file_dir, "iceberg_warehouse"))
+ICEBERG_WAREHOUSE_PATH = os.getenv(
+    "ICEBERG_WAREHOUSE_PATH", os.path.join(_current_file_dir, "iceberg_warehouse")
+)
 ICEBERG_CATALOG_NAME = os.getenv("ICEBERG_CATALOG_NAME", "local_catalog")
 
 # Global variables
@@ -38,18 +37,18 @@ def initialize_iceberg_catalog():
         # Create warehouse directory if it doesn't exist
         warehouse_path = Path(ICEBERG_WAREHOUSE_PATH).absolute()
         warehouse_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Ensure proper permissions on warehouse directory
         try:
             os.chmod(warehouse_path, 0o755)
         except:
             pass  # Might not be needed on all systems
-        
+
         logger.info(f"Using Iceberg warehouse path: {warehouse_path}")
 
         # SQLite database for catalog metadata
         catalog_db = warehouse_path / "catalog.db"
-        
+
         # Ensure catalog.db has proper permissions if it exists
         if catalog_db.exists():
             try:
@@ -63,9 +62,9 @@ def initialize_iceberg_catalog():
         iceberg_catalog = SqlCatalog(
             name=ICEBERG_CATALOG_NAME,
             uri=f"sqlite:///{catalog_db}",
-            warehouse=f"file://{warehouse_path}"
+            warehouse=f"file://{warehouse_path}",
         )
-        
+
         logger.info(f"Iceberg catalog initialized with URI: sqlite:///{catalog_db}")
 
         # Define batch statistics table schema with partitioning fields
@@ -73,8 +72,12 @@ def initialize_iceberg_catalog():
             NestedField(1, "query_id", LongType(), required=False),
             NestedField(2, "batch_id", StringType(), required=False),
             NestedField(3, "company_name", StringType(), required=False),  # Partition field
-            NestedField(4, "event_date", StringType(), required=False),  # Partition field (format: YYYY-MM-DD)
-            NestedField(5, "batch_number", IntegerType(), required=False),  # Batch number for file naming
+            NestedField(
+                4, "event_date", StringType(), required=False
+            ),  # Partition field (format: YYYY-MM-DD)
+            NestedField(
+                5, "batch_number", IntegerType(), required=False
+            ),  # Batch number for file naming
             NestedField(6, "timestamp", TimestampType(), required=False),
             NestedField(7, "status", StringType(), required=False),
             NestedField(8, "executable", StringType(), required=False),
@@ -82,20 +85,50 @@ def initialize_iceberg_catalog():
             NestedField(10, "to_dialect", StringType(), required=False),
             NestedField(11, "original_query", StringType(), required=False),
             NestedField(12, "converted_query", StringType(), required=False),
-            NestedField(13, "supported_functions", ListType(element_id=20, element_type=StringType(), element_required=False), required=False),
-            NestedField(14, "unsupported_functions", ListType(element_id=21, element_type=StringType(), element_required=False), required=False),
-            NestedField(15, "udf_list", ListType(element_id=22, element_type=StringType(), element_required=False), required=False),
-            NestedField(16, "tables_list", ListType(element_id=23, element_type=StringType(), element_required=False), required=False),
+            NestedField(
+                13,
+                "supported_functions",
+                ListType(element_id=20, element_type=StringType(), element_required=False),
+                required=False,
+            ),
+            NestedField(
+                14,
+                "unsupported_functions",
+                ListType(element_id=21, element_type=StringType(), element_required=False),
+                required=False,
+            ),
+            NestedField(
+                15,
+                "udf_list",
+                ListType(element_id=22, element_type=StringType(), element_required=False),
+                required=False,
+            ),
+            NestedField(
+                16,
+                "tables_list",
+                ListType(element_id=23, element_type=StringType(), element_required=False),
+                required=False,
+            ),
             NestedField(17, "processing_time_ms", LongType(), required=False),
             NestedField(18, "error_message", StringType(), required=False),
-            NestedField(19, "unsupported_functions_after_transpilation", ListType(element_id=24, element_type=StringType(), element_required=False), required=False),
-            NestedField(20, "joins_list", ListType(element_id=25, element_type=StringType(), element_required=False), required=False)
+            NestedField(
+                19,
+                "unsupported_functions_after_transpilation",
+                ListType(element_id=24, element_type=StringType(), element_required=False),
+                required=False,
+            ),
+            NestedField(
+                20,
+                "joins_list",
+                ListType(element_id=25, element_type=StringType(), element_required=False),
+                required=False,
+            ),
         )
 
         # Define partition specification for company_name and event_date
         partition_spec = PartitionSpec(
             PartitionField(source_id=3, field_id=1000, transform="identity", name="company_name"),
-            PartitionField(source_id=4, field_id=1001, transform="identity", name="event_date")
+            PartitionField(source_id=4, field_id=1001, transform="identity", name="event_date"),
         )
 
         # Create namespace if it doesn't exist
@@ -111,26 +144,36 @@ def initialize_iceberg_catalog():
             # First try to load existing table
             batch_statistics_table = iceberg_catalog.load_table(table_identifier)
             logger.info(f"Loaded existing Iceberg table: {table_identifier}")
-            
+
             # Check if table has the new schema with all required columns
             existing_columns = [field.name for field in batch_statistics_table.schema().fields]
-            required_columns = ["company_name", "event_date", "batch_number", "unsupported_functions_after_transpilation", "joins_list"]
+            required_columns = [
+                "company_name",
+                "event_date",
+                "batch_number",
+                "unsupported_functions_after_transpilation",
+                "joins_list",
+            ]
             missing_columns = [col for col in required_columns if col not in existing_columns]
-            
+
             if missing_columns:
-                logger.info(f"Table missing required columns: {missing_columns}. Dropping and recreating table...")
+                logger.info(
+                    f"Table missing required columns: {missing_columns}. Dropping and recreating table..."
+                )
                 try:
                     # Drop the existing table
                     iceberg_catalog.drop_table(table_identifier)
                     logger.info(f"Dropped existing table: {table_identifier}")
-                    
+
                     # Create new table with updated schema and partitioning
                     batch_statistics_table = iceberg_catalog.create_table(
                         identifier=table_identifier,
                         schema=batch_stats_schema,
-                        partition_spec=partition_spec
+                        partition_spec=partition_spec,
                     )
-                    logger.info(f"Created new Iceberg table with updated schema: {table_identifier}")
+                    logger.info(
+                        f"Created new Iceberg table with updated schema: {table_identifier}"
+                    )
                 except Exception as recreate_error:
                     logger.error(f"Failed to recreate table: {str(recreate_error)}")
 
@@ -140,7 +183,7 @@ def initialize_iceberg_catalog():
                 batch_statistics_table = iceberg_catalog.create_table(
                     identifier=table_identifier,
                     schema=batch_stats_schema,
-                    partition_spec=partition_spec
+                    partition_spec=partition_spec,
                 )
                 logger.info(f"Created new Iceberg table: {table_identifier}")
             except Exception as create_error:

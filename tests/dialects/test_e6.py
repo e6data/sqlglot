@@ -2566,7 +2566,7 @@ class TestE6(Validator):
 
     def test_interval_cast_transformation(self):
         """Test interval cast transformations for ::INTERVAL casting"""
-        
+
         # Test plural to singular conversion - hours to hour
         self.validate_all(
             "INTERVAL col1 'hour'",
