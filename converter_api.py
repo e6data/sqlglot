@@ -1,6 +1,5 @@
-from fastapi import FastAPI, Form, HTTPException, Response, BackgroundTasks
-from fastapi.responses import StreamingResponse
-from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, Form, HTTPException, Response
+from typing import Optional
 import typing as t
 import uvicorn
 import re
@@ -10,16 +9,8 @@ import sqlglot
 import logging
 from datetime import datetime
 from log_collector import setup_logger, log_records
-import pyarrow as pa
 import pyarrow.parquet as pq
-import pyarrow.dataset as ds
 import pyarrow.fs as fs
-import pyarrow.compute as pc
-from pathlib import Path
-import pandas as pd
-from io import BytesIO
-import time
-import uuid
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from guardrail.main import StorageServiceClient
