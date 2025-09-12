@@ -2226,6 +2226,23 @@ class TestE6(Validator):
             },
         )
 
+    def test_timestamp_epoch(self):
+        # Test timestamp 'epoch' literal
+        self.validate_all(
+            "CAST('1970-01-01T00:00:00.000' AS TIMESTAMP)",
+            read={
+                "databricks": "timestamp 'epoch'",
+            },
+        )
+        
+        # Test CAST('epoch' AS TIMESTAMP)
+        self.validate_all(
+            "CAST('1970-01-01T00:00:00.000' AS TIMESTAMP)",
+            read={
+                "databricks": "CAST('epoch' AS TIMESTAMP)",
+            },
+        )
+
     def test_array_agg(self):
         self.validate_all(
             "SELECT ARRAY_AGG(DISTINCT col) AS result FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
