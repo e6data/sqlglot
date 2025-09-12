@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing as t
 
-from sqlglot import exp, generator, parser, tokens
+from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
@@ -23,6 +23,17 @@ from typing import Any, Optional
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
+
+
+def epoch_cast_to_ts_e6(expression: exp.Expression) -> exp.Expression:
+    """Replace 'epoch' in casts by the E6-specific ISO timestamp literal."""
+    if (
+        isinstance(expression, (exp.Cast, exp.TryCast))
+        and expression.name.lower() == "epoch"
+        and expression.to.this in exp.DataType.TEMPORAL_TYPES
+    ):
+        expression.this.replace(exp.Literal.string("1970-01-01T00:00:00.000"))
+    return expression
 
 
 def _to_int(expression: exp.Expression) -> exp.Expression:
@@ -2307,6 +2318,7 @@ class E6(Dialect):
             **generator.Generator.TRANSFORMS,
             exp.Anonymous: anonymous_sql,
             exp.Any: lambda self, e: self.any_sql(e).replace("ANY", "SOME"),
+            exp.Cast: transforms.preprocess([epoch_cast_to_ts_e6]),
             exp.FindInSet: lambda self, e: self.func(
                 "ARRAY_POSITION", e.this, self.func("SPLIT", e.expression, exp.Literal.string(","))
             ),
