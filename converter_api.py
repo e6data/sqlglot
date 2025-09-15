@@ -641,206 +641,206 @@ async def guardstats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Import distributed processing modules
-import sys
+# # Import distributed processing modules
+# import sys
 
-sys.path.append("./final_distributed_processing")
-sys.path.append("./automated_processing")
-from automated_processing.orchestrator import (
-    orchestrate_processing,
-    get_processing_status,
-    get_task_result,
-)
-
-
-@app.post("/process-parquet-directory-automated")
-async def process_parquet_directory_automated(
-    directory_path: str = Form(
-        ...,
-        description="Path to directory containing parquet files OR path to a single parquet file",
-    ),
-    company_name: str = Form(..., description="Company identifier for Iceberg partitioning"),
-    from_dialect: str = Form(..., description="Source SQL dialect (e.g., snowflake, bigquery)"),
-    to_dialect: str = Form("e6", description="Target SQL dialect"),
-    query_column: str = Form(..., description="Column name containing SQL queries"),
-    batch_size: int = Form(10000, description="Number of queries per batch"),
-    filters: Optional[str] = Form(
-        None,
-        description='JSON string of column filters e.g. \'{"statement_type": "SELECT", "client_application": "PowerBI"}\'',
-    ),
-    session_name: Optional[str] = Form(None, description="Custom session name for identification"),
-):
-    """
-    Batch processing endpoint for parquet files containing SQL queries.
-
-    Accepts either:
-    - Path to a directory containing parquet files (e.g., "/path/to/parquet_files/")
-    - Path to a single parquet file (e.g., "/path/to/file.parquet")
-    - S3 directory path (e.g., "s3://bucket/path/to/directory/")
-    - S3 single file path (e.g., "s3://bucket/path/to/file.parquet")
-
-    Processes queries through SQLGlot transpilation using Celery distributed workers.
-    Results are stored in Iceberg table with partitioning by company_name and event_date.
-    """
-
-    logger.info(
-        f"🚀 Starting FULLY AUTONOMOUS processing: {directory_path} ({from_dialect} -> {to_dialect})"
-    )
-
-    try:
-        # Validate inputs first
-        if not directory_path or not directory_path.strip():
-            raise HTTPException(status_code=400, detail="directory_path is required")
-
-        if not query_column or not query_column.strip():
-            raise HTTPException(status_code=400, detail="query_column is required")
-
-        if batch_size <= 0:
-            raise HTTPException(status_code=400, detail="batch_size must be positive")
-
-        # Parse filters if provided
-        filter_dict = {}
-        if filters and filters.strip():
-            try:
-                filter_dict = json.loads(filters)
-                logger.info(f"Parsed filters: {filter_dict}")
-            except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=400, detail="Invalid JSON format for filters parameter"
-                )
-
-        # Use the new simplified orchestrator
-        logger.info("🔧 Starting processing with Celery orchestrator...")
-
-        # Call the orchestrator which returns immediately
-        result = orchestrate_processing(
-            directory_path=directory_path.strip(),
-            company_name=company_name.strip(),
-            from_dialect=from_dialect.lower().strip(),
-            to_dialect=to_dialect.lower().strip(),
-            query_column=query_column.strip(),
-            batch_size=batch_size,
-            filters=filter_dict,
-            name=session_name.strip() if session_name else None,
-        )
-
-        # Check if there was an error
-        if "error" in result:
-            logger.error(f"❌ Orchestration failed: {result['error']}")
-            raise HTTPException(status_code=500, detail=result["error"])
-
-        logger.info(f"✅ Processing started with session {result['session_id']}")
-
-        # Fixed Iceberg storage structure
-        event_date = datetime.now().strftime("%Y-%m-%d")
-        iceberg_structure = f"company_name={company_name}/event_date={event_date}/"
-
-        logger.info(f"📂 Iceberg structure: {iceberg_structure}")
-
-        return {
-            "session_id": result["session_id"],
-            "total_files": result.get("total_files", 0),
-            "total_batches": result.get("total_batches", 0),
-            "task_ids": result.get("task_ids", []),
-            "status": result.get("status", "processing"),
-            "created_at": result.get("created_at"),
-            "status_url": f"/processing-status/{result['session_id']}",
-            "configuration": {
-                "directory_path": directory_path,
-                "company_name": company_name,
-                "query_column": query_column,
-                "batch_size": batch_size,
-                "dialect_conversion": f"{from_dialect} -> {to_dialect}",
-            },
-            "iceberg_storage": {
-                "table": "default.batch_statistics",
-                "partition_structure": iceberg_structure,
-                "storage_pattern": f"{iceberg_structure}session_{result['session_id']}_batch_{{batch_id}}.parquet",
-            },
-            "message": "Processing initiated! Monitor progress at the status_url.",
-        }
-
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
-    except Exception as e:
-        logger.error(f"❌ Error in autonomous processing: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to start autonomous processing: {str(e)}"
-        )
+# sys.path.append("./final_distributed_processing")
+# sys.path.append("./automated_processing")
+# from automated_processing.orchestrator import (
+#     orchestrate_processing,
+#     get_processing_status,
+#     get_task_result,
+# )
 
 
-@app.get("/processing-status/{session_id}")
-async def get_processing_session_status(session_id: str):
-    """Get status of automated processing session"""
-    try:
-        # Let the orchestrator handle task discovery from Redis
-        result = get_processing_status(session_id, [])
-        return result
-    except Exception as e:
-        logger.error(f"❌ Error getting session status: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get session status: {str(e)}")
+# @app.post("/process-parquet-directory-automated")
+# async def process_parquet_directory_automated(
+#     directory_path: str = Form(
+#         ...,
+#         description="Path to directory containing parquet files OR path to a single parquet file",
+#     ),
+#     company_name: str = Form(..., description="Company identifier for Iceberg partitioning"),
+#     from_dialect: str = Form(..., description="Source SQL dialect (e.g., snowflake, bigquery)"),
+#     to_dialect: str = Form("e6", description="Target SQL dialect"),
+#     query_column: str = Form(..., description="Column name containing SQL queries"),
+#     batch_size: int = Form(10000, description="Number of queries per batch"),
+#     filters: Optional[str] = Form(
+#         None,
+#         description='JSON string of column filters e.g. \'{"statement_type": "SELECT", "client_application": "PowerBI"}\'',
+#     ),
+#     session_name: Optional[str] = Form(None, description="Custom session name for identification"),
+# ):
+#     """
+#     Batch processing endpoint for parquet files containing SQL queries.
+
+#     Accepts either:
+#     - Path to a directory containing parquet files (e.g., "/path/to/parquet_files/")
+#     - Path to a single parquet file (e.g., "/path/to/file.parquet")
+#     - S3 directory path (e.g., "s3://bucket/path/to/directory/")
+#     - S3 single file path (e.g., "s3://bucket/path/to/file.parquet")
+
+#     Processes queries through SQLGlot transpilation using Celery distributed workers.
+#     Results are stored in Iceberg table with partitioning by company_name and event_date.
+#     """
+
+#     logger.info(
+#         f"🚀 Starting FULLY AUTONOMOUS processing: {directory_path} ({from_dialect} -> {to_dialect})"
+#     )
+
+#     try:
+#         # Validate inputs first
+#         if not directory_path or not directory_path.strip():
+#             raise HTTPException(status_code=400, detail="directory_path is required")
+
+#         if not query_column or not query_column.strip():
+#             raise HTTPException(status_code=400, detail="query_column is required")
+
+#         if batch_size <= 0:
+#             raise HTTPException(status_code=400, detail="batch_size must be positive")
+
+#         # Parse filters if provided
+#         filter_dict = {}
+#         if filters and filters.strip():
+#             try:
+#                 filter_dict = json.loads(filters)
+#                 logger.info(f"Parsed filters: {filter_dict}")
+#             except json.JSONDecodeError:
+#                 raise HTTPException(
+#                     status_code=400, detail="Invalid JSON format for filters parameter"
+#                 )
+
+#         # Use the new simplified orchestrator
+#         logger.info("🔧 Starting processing with Celery orchestrator...")
+
+#         # Call the orchestrator which returns immediately
+#         result = orchestrate_processing(
+#             directory_path=directory_path.strip(),
+#             company_name=company_name.strip(),
+#             from_dialect=from_dialect.lower().strip(),
+#             to_dialect=to_dialect.lower().strip(),
+#             query_column=query_column.strip(),
+#             batch_size=batch_size,
+#             filters=filter_dict,
+#             name=session_name.strip() if session_name else None,
+#         )
+
+#         # Check if there was an error
+#         if "error" in result:
+#             logger.error(f"❌ Orchestration failed: {result['error']}")
+#             raise HTTPException(status_code=500, detail=result["error"])
+
+#         logger.info(f"✅ Processing started with session {result['session_id']}")
+
+#         # Fixed Iceberg storage structure
+#         event_date = datetime.now().strftime("%Y-%m-%d")
+#         iceberg_structure = f"company_name={company_name}/event_date={event_date}/"
+
+#         logger.info(f"📂 Iceberg structure: {iceberg_structure}")
+
+#         return {
+#             "session_id": result["session_id"],
+#             "total_files": result.get("total_files", 0),
+#             "total_batches": result.get("total_batches", 0),
+#             "task_ids": result.get("task_ids", []),
+#             "status": result.get("status", "processing"),
+#             "created_at": result.get("created_at"),
+#             "status_url": f"/processing-status/{result['session_id']}",
+#             "configuration": {
+#                 "directory_path": directory_path,
+#                 "company_name": company_name,
+#                 "query_column": query_column,
+#                 "batch_size": batch_size,
+#                 "dialect_conversion": f"{from_dialect} -> {to_dialect}",
+#             },
+#             "iceberg_storage": {
+#                 "table": "default.batch_statistics",
+#                 "partition_structure": iceberg_structure,
+#                 "storage_pattern": f"{iceberg_structure}session_{result['session_id']}_batch_{{batch_id}}.parquet",
+#             },
+#             "message": "Processing initiated! Monitor progress at the status_url.",
+#         }
+
+#     except HTTPException:
+#         # Re-raise HTTP exceptions as-is
+#         raise
+#     except Exception as e:
+#         logger.error(f"❌ Error in autonomous processing: {str(e)}")
+#         raise HTTPException(
+#             status_code=500, detail=f"Failed to start autonomous processing: {str(e)}"
+#         )
 
 
-@app.get("/task-result/{task_id}")
-async def get_individual_task_result(task_id: str):
-    """Get result of a specific task"""
-    try:
-        result = get_task_result(task_id)
-        return result
-    except Exception as e:
-        logger.error(f"❌ Error getting task result: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get task result: {str(e)}")
+# @app.get("/processing-status/{session_id}")
+# async def get_processing_session_status(session_id: str):
+#     """Get status of automated processing session"""
+#     try:
+#         # Let the orchestrator handle task discovery from Redis
+#         result = get_processing_status(session_id, [])
+#         return result
+#     except Exception as e:
+#         logger.error(f"❌ Error getting session status: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Failed to get session status: {str(e)}")
 
 
-@app.post("/validate-s3-bucket")
-async def validate_s3_bucket(
-    s3_path: str = Form(...),
-):
-    try:
-        if not s3_path.startswith("s3://"):
-            return {"authenticated": False, "error": "Invalid S3 path"}
+# @app.get("/task-result/{task_id}")
+# async def get_individual_task_result(task_id: str):
+#     """Get result of a specific task"""
+#     try:
+#         result = get_task_result(task_id)
+#         return result
+#     except Exception as e:
+#         logger.error(f"❌ Error getting task result: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Failed to get task result: {str(e)}")
 
-        bucket = s3_path.split("/")[2]
-        key_prefix = "/".join(s3_path.split("/")[3:])
 
-        try:
-            s3fs = fs.S3FileSystem(
-                access_key=os.getenv("AWS_ACCESS_KEY_ID", "YOUR_ACCESS_KEY_ID"),
-                secret_key=os.getenv("AWS_SECRET_ACCESS_KEY", "YOUR_SECRET_ACCESS_KEY"),
-                session_token=os.getenv("AWS_SESSION_TOKEN", "YOUR_SESSION_TOKEN"),
-                region=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-            )
-        except Exception as e:
-            return {"authenticated": False, "error": f"S3 auth failed: {str(e)}"}
+# @app.post("/validate-s3-bucket")
+# async def validate_s3_bucket(
+#     s3_path: str = Form(...),
+# ):
+#     try:
+#         if not s3_path.startswith("s3://"):
+#             return {"authenticated": False, "error": "Invalid S3 path"}
 
-        path = f"{bucket}/{key_prefix}" if key_prefix else bucket
-        file_info = s3fs.get_file_info(path)
+#         bucket = s3_path.split("/")[2]
+#         key_prefix = "/".join(s3_path.split("/")[3:])
 
-        parquet_files = []
-        if file_info.type == fs.FileType.File and path.endswith(".parquet"):
-            parquet_files = [path]
-        else:
-            from pyarrow.fs import FileSelector
+#         try:
+#             s3fs = fs.S3FileSystem(
+#                 access_key=os.getenv("AWS_ACCESS_KEY_ID", "YOUR_ACCESS_KEY_ID"),
+#                 secret_key=os.getenv("AWS_SECRET_ACCESS_KEY", "YOUR_SECRET_ACCESS_KEY"),
+#                 session_token=os.getenv("AWS_SESSION_TOKEN", "YOUR_SESSION_TOKEN"),
+#                 region=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+#             )
+#         except Exception as e:
+#             return {"authenticated": False, "error": f"S3 auth failed: {str(e)}"}
 
-            selector = FileSelector(path, recursive=True)
-            file_infos = s3fs.get_file_info(selector)
-            parquet_files = [
-                f.path
-                for f in file_infos
-                if f.type == fs.FileType.File and f.path.endswith(".parquet")
-            ]
+#         path = f"{bucket}/{key_prefix}" if key_prefix else bucket
+#         file_info = s3fs.get_file_info(path)
 
-        if not parquet_files:
-            return {"authenticated": True, "error": "No parquet files found"}
+#         parquet_files = []
+#         if file_info.type == fs.FileType.File and path.endswith(".parquet"):
+#             parquet_files = [path]
+#         else:
+#             from pyarrow.fs import FileSelector
 
-        parquet_file = pq.ParquetFile(parquet_files[0], filesystem=s3fs)
-        all_columns = [field.name for field in parquet_file.schema]
+#             selector = FileSelector(path, recursive=True)
+#             file_infos = s3fs.get_file_info(selector)
+#             parquet_files = [
+#                 f.path
+#                 for f in file_infos
+#                 if f.type == fs.FileType.File and f.path.endswith(".parquet")
+#             ]
 
-        return {"authenticated": True, "columns": all_columns}
+#         if not parquet_files:
+#             return {"authenticated": True, "error": "No parquet files found"}
 
-    except Exception as e:
-        return {"authenticated": False, "error": f"Validation failed: {str(e)}"}
+#         parquet_file = pq.ParquetFile(parquet_files[0], filesystem=s3fs)
+#         all_columns = [field.name for field in parquet_file.schema]
+
+#         return {"authenticated": True, "columns": all_columns}
+
+#     except Exception as e:
+#         return {"authenticated": False, "error": f"Validation failed: {str(e)}"}
 
 
 if __name__ == "__main__":
