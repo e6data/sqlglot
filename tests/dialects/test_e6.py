@@ -566,6 +566,11 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT meta:bincounttaskmeta FROM silver_mongo.tms.tasks",
+            read={"databricks": "SELECT meta:bincounttaskmeta FROM silver_mongo.tms.tasks "},
+        )
+
+        self.validate_all(
             "TO_JSON(X)",
             read={
                 "presto": "JSON_FORMAT(CAST(X as JSON))",
