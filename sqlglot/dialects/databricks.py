@@ -130,8 +130,17 @@ class Databricks(Spark):
 
         FACTOR = {
             **Spark.Parser.FACTOR,
-            TokenType.COLON: exp.JSONExtract,
         }
+
+        def _parse_colon_as_variant_extract(
+            self, this: t.Optional[exp.Expression]
+        ) -> t.Optional[exp.Expression]:
+            """Override to set json_query=True for Databricks colon syntax"""
+            result = super()._parse_colon_as_variant_extract(this)
+            if isinstance(result, exp.JSONExtract):
+                result.set("json_query", True)
+
+            return result
 
     class Generator(Spark.Generator):
         TABLESAMPLE_SEED_KEYWORD = "REPEATABLE"

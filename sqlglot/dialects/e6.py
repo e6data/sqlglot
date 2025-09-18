@@ -2250,6 +2250,25 @@ class E6(Dialect):
             return self.func("TO_JSON", inner)
 
         def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
+            # Check if this is Databricks colon syntax (marked with json_query=True)
+            json_query_flag = getattr(e, "json_query", False) or e.args.get("json_query", False)
+
+            if self.from_dialect == "databricks" and json_query_flag:
+                # Only preserve simple colon syntax for Databricks variant extraction
+                # Complex paths with brackets/subscripts should use JSON_EXTRACT
+                if isinstance(e.expression, exp.JSONPath):
+                    # Check if this is a simple path (only JSONPathRoot + single JSONPathKey)
+                    path_expressions = e.expression.expressions
+                    if (
+                        len(path_expressions) == 2
+                        and isinstance(path_expressions[0], exp.JSONPathRoot)
+                        and isinstance(path_expressions[1], exp.JSONPathKey)
+                    ):
+                        return f"{self.sql(e.this)}:{path_expressions[1].this}"
+                # Fallback if not JSONPath format
+                elif isinstance(e.expression, exp.Literal):
+                    return f"{self.sql(e.this)}:{e.expression.this}"
+
             path = e.expression
             if self.from_dialect == "databricks":
                 if not self.sql(path).startswith("'$."):
