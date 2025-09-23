@@ -16,6 +16,17 @@ from sqlglot import parse_one
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
+
+# Enable Rust tokenizer for better performance
+ENABLE_RUST_TOKENIZER = os.getenv("ENABLE_RUST_TOKENIZER", "true").lower() == "true"
+if ENABLE_RUST_TOKENIZER:
+    try:
+        import sqlglotrs
+        os.environ["SQLGLOTRS_TOKENIZER"] = "1"
+        print("✅ Rust tokenizer enabled")
+    except ImportError:
+        print("⚠️ Rust tokenizer not available, using Python tokenizer")
+
 from apis.utils.helpers import (
     strip_comment,
     unsupported_functionality_identifiers,
@@ -49,6 +60,12 @@ storage_service_client = None
 app = FastAPI()
 
 logger = logging.getLogger(__name__)
+
+# Log tokenizer status
+if ENABLE_RUST_TOKENIZER and "SQLGLOTRS_TOKENIZER" in os.environ:
+    logger.info("Rust tokenizer is ENABLED")
+else:
+    logger.info("Using standard Python tokenizer")
 
 
 if ENABLE_GUARDRAIL.lower() == "true":
@@ -104,19 +121,47 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        query = normalize_unicode_spaces(query)
-        logger.info(
-            "%s AT %s FROM %s — Normalized (escaped):\n%s",
-            query_id,
-            timestamp,
-            from_sql.upper(),
-            escape_unicode(query),
-        )
+        # Check feature flag for Unicode normalization
+        if flags_dict.get("ENABLE_UNICODE_NORMALIZATION", True):  # Default to True for backward compatibility
+            query = normalize_unicode_spaces(query)
+            logger.info(
+                "%s AT %s FROM %s — Normalized (escaped):\n%s",
+                query_id,
+                timestamp,
+                from_sql.upper(),
+                escape_unicode(query),
+            )
+        else:
+            logger.info(
+                "%s AT %s — Unicode normalization DISABLED via feature flag",
+                query_id,
+                timestamp,
+            )
 
         item = "condenast"
         query, comment = strip_comment(query, item)
 
+        # Log which tokenizer is being used
+        tokenizer_type = "Rust" if os.environ.get("SQLGLOTRS_TOKENIZER") == "1" else "Python"
+        logger.info(
+            "%s AT %s — Using %s tokenizer for parsing",
+            query_id,
+            timestamp,
+            tokenizer_type,
+        )
+
+        import time
+        parse_start = time.time()
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+        parse_time = time.time() - parse_start
+
+        logger.info(
+            "%s AT %s — Parsed in %.4f seconds with %s tokenizer",
+            query_id,
+            timestamp,
+            parse_time,
+            tokenizer_type,
+        )
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
             # Check if we should only transform catalog.schema without full transpilation
@@ -359,7 +404,24 @@ async def stats_api(
             # ------------------------------
             # Step 1: Parse the Original Query
             # ------------------------------
+            tokenizer_type = "Rust" if os.environ.get("SQLGLOTRS_TOKENIZER") == "1" else "Python"
+            logger.info(
+                "%s — Using %s tokenizer for statistics parsing",
+                query_id,
+                tokenizer_type,
+            )
+
+            import time
+            parse_start = time.time()
             original_ast = parse_one(query, read=from_sql)
+            parse_time = time.time() - parse_start
+
+            logger.info(
+                "%s — Statistics parsing completed in %.4f seconds with %s tokenizer",
+                query_id,
+                parse_time,
+                tokenizer_type,
+            )
             tables_list = extract_db_and_Table_names(original_ast)
             supported, unsupported = unsupported_functionality_identifiers(
                 original_ast, unsupported, supported
