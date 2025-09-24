@@ -17,15 +17,19 @@ from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
 
+# Initialize logging first
+setup_logger()
+logger = logging.getLogger(__name__)
+
 # Enable Rust tokenizer for better performance
 ENABLE_RUST_TOKENIZER = os.getenv("ENABLE_RUST_TOKENIZER", "true").lower() == "true"
 if ENABLE_RUST_TOKENIZER:
     try:
         import sqlglotrs
         os.environ["SQLGLOTRS_TOKENIZER"] = "1"
-        print("✅ Rust tokenizer enabled")
+        logger.info("✅ Rust tokenizer enabled")
     except ImportError:
-        print("⚠️ Rust tokenizer not available, using Python tokenizer")
+        logger.warning("⚠️ Rust tokenizer not available, using Python tokenizer")
 
 from apis.utils.helpers import (
     strip_comment,
@@ -49,8 +53,6 @@ from apis.utils.helpers import (
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
-setup_logger()
-
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
@@ -58,8 +60,6 @@ STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
 storage_service_client = None
 
 app = FastAPI()
-
-logger = logging.getLogger(__name__)
 
 # Log tokenizer status
 if ENABLE_RUST_TOKENIZER and "SQLGLOTRS_TOKENIZER" in os.environ:
