@@ -152,8 +152,19 @@ async def convert_query(
 
         import time
         parse_start = time.time()
-        tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-        parse_time = time.time() - parse_start
+        try:
+            tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+            parse_time = time.time() - parse_start
+        except Exception as e:
+            if tokenizer_type == "Rust":
+                logger.warning("%s — Rust tokenizer failed, trying Python fallback: %s", query_id, str(e))
+                os.environ["SQLGLOTRS_TOKENIZER"] = "0"
+                tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+                parse_time = time.time() - parse_start
+                tokenizer_type = "Python (fallback)"
+                os.environ["SQLGLOTRS_TOKENIZER"] = "1"
+            else:
+                raise e
 
         logger.info(
             "%s AT %s — Parsed in %.4f seconds with %s tokenizer",
@@ -413,8 +424,19 @@ async def stats_api(
 
             import time
             parse_start = time.time()
-            original_ast = parse_one(query, read=from_sql)
-            parse_time = time.time() - parse_start
+            try:
+                original_ast = parse_one(query, read=from_sql)
+                parse_time = time.time() - parse_start
+            except Exception as e:
+                if tokenizer_type == "Rust":
+                    logger.warning("%s — Rust tokenizer failed in statistics, trying Python fallback: %s", query_id, str(e))
+                    os.environ["SQLGLOTRS_TOKENIZER"] = "0"
+                    original_ast = parse_one(query, read=from_sql)
+                    parse_time = time.time() - parse_start
+                    tokenizer_type = "Python (fallback)"
+                    os.environ["SQLGLOTRS_TOKENIZER"] = "1"
+                else:
+                    raise e
 
             logger.info(
                 "%s — Statistics parsing completed in %.4f seconds with %s tokenizer",
