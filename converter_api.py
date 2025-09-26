@@ -17,14 +17,6 @@ from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
 
-# Enable Rust tokenizer for better performance
-try:
-    import sqlglotrs
-    os.environ["SQLGLOTRS_TOKENIZER"] = "1"
-    print("✅ Rust tokenizer enabled")
-except ImportError:
-    print("⚠️ Rust tokenizer not available, using Python tokenizer")
-
 from apis.utils.helpers import (
     strip_comment,
     unsupported_functionality_identifiers,
@@ -58,6 +50,17 @@ storage_service_client = None
 app = FastAPI()
 
 logger = logging.getLogger(__name__)
+
+# Check if Rust tokenizer is available
+try:
+    import sqlglotrs
+    # SQLGLOTRS_TOKENIZER should be set via environment if you want to use Rust
+    if os.environ.get("SQLGLOTRS_TOKENIZER") == "1":
+        logger.info("✅ Rust tokenizer enabled via environment")
+    else:
+        logger.info("ℹ️ Rust tokenizer available but not enabled (set SQLGLOTRS_TOKENIZER=1 to enable)")
+except ImportError as e:
+    logger.warning("⚠️ Rust tokenizer module not available, using Python tokenizer: %s", str(e))
 
 
 if ENABLE_GUARDRAIL.lower() == "true":
