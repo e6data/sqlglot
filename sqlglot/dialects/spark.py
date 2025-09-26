@@ -9,6 +9,7 @@ from sqlglot.dialects.dialect import (
     unit_to_var,
     timestampdiff_sql,
     build_date_delta,
+    date_delta_to_binary_interval_op,
     groupconcat_sql,
 )
 from sqlglot.dialects.hive import _build_with_ignore_nulls
@@ -127,11 +128,18 @@ class Spark(Spark2):
             **Spark2.Parser.FUNCTIONS,
             "ANY_VALUE": _build_with_ignore_nulls(exp.AnyValue),
             "ARRAY_INTERSECT": exp.ArrayIntersect.from_arg_list,
+            "BIT_AND": exp.BitwiseAndAgg.from_arg_list,
+            "BIT_OR": exp.BitwiseOrAgg.from_arg_list,
+            "BIT_XOR": exp.BitwiseXorAgg.from_arg_list,
+            "BIT_COUNT": exp.BitwiseCountAgg.from_arg_list,
             "DATE_ADD": _build_dateadd,
             "DATEADD": _build_dateadd,
             "SPACE": exp.Space.from_arg_list,
             "TIMESTAMPADD": _build_dateadd,
             "TIMESTAMPDIFF": build_date_delta(exp.TimestampDiff),
+            "TRY_ADD": exp.SafeAdd.from_arg_list,
+            "TRY_MULTIPLY": exp.SafeMultiply.from_arg_list,
+            "TRY_SUBTRACT": exp.SafeSubtract.from_arg_list,
             "DATEDIFF": _build_datediff,
             "DATE_DIFF": _build_datediff,
             "LISTAGG": exp.GroupConcat.from_arg_list,
@@ -199,6 +207,10 @@ class Spark(Spark2):
             exp.ArrayConstructCompact: lambda self, e: self.func(
                 "ARRAY_COMPACT", self.func("ARRAY", *e.expressions)
             ),
+            exp.BitwiseAndAgg: rename_func("BIT_AND"),
+            exp.BitwiseOrAgg: rename_func("BIT_OR"),
+            exp.BitwiseXorAgg: rename_func("BIT_XOR"),
+            exp.BitwiseCountAgg: rename_func("BIT_COUNT"),
             exp.Create: preprocess(
                 [
                     remove_unique_constraints,
@@ -208,14 +220,23 @@ class Spark(Spark2):
                     move_partitioned_by_to_schema_columns,
                 ]
             ),
+            exp.DateFromUnixDate: rename_func("DATE_FROM_UNIX_DATE"),
+            exp.DatetimeAdd: date_delta_to_binary_interval_op(cast=False),
+            exp.DatetimeSub: date_delta_to_binary_interval_op(cast=False),
             exp.GroupConcat: _groupconcat_sql,
             exp.EndsWith: rename_func("ENDSWITH"),
             exp.Encode: rename_func("ENCODE"),
             exp.PartitionedByProperty: lambda self,
             e: f"PARTITIONED BY {self.wrap(self.expressions(sqls=[_normalize_partition(e) for e in e.this.expressions], skip_first=True))}",
+            exp.SafeAdd: rename_func("TRY_ADD"),
+            exp.SafeMultiply: rename_func("TRY_MULTIPLY"),
+            exp.SafeSubtract: rename_func("TRY_SUBTRACT"),
             exp.StartsWith: rename_func("STARTSWITH"),
+            exp.TimeAdd: date_delta_to_binary_interval_op(cast=False),
+            exp.TimeSub: date_delta_to_binary_interval_op(cast=False),
             exp.TsOrDsAdd: _dateadd_sql,
             exp.TimestampAdd: _dateadd_sql,
+            exp.TimestampSub: date_delta_to_binary_interval_op(cast=False),
             exp.DatetimeDiff: timestampdiff_sql,
             exp.TimestampDiff: timestampdiff_sql,
             exp.TryCast: lambda self, e: (

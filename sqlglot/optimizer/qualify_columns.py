@@ -282,6 +282,7 @@ def _expand_alias_refs(
 
     alias_to_expression: t.Dict[str, t.Tuple[exp.Expression, int]] = {}
     projections = {s.alias_or_name for s in expression.selects}
+    is_bigquery = dialect == "bigquery"
 
     def replace_columns(
         node: t.Optional[exp.Expression],
@@ -317,17 +318,30 @@ def _expand_alias_refs(
 
                 # BigQuery's having clause gets confused if an alias matches a source.
                 # SELECT x.a, max(x.b) as x FROM x GROUP BY 1 HAVING x > 1;
-                # If HAVING x is expanded to max(x.b), bigquery treats x as the new projection x instead of the table
-                if is_having and dialect == "bigquery":
+                # If "HAVING x" is expanded to "HAVING max(x.b)", BQ would blindly replace the "x" reference with the projection MAX(x.b)
+                # i.e HAVING MAX(MAX(x.b).b), resulting in the error: "Aggregations of aggregations are not allowed"
+                if is_having and is_bigquery:
                     skip_replace = skip_replace or any(
                         node.parts[0].name in projections
                         for node in alias_expr.find_all(exp.Column)
                     )
+            elif is_bigquery and (is_group_by or is_having):
+                column_table = table.name if table else column.table
+                if column_table in projections:
+                    # BigQuery's GROUP BY and HAVING clauses get confused if the column name
+                    # matches a source name and a projection. For instance:
+                    # SELECT id, ARRAY_AGG(col) AS custom_fields FROM custom_fields GROUP BY id HAVING id >= 1
+                    # We should not qualify "id" with "custom_fields" in either clause, since the aggregation shadows the actual table
+                    # and we'd get the error: "Column custom_fields contains an aggregation function, which is not allowed in GROUP BY clause"
+                    column.replace(exp.to_identifier(column.name))
+                    return
 
             if table and (not alias_expr or skip_replace):
                 column.set("table", table)
             elif not column.table and alias_expr and not skip_replace:
-                if isinstance(alias_expr, exp.Literal) and (literal_index or resolve_table):
+                if (isinstance(alias_expr, exp.Literal) or alias_expr.is_number) and (
+                    literal_index or resolve_table
+                ):
                     if literal_index:
                         column.replace(exp.Literal.number(i))
                 else:
@@ -342,11 +356,15 @@ def _expand_alias_refs(
             alias_to_expression[projection.alias] = (projection.this, i + 1)
 
     parent_scope = scope
-    while parent_scope.is_union:
+    on_right_sub_tree = False
+    while parent_scope and not parent_scope.is_cte:
+        if parent_scope.is_union:
+            on_right_sub_tree = parent_scope.parent.expression.right is parent_scope.expression
         parent_scope = parent_scope.parent
 
     # We shouldn't expand aliases if they match the recursive CTE's columns
-    if parent_scope.is_cte:
+    # and we are in the recursive part (right sub tree) of the CTE
+    if parent_scope and on_right_sub_tree:
         cte = parent_scope.expression.parent
         if cte.find_ancestor(exp.With).recursive:
             for recursive_cte_column in cte.args["alias"].columns or cte.this.selects:
@@ -450,6 +468,7 @@ def _expand_positional_references(
 
                 if (
                     isinstance(select, exp.CONSTANTS)
+                    or select.is_number
                     or select.find(exp.Explode, exp.Unnest)
                     or ambiguous
                 ):
@@ -863,7 +882,7 @@ def qualify_outputs(scope_or_expression: Scope | exp.Expression) -> None:
         if isinstance(selection, exp.Subquery):
             if not selection.output_name:
                 selection.set("alias", exp.TableAlias(this=exp.to_identifier(f"_col_{i}")))
-        elif not isinstance(selection, exp.Alias) and not selection.is_star:
+        elif not isinstance(selection, (exp.Alias, exp.Aliases)) and not selection.is_star:
             selection = alias(
                 selection,
                 alias=selection.output_name or f"_col_{i}",
@@ -982,6 +1001,44 @@ class Resolver:
             }
         return self._all_columns
 
+    def get_source_columns_from_set_op(self, expression: exp.Expression) -> t.List[str]:
+        if isinstance(expression, exp.Select):
+            return expression.named_selects
+        if isinstance(expression, exp.Subquery) and isinstance(expression.this, exp.SetOperation):
+            # Different types of SET modifiers can be chained together if they're explicitly grouped by nesting
+            return self.get_source_columns_from_set_op(expression.this)
+        if not isinstance(expression, exp.SetOperation):
+            raise OptimizeError(f"Unknown set operation: {expression}")
+
+        set_op = expression
+
+        # BigQuery specific set operations modifiers, e.g INNER UNION ALL BY NAME
+        on_column_list = set_op.args.get("on")
+
+        if on_column_list:
+            # The resulting columns are the columns in the ON clause:
+            # {INNER | LEFT | FULL} UNION ALL BY NAME ON (col1, col2, ...)
+            columns = [col.name for col in on_column_list]
+        elif set_op.side or set_op.kind:
+            side = set_op.side
+            kind = set_op.kind
+
+            # Visit the children UNIONs (if any) in a post-order traversal
+            left = self.get_source_columns_from_set_op(set_op.left)
+            right = self.get_source_columns_from_set_op(set_op.right)
+
+            # We use dict.fromkeys to deduplicate keys and maintain insertion order
+            if side == "LEFT":
+                columns = left
+            elif side == "FULL":
+                columns = list(dict.fromkeys(left + right))
+            elif kind == "INNER":
+                columns = list(dict.fromkeys(left).keys() & dict.fromkeys(right).keys())
+        else:
+            columns = set_op.named_selects
+
+        return columns
+
     def get_source_columns(self, name: str, only_visible: bool = False) -> t.Sequence[str]:
         """Resolve the source columns for a given source `name`."""
         cache_key = (name, only_visible)
@@ -1006,31 +1063,8 @@ class Resolver:
                         for k in source.expression.type.expressions:  # type: ignore
                             columns.append(k.name)
             elif isinstance(source, Scope) and isinstance(source.expression, exp.SetOperation):
-                set_op = source.expression
+                columns = self.get_source_columns_from_set_op(source.expression)
 
-                # BigQuery specific set operations modifiers, e.g INNER UNION ALL BY NAME
-                on_column_list = set_op.args.get("on")
-
-                if on_column_list:
-                    # The resulting columns are the columns in the ON clause:
-                    # {INNER | LEFT | FULL} UNION ALL BY NAME ON (col1, col2, ...)
-                    columns = [col.name for col in on_column_list]
-                elif set_op.side or set_op.kind:
-                    side = set_op.side
-                    kind = set_op.kind
-
-                    left = set_op.left.named_selects
-                    right = set_op.right.named_selects
-
-                    # We use dict.fromkeys to deduplicate keys and maintain insertion order
-                    if side == "LEFT":
-                        columns = left
-                    elif side == "FULL":
-                        columns = list(dict.fromkeys(left + right))
-                    elif kind == "INNER":
-                        columns = list(dict.fromkeys(left).keys() & dict.fromkeys(right).keys())
-                else:
-                    columns = set_op.named_selects
             else:
                 select = seq_get(source.expression.selects, 0)
 

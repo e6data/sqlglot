@@ -35,6 +35,14 @@ class TestTrino(Validator):
                 "trino": "SELECT CAST('2012-10-31 01:00:00 +02:00' AS TIMESTAMP WITH TIME ZONE)",
             },
         )
+        self.validate_all(
+            "SELECT FORMAT('%s', 123)",
+            write={
+                "duckdb": "SELECT FORMAT('{}', 123)",
+                "snowflake": "SELECT TO_CHAR(123)",
+                "trino": "SELECT FORMAT('%s', 123)",
+            },
+        )
 
     def test_listagg(self):
         self.validate_identity(
@@ -131,3 +139,19 @@ class TestTrino(Validator):
     def test_analyze(self):
         self.validate_identity("ANALYZE tbl")
         self.validate_identity("ANALYZE tbl WITH (prop1=val1, prop2=val2)")
+
+    def test_json_value(self):
+        self.validate_identity(
+            "JSON_VALUE(jl.extra_attributes, 'lax $.amount_source' RETURNING VARCHAR)"
+        )
+
+        json_doc = """'{"item": "shoes", "price": "49.95"}'"""
+        self.validate_identity(f"""SELECT JSON_VALUE({json_doc}, 'strict $.price')""")
+        self.validate_identity(
+            f"""SELECT JSON_VALUE({json_doc}, 'lax $.price' RETURNING DECIMAL(4, 2))"""
+        )
+
+        for on_option in ("NULL", "ERROR", "DEFAULT 1"):
+            self.validate_identity(
+                f"""SELECT JSON_VALUE({json_doc}, 'lax $.price' RETURNING DECIMAL(4, 2) {on_option} ON EMPTY {on_option} ON ERROR) AS price"""
+            )

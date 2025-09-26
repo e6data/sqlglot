@@ -35,8 +35,18 @@ DATE_ADD_OR_DIFF = t.Union[
     exp.TsOrDsDiff,
 ]
 DATE_ADD_OR_SUB = t.Union[exp.DateAdd, exp.TsOrDsAdd, exp.DateSub]
-JSON_EXTRACT_TYPE = t.Union[exp.JSONExtract, exp.JSONExtractScalar]
-
+JSON_EXTRACT_TYPE = t.Union[
+    exp.JSONExtract, exp.JSONExtractScalar, exp.JSONBExtract, exp.JSONBExtractScalar
+]
+DATETIME_DELTA = t.Union[
+    exp.DateAdd,
+    exp.DatetimeAdd,
+    exp.DatetimeSub,
+    exp.TimeAdd,
+    exp.TimeSub,
+    exp.TimestampSub,
+    exp.TsOrDsAdd,
+]
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import B, E, F
@@ -89,6 +99,7 @@ class Dialects(str, Enum):
     REDSHIFT = "redshift"
     RISINGWAVE = "risingwave"
     SNOWFLAKE = "snowflake"
+    SOLR = "solr"
     SPARK = "spark"
     SPARK2 = "spark2"
     SQLITE = "sqlite"
@@ -283,6 +294,12 @@ class _Dialect(type):
                 TokenType.ANTI,
                 TokenType.SEMI,
             }
+
+        klass.VALID_INTERVAL_UNITS = {
+            *klass.VALID_INTERVAL_UNITS,
+            *klass.DATE_PART_MAPPING.keys(),
+            *klass.DATE_PART_MAPPING.values(),
+        }
 
         return klass
 
@@ -544,6 +561,8 @@ class Dialect(metaclass=_Dialect):
     IDENTIFIER_START = '"'
     IDENTIFIER_END = '"'
 
+    VALID_INTERVAL_UNITS: t.Set[str] = set()
+
     # Delimiters for bit, hex, byte and unicode literals
     BIT_START: t.Optional[str] = None
     BIT_END: t.Optional[str] = None
@@ -657,13 +676,17 @@ class Dialect(metaclass=_Dialect):
             exp.Length,
             exp.UnixDate,
             exp.UnixSeconds,
+            exp.UnixMicros,
+            exp.UnixMillis,
         },
         exp.DataType.Type.BINARY: {
+            exp.FromBase32,
             exp.FromBase64,
         },
         exp.DataType.Type.BOOLEAN: {
             exp.Between,
             exp.Boolean,
+            exp.Contains,
             exp.EndsWith,
             exp.In,
             exp.LogicalAnd,
@@ -677,6 +700,7 @@ class Dialect(metaclass=_Dialect):
             exp.DateFromParts,
             exp.DateStrToDate,
             exp.DiToDate,
+            exp.LastDay,
             exp.StrToDate,
             exp.TimeStrToDate,
             exp.TsOrDsToDate,
@@ -721,6 +745,9 @@ class Dialect(metaclass=_Dialect):
         },
         exp.DataType.Type.INTERVAL: {
             exp.Interval,
+            exp.JustifyDays,
+            exp.JustifyHours,
+            exp.JustifyInterval,
             exp.MakeInterval,
         },
         exp.DataType.Type.JSON: {
@@ -766,6 +793,7 @@ class Dialect(metaclass=_Dialect):
             exp.TimeToStr,
             exp.TimeToTimeStr,
             exp.Trim,
+            exp.ToBase32,
             exp.ToBase64,
             exp.TsOrDsToDateStr,
             exp.UnixToStr,
@@ -1057,7 +1085,9 @@ class Dialect(metaclass=_Dialect):
             try:
                 return parse_json_path(path_text, self)
             except ParseError as e:
-                if self.STRICT_JSON_PATH_SYNTAX:
+                if self.STRICT_JSON_PATH_SYNTAX and not path_text.lstrip().startswith(
+                    ("lax", "strict")
+                ):
                     logger.warning(f"Invalid JSON path syntax. {str(e)}")
 
         return path
@@ -1653,22 +1683,59 @@ def date_delta_sql(name: str, cast: bool = False) -> t.Callable[[Generator, DATE
     return _delta_sql
 
 
+def date_delta_to_binary_interval_op(
+    cast: bool = True,
+) -> t.Callable[[Generator, DATETIME_DELTA], str]:
+    def date_delta_to_binary_interval_op_sql(self: Generator, expression: DATETIME_DELTA) -> str:
+        this = expression.this
+        unit = unit_to_var(expression)
+        op = (
+            "+"
+            if isinstance(expression, (exp.DateAdd, exp.TimeAdd, exp.DatetimeAdd, exp.TsOrDsAdd))
+            else "-"
+        )
+
+        to_type: t.Optional[exp.DATA_TYPE] = None
+        if cast:
+            if isinstance(expression, exp.TsOrDsAdd):
+                to_type = expression.return_type
+            elif this.is_string:
+                # Cast string literals (i.e function parameters) to the appropriate type for +/- interval to work
+                to_type = (
+                    exp.DataType.Type.DATETIME
+                    if isinstance(expression, (exp.DatetimeAdd, exp.DatetimeSub))
+                    else exp.DataType.Type.DATE
+                )
+
+        this = exp.cast(this, to_type) if to_type else this
+
+        expr = expression.expression
+        interval = expr if isinstance(expr, exp.Interval) else exp.Interval(this=expr, unit=unit)
+
+        return f"{self.sql(this)} {op} {self.sql(interval)}"
+
+    return date_delta_to_binary_interval_op_sql
+
+
 def unit_to_str(expression: exp.Expression, default: str = "DAY") -> t.Optional[exp.Expression]:
     unit = expression.args.get("unit")
+    if not unit:
+        return exp.Literal.string(default) if default else None
 
-    if isinstance(unit, exp.Placeholder):
+    if isinstance(unit, exp.Placeholder) or type(unit) not in (exp.Var, exp.Literal):
         return unit
-    if unit:
-        return exp.Literal.string(unit.name)
-    return exp.Literal.string(default) if default else None
+
+    return exp.Literal.string(unit.name)
 
 
 def unit_to_var(expression: exp.Expression, default: str = "DAY") -> t.Optional[exp.Expression]:
     unit = expression.args.get("unit")
 
-    if isinstance(unit, (exp.Var, exp.Placeholder)):
+    if isinstance(unit, (exp.Var, exp.Placeholder, exp.WeekStart)):
         return unit
-    return exp.Var(this=default) if default else None
+
+    value = unit.name if unit else default
+    return exp.Var(this=value) if value else None
 
 
 @t.overload
@@ -1741,6 +1808,7 @@ def build_json_extract_path(
     expr_type: t.Type[F],
     zero_based_indexing: bool = True,
     arrow_req_json_type: bool = False,
+    json_type: t.Optional[str] = None,
 ) -> t.Callable[[t.List], F]:
     def _builder(args: t.List) -> F:
         segments: t.List[exp.JSONPathPart] = [exp.JSONPathRoot()]
@@ -1760,11 +1828,19 @@ def build_json_extract_path(
 
         # This is done to avoid failing in the expression validator due to the arg count
         del args[2:]
-        return expr_type(
-            this=seq_get(args, 0),
-            expression=exp.JSONPath(expressions=segments),
-            only_json_types=arrow_req_json_type,
-        )
+        kwargs = {
+            "this": seq_get(args, 0),
+            "expression": exp.JSONPath(expressions=segments),
+        }
+
+        is_jsonb = issubclass(expr_type, (exp.JSONBExtract, exp.JSONBExtractScalar))
+        if not is_jsonb:
+            kwargs["only_json_types"] = arrow_req_json_type
+
+        if json_type is not None:
+            kwargs["json_type"] = json_type
+
+        return expr_type(**kwargs)
 
     return _builder
 
@@ -1955,6 +2031,12 @@ def groupconcat_sql(
     on_overflow_sql = self.sql(expression, "on_overflow")
     on_overflow_sql = f" ON OVERFLOW {on_overflow_sql}" if (on_overflow and on_overflow_sql) else ""
 
+    if isinstance(this, exp.Limit) and this.this:
+        limit = this
+        this = limit.this.pop()
+    else:
+        limit = None
+
     order = this.find(exp.Order)
 
     if order and order.this:
@@ -1963,16 +2045,21 @@ def groupconcat_sql(
     args = self.format_args(this, f"{separator}{on_overflow_sql}")
     listagg: exp.Expression = exp.Anonymous(this=func_name, expressions=[args])
 
+    modifiers = self.sql(limit)
+
     if order:
         if within_group:
             listagg = exp.WithinGroup(this=listagg, expression=order)
         else:
-            listagg.set("expressions", [f"{args}{self.sql(expression=expression.this)}"])
+            modifiers = f"{self.sql(order)}{modifiers}"
+
+    if modifiers:
+        listagg.set("expressions", [f"{args}{modifiers}"])
 
     return self.sql(listagg)
 
 
-def build_timetostr_or_tochar(args: t.List, dialect: Dialect) -> exp.TimeToStr | exp.ToChar:
+def build_timetostr_or_tochar(args: t.List, dialect: DialectType) -> exp.TimeToStr | exp.ToChar:
     if len(args) == 2:
         this = args[0]
         if not this.type:
@@ -1992,13 +2079,4 @@ def build_replace_with_optional_replacement(args: t.List) -> exp.Replace:
         this=seq_get(args, 0),
         expression=seq_get(args, 1),
         replacement=seq_get(args, 2) or exp.Literal.string(""),
-    )
-
-
-def space_sql(self: Generator, expression: exp.Space) -> str:
-    return self.sql(
-        exp.Repeat(
-            this=exp.Literal.string(" "),
-            times=expression.this,
-        )
     )

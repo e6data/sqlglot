@@ -204,6 +204,16 @@ def _jsonextract_sql(
     return self.func("GET_JSON_OBJECT", this, expr)
 
 
+def _build_date_add(args: t.List) -> exp.TsOrDsAdd:
+    expression = seq_get(args, 1)
+    if expression:
+        expression = expression * -1
+
+    return exp.TsOrDsAdd(
+        this=seq_get(args, 0), expression=expression, unit=exp.Literal.string("DAY")
+    )
+
+
 class Hive(Dialect):
     ALIAS_POST_TABLESAMPLE = True
     IDENTIFIERS_CAN_START_WITH_DIGIT = True
@@ -311,6 +321,7 @@ class Hive(Dialect):
         STRICT_CAST = False
         VALUES_FOLLOWED_BY_PAREN = False
         JOINS_HAVE_EQUAL_PRECEDENCE = True
+        ADD_JOIN_ON_TRUE = True
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -328,7 +339,7 @@ class Hive(Dialect):
                     seq_get(args, 1),
                 ]
             ),
-            "DATE_SUB": exp.DateSub.from_arg_list,
+            "DATE_SUB": _build_date_add,
             "DATEDIFF": lambda args: exp.DateDiff(
                 this=exp.TsOrDsToDate(this=seq_get(args, 0)),
                 expression=exp.TsOrDsToDate(this=seq_get(args, 1)),

@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from sqlglot import exp, parse_one
 from sqlglot.dialects import ClickHouse
 from sqlglot.expressions import convert
+from sqlglot.helper import logger as helper_logger
 from sqlglot.optimizer import traverse_scope
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from tests.dialects.test_dialect import Validator
@@ -121,6 +122,9 @@ class TestClickhouse(Validator):
         self.validate_identity("TRUNCATE DATABASE db ON CLUSTER '{cluster}'")
         self.validate_identity("EXCHANGE TABLES x.a AND y.b", check_command_warning=True)
         self.validate_identity("CREATE TABLE test (id UInt8) ENGINE=Null()")
+        self.validate_identity(
+            "SELECT * FROM foo ORDER BY bar OFFSET 0 ROWS FETCH NEXT 10 ROWS WITH TIES"
+        )
         self.validate_identity(
             "SELECT DATE_BIN(toDateTime('2023-01-01 14:45:00'), INTERVAL '1' MINUTE, toDateTime('2023-01-01 14:35:30'), 'UTC')",
         )
@@ -643,6 +647,17 @@ class TestClickhouse(Validator):
             "SELECT COUNT(1) FROM table SETTINGS additional_table_filters = {'a': 'b', 'c': 'd'}"
         )
         self.validate_identity("SELECT arrayConcat([1, 2], [3, 4])")
+
+        self.validate_identity("SELECT parseDateTime('2021-01-04+23:00:00', '%Y-%m-%d+%H:%i:%s')")
+        self.validate_identity(
+            "SELECT parseDateTime('2021-01-04+23:00:00', '%Y-%m-%d+%H:%i:%s', 'Asia/Istanbul')"
+        )
+
+        self.validate_identity("farmFingerprint64(x1, x2, x3)")
+
+        self.validate_identity("cosineDistance(x, y)")
+        self.validate_identity("L2Distance(x, y)")
+        self.validate_identity("tuple(1 = 1, 'foo' = 'foo')")
 
     def test_clickhouse_values(self):
         ast = self.parse_one("SELECT * FROM VALUES (1, 2, 3)")
@@ -1231,6 +1246,35 @@ LIFETIME(MIN 0 MAX 0)""",
             )
         )
 
+        self.validate_all(
+            """
+            CREATE TABLE session_log
+            (
+                UserID UInt64,
+                SessionID UUID
+            )
+            ENGINE = MergeTree
+            PARTITION BY sipHash64(UserID) % 16
+            ORDER BY tuple();
+            """,
+            pretty=True,
+        )
+
+        self.validate_all(
+            """
+            CREATE TABLE visits
+            (
+                VisitDate Date,
+                Hour UInt8,
+                ClientID UUID
+            )
+            ENGINE = MergeTree()
+            PARTITION BY (toYYYYMM(VisitDate), Hour)
+            ORDER BY Hour;
+            """,
+            pretty=True,
+        )
+
     def test_agg_functions(self):
         def extract_agg_func(query):
             return parse_one(query, read="clickhouse").selects[0].this
@@ -1257,6 +1301,16 @@ LIFETIME(MIN 0 MAX 0)""",
         )
 
         parse_one("foobar(x)").assert_is(exp.Anonymous)
+
+        self.validate_identity("SELECT approx_top_sum(column, weight) FROM t").selects[0].assert_is(
+            exp.AnonymousAggFunc
+        )
+        self.validate_identity("SELECT approx_top_sum(N)(column, weight) FROM t").selects[
+            0
+        ].assert_is(exp.ParameterizedAgg)
+        self.validate_identity("SELECT approx_top_sum(N, reserved)(column, weight) FROM t").selects[
+            0
+        ].assert_is(exp.ParameterizedAgg)
 
     def test_drop_on_cluster(self):
         for creatable in ("DATABASE", "TABLE", "VIEW", "DICTIONARY", "FUNCTION"):
@@ -1395,6 +1449,10 @@ LIFETIME(MIN 0 MAX 0)""",
         self.validate_identity("GRANT SELECT(x, y) ON db.table TO john WITH GRANT OPTION")
         self.validate_identity("GRANT INSERT(x, y) ON db.table TO john")
 
+    def test_revoke(self):
+        self.validate_identity("REVOKE SELECT(x, y) ON db.table FROM john")
+        self.validate_identity("REVOKE INSERT(x, y) ON db.table FROM john")
+
     def test_array_join(self):
         expr = self.validate_identity(
             "SELECT * FROM arrays_test ARRAY JOIN arr1, arrays_test.arr2 AS foo, ['a', 'b', 'c'] AS elem"
@@ -1441,3 +1499,26 @@ LIFETIME(MIN 0 MAX 0)""",
         self.validate_identity(
             "SELECT TRANSFORM(foo, [1, 2], ['first', 'second'], 'default') FROM table"
         )
+
+    def test_array_offset(self):
+        with self.assertLogs(helper_logger) as cm:
+            self.validate_all(
+                "SELECT col[1]",
+                write={
+                    "bigquery": "SELECT col[0]",
+                    "duckdb": "SELECT col[1]",
+                    "hive": "SELECT col[0]",
+                    "clickhouse": "SELECT col[1]",
+                    "presto": "SELECT col[1]",
+                },
+            )
+
+            self.assertEqual(
+                cm.output,
+                [
+                    "INFO:sqlglot:Applying array index offset (-1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
+                ],
+            )

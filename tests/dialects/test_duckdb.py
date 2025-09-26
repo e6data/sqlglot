@@ -12,8 +12,12 @@ class TestDuckDB(Validator):
         with self.assertRaises(ParseError):
             parse_one("1 //", read="duckdb")
 
-        query = "WITH _data AS (SELECT [{'a': 1, 'b': 2}, {'a': 2, 'b': 3}] AS col) SELECT t.col['b'] FROM _data, UNNEST(_data.col) AS t(col) WHERE t.col['a'] = 1"
-        expr = annotate_types(self.validate_identity(query))
+        expr = annotate_types(
+            self.validate_identity(
+                "WITH _data AS (SELECT [{'a': 1, 'b': 2}, {'a': 2, 'b': 3}] AS col) SELECT t.col['b'] FROM _data, UNNEST(_data.col) AS t(col) WHERE t.col['a'] = 1",
+                "WITH _data AS (SELECT [{'a': 1, 'b': 2}, {'a': 2, 'b': 3}] AS col) SELECT t.col['b'] FROM _data JOIN UNNEST(_data.col) AS t(col) ON TRUE WHERE t.col['a'] = 1",
+            )
+        )
         self.assertEqual(
             expr.sql(dialect="bigquery"),
             "WITH _data AS (SELECT [STRUCT(1 AS a, 2 AS b), STRUCT(2 AS a, 3 AS b)] AS col) SELECT col.b FROM _data, UNNEST(_data.col) AS col WHERE col.a = 1",
@@ -343,12 +347,26 @@ class TestDuckDB(Validator):
         self.validate_identity(
             "SUMMARIZE TABLE 'https://blobs.duckdb.org/data/Star_Trek-Season_1.csv'"
         ).assert_is(exp.Summarize)
-        self.validate_identity(
-            "SELECT * FROM x LEFT JOIN UNNEST(y)",
-            "SELECT * FROM x LEFT JOIN UNNEST(y) ON TRUE",
-        )
+
+        for join_type in ("LEFT", "LEFT OUTER", "INNER"):
+            with self.subTest(f"Testing transpilation of join {join_type} with UNNEST"):
+                self.validate_all(
+                    f"SELECT * FROM x {join_type} JOIN UNNEST(y) ON TRUE",
+                    read={
+                        "bigquery": f"SELECT * FROM x {join_type} JOIN UNNEST(y)",
+                    },
+                    write={
+                        "bigquery": f"SELECT * FROM x {join_type} JOIN UNNEST(y) ON TRUE",
+                        "duckdb": f"SELECT * FROM x {join_type} JOIN UNNEST(y) ON TRUE",
+                    },
+                )
+
         self.validate_identity(
             """SELECT '{ "family": "anatidae", "species": [ "duck", "goose", "swan", null ] }' ->> ['$.family', '$.species']""",
+        )
+        self.validate_identity(
+            "SELECT * FROM t PIVOT(FIRST(t) AS t, FOR quarter IN ('Q1', 'Q2'))",
+            "SELECT * FROM t PIVOT(FIRST(t) AS t FOR quarter IN ('Q1', 'Q2'))",
         )
         self.validate_identity(
             "SELECT 20_000 AS literal",
@@ -447,6 +465,34 @@ class TestDuckDB(Validator):
         self.validate_all("x ~ y", write={"duckdb": "REGEXP_MATCHES(x, y)"})
         self.validate_all("SELECT * FROM 'x.y'", write={"duckdb": 'SELECT * FROM "x.y"'})
         self.validate_all(
+            "SELECT LIST(DISTINCT sample_col) FROM sample_table",
+            read={
+                "duckdb": "SELECT LIST(DISTINCT sample_col) FROM sample_table",
+                "spark": "SELECT COLLECT_SET(sample_col) FROM sample_table",
+            },
+        )
+        self.validate_all(
+            "SELECT LIST_TRANSFORM(STR_SPLIT_REGEX('abc , dfg ', ','), x -> TRIM(x))",
+            write={
+                "duckdb": "SELECT LIST_TRANSFORM(STR_SPLIT_REGEX('abc , dfg ', ','), x -> TRIM(x))",
+                "spark": "SELECT TRANSFORM(SPLIT('abc , dfg ', ','), x -> TRIM(x))",
+            },
+        )
+        self.validate_all(
+            "SELECT LIST_FILTER([4, 5, 6], x -> x > 4)",
+            write={
+                "duckdb": "SELECT LIST_FILTER([4, 5, 6], x -> x > 4)",
+                "spark": "SELECT FILTER(ARRAY(4, 5, 6), x -> x > 4)",
+            },
+        )
+        self.validate_all(
+            "SELECT ANY_VALUE(sample_column) FROM sample_table",
+            write={
+                "duckdb": "SELECT ANY_VALUE(sample_column) FROM sample_table",
+                "spark": "SELECT ANY_VALUE(sample_column) IGNORE NULLS FROM sample_table",
+            },
+        )
+        self.validate_all(
             "COUNT_IF(x)",
             write={
                 "duckdb": "COUNT_IF(x)",
@@ -458,7 +504,7 @@ class TestDuckDB(Validator):
             "SELECT STRFTIME(CAST('2020-01-01' AS TIMESTAMP), CONCAT('%Y', '%m'))",
             write={
                 "duckdb": "SELECT STRFTIME(CAST('2020-01-01' AS TIMESTAMP), CONCAT('%Y', '%m'))",
-                "spark": "SELECT DATE_FORMAT(CAST('2020-01-01' AS TIMESTAMP_NTZ), CONCAT(COALESCE('yyyy', ''), COALESCE('MM', '')))",
+                "spark": "SELECT DATE_FORMAT(CAST('2020-01-01' AS TIMESTAMP_NTZ), CONCAT('yyyy', 'MM'))",
                 "tsql": "SELECT FORMAT(CAST('2020-01-01' AS DATETIME2), CONCAT('yyyy', 'MM'))",
             },
         )
@@ -688,15 +734,6 @@ class TestDuckDB(Validator):
                 "bigquery": "STRUCT('value1' AS key1, 42 AS key2)",
                 "duckdb": "{'key1': 'value1', 'key2': 42}",
                 "spark": "STRUCT('value1' AS key1, 42 AS key2)",
-            },
-        )
-        self.validate_all(
-            "ARRAY_SORT(x)",
-            write={
-                "duckdb": "ARRAY_SORT(x)",
-                "presto": "ARRAY_SORT(x)",
-                "hive": "SORT_ARRAY(x)",
-                "spark": "SORT_ARRAY(x)",
             },
         )
         self.validate_all(
@@ -1005,6 +1042,35 @@ class TestDuckDB(Validator):
         )
         self.validate_identity("LISTAGG(x, ', ')")
         self.validate_identity("STRING_AGG(x, ', ')", "LISTAGG(x, ', ')")
+
+        self.validate_all(
+            "SELECT CONCAT(foo)",
+            write={
+                "duckdb": "SELECT CONCAT(foo)",
+                "spark": "SELECT CONCAT(COALESCE(foo, ''))",
+            },
+        )
+        self.validate_all(
+            "SELECT CONCAT(COALESCE(['abc'], []), ['bcg'])",
+            write={
+                "duckdb": "SELECT CONCAT(COALESCE(['abc'], []), ['bcg'])",
+                "spark": "SELECT CONCAT(COALESCE(ARRAY('abc'), ARRAY()), ARRAY('bcg'))",
+            },
+        )
+        self.validate_identity(
+            "SELECT CUME_DIST( ORDER BY foo) OVER (ORDER BY 1) FROM (SELECT 1 AS foo)"
+        )
+        self.validate_identity(
+            "SELECT NTILE(1 ORDER BY foo) OVER (ORDER BY 1) FROM (SELECT 1 AS foo)"
+        )
+        self.validate_identity(
+            "SELECT RANK( ORDER BY foo) OVER (ORDER BY 1) FROM (SELECT 1 AS foo)"
+        )
+        self.validate_identity(
+            "SELECT PERCENT_RANK( ORDER BY foo) OVER (ORDER BY 1) FROM (SELECT 1 AS foo)"
+        )
+        self.validate_identity("LIST_COSINE_DISTANCE(x, y)")
+        self.validate_identity("LIST_DISTANCE(x, y)")
 
     def test_array_index(self):
         with self.assertLogs(helper_logger) as cm:
@@ -1742,3 +1808,24 @@ class TestDuckDB(Validator):
         self.validate_identity("MAP {1: 'a', 2: 'b'}")
         self.validate_identity("MAP {'1': 'a', '2': 'b'}")
         self.validate_identity("MAP {[1, 2]: 'a', [3, 4]: 'b'}")
+
+    def test_create_sequence(self):
+        self.validate_identity(
+            "CREATE SEQUENCE serial START 101", "CREATE SEQUENCE serial START WITH 101"
+        )
+        self.validate_identity("CREATE SEQUENCE serial START WITH 1 INCREMENT BY 2")
+        self.validate_identity("CREATE SEQUENCE serial START WITH 99 INCREMENT BY -1 MAXVALUE 99")
+        self.validate_identity("CREATE SEQUENCE serial START WITH 1 MAXVALUE 10 NO CYCLE")
+        self.validate_identity("CREATE SEQUENCE serial START WITH 1 MAXVALUE 10 CYCLE")
+
+    def test_install(self):
+        ast = self.validate_identity("INSTALL httpfs")
+        ast.assert_is(exp.Install).name == "httpfs"
+        assert isinstance(ast.this, exp.Identifier)
+
+        self.validate_identity("INSTALL httpfs FROM community")
+        self.validate_identity("INSTALL httpfs FROM 'https://extensions.duckdb.org'")
+        self.validate_identity("FORCE INSTALL httpfs").assert_is(exp.Install).name == "httpfs"
+        self.validate_identity("FORCE INSTALL httpfs FROM community")
+        self.validate_identity("FORCE INSTALL httpfs FROM 'https://extensions.duckdb.org'")
+        self.validate_identity("FORCE CHECKPOINT db", check_command_warning=True)

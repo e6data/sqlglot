@@ -112,6 +112,7 @@ class SQLite(Dialect):
         STRING_ALIASES = True
         ALTER_RENAME_REQUIRES_COLUMN = False
         JOINS_HAVE_EQUAL_PRECEDENCE = True
+        ADD_JOIN_ON_TRUE = True
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -158,6 +159,7 @@ class SQLite(Dialect):
         EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
         SUPPORTS_MEDIAN = False
         JSON_KEY_VALUE_PAIR_SEP = ","
+        PARSE_JSON_NAME: t.Optional[str] = None
 
         SUPPORTED_JSON_PATH_PARTS = {
             exp.JSONPathKey,

@@ -325,10 +325,12 @@ class Postgres(Dialect):
             "@@": TokenType.DAT,
             "@>": TokenType.AT_GT,
             "<@": TokenType.LT_AT,
+            "?&": TokenType.QMARK_AMP,
+            "?|": TokenType.QMARK_PIPE,
+            "#-": TokenType.HASH_DASH,
             "|/": TokenType.PIPE_SLASH,
             "||/": TokenType.DPIPE_SLASH,
-            "BEGIN": TokenType.COMMAND,
-            "BEGIN TRANSACTION": TokenType.BEGIN,
+            "BEGIN": TokenType.BEGIN,
             "BIGSERIAL": TokenType.BIGSERIAL,
             "CONSTRAINT TRIGGER": TokenType.COMMAND,
             "CSTRING": TokenType.PSEUDO_TYPE,
@@ -345,7 +347,6 @@ class Postgres(Dialect):
             "REFRESH": TokenType.COMMAND,
             "REINDEX": TokenType.COMMAND,
             "RESET": TokenType.COMMAND,
-            "REVOKE": TokenType.COMMAND,
             "SERIAL": TokenType.SERIAL,
             "SMALLSERIAL": TokenType.SMALLSERIAL,
             "TEMP": TokenType.TEMPORARY,
@@ -374,6 +375,8 @@ class Postgres(Dialect):
         VAR_SINGLE_TOKENS = {"$"}
 
     class Parser(parser.Parser):
+        SUPPORTS_OMITTED_INTERVAL_SPAN_UNIT = True
+
         PROPERTY_PARSERS = {
             **parser.Parser.PROPERTY_PARSERS,
             "SET": lambda self: self.expression(exp.SetConfigProperty, this=self._parse_set()),
@@ -388,6 +391,9 @@ class Postgres(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            "BIT_AND": exp.BitwiseAndAgg.from_arg_list,
+            "BIT_OR": exp.BitwiseOrAgg.from_arg_list,
+            "BIT_XOR": exp.BitwiseXorAgg.from_arg_list,
             "DATE_TRUNC": build_timestamp_trunc,
             "DIV": lambda args: exp.cast(
                 binary_from_function(exp.IntDiv)(args), exp.DataType.Type.DECIMAL
@@ -420,6 +426,11 @@ class Postgres(Dialect):
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
             "DATE_PART": lambda self: self._parse_date_part(),
+            "JSON_AGG": lambda self: self.expression(
+                exp.JSONArrayAgg,
+                this=self._parse_lambda(),
+                order=self._parse_order(),
+            ),
             "JSONB_EXISTS": lambda self: self._parse_jsonb_exists(),
         }
 
@@ -450,13 +461,16 @@ class Postgres(Dialect):
 
         COLUMN_OPERATORS = {
             **parser.Parser.COLUMN_OPERATORS,
-            TokenType.ARROW: lambda self, this, path: build_json_extract_path(
-                exp.JSONExtract, arrow_req_json_type=self.JSON_ARROWS_REQUIRE_JSON_TYPE
-            )([this, path]),
-            TokenType.DARROW: lambda self, this, path: build_json_extract_path(
-                exp.JSONExtractScalar,
-                arrow_req_json_type=self.JSON_ARROWS_REQUIRE_JSON_TYPE,
-            )([this, path]),
+            TokenType.ARROW: lambda self, this, path: self.validate_expression(
+                build_json_extract_path(
+                    exp.JSONExtract, arrow_req_json_type=self.JSON_ARROWS_REQUIRE_JSON_TYPE
+                )([this, path])
+            ),
+            TokenType.DARROW: lambda self, this, path: self.validate_expression(
+                build_json_extract_path(
+                    exp.JSONExtractScalar, arrow_req_json_type=self.JSON_ARROWS_REQUIRE_JSON_TYPE
+                )([this, path])
+            ),
         }
 
         def _parse_query_parameter(self) -> t.Optional[exp.Expression]:
@@ -587,7 +601,10 @@ class Postgres(Dialect):
             exp.AnyValue: _versioned_anyvalue_sql,
             exp.ArrayConcat: lambda self, e: self.arrayconcat_sql(e, name="ARRAY_CAT"),
             exp.ArrayFilter: filter_array_using_unnest,
+            exp.BitwiseAndAgg: rename_func("BIT_AND"),
+            exp.BitwiseOrAgg: rename_func("BIT_OR"),
             exp.BitwiseXor: lambda self, e: self.binary(e, "#"),
+            exp.BitwiseXorAgg: rename_func("BIT_XOR"),
             exp.ColumnDef: transforms.preprocess([_auto_increment_to_serial, _serial_to_generated]),
             exp.CurrentDate: no_paren_current_date_sql,
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
@@ -602,6 +619,11 @@ class Postgres(Dialect):
                 self, e, func_name="STRING_AGG", within_group=False
             ),
             exp.IntDiv: rename_func("DIV"),
+            exp.JSONArrayAgg: lambda self, e: self.func(
+                "JSON_AGG",
+                self.sql(e, "this"),
+                suffix=f"{self.sql(e, 'order')})",
+            ),
             exp.JSONExtract: _json_extract_sql("JSON_EXTRACT_PATH", "->"),
             exp.JSONExtractScalar: _json_extract_sql("JSON_EXTRACT_PATH_TEXT", "->>"),
             exp.JSONBExtract: lambda self, e: self.binary(e, "#>"),

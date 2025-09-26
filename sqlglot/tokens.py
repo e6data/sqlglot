@@ -80,10 +80,15 @@ class TokenType(AutoName):
     AT_GT = auto()
     DOLLAR = auto()
     PARAMETER = auto()
+    SESSION = auto()
     SESSION_PARAMETER = auto()
     DAMP = auto()
     XOR = auto()
     DSTAR = auto()
+    QMARK_AMP = auto()
+    QMARK_PIPE = auto()
+    HASH_DASH = auto()
+    EXCLAMATION = auto()
 
     URI_START = auto()
 
@@ -233,7 +238,6 @@ class TokenType(AutoName):
     # keywords
     ALIAS = auto()
     ALTER = auto()
-    ALWAYS = auto()
     ALL = auto()
     ANTI = auto()
     ANY = auto()
@@ -310,6 +314,7 @@ class TokenType(AutoName):
     INDEX = auto()
     INNER = auto()
     INSERT = auto()
+    INSTALL = auto()
     INTERSECT = auto()
     INTERVAL = auto()
     INTO = auto()
@@ -376,6 +381,7 @@ class TokenType(AutoName):
     RENAME = auto()
     REPLACE = auto()
     RETURNING = auto()
+    REVOKE = auto()
     REFERENCES = auto()
     RIGHT = auto()
     RLIKE = auto()
@@ -394,6 +400,7 @@ class TokenType(AutoName):
     SIMILAR_TO = auto()
     SOME = auto()
     SORT_BY = auto()
+    SOUNDS_LIKE = auto()
     START_WITH = auto()
     STORAGE_INTEGRATION = auto()
     STRAIGHT_JOIN = auto()
@@ -422,6 +429,9 @@ class TokenType(AutoName):
     WINDOW = auto()
     WITH = auto()
     UNIQUE = auto()
+    UTC_DATE = auto()
+    UTC_TIME = auto()
+    UTC_TIMESTAMP = auto()
     VERSION_SNAPSHOT = auto()
     TIMESTAMP_SNAPSHOT = auto()
     OPTION = auto()
@@ -713,7 +723,6 @@ class Tokenizer(metaclass=_Tokenizer):
         "~~*": TokenType.ILIKE,
         "~*": TokenType.IRLIKE,
         "ALL": TokenType.ALL,
-        "ALWAYS": TokenType.ALWAYS,
         "AND": TokenType.AND,
         "ANTI": TokenType.ANTI,
         "ANY": TokenType.ANY,
@@ -839,6 +848,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "SCHEMA": TokenType.SCHEMA,
         "SELECT": TokenType.SELECT,
         "SEMI": TokenType.SEMI,
+        "SESSION": TokenType.SESSION,
         "SET": TokenType.SET,
         "SETTINGS": TokenType.SETTINGS,
         "SHOW": TokenType.SHOW,
@@ -977,6 +987,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "COMMENT": TokenType.COMMENT,
         "EXPLAIN": TokenType.COMMAND,
         "GRANT": TokenType.GRANT,
+        "REVOKE": TokenType.REVOKE,
         "OPTIMIZE": TokenType.COMMAND,
         "PREPARE": TokenType.COMMAND,
         "VACUUM": TokenType.COMMAND,
@@ -1430,7 +1441,7 @@ class Tokenizer(metaclass=_Tokenizer):
         self._advance(len(start))
         text = self._extract_string(end, raw_string=token_type == TokenType.RAW_STRING)
 
-        if base:
+        if base and text:
             try:
                 int(text, base)
             except Exception:
