@@ -60,7 +60,7 @@ try:
     else:
         logger.info("ℹ️ Rust tokenizer available but not enabled (set SQLGLOTRS_TOKENIZER=1 to enable)")
 except ImportError as e:
-    logger.warning("⚠️ Rust tokenizer module not available, using Python tokenizer: %s", str(e))
+    logger.error("⚠️ Rust tokenizer module not available, using Python tokenizer: %s", str(e))
 
 
 if ENABLE_GUARDRAIL.lower() == "true":
