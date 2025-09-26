@@ -17,19 +17,13 @@ from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
 
-# Initialize logging first
-setup_logger()
-logger = logging.getLogger(__name__)
-
 # Enable Rust tokenizer for better performance
-ENABLE_RUST_TOKENIZER = os.getenv("ENABLE_RUST_TOKENIZER", "true").lower() == "true"
-if ENABLE_RUST_TOKENIZER:
-    try:
-        import sqlglotrs
-        os.environ["SQLGLOTRS_TOKENIZER"] = "1"
-        logger.info("✅ Rust tokenizer enabled")
-    except ImportError:
-        logger.warning("⚠️ Rust tokenizer not available, using Python tokenizer")
+try:
+    import sqlglotrs
+    os.environ["SQLGLOTRS_TOKENIZER"] = "1"
+    print("✅ Rust tokenizer enabled")
+except ImportError:
+    print("⚠️ Rust tokenizer not available, using Python tokenizer")
 
 from apis.utils.helpers import (
     strip_comment,
@@ -53,6 +47,8 @@ from apis.utils.helpers import (
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
+setup_logger()
+
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
@@ -61,11 +57,7 @@ storage_service_client = None
 
 app = FastAPI()
 
-# Log tokenizer status
-if ENABLE_RUST_TOKENIZER and "SQLGLOTRS_TOKENIZER" in os.environ:
-    logger.info("Rust tokenizer is ENABLED")
-else:
-    logger.info("Using standard Python tokenizer")
+logger = logging.getLogger(__name__)
 
 
 if ENABLE_GUARDRAIL.lower() == "true":
@@ -80,7 +72,7 @@ logger.info("Storage Service Client is created")
 def escape_unicode(s: str) -> str:
     """
     Turn every non-ASCII (including all Unicode spaces) into \\uXXXX,
-    so even “invisible” characters become visible in logs.
+    so even "invisible" characters become visible in logs.
     """
     return s.encode("unicode_escape").decode("ascii")
 
@@ -141,38 +133,7 @@ async def convert_query(
         item = "condenast"
         query, comment = strip_comment(query, item)
 
-        # Test tokenization separately with fallback
-        from sqlglot.dialects import Dialect
-        tokenizer_type = "Rust" if os.environ.get("SQLGLOTRS_TOKENIZER") == "1" else "Python"
-
-        try:
-            dialect = Dialect.get_or_raise(from_sql)
-            tokens = dialect.tokenize(query)
-            logger.info("%s — Tokenized with %s (%d tokens)", query_id, tokenizer_type, len(tokens))
-        except Exception as e:
-            if tokenizer_type == "Rust":
-                logger.warning("%s — Rust tokenizer failed: %s, falling back to Python", query_id, str(e))
-                os.environ["SQLGLOTRS_TOKENIZER"] = "0"
-                dialect = Dialect.get_or_raise(from_sql)
-                tokens = dialect.tokenize(query)
-                tokenizer_type = "Python (fallback)"
-                os.environ["SQLGLOTRS_TOKENIZER"] = "1"
-                logger.info("%s — Tokenized with %s (%d tokens)", query_id, tokenizer_type, len(tokens))
-            else:
-                raise
-
-        import time
-        parse_start = time.time()
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-        parse_time = time.time() - parse_start
-
-        logger.info(
-            "%s AT %s — Parsed in %.4f seconds with %s tokenizer",
-            query_id,
-            timestamp,
-            parse_time,
-            tokenizer_type,
-        )
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
             # Check if we should only transform catalog.schema without full transpilation
@@ -415,37 +376,7 @@ async def stats_api(
             # ------------------------------
             # Step 1: Parse the Original Query
             # ------------------------------
-            # Test tokenization separately with fallback
-            from sqlglot.dialects import Dialect
-            tokenizer_type = "Rust" if os.environ.get("SQLGLOTRS_TOKENIZER") == "1" else "Python"
-
-            try:
-                dialect = Dialect.get_or_raise(from_sql)
-                tokens = dialect.tokenize(query)
-                logger.info("%s — Statistics tokenized with %s (%d tokens)", query_id, tokenizer_type, len(tokens))
-            except Exception as e:
-                if tokenizer_type == "Rust":
-                    logger.warning("%s — Rust tokenizer failed in statistics: %s, falling back to Python", query_id, str(e))
-                    os.environ["SQLGLOTRS_TOKENIZER"] = "0"
-                    dialect = Dialect.get_or_raise(from_sql)
-                    tokens = dialect.tokenize(query)
-                    tokenizer_type = "Python (fallback)"
-                    os.environ["SQLGLOTRS_TOKENIZER"] = "1"
-                    logger.info("%s — Statistics tokenized with %s (%d tokens)", query_id, tokenizer_type, len(tokens))
-                else:
-                    raise
-
-            import time
-            parse_start = time.time()
             original_ast = parse_one(query, read=from_sql)
-            parse_time = time.time() - parse_start
-
-            logger.info(
-                "%s — Statistics parsing completed in %.4f seconds with %s tokenizer",
-                query_id,
-                parse_time,
-                tokenizer_type,
-            )
             tables_list = extract_db_and_Table_names(original_ast)
             supported, unsupported = unsupported_functionality_identifiers(
                 original_ast, unsupported, supported
