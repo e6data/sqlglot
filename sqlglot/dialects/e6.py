@@ -1318,6 +1318,8 @@ class E6(Dialect):
         In this context, the AST would be structured as follows:
         """
 
+        COLON_IS_VARIANT_EXTRACT = True
+
         # Define the set of data types that are supported for casting operations in the E6 dialect.
 
         SUPPORTED_CAST_TYPES = {
@@ -2250,12 +2252,12 @@ class E6(Dialect):
             return self.func("TO_JSON", inner)
 
         def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
-            # Check if this is Databricks colon syntax (marked with json_query=True)
-            json_query_flag = getattr(e, "json_query", False) or e.args.get("json_query", False)
+            # Check if this is Databricks colon syntax (marked with variant_extract=True)
+            variant_extract_flag = getattr(e, "variant_extract", False) or e.args.get(
+                "variant_extract", False
+            )
 
-            if self.from_dialect == "databricks" and json_query_flag:
-                # Only preserve simple colon syntax for Databricks variant extraction
-                # Complex paths with brackets/subscripts should use JSON_EXTRACT
+            if self.from_dialect == "databricks" and variant_extract_flag:
                 if isinstance(e.expression, exp.JSONPath):
                     # Check if this is a simple path (only JSONPathRoot + single JSONPathKey)
                     path_expressions = e.expression.expressions

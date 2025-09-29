@@ -571,6 +571,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            'SELECT CAST(STAFF:is_active AS BOOLEAN) AS "staff_is_active" FROM silver_mongo.tms.staffs LIMIT 100',
+            read={
+                "databricks": "SELECT STAFF:is_active::boolean AS `staff_is_active` FROM silver_mongo.tms.staffs LIMIT 100"
+            },
+        )
+
+        self.validate_all(
             "TO_JSON(X)",
             read={
                 "presto": "JSON_FORMAT(CAST(X as JSON))",
