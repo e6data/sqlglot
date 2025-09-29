@@ -362,6 +362,7 @@ class Hive(Dialect):
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT": exp.RegexpSplit.from_arg_list,
+            "SPACE":exp.Space.from_arg_list,
             "STR_TO_MAP": lambda args: exp.StrToMap(
                 this=seq_get(args, 0),
                 pair_delim=seq_get(args, 1) or exp.Literal.string(","),
@@ -667,6 +668,7 @@ class Hive(Dialect):
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
             exp.DayOfMonth: rename_func("DAYOFMONTH"),
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
+            exp.Space: rename_func("SPACE"),
             exp.Levenshtein: unsupported_args("ins_cost", "del_cost", "sub_cost", "max_dist")(
                 rename_func("LEVENSHTEIN")
             ),

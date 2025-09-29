@@ -1359,7 +1359,7 @@ class BigQuery(Dialect):
             exp.IntDiv: rename_func("DIV"),
             exp.Int64: rename_func("INT64"),
             exp.JSONBool: rename_func("BOOL"),
-            exp.JSONExtract: _json_extract_sql,
+            exp.JSONExtract: json_extract_sql,
             exp.JSONExtractArray: _json_extract_sql,
             exp.JSONExtractScalar: _json_extract_sql,
             exp.JSONFormat: lambda self, e: self.func(
@@ -1441,6 +1441,9 @@ class BigQuery(Dialect):
             exp.Uuid: lambda *_: "GENERATE_UUID()",
             exp.Values: _derived_table_values_to_unnest,
             exp.VariancePop: rename_func("VAR_POP"),
+            exp.SafeAdd: rename_func("SAFE_ADD"),
+            exp.SafeMultiply: rename_func("SAFE_MULTIPLY"),
+            exp.SafeSubtract: rename_func("SAFE_SUBTRACT"),
             exp.SafeDivide: rename_func("SAFE_DIVIDE"),
         }
 

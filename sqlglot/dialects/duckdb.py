@@ -4,6 +4,7 @@ import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
 
+from sqlglot.expressions import DATA_TYPE
 from sqlglot.dialects.dialect import (
     Dialect,
     JSON_EXTRACT_TYPE,
@@ -15,7 +16,6 @@ from sqlglot.dialects.dialect import (
     bool_xor_sql,
     build_default_decimal_type,
     count_if_to_sum,
-    date_delta_to_binary_interval_op,
     date_trunc_to_time,
     datestrtodate_sql,
     no_datetime_sql,
@@ -32,6 +32,7 @@ from sqlglot.dialects.dialect import (
     str_to_time_sql,
     timestamptrunc_sql,
     timestrtotime_sql,
+    unit_to_var,
     unit_to_str,
     sha256_sql,
     build_regexp_extract,
@@ -344,8 +345,7 @@ class DuckDB(Dialect):
             "CHAR": TokenType.TEXT,
             "DATETIME": TokenType.TIMESTAMPNTZ,
             "DETACH": TokenType.DETACH,
-            "FORCE": TokenType.FORCE,
-            "INSTALL": TokenType.INSTALL,
+            "EXCLUDE": TokenType.EXCEPT,
             "LOGICAL": TokenType.BOOLEAN,
             "ONLY": TokenType.ONLY,
             "PIVOT_WIDER": TokenType.PIVOT,
@@ -407,12 +407,8 @@ class DuckDB(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
-            "ANY_VALUE": lambda args: exp.IgnoreNulls(this=exp.AnyValue.from_arg_list(args)),
             "ARRAY_REVERSE_SORT": _build_sort_array_desc,
             "ARRAY_SORT": exp.SortArray.from_arg_list,
-            "BIT_AND": exp.BitwiseAndAgg.from_arg_list,
-            "BIT_OR": exp.BitwiseOrAgg.from_arg_list,
-            "BIT_XOR": exp.BitwiseXorAgg.from_arg_list,
             "DATEDIFF": _build_date_diff,
             "DATE_DIFF": _build_date_diff,
             "DATE_TRUNC": date_trunc_to_time,
@@ -433,14 +429,10 @@ class DuckDB(Dialect):
             "JSON_EXTRACT_PATH": parser.build_extract_json_with_path(exp.JSONExtract),
             "JSON_EXTRACT_STRING": parser.build_extract_json_with_path(exp.JSONExtractScalar),
             "LIST_CONTAINS": exp.ArrayContains.from_arg_list,
-            "LIST_COSINE_DISTANCE": exp.CosineDistance.from_arg_list,
-            "LIST_DISTANCE": exp.EuclideanDistance.from_arg_list,
-            "LIST_FILTER": exp.ArrayFilter.from_arg_list,
             "LIST_HAS": exp.ArrayContains.from_arg_list,
             "LIST_HAS_ANY": exp.ArrayOverlaps.from_arg_list,
             "LIST_REVERSE_SORT": _build_sort_array_desc,
             "LIST_SORT": exp.SortArray.from_arg_list,
-            "LIST_TRANSFORM": exp.Transform.from_arg_list,
             "LIST_VALUE": lambda args: exp.Array(expressions=args),
             "MAKE_TIME": exp.TimeFromParts.from_arg_list,
             "MAKE_TIMESTAMP": _build_make_timestamp,
@@ -513,8 +505,6 @@ class DuckDB(Dialect):
             **parser.Parser.STATEMENT_PARSERS,
             TokenType.ATTACH: lambda self: self._parse_attach_detach(),
             TokenType.DETACH: lambda self: self._parse_attach_detach(is_attach=False),
-            TokenType.FORCE: lambda self: self._parse_force(),
-            TokenType.INSTALL: lambda self: self._parse_install(),
             TokenType.SHOW: lambda self: self._parse_show(),
         }
 
@@ -652,24 +642,6 @@ class DuckDB(Dialect):
         def _parse_show_duckdb(self, this: str) -> exp.Show:
             return self.expression(exp.Show, this=this)
 
-        def _parse_force(self) -> exp.Install | exp.Command:
-            # FORCE can only be followed by INSTALL or CHECKPOINT
-            # In the case of CHECKPOINT, we fallback
-            if not self._match(TokenType.INSTALL):
-                return self._parse_as_command(self._prev)
-
-            return self._parse_install(force=True)
-
-        def _parse_install(self, force: bool = False) -> exp.Install:
-            return self.expression(
-                exp.Install,
-                **{  # type: ignore
-                    "this": self._parse_id_var(),
-                    "from": self._parse_var_or_string() if self._match(TokenType.FROM) else None,
-                    "force": force,
-                },
-            )
-
         def _parse_primary(self) -> t.Optional[exp.Expression]:
             if self._match_pair(TokenType.HASH, TokenType.NUMBER):
                 return exp.PositionalColumn(this=exp.Literal.number(self._prev.text))
@@ -714,15 +686,8 @@ class DuckDB(Dialect):
             exp.ArrayRemove: remove_from_array_using_filter,
             exp.ArraySort: _array_sort_sql,
             exp.ArraySum: rename_func("LIST_SUM"),
-            exp.ArrayUniqueAgg: lambda self, e: self.func(
-                "LIST", exp.Distinct(expressions=[e.this])
-            ),
-            exp.BitwiseAndAgg: rename_func("BIT_AND"),
-            exp.BitwiseOrAgg: rename_func("BIT_OR"),
             exp.BitwiseXor: rename_func("XOR"),
-            exp.BitwiseXorAgg: rename_func("BIT_XOR"),
             exp.CommentColumnConstraint: no_comment_column_constraint_sql,
-            exp.CosineDistance: rename_func("LIST_COSINE_DISTANCE"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTime: lambda *_: "CURRENT_TIME",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
@@ -732,21 +697,20 @@ class DuckDB(Dialect):
             exp.DayOfYear: rename_func("DAYOFYEAR"),
             exp.DataType: _datatype_sql,
             exp.Date: _date_sql,
-            exp.DateAdd: date_delta_to_binary_interval_op(),
+            exp.DateAdd: _date_delta_sql,
             exp.DateFromParts: rename_func("MAKE_DATE"),
-            exp.DateSub: date_delta_to_binary_interval_op(),
+            exp.DateSub: _date_delta_sql,
             exp.DateDiff: _date_diff_sql,
             exp.DateStrToDate: datestrtodate_sql,
             exp.Datetime: no_datetime_sql,
-            exp.DatetimeSub: date_delta_to_binary_interval_op(),
-            exp.DatetimeAdd: date_delta_to_binary_interval_op(),
+            exp.DatetimeSub: _date_delta_sql,
+            exp.DatetimeAdd: _date_delta_sql,
             exp.DateToDi: lambda self,
             e: f"CAST(STRFTIME({self.sql(e, 'this')}, {DuckDB.DATEINT_FORMAT}) AS INT)",
             exp.Decode: lambda self, e: encode_decode_sql(self, e, "DECODE", replace=False),
             exp.DiToDate: lambda self,
             e: f"CAST(STRPTIME(CAST({self.sql(e, 'this')} AS TEXT), {DuckDB.DATEINT_FORMAT}) AS DATE)",
             exp.Encode: lambda self, e: encode_decode_sql(self, e, "ENCODE", replace=False),
-            exp.EuclideanDistance: rename_func("LIST_DISTANCE"),
             exp.GenerateDateArray: _generate_datetime_array_sql,
             exp.GenerateTimestampArray: _generate_datetime_array_sql,
             exp.GroupConcat: lambda self, e: groupconcat_sql(self, e, within_group=False),
@@ -802,7 +766,7 @@ class DuckDB(Dialect):
             ),
             exp.Struct: _struct_sql,
             exp.Transform: rename_func("LIST_TRANSFORM"),
-            exp.TimeAdd: date_delta_to_binary_interval_op(),
+            exp.TimeAdd: _date_delta_sql,
             exp.Time: no_time_sql,
             exp.TimeDiff: _timediff_sql,
             exp.Timestamp: no_timestamp_sql,
@@ -819,7 +783,7 @@ class DuckDB(Dialect):
             exp.TimeToUnix: rename_func("EPOCH"),
             exp.TsOrDiToDi: lambda self,
             e: f"CAST(SUBSTR(REPLACE(CAST({self.sql(e, 'this')} AS TEXT), '-', ''), 1, 8) AS INT)",
-            exp.TsOrDsAdd: date_delta_to_binary_interval_op(),
+            exp.TsOrDsAdd: _date_delta_sql,
             exp.TsOrDsDiff: lambda self, e: self.func(
                 "DATE_DIFF",
                 f"'{e.args.get('unit') or 'DAY'}'",
@@ -969,7 +933,6 @@ class DuckDB(Dialect):
         PROPERTIES_LOCATION[exp.LikeProperty] = exp.Properties.Location.POST_SCHEMA
         PROPERTIES_LOCATION[exp.TemporaryProperty] = exp.Properties.Location.POST_CREATE
         PROPERTIES_LOCATION[exp.ReturnsProperty] = exp.Properties.Location.POST_ALIAS
-        PROPERTIES_LOCATION[exp.SequenceProperties] = exp.Properties.Location.POST_EXPRESSION
 
         IGNORE_RESPECT_NULLS_WINDOW_FUNCTIONS = (
             exp.FirstValue,
@@ -994,13 +957,6 @@ class DuckDB(Dialect):
 
         def show_sql(self, expression: exp.Show) -> str:
             return f"SHOW {expression.name}"
-
-        def install_sql(self, expression: exp.Install) -> str:
-            force = "FORCE " if expression.args.get("force") else ""
-            this = self.sql(expression, "this")
-            from_clause = expression.args.get("from")
-            from_clause = f" FROM {from_clause}" if from_clause else ""
-            return f"{force}INSTALL {this}{from_clause}"
 
         def fromiso8601timestamp_sql(self, expression: exp.FromISO8601Timestamp) -> str:
             return self.sql(exp.cast(expression.this, exp.DataType.Type.TIMESTAMPTZ))
@@ -1076,18 +1032,13 @@ class DuckDB(Dialect):
 
         def join_sql(self, expression: exp.Join) -> str:
             if (
-                not expression.args.get("using")
+                expression.side == "LEFT"
                 and not expression.args.get("on")
-                and not expression.method
-                and (expression.kind in ("", "INNER", "OUTER"))
+                and isinstance(expression.this, exp.Unnest)
             ):
-                # Some dialects support `LEFT/INNER JOIN UNNEST(...)` without an explicit ON clause
+                # Some dialects support `LEFT JOIN UNNEST(...)` without an explicit ON clause
                 # DuckDB doesn't, but we can just add a dummy ON clause that is always true
-                if isinstance(expression.this, exp.Unnest):
-                    return super().join_sql(expression.on(exp.true()))
-
-                expression.args.pop("side", None)
-                expression.args.pop("kind", None)
+                return super().join_sql(expression.on(exp.true()))
 
             return super().join_sql(expression)
 
@@ -1199,10 +1150,9 @@ class DuckDB(Dialect):
 
                 # If BQ's UNNEST is aliased, we transform it from a column alias to a table alias in DDB
                 alias = expression.args.get("alias")
-                if isinstance(alias, exp.TableAlias):
+                if alias:
                     expression.set("alias", None)
-                    if alias.columns:
-                        alias = exp.TableAlias(this=seq_get(alias.columns, 0))
+                    alias = exp.TableAlias(this=seq_get(alias.args.get("columns"), 0))
 
                 unnest_sql = super().unnest_sql(expression)
                 select = exp.Select(expressions=[unnest_sql]).subquery(alias)
@@ -1211,20 +1161,13 @@ class DuckDB(Dialect):
             return super().unnest_sql(expression)
 
         def ignorenulls_sql(self, expression: exp.IgnoreNulls) -> str:
-            this = expression.this
-
-            if isinstance(this, self.IGNORE_RESPECT_NULLS_WINDOW_FUNCTIONS):
+            if isinstance(expression.this, self.IGNORE_RESPECT_NULLS_WINDOW_FUNCTIONS):
                 # DuckDB should render IGNORE NULLS only for the general-purpose
                 # window functions that accept it e.g. FIRST_VALUE(... IGNORE NULLS) OVER (...)
                 return super().ignorenulls_sql(expression)
 
-            if isinstance(this, exp.First):
-                this = exp.AnyValue(this=this.this)
-
-            if not isinstance(this, exp.AnyValue):
-                self.unsupported("IGNORE NULLS is not supported for non-window functions.")
-
-            return self.sql(this)
+            self.unsupported("IGNORE NULLS is not supported for non-window functions.")
+            return self.sql(expression, "this")
 
         def respectnulls_sql(self, expression: exp.RespectNulls) -> str:
             if isinstance(expression.this, self.IGNORE_RESPECT_NULLS_WINDOW_FUNCTIONS):
@@ -1318,33 +1261,3 @@ class DuckDB(Dialect):
                 return self.sql(exp.Subquery(this=exp.Select(expressions=[posexplode_sql])))
 
             return posexplode_sql
-
-        def addmonths_sql(self, expression: exp.AddMonths) -> str:
-            this = expression.this
-
-            if not this.type:
-                from sqlglot.optimizer.annotate_types import annotate_types
-
-                this = annotate_types(this, dialect=self.dialect)
-
-            if this.is_type(*exp.DataType.TEXT_TYPES):
-                this = exp.Cast(this=this, to=exp.DataType(this=exp.DataType.Type.TIMESTAMP))
-
-            func = self.func(
-                "DATE_ADD", this, exp.Interval(this=expression.expression, unit=exp.var("MONTH"))
-            )
-
-            # DuckDB's DATE_ADD function returns TIMESTAMP/DATETIME by default, even when the input is DATE
-            # To match for example Snowflake's ADD_MONTHS behavior (which preserves the input type)
-            # We need to cast the result back to the original type when the input is DATE or TIMESTAMPTZ
-            # Example: ADD_MONTHS('2023-01-31'::date, 1) should return DATE, not TIMESTAMP
-            if this.is_type(exp.DataType.Type.DATE, exp.DataType.Type.TIMESTAMPTZ):
-                return self.sql(exp.Cast(this=func, to=this.type))
-
-            return self.sql(func)
-
-        def format_sql(self, expression: exp.Format) -> str:
-            if expression.name.lower() == "%s" and len(expression.expressions) == 1:
-                return self.func("FORMAT", "'{}'", expression.expressions[0])
-
-            return self.function_fallback_sql(expression)

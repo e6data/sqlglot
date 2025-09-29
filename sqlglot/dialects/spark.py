@@ -242,6 +242,7 @@ class Spark(Spark2):
             exp.TryCast: lambda self, e: (
                 self.trycast_sql(e) if e.args.get("safe") else self.cast_sql(e)
             ),
+            exp.Space: rename_func("SPACE"),
         }
         TRANSFORMS.pop(exp.AnyValue)
         TRANSFORMS.pop(exp.DateDiff)
