@@ -1712,6 +1712,16 @@ def date_delta_to_binary_interval_op(
         expr = expression.expression
         interval = expr if isinstance(expr, exp.Interval) else exp.Interval(this=expr, unit=unit)
 
+        # Handle negative intervals: convert TsOrDsAdd with negative interval to subtraction
+        if (isinstance(expression, exp.TsOrDsAdd) and
+            isinstance(interval.this, exp.Mul) and
+            isinstance(interval.this.expression, exp.Literal) and
+            interval.this.expression.is_int and
+            int(interval.this.expression.this) < 0):
+            # Convert x + INTERVAL (7 * -1) DAY to x - INTERVAL 7 DAY
+            positive_interval = exp.Interval(this=interval.this.this, unit=unit)
+            op = "-"
+            interval = positive_interval
         return f"{self.sql(this)} {op} {self.sql(interval)}"
 
     return date_delta_to_binary_interval_op_sql

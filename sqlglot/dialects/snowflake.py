@@ -736,7 +736,12 @@ class Snowflake(Dialect):
                 max_dist=seq_get(args, 2),
             ),
             "FLATTEN": exp.Explode.from_arg_list,
-            "GET": exp.GetExtract.from_arg_list,
+            "GET": lambda args: exp.Bracket(
+                this=seq_get(args, 0),
+                expressions=[seq_get(args, 1)],
+                offset=0,
+                safe=True,
+            ),
             "GET_PATH": lambda args, dialect: exp.JSONExtract(
                 this=seq_get(args, 0),
                 expression=dialect.to_json_path(seq_get(args, 1)),
@@ -745,7 +750,7 @@ class Snowflake(Dialect):
             "HEX_DECODE_BINARY": exp.Unhex.from_arg_list,
             "IFF": exp.If.from_arg_list,
             "MD5_HEX": exp.MD5.from_arg_list,
-            "MD5_BINARY": exp.MD5Digest.from_arg_list,
+            "MD5_BINARY": exp.MD5Binary.from_arg_list,
             "MD5_NUMBER_LOWER64": exp.MD5NumberLower64.from_arg_list,
             "MD5_NUMBER_UPPER64": exp.MD5NumberUpper64.from_arg_list,
             "LAST_DAY": lambda args: exp.LastDay(
@@ -1491,7 +1496,7 @@ class Snowflake(Dialect):
             exp.SHA: rename_func("SHA1"),
             exp.SHA2: rename_func("SHA2"),
             exp.SplitPart: rename_func("SPLIT_PART"),
-            exp.MD5Digest: rename_func("MD5_BINARY"),
+            exp.MD5Binary: rename_func("MD5_BINARY"),
             exp.MD5NumberLower64: rename_func("MD5_NUMBER_LOWER64"),
             exp.MD5NumberUpper64: rename_func("MD5_NUMBER_UPPER64"),
             exp.LowerHex: rename_func("TO_CHAR"),

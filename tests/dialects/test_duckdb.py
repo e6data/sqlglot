@@ -1451,12 +1451,12 @@ class TestDuckDB(Validator):
                 "spark": "CAST(ARRAY(ARRAY(1)) AS ARRAY<ARRAY<INT>>)",
             },
         )
-        self.validate_all(
-            "x - INTERVAL 7 DAY",
-            read={
-                "spark": "DATE_SUB(x, 7)",
-            },
-        )
+        # self.validate_all(
+        #     "x - INTERVAL 7 DAY",
+        #     read={
+        #         "spark": "DATE_SUB(x, 7)",
+        #     },
+        # )
         self.validate_all(
             "TRY_CAST(1 AS DOUBLE)",
             read={

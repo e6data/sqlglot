@@ -7108,6 +7108,9 @@ class Max(AggFunc):
     is_var_len_args = True
 
 
+class MD5Binary(Func):
+    _sql_names = ["MD5_BINARY"]
+
 class MD5(Func):
     _sql_names = ["MD5"]
 
