@@ -415,12 +415,7 @@ class TestOptimizer(unittest.TestCase):
                     schema={
                         "t1": {"id": "int64", "dt": "date", "common": "int64"},
                         "lkp": {"id": "int64", "other_id": "int64", "common": "int64"},
-                        "t2": {
-                            "other_id": "int64",
-                            "dt": "date",
-                            "v": "int64",
-                            "common": "int64",
-                        },
+                        "t2": {"other_id": "int64", "dt": "date", "v": "int64", "common": "int64"},
                     },
                     dialect="bigquery",
                 ),
@@ -791,10 +786,7 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
         WHERE s.b > (SELECT MAX(x.a) FROM x WHERE x.b = s.b)
         """
         expression = parse_one(sql)
-        for scopes in (
-            traverse_scope(expression),
-            list(build_scope(expression).traverse()),
-        ):
+        for scopes in traverse_scope(expression), list(build_scope(expression).traverse()):
             self.assertEqual(len(scopes), 7)
             self.assertEqual(scopes[0].expression.sql(), "SELECT x.b FROM x")
             self.assertEqual(scopes[1].expression.sql(), "SELECT y.b FROM y")
@@ -831,10 +823,7 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
         # Check that parentheses don't introduce a new scope unless an alias is attached
         sql = "SELECT * FROM (((SELECT * FROM (t1 JOIN t2) AS t3) JOIN (SELECT * FROM t4)))"
         expression = parse_one(sql)
-        for scopes in (
-            traverse_scope(expression),
-            list(build_scope(expression).traverse()),
-        ):
+        for scopes in traverse_scope(expression), list(build_scope(expression).traverse()):
             self.assertEqual(len(scopes), 4)
 
             self.assertEqual(scopes[0].expression.sql(), "t1, t2")
@@ -857,10 +846,7 @@ FROM READ_CSV('tests/fixtures/optimizer/tpc-h/nation.csv.gz', 'delimiter', '|') 
             sql = f"SELECT a FROM foo CROSS JOIN {udtf}"
             expression = parse_one(sql)
 
-            for scopes in (
-                traverse_scope(expression),
-                list(build_scope(expression).traverse()),
-            ):
+            for scopes in traverse_scope(expression), list(build_scope(expression).traverse()):
                 self.assertEqual(len(scopes), 3)
 
                 self.assertEqual(scopes[0].expression.sql(), inner_query)

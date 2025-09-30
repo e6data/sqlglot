@@ -6482,6 +6482,25 @@ class FromBase32(Func):
 class FromBase64(Func):
     pass
 
+# https://docs.snowflake.com/en/sql-reference/functions/try_base64_decode_binary
+class TryBase64DecodeBinary(Func):
+    arg_types = {"this": True, "alphabet": False}
+
+
+# https://docs.snowflake.com/en/sql-reference/functions/try_base64_decode_string
+class TryBase64DecodeString(Func):
+    arg_types = {"this": True, "alphabet": False}
+
+
+# https://docs.snowflake.com/en/sql-reference/functions/try_hex_decode_binary
+class TryHexDecodeBinary(Func):
+    pass
+
+
+# https://docs.snowflake.com/en/sql-reference/functions/try_hex_decode_string
+class TryHexDecodeString(Func):
+    pass
+
 
 class FeaturesAtTime(Func):
     arg_types = {
@@ -6962,6 +6981,8 @@ class JSONArrayInsert(Func):
     is_var_len_args = True
     _sql_names = ["JSON_ARRAY_INSERT"]
 
+class ParseIp(Func):
+    arg_types = {"this": True, "type": True, "permissive": False}
 
 class ParseBignumeric(Func):
     pass
@@ -7008,6 +7029,8 @@ class Right(Func):
 class Reverse(Func):
     pass
 
+class RtrimmedLength(Func):
+    pass
 
 class Length(Func):
     arg_types = {"this": True, "binary": False, "encoding": False}

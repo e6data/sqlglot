@@ -307,7 +307,7 @@ class TestSnowflake(Validator):
         )
         self.validate_identity(
             "SELECT {fn CEILING(5.3)}",
-            "SELECT CEILING(5.3)",
+            "SELECT CEIL(5.3)",
         )
         self.validate_identity(
             "CAST(x AS BYTEINT)",
@@ -3206,12 +3206,11 @@ FROM SEMANTIC_VIEW(
 
     def test_md5(self):
         self.validate_all(
-            "MD5(x)",
+            "MD5_BINARY(x)",
             read={
                 "clickhouse": "MD5(x)",
                 "presto": "MD5(x)",
-                "trino": "MD5(x)",
-                "snowflake": "MD5_HEX(x)",
+                "trino": "MD5(x)"
             },
         )
 

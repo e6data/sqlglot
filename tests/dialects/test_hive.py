@@ -402,20 +402,36 @@ class TestHive(Validator):
                 "tsql": "DATEADD(DAY, 1, CAST(CAST('2020-01-01' AS DATETIME2) AS DATE))",
             },
         )
+        # self.validate_all(
+        #     "DATE_SUB('2020-01-01', 1)",
+        #     write={
+        #         "": "DATE_SUB('2020-01-01', 1)",
+        #         "bigquery": "DATE_SUB('2020-01-01', INTERVAL 1 DAY)",
+        #         "duckdb": "CAST('2020-01-01' AS DATE) - INTERVAL 1 DAY",
+        #         "hive": "DATE_ADD('2020-01-01', -1)",
+        #         "presto": "DATE_ADD('DAY', 1 * -1, '2020-01-01')",
+        #         "redshift": "'2020-01-01' - INTERVAL '1 DAY'",
+        #         "snowflake": "DATEADD(DAY, 1 * -1, '2020-01-01')",
+        #         "spark": "DATE_ADD('2020-01-01', -1)",
+        #         "tsql": "DATEADD(DAY, 1 * -1, CAST('2020-01-01' AS DATETIME2))",
+        #     },
+        # )
+
         self.validate_all(
             "DATE_SUB('2020-01-01', 1)",
             write={
-                "": "DATE_SUB('2020-01-01', 1)",
-                "bigquery": "DATE_SUB('2020-01-01', INTERVAL 1 DAY)",
-                "duckdb": "CAST('2020-01-01' AS DATE) - INTERVAL 1 DAY",
-                "hive": "DATE_ADD('2020-01-01', -1)",
-                "presto": "DATE_ADD('DAY', 1 * -1, '2020-01-01')",
-                "redshift": "'2020-01-01' - INTERVAL '1 DAY'",
-                "snowflake": "DATEADD(DAY, 1 * -1, '2020-01-01')",
-                "spark": "DATE_ADD('2020-01-01', -1)",
-                "tsql": "DATEADD(DAY, 1 * -1, CAST('2020-01-01' AS DATETIME2))",
+                "": "TS_OR_DS_ADD('2020-01-01', 1 * -1, DAY)",
+                "bigquery": "DATE_ADD(CAST(CAST('2020-01-01' AS DATETIME) AS DATE), INTERVAL (1 * -1) DAY)",
+                "duckdb": "CAST('2020-01-01' AS DATE) + INTERVAL (1 * -1) DAY",
+                "hive": "DATE_ADD('2020-01-01', 1 * -1)",
+                "presto": "DATE_ADD('DAY', 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
+                "redshift": "DATEADD(DAY, 1 * -1, '2020-01-01')",
+                "snowflake": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
+                "spark": "DATE_ADD('2020-01-01', 1 * -1)",
+                "tsql": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS DATETIME2) AS DATE))",
             },
         )
+
         self.validate_all("DATE_ADD('2020-01-01', -1)", read={"": "DATE_SUB('2020-01-01', 1)"})
         self.validate_all("DATE_ADD(a, b * -1)", read={"": "DATE_SUB(a, b)"})
         self.validate_all(

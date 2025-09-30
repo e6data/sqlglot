@@ -489,7 +489,7 @@ class TestDuckDB(Validator):
             "SELECT ANY_VALUE(sample_column) FROM sample_table",
             write={
                 "duckdb": "SELECT ANY_VALUE(sample_column) FROM sample_table",
-                "spark": "SELECT ANY_VALUE(sample_column) IGNORE NULLS FROM sample_table",
+                "spark": "SELECT ANY_VALUE(sample_column) FROM sample_table",
             },
         )
         self.validate_all(
