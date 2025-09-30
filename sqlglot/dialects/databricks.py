@@ -135,11 +135,8 @@ class Databricks(Spark):
         def _parse_colon_as_variant_extract(
             self, this: t.Optional[exp.Expression]
         ) -> t.Optional[exp.Expression]:
-            """Override to set json_query=True for Databricks colon syntax"""
+            """Override for Databricks colon syntax - variant_extract flag is set by parent"""
             result = super()._parse_colon_as_variant_extract(this)
-            if isinstance(result, exp.JSONExtract):
-                result.set("json_query", True)
-
             return result
 
     class Generator(Spark.Generator):
