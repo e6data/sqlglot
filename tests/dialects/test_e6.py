@@ -1694,7 +1694,7 @@ class TestE6(Validator):
                 "clickhouse": "SELECT MD5('E6')",
                 "presto": "SELECT MD5('E6')",
                 "trino": "SELECT MD5('E6')",
-                "snowflake": "SELECT MD5('E6')",
+                "snowflake": "SELECT MD5_BINARY('E6')",
                 "databricks": "SELECT UNHEX(MD5('E6'))",
             },
         )
