@@ -2477,11 +2477,17 @@ class E6(Dialect):
             exp.TryCast: lambda self, e: self.func(
                 "TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"
             ),
-            exp.TsOrDsAdd: lambda self, e: self.func(
-                "DATE_ADD",
-                unit_to_str(e),
-                _to_int(e.expression),
-                e.this,
+            exp.TsOrDsAdd: lambda self, e: (
+                self.func("DATE_SUB", e.this, e.expression.this.this)
+                if isinstance(e.expression, exp.Mul) and
+                   isinstance(e.expression.expression, exp.Literal) and
+                   str(e.expression.expression.this) == '-1'
+                else self.func(
+                    "DATE_ADD",
+                    unit_to_str(e),
+                    _to_int(e.expression),
+                    e.this,
+                )
             ),
             exp.TsOrDsDiff: lambda self, e: self.func(
                 "DATE_DIFF",
