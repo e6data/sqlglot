@@ -31,6 +31,7 @@ class TestSnowflake(Validator):
 
         self.validate_identity("SELECT BIT_LENGTH('abc')")
         self.validate_identity("SELECT BIT_LENGTH(x'A1B2')")
+        self.validate_identity("SELECT RTRIMMED_LENGTH(' ABCD ')")
         self.validate_identity("SELECT HEX_DECODE_STRING('48656C6C6F')")
         self.validate_identity("SELECT HEX_ENCODE('Hello World')")
         self.validate_identity("SELECT HEX_ENCODE('Hello World', 1)")
@@ -41,7 +42,14 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT DECOMPRESS_STRING('compressed_data', 'ZSTD')")
         self.validate_identity("SELECT LPAD('Hello', 10, '*')")
         self.validate_identity("SELECT LPAD(tbl.bin_col, 10)")
+        self.validate_identity("SELECT RPAD('Hello', 10, '*')")
+        self.validate_identity("SELECT RPAD(tbl.bin_col, 10)")
+        self.validate_identity("SELECT SOUNDEX(column_name)")
+        self.validate_identity("SELECT SOUNDEX_P123(column_name)")
         self.validate_identity("SELECT JAROWINKLER_SIMILARITY('hello', 'world')")
+        self.validate_identity("SELECT TRANSLATE(column_name, 'abc', '123')")
+        self.validate_identity("SELECT UNICODE(column_name)")
+        self.validate_identity("SELECT SPLIT_PART('11.22.33', '.', 1)")
         self.validate_identity("PARSE_URL('https://example.com/path')")
         self.validate_identity("PARSE_URL('https://example.com/path', 1)")
         self.validate_identity("SELECT {*} FROM my_table")
@@ -113,9 +121,26 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT TO_CHAR(CAST('12:05:05' AS TIME))")
         self.validate_identity("SELECT TRIM(COALESCE(TO_CHAR(CAST(c AS TIME)), '')) FROM t")
         self.validate_identity("SELECT GET_PATH(PARSE_JSON(foo), 'bar')")
+        self.validate_identity("SELECT PARSE_IP('192.168.1.1', 'INET')")
+        self.validate_identity("SELECT PARSE_IP('192.168.1.1', 'INET', 0)")
         self.validate_identity("SELECT GET_PATH(foo, 'bar')")
         self.validate_identity("SELECT a, exclude, b FROM xxx")
         self.validate_identity("SELECT ARRAY_SORT(x, TRUE, FALSE)")
+        self.validate_identity(
+            "SELECT DATEADD(DAY, -7, DATEADD(t.m, 1, CAST('2023-01-03' AS DATE))) FROM (SELECT 'month' AS m) AS t"
+        ).selects[0].this.unit.assert_is(exp.Column)
+        self.validate_identity(
+            "SELECT STRTOK('hello world')", "SELECT SPLIT_PART('hello world', ' ', 1)"
+        )
+        self.validate_identity(
+            "SELECT STRTOK('hello world', ' ')", "SELECT SPLIT_PART('hello world', ' ', 1)"
+        )
+        self.validate_identity(
+            "SELECT STRTOK('hello world', ' ', 2)", "SELECT SPLIT_PART('hello world', ' ', 2)"
+        )
+        self.validate_identity("SELECT FILE_URL FROM DIRECTORY(@mystage) WHERE SIZE > 100000").args[
+            "from"
+        ].this.this.assert_is(exp.DirectoryStage).this.assert_is(exp.Var)
         self.validate_identity(
             "SELECT AI_CLASSIFY('text', ['travel', 'cooking'], OBJECT_CONSTRUCT('output_mode', 'multi'))"
         )
@@ -1022,6 +1047,24 @@ class TestSnowflake(Validator):
             },
         )
         self.validate_all(
+            "'foo' REGEXP 'bar'",
+            write={
+                "snowflake": "REGEXP_LIKE('foo', 'bar')",
+                "postgres": "'foo' ~ 'bar'",
+                "mysql": "REGEXP_LIKE('foo', 'bar')",
+                "bigquery": "REGEXP_CONTAINS('foo', 'bar')",
+            },
+        )
+        self.validate_all(
+            "'foo' NOT REGEXP 'bar'",
+            write={
+                "snowflake": "NOT REGEXP_LIKE('foo', 'bar')",
+                "postgres": "NOT 'foo' ~ 'bar'",
+                "mysql": "NOT REGEXP_LIKE('foo', 'bar')",
+                "bigquery": "NOT REGEXP_CONTAINS('foo', 'bar')",
+            },
+        )
+        self.validate_all(
             "SELECT a FROM test pivot",
             write={
                 "snowflake": "SELECT a FROM test AS pivot",
@@ -1389,6 +1432,20 @@ class TestSnowflake(Validator):
                 "bigquery": "CAST(A AS STRING)",
             },
         )
+
+        self.validate_identity("SELECT TRY_BASE64_DECODE_BINARY('SGVsbG8=')")
+        self.validate_identity(
+            "SELECT TRY_BASE64_DECODE_BINARY('SGVsbG8=', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/')"
+        )
+
+        self.validate_identity("SELECT TRY_BASE64_DECODE_STRING('SGVsbG8gV29ybGQ=')")
+        self.validate_identity(
+            "SELECT TRY_BASE64_DECODE_STRING('SGVsbG8gV29ybGQ=', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/')"
+        )
+
+        self.validate_identity("SELECT TRY_HEX_DECODE_BINARY('48656C6C6F')")
+
+        self.validate_identity("SELECT TRY_HEX_DECODE_STRING('48656C6C6F')")
 
     def test_null_treatment(self):
         self.validate_all(
@@ -2404,6 +2461,10 @@ FROM persons AS p, LATERAL FLATTEN(input => p.c, path => 'contact') AS _flattene
             "REGEXP_SUBSTR_ALL(subject, pattern)",
             "REGEXP_EXTRACT_ALL(subject, pattern)",
         )
+
+        self.validate_identity("SELECT REGEXP_COUNT('hello world', 'l')")
+        self.validate_identity("SELECT REGEXP_COUNT('hello world', 'l', 1)")
+        self.validate_identity("SELECT REGEXP_COUNT('hello world', 'l', 1, 'i')")
 
     @mock.patch("sqlglot.generator.logger")
     def test_regexp_replace(self, logger):

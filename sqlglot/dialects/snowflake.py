@@ -41,7 +41,18 @@ if t.TYPE_CHECKING:
     from sqlglot._typing import E, B
 
 
-# from https://docs.snowflake.com/en/sql-reference/functions/to_timestamp.html
+def _build_strtok(args: t.List) -> exp.SplitPart:
+    # Add default delimiter (space) if missing - per Snowflake docs
+    if len(args) == 1:
+        args.append(exp.Literal.string(" "))
+
+    # Add default part_index (1) if missing
+    if len(args) == 2:
+        args.append(exp.Literal.number(1))
+
+    return exp.SplitPart.from_arg_list(args)
+
+
 def _build_datetime(
     name: str, kind: exp.DataType.Type, safe: bool = False
 ) -> t.Callable[[t.List], exp.Func]:
@@ -541,6 +552,7 @@ class Snowflake(Dialect):
             exp.Levenshtein,
             exp.JarowinklerSimilarity,
             exp.StrPosition,
+            exp.Unicode,
         },
         exp.DataType.Type.VARCHAR: {
             *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.VARCHAR],
@@ -565,7 +577,11 @@ class Snowflake(Dialect):
             exp.Replace,
             exp.SHA,
             exp.SHA2,
+            exp.Soundex,
+            exp.SoundexP123,
             exp.Space,
+            exp.SplitPart,
+            exp.Translate,
             exp.Uuid,
         },
         exp.DataType.Type.BINARY: {
@@ -587,13 +603,12 @@ class Snowflake(Dialect):
         },
         exp.DataType.Type.ARRAY: {
             exp.Split,
+            exp.RegexpExtractAll,
+            exp.StringToArray,
         },
         exp.DataType.Type.OBJECT: {
             exp.ParseUrl,
             exp.ParseIp,
-        },
-        exp.DataType.Type.DECIMAL: {
-            exp.RegexpCount,
         },
     }
 
@@ -614,11 +629,17 @@ class Snowflake(Dialect):
                 exp.Substring,
             )
         },
+        **{
+            expr_type: lambda self, e: self._annotate_with_type(
+                e, exp.DataType.build("NUMBER", dialect="snowflake")
+            )
+            for expr_type in (
+                exp.RegexpCount,
+                exp.RegexpInstr,
+            )
+        },
         exp.ConcatWs: lambda self, e: self._annotate_by_args(e, "expressions"),
         exp.Reverse: _annotate_reverse,
-        exp.RegexpCount: lambda self, e: self._annotate_with_type(
-            e, exp.DataType.build("NUMBER", dialect="snowflake")
-        ),
     }
 
     TIME_MAPPING = {
@@ -776,6 +797,7 @@ class Snowflake(Dialect):
             "SHA2_BINARY": exp.SHA2Digest.from_arg_list,
             "SHA2_HEX": exp.SHA2.from_arg_list,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
+            "STRTOK": _build_strtok,
             "TABLE": lambda args: exp.TableFromRows(this=seq_get(args, 0)),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "TIMEADD": _build_date_time_add(exp.TimeAdd),
@@ -819,6 +841,7 @@ class Snowflake(Dialect):
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
             "DATE_PART": lambda self: self._parse_date_part(),
+            "DIRECTORY": lambda self: self._parse_directory(),
             "OBJECT_CONSTRUCT_KEEP_NULL": lambda self: self._parse_json_object(),
             "LISTAGG": lambda self: self._parse_string_agg(),
             "SEMANTIC_VIEW": lambda self: self._parse_semantic_view(),
@@ -927,6 +950,14 @@ class Snowflake(Dialect):
                 exp.ModelAttribute, this=this, expression=attr
             ),
         }
+
+        def _parse_directory(self) -> exp.DirectoryStage:
+            table = self._parse_table_parts()
+
+            if isinstance(table, exp.Table):
+                table = table.this
+
+            return self.expression(exp.DirectoryStage, this=table)
 
         def _parse_use(self) -> exp.Use:
             if self._match_text_seq("SECONDARY", "ROLES"):
@@ -1915,3 +1946,13 @@ class Snowflake(Dialect):
                 return self.func("TO_CHAR", expression.expressions[0])
 
             return self.function_fallback_sql(expression)
+
+        def splitpart_sql(self, expression: exp.SplitPart) -> str:
+            # Set part_index to 1 if missing
+            if not expression.args.get("delimiter"):
+                expression.set("delimiter", exp.Literal.string(" "))
+
+            if not expression.args.get("part_index"):
+                expression.set("part_index", exp.Literal.number(1))
+
+            return rename_func("SPLIT_PART")(self, expression)

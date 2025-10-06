@@ -1652,6 +1652,18 @@ LPAD(tbl.bin_col, 10, 0x20);
 BINARY;
 
 # dialect: snowflake
+RPAD('Hello', 10, '*');
+VARCHAR;
+
+# dialect: snowflake
+RPAD(tbl.str_col, 10);
+VARCHAR;
+
+# dialect: snowflake
+RPAD(tbl.bin_col, 10, 0x20);
+BINARY;
+
+# dialect: snowflake
 COLLATION('hello');
 VARCHAR;
 
@@ -1816,6 +1828,18 @@ PARSE_URL(tbl.str_col, 0);
 OBJECT;
 
 # dialect: snowflake
+POSITION('abc' IN 'abcdef');
+INT;
+
+# dialect: snowflake
+POSITION('abc', 'abcdef');
+INT;
+
+# dialect: snowflake
+POSITION('abc', 'abcdef', 1);
+INT;
+
+# dialect: snowflake
 LOWER(tbl.str_col);
 VARCHAR;
 
@@ -1832,6 +1856,18 @@ LTRIM(NULL);
 VARCHAR;
 
 # dialect: snowflake
+'foo' REGEXP 'bar';
+BOOLEAN;
+
+# dialect: snowflake
+'foo' NOT REGEXP 'bar';
+BOOLEAN;
+
+# dialect: snowflake
+'text123' REGEXP '^[a-z]+[0-9]+$';
+BOOLEAN;
+
+# dialect: snowflake
 REGEXP_LIKE('foo', 'bar');
 BOOLEAN;
 
@@ -1846,6 +1882,54 @@ BOOLEAN;
 # dialect: snowflake
 REGEXP_LIKE('foo', NULL, 'baz');
 BOOLEAN;
+
+# dialect: snowflake
+REGEXP_COUNT('hello world', 'l');
+DECIMAL(38, 0);
+
+# dialect: snowflake
+REGEXP_COUNT('hello world', 'l', 1);
+DECIMAL(38, 0);
+
+# dialect: snowflake
+REGEXP_COUNT('hello world', 'l', 1, 'i');
+DECIMAL(38, 0);
+
+# dialect: snowflake
+REGEXP_EXTRACT_ALL('hello world', 'world');
+ARRAY;
+
+# dialect: snowflake
+REGEXP_EXTRACT_ALL('hello world', 'world', 1);
+ARRAY;
+
+# dialect: snowflake
+REGEXP_EXTRACT_ALL('hello world', 'world', 1, 1);
+ARRAY;
+
+# dialect: snowflake
+REGEXP_EXTRACT_ALL('hello world', 'world', 1, 1, 'i');
+ARRAY;
+
+# dialect: snowflake
+REGEXP_EXTRACT_ALL('hello world', 'world', 1, 1, 'i', 0);
+ARRAY;
+
+# dialect: snowflake
+REGEXP_INSTR('hello world', 'world');
+DECIMAL(38, 0);
+
+# dialect: snowflake
+REGEXP_INSTR('hello world', 'world', 1, 1, 0);
+DECIMAL(38, 0);
+
+# dialect: snowflake
+REGEXP_INSTR('hello world', 'world', 1, 1, 0, 'i');
+DECIMAL(38, 0);
+
+# dialect: snowflake
+REGEXP_INSTR('hello world', 'world', 1, 1, 0, 'i', 1);
+DECIMAL(38, 0);
 
 # dialect: snowflake
 REGEXP_REPLACE('hello world', 'world', 'universe');
@@ -1878,6 +1962,26 @@ VARCHAR;
 # dialect: snowflake
 REGEXP_SUBSTR('hello world', 'world', 1, 1, 'e', NULL);
 VARCHAR;
+
+# dialect: snowflake
+REGEXP_SUBSTR_ALL('hello world', 'world');
+ARRAY;
+
+# dialect: snowflake
+REGEXP_SUBSTR_ALL('hello world', 'world', 1);
+ARRAY;
+
+# dialect: snowflake
+REGEXP_SUBSTR_ALL('hello world', 'world', 1, 1);
+ARRAY;
+
+# dialect: snowflake
+REGEXP_SUBSTR_ALL('hello world', 'world', 1, 1, 'i');
+ARRAY;
+
+# dialect: snowflake
+REGEXP_SUBSTR_ALL('hello world', 'world', 1, 1, 'i', 0);
+ARRAY;
 
 # dialect: snowflake
 REPEAT('hello', 3);
@@ -1956,6 +2060,10 @@ RTRIM(NULL);
 VARCHAR;
 
 # dialect: snowflake
+RTRIMMED_LENGTH(' ABCD ');
+INT;
+
+# dialect: snowflake
 SHA1('foo');
 VARCHAR;
 
@@ -2028,6 +2136,14 @@ SHA2_HEX('foo', null);
 VARCHAR;
 
 # dialect: snowflake
+SOUNDEX(tbl.str_col);
+VARCHAR;
+
+# dialect: snowflake
+SOUNDEX_P123('test');
+VARCHAR;
+
+# dialect: snowflake
 SPACE(5);
 VARCHAR;
 
@@ -2040,6 +2156,10 @@ SPACE(NULL);
 VARCHAR;
 
 # dialect: snowflake
+SQRT(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
 SPLIT('hello world', ' ');
 ARRAY;
 
@@ -2050,6 +2170,22 @@ ARRAY;
 # dialect: snowflake
 SPLIT(NULL, ',');
 ARRAY;
+
+# dialect: snowflake
+SPLIT_PART('11.22.33', '.', 1);
+VARCHAR;
+
+# dialect: snowflake
+STRTOK('hello world');
+VARCHAR;
+
+# dialect: snowflake
+STRTOK('hello world', ' ');
+VARCHAR;
+
+# dialect: snowflake
+STRTOK('a.b.c', '.', 1);
+VARCHAR;
 
 # dialect: snowflake
 STARTSWITH('hello world', 'hello');
@@ -2068,6 +2204,10 @@ STARTSWITH(tbl.bin_col, NULL);
 BOOLEAN;
 
 # dialect: snowflake
+STRTOK_TO_ARRAY('a,b,c', ',');
+ARRAY;
+
+# dialect: snowflake
 SUBSTR('hello world', 1, 5);
 VARCHAR;
 
@@ -2082,6 +2222,14 @@ BINARY;
 # dialect: snowflake
 SUBSTR(tbl.str_col, NULL);
 STRING;
+
+# dialect: snowflake
+TRANSLATE('hello world', 'elo', 'XYZ');
+VARCHAR;
+
+# dialect: snowflake
+UNICODE('€');
+INT;
 
 # dialect: snowflake
 TRIM('hello world');
@@ -2101,6 +2249,30 @@ VARCHAR;
 
 # dialect: snowflake
 TRIM(NULL);
+VARCHAR;
+
+# dialect: snowflake
+TRY_BASE64_DECODE_BINARY('SGVsbG8=');
+BINARY;
+
+# dialect: snowflake
+TRY_BASE64_DECODE_BINARY('SGVsbG8=', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/');
+BINARY;
+
+# dialect: snowflake
+TRY_BASE64_DECODE_STRING('SGVsbG8gV29ybGQ=');
+VARCHAR;
+
+# dialect: snowflake
+TRY_BASE64_DECODE_STRING('SGVsbG8gV29ybGQ=', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/');
+VARCHAR;
+
+# dialect: snowflake
+TRY_HEX_DECODE_BINARY('48656C6C6F');
+BINARY;
+
+# dialect: snowflake
+TRY_HEX_DECODE_STRING('48656C6C6F');
 VARCHAR;
 
 # dialect: snowflake
@@ -2186,6 +2358,10 @@ BOOLEAN;
 # dialect: snowflake
 ILIKE(tbl.str_col, 'pattern');
 BOOLEAN;
+
+# dialect: snowflake
+PARSE_IP('192.168.1.1', 'INET');
+OBJECT;
 
 --------------------------------------
 -- T-SQL

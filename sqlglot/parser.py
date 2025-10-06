@@ -813,6 +813,8 @@ class Parser(metaclass=_Parser):
         exp.DataType: lambda self: self._parse_types(allow_identifiers=False, schema=True),
         exp.Expression: lambda self: self._parse_expression(),
         exp.From: lambda self: self._parse_from(joins=True),
+        exp.GrantPrincipal: lambda self: self._parse_grant_principal(),
+        exp.GrantPrivilege: lambda self: self._parse_grant_privilege(),
         exp.Group: lambda self: self._parse_group(),
         exp.Having: lambda self: self._parse_having(),
         exp.Hint: lambda self: self._parse_hint_body(),
@@ -1147,11 +1149,6 @@ class Parser(metaclass=_Parser):
         "TTL": lambda self: self.expression(exp.MergeTreeTTL, expressions=[self._parse_bitwise()]),
         "UNIQUE": lambda self: self._parse_unique(),
         "UPPERCASE": lambda self: self.expression(exp.UppercaseColumnConstraint),
-        "WATERMARK": lambda self: self.expression(
-            exp.WatermarkColumnConstraint,
-            this=self._match(TokenType.FOR) and self._parse_column(),
-            expression=self._match(TokenType.ALIAS) and self._parse_disjunction(),
-        ),
         "WITH": lambda self: self.expression(
             exp.Properties, expressions=self._parse_wrapped_properties()
         ),
@@ -1218,7 +1215,6 @@ class Parser(metaclass=_Parser):
         "PERIOD",
         "PRIMARY KEY",
         "UNIQUE",
-        "WATERMARK",
         "BUCKET",
         "TRUNCATE",
     }
@@ -1434,7 +1430,7 @@ class Parser(metaclass=_Parser):
 
     VIEW_ATTRIBUTES = {"ENCRYPTION", "SCHEMABINDING", "VIEW_METADATA"}
 
-    WINDOW_ALIAS_TOKENS = ID_VAR_TOKENS - {TokenType.ROWS}
+    WINDOW_ALIAS_TOKENS = ID_VAR_TOKENS - {TokenType.RANGE, TokenType.ROWS}
     WINDOW_BEFORE_PAREN_TOKENS = {TokenType.OVER}
     WINDOW_SIDES = {"FOLLOWING", "PRECEDING"}
 
