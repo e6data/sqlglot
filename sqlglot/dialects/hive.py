@@ -347,7 +347,7 @@ class Hive(Dialect):
             "DAY": lambda args: exp.Day(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "FIRST": _build_with_ignore_nulls(exp.First),
             "FIRST_VALUE": _build_with_ignore_nulls(exp.FirstValue),
-            "FROM_UNIXTIME": build_formatted_time(exp.UnixToStr, "hive", True),
+            "FROM_UNIXTIME": build_formatted_time(exp.UnixToStr, "hive", False),
             "GET_JSON_OBJECT": lambda args, dialect: exp.JSONExtractScalar(
                 this=seq_get(args, 0), expression=dialect.to_json_path(seq_get(args, 1))
             ),
@@ -362,7 +362,7 @@ class Hive(Dialect):
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT": exp.RegexpSplit.from_arg_list,
-            "SPACE":exp.Space.from_arg_list,
+            "SPACE": exp.Space.from_arg_list,
             "STR_TO_MAP": lambda args: exp.StrToMap(
                 this=seq_get(args, 0),
                 pair_delim=seq_get(args, 1) or exp.Literal.string(","),

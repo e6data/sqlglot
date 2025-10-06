@@ -5560,14 +5560,6 @@ class Sech(Func):
     pass
 
 
-class Sin(Func):
-    pass
-
-
-class Sinh(Func):
-    pass
-
-
 class CosineDistance(Func):
     arg_types = {"this": True, "expression": True}
 
@@ -6482,6 +6474,7 @@ class FromBase32(Func):
 class FromBase64(Func):
     pass
 
+
 # https://docs.snowflake.com/en/sql-reference/functions/try_base64_decode_binary
 class TryBase64DecodeBinary(Func):
     arg_types = {"this": True, "alphabet": False}
@@ -6500,15 +6493,6 @@ class TryHexDecodeBinary(Func):
 # https://docs.snowflake.com/en/sql-reference/functions/try_hex_decode_string
 class TryHexDecodeString(Func):
     pass
-
-
-class FeaturesAtTime(Func):
-    arg_types = {
-        "this": True,
-        "time": False,
-        "num_rows": False,
-        "ignore_feature_nulls": False,
-    }
 
 
 class ToBase32(Func):
@@ -6981,8 +6965,10 @@ class JSONArrayInsert(Func):
     is_var_len_args = True
     _sql_names = ["JSON_ARRAY_INSERT"]
 
+
 class ParseIp(Func):
     arg_types = {"this": True, "type": True, "permissive": False}
+
 
 class ParseBignumeric(Func):
     pass
@@ -7029,8 +7015,10 @@ class Right(Func):
 class Reverse(Func):
     pass
 
+
 class RtrimmedLength(Func):
     pass
+
 
 class Length(Func):
     arg_types = {"this": True, "binary": False, "encoding": False}
@@ -7133,6 +7121,7 @@ class Max(AggFunc):
 
 class MD5Binary(Func):
     _sql_names = ["MD5_BINARY"]
+
 
 class MD5(Func):
     _sql_names = ["MD5"]
@@ -7466,10 +7455,6 @@ class SortArray(Func):
 
 
 class Soundex(Func):
-    pass
-
-
-class Soundex(Func):
     _sql_names = ["SOUNDEX"]
     arg_types = {"this": True}
 
@@ -7796,11 +7781,23 @@ class CumeDist(AggFunc):
 
 
 class Variance(AggFunc):
-    _sql_names = ["VARIANCE", "VARIANCE_SAMP", "VAR_SAMP"]
+    _sql_names = ["VARIANCE"]
+
+
+class VarianceSamp(AggFunc):
+    _sql_names = ["VARIANCE_SAMP"]
+
+
+class VarSamp(AggFunc):
+    _sql_names = ["VAR_SAMP"]
 
 
 class VariancePop(AggFunc):
-    _sql_names = ["VARIANCE_POP", "VAR_POP"]
+    _sql_names = ["VARIANCE_POP"]
+
+
+class VarPop(AggFunc):
+    _sql_names = ["VAR_POP"]
 
 
 class CovarSamp(Binary, AggFunc):

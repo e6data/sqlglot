@@ -293,6 +293,8 @@ class Spark2(Hive):
                 zone=seq_get(args, 1),
             ),
             "TRUNC": lambda args: exp.DateTrunc(unit=seq_get(args, 1), this=seq_get(args, 0)),
+            "VAR_SAMP": exp.VarSamp.from_arg_list,
+            "VARIANCE_SAMP": exp.VarianceSamp.from_arg_list,
             "WEEKOFYEAR": lambda args: exp.WeekOfYear(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
         }
 

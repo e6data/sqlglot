@@ -36,7 +36,6 @@ from sqlglot.helper import find_new_name, flatten, is_float, is_int, seq_get
 from sqlglot.optimizer.annotate_types import TypeAnnotator
 from sqlglot.optimizer.scope import build_scope, find_all_in_scope
 from sqlglot.tokens import TokenType
-from sqlglot.parser import build_coalesce
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E, B
@@ -808,6 +807,8 @@ class Snowflake(Dialect):
             "TO_TIMESTAMP_TZ": _build_datetime("TO_TIMESTAMP_TZ", exp.DataType.Type.TIMESTAMPTZ),
             "TO_VARCHAR": build_timetostr_or_tochar,
             "TO_JSON": exp.JSONFormat.from_arg_list,
+            "VARIANCE_SAMP": exp.VarianceSamp.from_arg_list,
+            "VAR_SAMP": exp.VarSamp.from_arg_list,
             "VECTOR_L2_DISTANCE": exp.EuclideanDistance.from_arg_list,
             "ZEROIFNULL": _build_if_from_zeroifnull,
             "LIKE": _build_like(exp.Like),

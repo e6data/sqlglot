@@ -244,7 +244,7 @@ class TypeAnnotator(metaclass=_TypeAnnotator):
         # Replace NULL type with UNKNOWN, since the former is not an actual type;
         # it is mostly used to aid type coercion, e.g. in query set operations.
         for expr in self._null_expressions.values():
-            expr.type = exp.DataType.Type.UNKNOWN
+            expr.type = exp.DataType.build(exp.DataType.Type.UNKNOWN)
 
         return expression
 

@@ -845,7 +845,7 @@ class TestE6(Validator):
             },
             write={
                 "spark": "a RLIKE 'x'",
-                "databricks": "a RLIKE 'x'",
+                "databricks": "REGEXP_LIKE(a, 'x')",
                 "duckdb": "REGEXP_MATCHES(a, 'x')",
                 "presto": "REGEXP_LIKE(a, 'x')",
                 "bigquery": "REGEXP_CONTAINS(a, 'x')",

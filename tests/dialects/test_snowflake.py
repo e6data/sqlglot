@@ -3207,11 +3207,7 @@ FROM SEMANTIC_VIEW(
     def test_md5(self):
         self.validate_all(
             "MD5_BINARY(x)",
-            read={
-                "clickhouse": "MD5(x)",
-                "presto": "MD5(x)",
-                "trino": "MD5(x)"
-            },
+            read={"clickhouse": "MD5(x)", "presto": "MD5(x)", "trino": "MD5(x)"},
         )
 
     def test_get_extract(self):

@@ -184,7 +184,9 @@ class Databricks(Spark):
             exp.Trim: _trim_sql,
         }
 
-        TRANSFORMS.pop(exp.RegexpLike)
+        TRANSFORMS.pop(
+            exp.RegexpLike
+        )  # They have added this flag such that databricks can use this as is but we have test cases for that
         TRANSFORMS.pop(exp.TryCast)
 
         TYPE_MAPPING = {

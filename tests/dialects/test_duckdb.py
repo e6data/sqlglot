@@ -532,10 +532,10 @@ class TestDuckDB(Validator):
         self.validate_all(
             "VAR_POP(x)",
             read={
-                "": "VARIANCE_POP(x)",
+                "": "VAR_POP(x)",
             },
             write={
-                "": "VARIANCE_POP(x)",
+                "": "VAR_POP(x)",
             },
         )
         self.validate_all(

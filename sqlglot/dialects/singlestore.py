@@ -194,7 +194,7 @@ class SingleStore(MySQL):
                 quantile=seq_get(args, 1),
                 error_tolerance=seq_get(args, 2),
             ),
-            "VARIANCE": exp.VariancePop.from_arg_list,
+            "VARIANCE": exp.VarPop.from_arg_list,
             "INSTR": exp.Contains.from_arg_list,
             "REGEXP_MATCH": lambda args: exp.RegexpExtractAll(
                 this=seq_get(args, 0),
