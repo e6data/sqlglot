@@ -157,11 +157,14 @@ class Expression(metaclass=_Expression):
                         if t is list:
                             for x in v:
                                 if x is not None and x is not False:
-                                    hash_ = hash((hash_, k, x.lower() if type(x) is str else x))
+                                    hash_ = hash((hash_, k, x.lower() if isinstance(x, str) else x))
                                 else:
                                     hash_ = hash((hash_, k))
                         elif v is not None and v is not False:
-                            hash_ = hash((hash_, k, v.lower() if t is str else v))
+                            if isinstance(v, str):
+                                hash_ = hash((hash_, k, v.lower()))
+                            else:
+                                hash_ = hash((hash_, k, v))
 
                 node._hash = hash_
         assert self._hash
@@ -6546,26 +6549,6 @@ class Base64Encode(Func):
     arg_types = {"this": True, "max_line_length": False, "alphabet": False}
 
 
-# https://docs.snowflake.com/en/sql-reference/functions/try_base64_decode_binary
-class TryBase64DecodeBinary(Func):
-    arg_types = {"this": True, "alphabet": False}
-
-
-# https://docs.snowflake.com/en/sql-reference/functions/try_base64_decode_string
-class TryBase64DecodeString(Func):
-    arg_types = {"this": True, "alphabet": False}
-
-
-# https://docs.snowflake.com/en/sql-reference/functions/try_hex_decode_binary
-class TryHexDecodeBinary(Func):
-    pass
-
-
-# https://docs.snowflake.com/en/sql-reference/functions/try_hex_decode_string
-class TryHexDecodeString(Func):
-    pass
-
-
 # https://trino.io/docs/current/functions/datetime.html#from_iso8601_timestamp
 class FromISO8601Timestamp(Func):
     _sql_names = ["FROM_ISO8601_TIMESTAMP"]
@@ -7041,10 +7024,6 @@ class ParseUrl(Func):
     arg_types = {"this": True, "part_to_extract": False, "key": False, "permissive": False}
 
 
-class ParseIp(Func):
-    arg_types = {"this": True, "type": True, "permissive": False}
-
-
 class ParseTime(Func):
     arg_types = {"this": True, "format": True}
 
@@ -7067,10 +7046,6 @@ class Right(Func):
 
 
 class Reverse(Func):
-    pass
-
-
-class RtrimmedLength(Func):
     pass
 
 
@@ -7426,15 +7401,6 @@ class RegexpInstr(Func):
 # limit is the number of times a pattern is applied
 class RegexpSplit(Func):
     arg_types = {"this": True, "expression": True, "limit": False}
-
-
-class RegexpCount(Func):
-    arg_types = {
-        "this": True,
-        "expression": True,
-        "position": False,
-        "parameters": False,
-    }
 
 
 class Repeat(Func):
