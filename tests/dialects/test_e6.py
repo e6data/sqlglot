@@ -592,10 +592,10 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT EXTRACT(FIELDSTR FROM CAST(date_expr AS DATE))",
+            "SELECT EXTRACT(FIELDSTR FROM date_expr)",
             read={
                 "databricks": "SELECT DATE_PART(FIELDSTR, date_expr)",
-                "e6": "SELECT EXTRACT(FIELDSTR FROM CAST(date_expr AS DATE))",
+                "e6": "SELECT EXTRACT(FIELDSTR FROM date_expr)",
             },
         )
 

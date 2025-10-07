@@ -1801,6 +1801,18 @@ class E6(Dialect):
             extract_str = f"EXTRACT({unit_mapped} FROM {expression_sql})"
             return extract_str
 
+        def extract(self: E6.Generator, expression: exp.Extract | exp.DayOfYear) -> str:
+            unit = expression.this.name
+            unit_mapped = E6.UNIT_PART_MAPPING.get(f"'{unit.lower()}'", unit)
+            date_expr = (
+                expression.expression if isinstance(expression, exp.Extract) else expression.this
+            )
+            if isinstance(expression, exp.Extract):
+                expression_sql = self.sql(date_expr)
+
+            extract_str = f"EXTRACT({unit_mapped} FROM {expression_sql})"
+            return extract_str
+
         def filter_array_sql(self: E6.Generator, expression: exp.ArrayFilter) -> str:
             cond = expression.expression
             if isinstance(cond, exp.Lambda):
@@ -2407,7 +2419,7 @@ class E6(Dialect):
             exp.DayOfYear: extract_sql,
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Explode: explode_sql,
-            exp.Extract: extract_sql,
+            exp.Extract: extract,
             exp.FirstValue: rename_func("FIRST_VALUE"),
             exp.Format: rename_func("FORMAT"),
             exp.FormatDatetime: rename_func("FORMAT_DATETIME"),
