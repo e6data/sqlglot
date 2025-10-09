@@ -8,6 +8,10 @@ class TestPostgres(Validator):
     dialect = "postgres"
 
     def test_postgres(self):
+        self.validate_identity(
+            "select count() OVER(partition by a order by a range offset preceding exclude current row)",
+            "SELECT COUNT() OVER (PARTITION BY a ORDER BY a range BETWEEN offset preceding AND CURRENT ROW EXCLUDE CURRENT ROW)",
+        )
         expr = self.parse_one("SELECT * FROM r CROSS JOIN LATERAL UNNEST(ARRAY[1]) AS s(location)")
         unnest = expr.args["joins"][0].this.this
         unnest.assert_is(exp.Unnest)
@@ -81,6 +85,9 @@ class TestPostgres(Validator):
         self.validate_identity("SELECT INTERVAL '-10.75 MINUTE'")
         self.validate_identity("SELECT INTERVAL '0.123456789 SECOND'")
         self.validate_identity(
+            "SELECT SUM(x) OVER (PARTITION BY y ORDER BY interval ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) - SUM(x) OVER (PARTITION BY y ORDER BY interval ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS total"
+        )
+        self.validate_identity(
             "SELECT * FROM test_data, LATERAL JSONB_ARRAY_ELEMENTS(data) WITH ORDINALITY AS elem(value, ordinality)"
         )
         self.validate_identity(
@@ -153,6 +160,14 @@ class TestPostgres(Validator):
             "WHERE c.relname OPERATOR(pg_catalog.~) '^(courses)$' COLLATE pg_catalog.default AND "
             "pg_catalog.PG_TABLE_IS_VISIBLE(c.oid) "
             "ORDER BY 2, 3"
+        )
+        self.validate_identity(
+            "x::JSON -> 'duration' ->> -1",
+            "JSON_EXTRACT_PATH_TEXT(CAST(x AS JSON) -> 'duration', -1)",
+        ).assert_is(exp.JSONExtractScalar).this.assert_is(exp.JSONExtract)
+        self.validate_identity(
+            "SELECT SUBSTRING('Thomas' FOR 3 FROM 2)",
+            "SELECT SUBSTRING('Thomas' FROM 2 FOR 3)",
         )
         self.validate_identity(
             "SELECT ARRAY[1, 2, 3] <@ ARRAY[1, 2]",
@@ -806,6 +821,10 @@ FROM json_data, field_ids""",
         )
         self.assertIsInstance(self.parse_one("id::UUID"), exp.Cast)
 
+        self.validate_identity('1::"int"', "CAST(1 AS INT)").to.is_type(exp.DataType.Type.INT)
+        self.validate_identity(
+            '1::"udt"', 'CAST(1 AS "udt")'
+        ).to.this == exp.DataType.Type.USERDEFINED
         self.validate_identity(
             "COPY tbl (col1, col2) FROM 'file' WITH (FORMAT format, HEADER MATCH, FREEZE TRUE)"
         )
@@ -931,6 +950,32 @@ FROM json_data, field_ids""",
         self.validate_identity("SELECT * FROM foo WHERE id = %s")
         self.validate_identity("SELECT * FROM foo WHERE id = %(id_param)s")
         self.validate_identity("SELECT * FROM foo WHERE id = ?")
+
+        self.validate_identity("a ?| b").assert_is(exp.JSONBContainsAnyTopKeys)
+        self.validate_identity(
+            """SELECT '{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'c']""",
+            """SELECT CAST('{"a":1, "b":2, "c":3}' AS JSONB) ?| ARRAY['b', 'c']""",
+        )
+
+        self.validate_identity("a ?& b").assert_is(exp.JSONBContainsAllTopKeys)
+        self.validate_identity(
+            """SELECT '["a", "b"]'::jsonb ?& array['a', 'b']""",
+            """SELECT CAST('["a", "b"]' AS JSONB) ?& ARRAY['a', 'b']""",
+        )
+
+        self.validate_identity("a #- b").assert_is(exp.JSONBDeleteAtPath)
+        self.validate_identity(
+            """SELECT '["a", {"b":1}]'::jsonb #- '{1,b}'""",
+            """SELECT CAST('["a", {"b":1}]' AS JSONB) #- '{1,b}'""",
+        )
+
+        self.validate_identity("SELECT JSON_AGG(DISTINCT name) FROM users")
+        self.validate_identity(
+            "SELECT JSON_AGG(c1 ORDER BY c1) FROM (VALUES ('c'), ('b'), ('a')) AS t(c1)"
+        )
+        self.validate_identity(
+            "SELECT JSON_AGG(DISTINCT c1 ORDER BY c1) FROM (VALUES ('c'), ('b'), ('a')) AS t(c1)"
+        )
 
     def test_ddl(self):
         # Checks that user-defined types are parsed into DataType instead of Identifier
@@ -1500,3 +1545,123 @@ CROSS JOIN JSON_ARRAY_ELEMENTS(CAST(JSON_EXTRACT_PATH(tbox, 'boxes') AS JSON)) A
         for key_type in ("FOR SHARE", "FOR UPDATE", "FOR NO KEY UPDATE", "FOR KEY SHARE"):
             with self.subTest(f"Test lock type {key_type}"):
                 self.validate_identity(f"SELECT 1 FROM foo AS x {key_type} OF x")
+
+    def test_grant(self):
+        grant_cmds = [
+            "GRANT SELECT ON TABLE users TO role1",
+            "GRANT INSERT, DELETE ON TABLE orders TO user1",
+            "GRANT SELECT ON employees TO manager WITH GRANT OPTION",
+            "GRANT USAGE ON SCHEMA finance TO user2",
+            "GRANT ALL PRIVILEGES ON DATABASE mydb TO PUBLIC",
+            "GRANT CREATE ON SCHEMA public TO developer",
+            "GRANT CONNECT ON DATABASE testdb TO readonly_user",
+            "GRANT TEMPORARY ON DATABASE testdb TO temp_user",
+            "GRANT TRIGGER ON orders TO audit_role",
+            "GRANT REFERENCES ON products TO foreign_key_user",
+            "GRANT TRUNCATE ON logs TO admin_role",
+            "GRANT UPDATE(salary) ON employees TO hr_manager",
+            "GRANT SELECT(id, name), UPDATE(email) ON customers TO customer_service",
+        ]
+
+        for sql in grant_cmds:
+            with self.subTest(f"Testing PostgreSQL's GRANT statement: {sql}"):
+                self.validate_identity(sql)
+
+        self.validate_identity(
+            "GRANT EXECUTE ON FUNCTION calculate_bonus(integer) TO analyst",
+            "GRANT EXECUTE ON FUNCTION CALCULATE_BONUS(integer) TO analyst",
+        )
+
+        advanced_grants = [
+            "GRANT INSERT, DELETE ON ALL TABLES IN SCHEMA myschema TO user1",
+            "GRANT developer_role TO john",
+            "GRANT admin_role TO mary WITH ADMIN OPTION",
+        ]
+
+        for sql in advanced_grants:
+            with self.subTest(f"Testing PostgreSQL's advanced GRANT statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
+    def test_revoke(self):
+        revoke_cmds = [
+            "REVOKE SELECT ON TABLE users FROM role1",
+            "REVOKE INSERT, DELETE ON TABLE orders FROM user1",
+            "REVOKE USAGE ON SCHEMA finance FROM user2",
+            "REVOKE ALL PRIVILEGES ON DATABASE mydb FROM PUBLIC",
+            "REVOKE CREATE ON SCHEMA public FROM developer",
+            "REVOKE CONNECT ON DATABASE testdb FROM readonly_user",
+            "REVOKE TEMPORARY ON DATABASE testdb FROM temp_user",
+            "REVOKE TRIGGER ON orders FROM audit_role",
+            "REVOKE REFERENCES ON products FROM foreign_key_user",
+            "REVOKE TRUNCATE ON logs FROM admin_role",
+            "REVOKE USAGE ON SCHEMA finance FROM user2 CASCADE",
+            "REVOKE SELECT ON TABLE orders FROM user1 RESTRICT",
+            "REVOKE GRANT OPTION FOR SELECT ON employees FROM manager",
+            "REVOKE GRANT OPTION FOR SELECT ON employees FROM manager RESTRICT",
+            "REVOKE UPDATE(salary) ON employees FROM hr_manager",
+            "REVOKE SELECT(id, name), UPDATE(email) ON customers FROM customer_service",
+        ]
+
+        for sql in revoke_cmds:
+            with self.subTest(f"Testing PostgreSQL's REVOKE statement: {sql}"):
+                self.validate_identity(sql)
+
+        self.validate_identity(
+            "REVOKE EXECUTE ON FUNCTION calculate_bonus(integer) FROM analyst",
+            "REVOKE EXECUTE ON FUNCTION CALCULATE_BONUS(integer) FROM analyst",
+        )
+
+        advanced_revoke_cmds = [
+            "REVOKE INSERT, DELETE ON ALL TABLES IN SCHEMA myschema FROM user1",
+            "REVOKE developer_role FROM john",
+            "REVOKE admin_role FROM mary",
+        ]
+
+        for sql in advanced_revoke_cmds:
+            with self.subTest(f"Testing PostgreSQL's advanced REVOKE statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
+    def test_begin_transaction(self):
+        self.validate_all(
+            "BEGIN",
+            write={
+                "postgres": "BEGIN",
+                "presto": "START TRANSACTION",
+                "trino": "START TRANSACTION",
+            },
+        )
+
+        for keyword in ("TRANSACTION", "WORK"):
+            for level in (
+                "ISOLATION LEVEL SERIALIZABLE",
+                "ISOLATION LEVEL READ COMMITTED",
+                "NOT DEFFERABLE",
+                "READ WRITE",
+                "DEFERRABLE",
+            ):
+                with self.subTest(f"Testing Postgres's BEGIN {keyword} {level}"):
+                    self.validate_identity(
+                        f"BEGIN {keyword} {level}, {level}", f"BEGIN {level}, {level}"
+                    ).assert_is(exp.Transaction)
+
+    def test_interval_span(self):
+        for time_str in ["1 01:", "1 01:00", "1.5 01:", "-0.25 01:"]:
+            with self.subTest(f"Postgres INTERVAL span, omitted DAY TO MINUTE unit: {time_str}"):
+                self.validate_identity(f"INTERVAL '{time_str}'")
+
+        for time_str in [
+            "1 01:01:",
+            "1 01:01:",
+            "1 01:01:01",
+            "1 01:01:01.01",
+            "1.5 01:01:",
+            "-0.25 01:01:",
+        ]:
+            with self.subTest(f"Postgres INTERVAL span, omitted DAY TO SECOND unit: {time_str}"):
+                self.validate_identity(f"INTERVAL '{time_str}'")
+
+        # Ensure AND is not consumed as a unit following an omitted-span interval
+        with self.subTest("Postgres INTERVAL span, omitted unit with following AND"):
+            day_time_str = "a > INTERVAL '1 00:00' AND TRUE"
+            self.validate_identity(day_time_str, "a > INTERVAL '1 00:00' AND TRUE")
+            self.assertIsInstance(self.parse_one(day_time_str), exp.And)

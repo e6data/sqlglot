@@ -253,6 +253,7 @@ class Spark2(Hive):
             "DAY_OF_YEAR": lambda args: exp.DayOfYear(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
             "DOUBLE": _build_as_cast("double"),
             "FLOAT": _build_as_cast("float"),
+            "FORMAT_STRING": exp.Format.from_arg_list,
             "FROM_UTC_TIMESTAMP": lambda args, dialect: exp.AtTimeZone(
                 this=exp.cast(
                     seq_get(args, 0) or exp.Var(this=""),
@@ -292,6 +293,8 @@ class Spark2(Hive):
                 zone=seq_get(args, 1),
             ),
             "TRUNC": lambda args: exp.DateTrunc(unit=seq_get(args, 1), this=seq_get(args, 0)),
+            "VAR_SAMP": exp.VarSamp.from_arg_list,
+            "VARIANCE_SAMP": exp.VarianceSamp.from_arg_list,
             "WEEKOFYEAR": lambda args: exp.WeekOfYear(this=exp.TsOrDsToDate(this=seq_get(args, 0))),
         }
 
@@ -372,6 +375,7 @@ class Spark2(Hive):
             # (DAY_OF_WEEK(datetime) % 7) + 1 is equivalent to DAYOFWEEK_ISO(datetime)
             exp.DayOfWeekIso: lambda self, e: f"(({self.func('DAYOFWEEK', e.this)} % 7) + 1)",
             exp.DayOfYear: rename_func("DAYOFYEAR"),
+            exp.Format: rename_func("FORMAT_STRING"),
             exp.From: transforms.preprocess([_unalias_pivot]),
             exp.FromTimeZone: lambda self, e: self.func(
                 "TO_UTC_TIMESTAMP", e.this, e.args.get("zone")

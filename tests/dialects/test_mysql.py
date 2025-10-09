@@ -306,6 +306,15 @@ class TestMySQL(Validator):
         self.validate_identity(
             "SELECT DISTINCTROW tbl.col FROM tbl", "SELECT DISTINCT tbl.col FROM tbl"
         )
+        self.validate_identity("ATAN(y, x)")
+
+        self.validate_identity(
+            "SELECT 'foo' SOUNDS LIKE 'bar'", "SELECT SOUNDEX('foo') = SOUNDEX('bar')"
+        )
+        self.validate_identity(
+            "SELECT 'foo' NOT SOUNDS LIKE 'bar'", "SELECT NOT SOUNDEX('foo') = SOUNDEX('bar')"
+        )
+        self.validate_identity("SELECT SUBSTR(1 FROM 2 FOR 3)", "SELECT SUBSTRING(1, 2, 3)")
 
     def test_types(self):
         for char_type in MySQL.Generator.CHAR_CAST_MAPPING:
@@ -1407,6 +1416,21 @@ COMMENT='客户账户表'"""
             with self.subTest(f"Testing MySQL's GRANT command statement: {sql}"):
                 self.validate_identity(sql, check_command_warning=True)
 
+    def test_revoke(self):
+        revoke_cmds = [
+            "REVOKE 'role1', 'role2' FROM 'user1'@'localhost', 'user2'@'localhost'",
+            "REVOKE SELECT ON world.* FROM 'role3'",
+            "REVOKE SELECT ON db2.invoice FROM 'jeffrey'@'localhost'",
+            "REVOKE INSERT ON `d%`.* FROM u",
+            "REVOKE ALL ON test.* FROM ''@'localhost'",
+            "REVOKE SELECT (col1), INSERT (col1, col2) ON mydb.mytbl FROM 'someuser'@'somehost'",
+            "REVOKE SELECT, INSERT, UPDATE ON *.* FROM u2",
+        ]
+
+        for sql in revoke_cmds:
+            with self.subTest(f"Testing MySQL's REVOKE command statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
     def test_explain(self):
         self.validate_identity(
             "EXPLAIN ANALYZE SELECT * FROM t", "DESCRIBE ANALYZE SELECT * FROM t"
@@ -1458,3 +1482,31 @@ COMMENT='客户账户表'"""
         self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1 WITH 5 BUCKETS AUTO UPDATE")
         self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1 WITH 5 BUCKETS MANUAL UPDATE")
         self.validate_identity("ANALYZE tbl DROP HISTOGRAM ON col1")
+
+    def test_utc_time(self):
+        self.validate_identity("UTC_TIME()").assert_is(exp.UtcTime)
+        self.validate_identity("UTC_TIME(6)").assert_is(exp.UtcTime)
+        self.validate_identity("UTC_TIMESTAMP()").assert_is(exp.UtcTimestamp)
+        self.validate_identity("UTC_TIMESTAMP(6)").assert_is(exp.UtcTimestamp)
+
+    def test_mod(self):
+        self.validate_identity("x % y").assert_is(exp.Mod)
+        self.validate_identity("x MOD y", "x % y").assert_is(exp.Mod)
+        self.validate_identity("MOD(x, y)", "x % y").assert_is(exp.Mod)
+
+    def test_valid_interval_units(self):
+        for unit in (
+            "SECOND_MICROSECOND",
+            "MINUTE_MICROSECOND",
+            "MINUTE_SECOND",
+            "HOUR_MICROSECOND",
+            "HOUR_SECOND",
+            "HOUR_MINUTE",
+            "DAY_MICROSECOND",
+            "DAY_SECOND",
+            "DAY_MINUTE",
+            "DAY_HOUR",
+            "YEAR_MONTH",
+        ):
+            with self.subTest(f"Testing INTERVAL unit: {unit}"):
+                self.validate_identity(f"DATE_ADD(base_date, INTERVAL day_interval {unit})")

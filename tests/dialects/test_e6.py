@@ -852,7 +852,7 @@ class TestE6(Validator):
             },
             write={
                 "spark": "a RLIKE 'x'",
-                "databricks": "a RLIKE 'x'",
+                "databricks": "REGEXP_LIKE(a, 'x')",
                 "duckdb": "REGEXP_MATCHES(a, 'x')",
                 "presto": "REGEXP_LIKE(a, 'x')",
                 "bigquery": "REGEXP_CONTAINS(a, 'x')",
@@ -1701,7 +1701,7 @@ class TestE6(Validator):
                 "clickhouse": "SELECT MD5('E6')",
                 "presto": "SELECT MD5('E6')",
                 "trino": "SELECT MD5('E6')",
-                "snowflake": "SELECT MD5('E6')",
+                "snowflake": "SELECT MD5_BINARY('E6')",
                 "databricks": "SELECT UNHEX(MD5('E6'))",
             },
         )

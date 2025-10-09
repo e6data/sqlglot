@@ -179,6 +179,21 @@ class MySQL(Dialect):
         "%W": "%A",
     }
 
+    VALID_INTERVAL_UNITS = {
+        *Dialect.VALID_INTERVAL_UNITS,
+        "SECOND_MICROSECOND",
+        "MINUTE_MICROSECOND",
+        "MINUTE_SECOND",
+        "HOUR_MICROSECOND",
+        "HOUR_SECOND",
+        "HOUR_MINUTE",
+        "DAY_MICROSECOND",
+        "DAY_SECOND",
+        "DAY_MINUTE",
+        "DAY_HOUR",
+        "YEAR_MONTH",
+    }
+
     class Tokenizer(tokens.Tokenizer):
         QUOTES = ["'", '"']
         COMMENTS = ["--", "#", ("/*", "*/")]
@@ -191,10 +206,8 @@ class MySQL(Dialect):
 
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
-            "CHARSET": TokenType.CHARACTER_SET,
-            # The DESCRIBE and EXPLAIN statements are synonyms.
-            # https://dev.mysql.com/doc/refman/8.4/en/explain.html
             "BLOB": TokenType.BLOB,
+            "CHARSET": TokenType.CHARACTER_SET,
             "DISTINCTROW": TokenType.DISTINCT,
             "EXPLAIN": TokenType.DESCRIBE,
             "FORCE": TokenType.FORCE,
@@ -204,17 +217,19 @@ class MySQL(Dialect):
             "LONGBLOB": TokenType.LONGBLOB,
             "LONGTEXT": TokenType.LONGTEXT,
             "MEDIUMBLOB": TokenType.MEDIUMBLOB,
-            "TINYBLOB": TokenType.TINYBLOB,
-            "TINYTEXT": TokenType.TINYTEXT,
-            "MEDIUMTEXT": TokenType.MEDIUMTEXT,
             "MEDIUMINT": TokenType.MEDIUMINT,
+            "MEDIUMTEXT": TokenType.MEDIUMTEXT,
             "MEMBER OF": TokenType.MEMBER_OF,
+            "MOD": TokenType.MOD,
             "SEPARATOR": TokenType.SEPARATOR,
             "SERIAL": TokenType.SERIAL,
-            "START": TokenType.BEGIN,
             "SIGNED": TokenType.BIGINT,
             "SIGNED INTEGER": TokenType.BIGINT,
+            "SOUNDS LIKE": TokenType.SOUNDS_LIKE,
+            "START": TokenType.BEGIN,
             "TIMESTAMP": TokenType.TIMESTAMPTZ,
+            "TINYBLOB": TokenType.TINYBLOB,
+            "TINYTEXT": TokenType.TINYTEXT,
             "UNLOCK TABLES": TokenType.COMMAND,
             "UNSIGNED": TokenType.UBIGINT,
             "UNSIGNED INTEGER": TokenType.UBIGINT,
@@ -271,6 +286,7 @@ class MySQL(Dialect):
         FUNC_TOKENS = {
             *parser.Parser.FUNC_TOKENS,
             TokenType.DATABASE,
+            TokenType.MOD,
             TokenType.SCHEMA,
             TokenType.VALUES,
         }
@@ -292,6 +308,11 @@ class MySQL(Dialect):
 
         RANGE_PARSERS = {
             **parser.Parser.RANGE_PARSERS,
+            TokenType.SOUNDS_LIKE: lambda self, this: self.expression(
+                exp.EQ,
+                this=self.expression(exp.Soundex, this=this),
+                expression=self.expression(exp.Soundex, this=self._parse_term()),
+            ),
             TokenType.MEMBER_OF: lambda self, this: self.expression(
                 exp.JSONArrayContains,
                 this=this,
@@ -301,6 +322,10 @@ class MySQL(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            "BIT_AND": exp.BitwiseAndAgg.from_arg_list,
+            "BIT_OR": exp.BitwiseOrAgg.from_arg_list,
+            "BIT_XOR": exp.BitwiseXorAgg.from_arg_list,
+            "BIT_COUNT": exp.BitwiseCountAgg.from_arg_list,
             "CONVERT_TZ": lambda args: exp.ConvertTimezone(
                 source_tz=seq_get(args, 1),
                 target_tz=seq_get(args, 2),
@@ -357,6 +382,7 @@ class MySQL(Dialect):
                 exp.Anonymous, this="VALUES", expressions=[self._parse_id_var()]
             ),
             "JSON_VALUE": lambda self: self._parse_json_value(),
+            "SUBSTR": lambda self: self._parse_substring(),
         }
 
         STATEMENT_PARSERS = {
@@ -577,9 +603,11 @@ class MySQL(Dialect):
             full: t.Optional[bool] = None,
             global_: t.Optional[bool] = None,
         ) -> exp.Show:
+            json = self._match_text_seq("JSON")
+
             if target:
                 if isinstance(target, str):
-                    self._match_text_seq(target)
+                    self._match_text_seq(*target.split(" "))
                 target_id = self._parse_id_var()
             else:
                 target_id = None
@@ -616,6 +644,12 @@ class MySQL(Dialect):
             mutex = True if self._match_text_seq("MUTEX") else None
             mutex = False if self._match_text_seq("STATUS") else mutex
 
+            for_table = self._parse_id_var() if self._match_text_seq("FOR", "TABLE") else None
+            for_group = self._parse_string() if self._match_text_seq("FOR", "GROUP") else None
+            for_user = self._parse_string() if self._match_text_seq("FOR", "USER") else None
+            for_role = self._parse_string() if self._match_text_seq("FOR", "ROLE") else None
+            into_outfile = self._parse_string() if self._match_text_seq("INTO", "OUTFILE") else None
+
             return self.expression(
                 exp.Show,
                 this=this,
@@ -632,6 +666,12 @@ class MySQL(Dialect):
                 offset=offset,
                 limit=limit,
                 mutex=mutex,
+                for_table=for_table,
+                for_group=for_group,
+                for_user=for_user,
+                for_role=for_role,
+                into_outfile=into_outfile,
+                json=json,
                 **{"global": global_},  # type: ignore
             )
 
@@ -679,54 +719,6 @@ class MySQL(Dialect):
                 fallback_to_identifier=fallback_to_identifier,
             )
 
-        def _parse_group_concat(self) -> t.Optional[exp.Expression]:
-            def concat_exprs(
-                node: t.Optional[exp.Expression], exprs: t.List[exp.Expression]
-            ) -> exp.Expression:
-                if isinstance(node, exp.Distinct) and len(node.expressions) > 1:
-                    concat_exprs = [
-                        self.expression(exp.Concat, expressions=node.expressions, safe=True)
-                    ]
-                    node.set("expressions", concat_exprs)
-                    return node
-                if len(exprs) == 1:
-                    return exprs[0]
-                return self.expression(exp.Concat, expressions=args, safe=True)
-
-            args = self._parse_csv(self._parse_lambda)
-
-            if args:
-                order = args[-1] if isinstance(args[-1], exp.Order) else None
-
-                if order:
-                    # Order By is the last (or only) expression in the list and has consumed the 'expr' before it,
-                    # remove 'expr' from exp.Order and add it back to args
-                    args[-1] = order.this
-                    order.set("this", concat_exprs(order.this, args))
-
-                this = order or concat_exprs(args[0], args)
-            else:
-                this = None
-
-            separator = self._parse_field() if self._match(TokenType.SEPARATOR) else None
-
-            return self.expression(exp.GroupConcat, this=this, separator=separator)
-
-        def _parse_json_value(self) -> exp.JSONValue:
-            this = self._parse_bitwise()
-            self._match(TokenType.COMMA)
-            path = self._parse_bitwise()
-
-            returning = self._match(TokenType.RETURNING) and self._parse_type()
-
-            return self.expression(
-                exp.JSONValue,
-                this=this,
-                path=self.dialect.to_json_path(path),
-                returning=returning,
-                on_condition=self._parse_on_condition(),
-            )
-
         def _parse_alter_table_alter_index(self) -> exp.AlterIndex:
             index = self._parse_field(any_token=True)
 
@@ -742,7 +734,7 @@ class MySQL(Dialect):
     class Generator(generator.Generator):
         INTERVAL_ALLOWS_PLURAL_FORM = False
         LOCKING_READS_SUPPORTED = True
-        NULL_ORDERING_SUPPORTED = None
+        NULL_ORDERING_SUPPORTED: t.Optional[bool] = None
         JOIN_HINTS = False
         TABLE_HINTS = True
         DUPLICATE_KEY_UPDATE_WITH_SET = False
@@ -763,6 +755,10 @@ class MySQL(Dialect):
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
             exp.ArrayAgg: rename_func("GROUP_CONCAT"),
+            exp.BitwiseAndAgg: rename_func("BIT_AND"),
+            exp.BitwiseOrAgg: rename_func("BIT_OR"),
+            exp.BitwiseXorAgg: rename_func("BIT_XOR"),
+            exp.BitwiseCountAgg: rename_func("BIT_COUNT"),
             exp.CurrentDate: no_paren_current_date_sql,
             exp.DateDiff: _remove_ts_or_ds_to_date(
                 lambda self, e: self.func("DATEDIFF", e.this, e.expression),
@@ -831,6 +827,8 @@ class MySQL(Dialect):
             exp.Week: _remove_ts_or_ds_to_date(),
             exp.WeekOfYear: _remove_ts_or_ds_to_date(rename_func("WEEKOFYEAR")),
             exp.Year: _remove_ts_or_ds_to_date(),
+            exp.UtcTimestamp: rename_func("UTC_TIMESTAMP"),
+            exp.UtcTime: rename_func("UTC_TIME"),
         }
 
         UNSIGNED_TYPE_MAPPING = {
@@ -1242,6 +1240,10 @@ class MySQL(Dialect):
                 target = f" FROM{target}"
             elif expression.name == "GRANTS":
                 target = f" FOR{target}"
+            elif expression.name in ("LINKS", "PARTITIONS"):
+                target = f" ON{target}" if target else ""
+            elif expression.name == "PROJECTIONS":
+                target = f" ON TABLE{target}" if target else ""
 
             db = self._prefixed_sql("FROM", expression, "db")
 
@@ -1269,7 +1271,14 @@ class MySQL(Dialect):
             else:
                 mutex_or_status = ""
 
-            return f"SHOW{full}{global_}{this}{target}{types}{db}{query}{log}{position}{channel}{mutex_or_status}{like}{where}{offset}{limit}"
+            for_table = self._prefixed_sql("FOR TABLE", expression, "for_table")
+            for_group = self._prefixed_sql("FOR GROUP", expression, "for_group")
+            for_user = self._prefixed_sql("FOR USER", expression, "for_user")
+            for_role = self._prefixed_sql("FOR ROLE", expression, "for_role")
+            into_outfile = self._prefixed_sql("INTO OUTFILE", expression, "into_outfile")
+            json = " JSON" if expression.args.get("json") else ""
+
+            return f"SHOW{full}{global_}{this}{json}{target}{for_table}{types}{db}{query}{log}{position}{channel}{mutex_or_status}{like}{where}{offset}{limit}{for_group}{for_user}{for_role}{into_outfile}"
 
         def altercolumn_sql(self, expression: exp.AlterColumn) -> str:
             dtype = self.sql(expression, "dtype")

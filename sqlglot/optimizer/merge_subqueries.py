@@ -204,6 +204,7 @@ def _mergeable(
         and not outer_scope.pivots
         and not any(e.find(exp.AggFunc, exp.Select, exp.Explode) for e in inner_select.expressions)
         and not (leave_tables_isolated and len(outer_scope.selected_sources) > 1)
+        and not (isinstance(from_or_join, exp.Join) and inner_select.args.get("joins"))
         and not (
             isinstance(from_or_join, exp.Join)
             and inner_select.args.get("where")
@@ -285,6 +286,7 @@ def _merge_joins(outer_scope: Scope, inner_scope: Scope, from_or_join: FromOrJoi
     new_joins = []
 
     joins = inner_scope.expression.args.get("joins") or []
+
     for join in joins:
         new_joins.append(join)
         outer_scope.add_source(join.alias_or_name, inner_scope.sources[join.alias_or_name])
@@ -332,6 +334,10 @@ def _merge_expressions(outer_scope: Scope, inner_scope: Scope, alias: str) -> No
             # context surrounding the outer expression (i.e. it's not a simple projection).
             if isinstance(column.parent, (exp.Unary, exp.Binary)) and must_wrap_expression:
                 expression = exp.paren(expression, copy=False)
+
+            # make sure we do not accidentally change the name of the column
+            if isinstance(column.parent, exp.Select) and column.name != expression.name:
+                expression = exp.alias_(expression, column.name)
 
             column.replace(expression.copy())
 
