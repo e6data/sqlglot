@@ -311,6 +311,7 @@ class DuckDB(Dialect):
             "PIVOT_WIDER": TokenType.PIVOT,
             "POSITIONAL": TokenType.POSITIONAL,
             "RESET": TokenType.COMMAND,
+            "ROW": TokenType.STRUCT,
             "SIGNED": TokenType.INT,
             "STRING": TokenType.TEXT,
             "SUMMARIZE": TokenType.SUMMARIZE,
@@ -337,16 +338,14 @@ class DuckDB(Dialect):
     class Parser(parser.Parser):
         MAP_KEYS_ARE_ARBITRARY_EXPRESSIONS = True
 
-        BITWISE = {
-            **parser.Parser.BITWISE,
-            TokenType.TILDA: exp.RegexpLike,
-        }
+        BITWISE = parser.Parser.BITWISE.copy()
         BITWISE.pop(TokenType.CARET)
 
         RANGE_PARSERS = {
             **parser.Parser.RANGE_PARSERS,
             TokenType.DAMP: binary_range_parser(exp.ArrayOverlaps),
             TokenType.CARET_AT: binary_range_parser(exp.StartsWith),
+            TokenType.TILDA: binary_range_parser(exp.RegexpFullMatch),
         }
 
         EXPONENT = {
@@ -707,7 +706,6 @@ class DuckDB(Dialect):
             exp.GenerateDateArray: _generate_datetime_array_sql,
             exp.GenerateTimestampArray: _generate_datetime_array_sql,
             exp.GroupConcat: lambda self, e: groupconcat_sql(self, e, within_group=False),
-            exp.HexString: lambda self, e: self.hexstring_sql(e, binary_function_repr="FROM_HEX"),
             exp.Explode: rename_func("UNNEST"),
             exp.IntDiv: lambda self, e: self.binary(e, "//"),
             exp.IsInf: rename_func("ISINF"),
@@ -1040,8 +1038,8 @@ class DuckDB(Dialect):
                 if isinstance(expression.this, exp.Unnest):
                     return super().join_sql(expression.on(exp.true()))
 
-                expression.args.pop("side", None)
-                expression.args.pop("kind", None)
+                expression.set("side", None)
+                expression.set("kind", None)
 
             return super().join_sql(expression)
 
@@ -1302,3 +1300,17 @@ class DuckDB(Dialect):
                 return self.func("FORMAT", "'{}'", expression.expressions[0])
 
             return self.function_fallback_sql(expression)
+
+        def hexstring_sql(
+            self, expression: exp.HexString, binary_function_repr: t.Optional[str] = None
+        ) -> str:
+            from_hex = super().hexstring_sql(expression, binary_function_repr="FROM_HEX")
+
+            if expression.args.get("is_integer"):
+                return from_hex
+
+            # `from_hex` has transpiled x'ABCD' (BINARY) to DuckDB's '\xAB\xCD' (BINARY)
+            # `to_hex` & CASTing transforms it to "ABCD" (BINARY) to match representation
+            to_hex = exp.cast(self.func("TO_HEX", from_hex), exp.DataType.Type.BLOB)
+
+            return self.sql(to_hex)

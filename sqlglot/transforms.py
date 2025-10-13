@@ -660,8 +660,8 @@ def eliminate_full_outer_join(expression: exp.Expression) -> exp.Expression:
             anti_join_clause = exp.select("1").from_(expression.args["from"]).where(join_conditions)
             expression_copy.args["joins"][index].set("side", "right")
             expression_copy = expression_copy.where(exp.Exists(this=anti_join_clause).not_())
-            expression_copy.args.pop("with", None)  # remove CTEs from RIGHT side
-            expression.args.pop("order", None)  # remove order by from LEFT side
+            expression_copy.set("with", None)  # remove CTEs from RIGHT side
+            expression.set("order", None)  # remove order by from LEFT side
 
             return exp.union(expression, expression_copy, copy=False, distinct=False)
 
@@ -903,9 +903,9 @@ def eliminate_join_marks(expression: exp.Expression) -> exp.Expression:
             if not left_join_table:
                 continue
 
-            assert not (
-                len(left_join_table) > 1
-            ), "Cannot combine JOIN predicates from different tables"
+            assert not (len(left_join_table) > 1), (
+                "Cannot combine JOIN predicates from different tables"
+            )
 
             for col in join_cols:
                 col.set("join_mark", False)
@@ -935,9 +935,9 @@ def eliminate_join_marks(expression: exp.Expression) -> exp.Expression:
 
         if query_from.alias_or_name in new_joins:
             only_old_joins = old_joins.keys() - new_joins.keys()
-            assert (
-                len(only_old_joins) >= 1
-            ), "Cannot determine which table to use in the new FROM clause"
+            assert len(only_old_joins) >= 1, (
+                "Cannot determine which table to use in the new FROM clause"
+            )
 
             new_from_name = list(only_old_joins)[0]
             query.set("from", exp.From(this=old_joins[new_from_name].this))

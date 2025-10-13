@@ -212,6 +212,9 @@ class TestMySQL(Validator):
         self.validate_identity("SELECT * FROM t1, t2 FOR SHARE OF t1, t2 SKIP LOCKED")
         self.validate_identity("SELECT a || b", "SELECT a OR b")
         self.validate_identity(
+            "SELECT * FROM source, JSON_TABLE(source.links, '$.org[*]' COLUMNS(row_id FOR ORDINALITY, link VARCHAR(255) PATH '$.link')) AS links"
+        )
+        self.validate_identity(
             "SELECT * FROM x ORDER BY BINARY a",
             "SELECT * FROM x ORDER BY CAST(a AS BINARY)",
         )
@@ -451,7 +454,7 @@ class TestMySQL(Validator):
             "clickhouse": UnsupportedError,
             "databricks": "SELECT X'CC'",
             "drill": "SELECT 204",
-            "duckdb": "SELECT FROM_HEX('CC')",
+            "duckdb": "SELECT CAST(HEX(FROM_HEX('CC')) AS VARBINARY)",
             "hive": "SELECT 204",
             "mysql": "SELECT x'CC'",
             "oracle": "SELECT 204",
@@ -472,7 +475,7 @@ class TestMySQL(Validator):
             "clickhouse": UnsupportedError,
             "databricks": "SELECT X'0000CC'",
             "drill": "SELECT 204",
-            "duckdb": "SELECT FROM_HEX('0000CC')",
+            "duckdb": "SELECT CAST(HEX(FROM_HEX('0000CC')) AS VARBINARY)",
             "hive": "SELECT 204",
             "mysql": "SELECT x'0000CC'",
             "oracle": "SELECT 204",

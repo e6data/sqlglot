@@ -56,6 +56,7 @@ class TestBigQuery(Validator):
         select_with_quoted_udf = self.validate_identity("SELECT `p.d.UdF`(data) FROM `p.d.t`")
         self.assertEqual(select_with_quoted_udf.selects[0].name, "p.d.UdF")
 
+        self.validate_identity("SELECT EXP(1)")
         self.validate_identity("DATE_TRUNC(x, @foo)").unit.assert_is(exp.Parameter)
         self.validate_identity("ARRAY_CONCAT_AGG(x ORDER BY ARRAY_LENGTH(x) LIMIT 2)")
         self.validate_identity("ARRAY_CONCAT_AGG(x LIMIT 2)")
@@ -79,6 +80,24 @@ class TestBigQuery(Validator):
         self.validate_identity("PARSE_JSON('{}', wide_number_mode => 'exact')")
         self.validate_identity("FOO(values)")
         self.validate_identity("STRUCT(values AS value)")
+
+        self.validate_identity("SELECT SEARCH(data_to_search, 'search_query')")
+        self.validate_identity(
+            "SELECT SEARCH(data_to_search, 'search_query', json_scope => 'JSON_KEYS_AND_VALUES')"
+        )
+        self.validate_identity(
+            "SELECT SEARCH(data_to_search, 'search_query', analyzer => 'PATTERN_ANALYZER')"
+        )
+        self.validate_identity(
+            "SELECT SEARCH(data_to_search, 'search_query', analyzer_options => 'analyzer_options_values')"
+        )
+        self.validate_identity(
+            "SELECT SEARCH(data_to_search, 'search_query', json_scope => 'JSON_VALUES', analyzer => 'LOG_ANALYZER')"
+        )
+        self.validate_identity(
+            "SELECT SEARCH(data_to_search, 'search_query', analyzer => 'PATTERN_ANALYZER', analyzer_options => 'options')"
+        )
+
         self.validate_identity("ARRAY_AGG(x IGNORE NULLS LIMIT 1)")
         self.validate_identity("ARRAY_AGG(x IGNORE NULLS ORDER BY x LIMIT 1)")
         self.validate_identity("ARRAY_AGG(DISTINCT x IGNORE NULLS ORDER BY x LIMIT 1)")
@@ -1815,6 +1834,14 @@ WHERE
         self.validate_identity("SELECT TRANSLATE(MODEL, 'in', 't') FROM (SELECT 'input' AS MODEL)")
         self.validate_identity("SELECT GRANT FROM (SELECT 'input' AS GRANT)")
 
+        self.validate_all(
+            "SELECT 0xA",
+            write={
+                "bigquery": "SELECT 0xA",
+                "duckdb": "SELECT 10",
+            },
+        )
+
     def test_errors(self):
         with self.assertRaises(ParseError):
             self.parse_one("SELECT * FROM a - b.c.d2")
@@ -2098,6 +2125,7 @@ OPTIONS (
         self.validate_identity(
             "SELECT * FROM ML.PREDICT(MODEL mydataset.mymodel, (SELECT custom_label, column1, column2 FROM mydataset.mytable), STRUCT(0.55 AS threshold))"
         )
+        self.validate_identity("SELECT COSH(1.5)")
         self.validate_identity(
             "SELECT * FROM ML.PREDICT(MODEL `my_project`.my_dataset.my_model, (SELECT * FROM input_data))"
         )

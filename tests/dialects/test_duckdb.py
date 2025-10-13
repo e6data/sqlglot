@@ -9,6 +9,7 @@ class TestDuckDB(Validator):
     dialect = "duckdb"
 
     def test_duckdb(self):
+        self.validate_identity("SELECT COSH(1.5)")
         with self.assertRaises(ParseError):
             parse_one("1 //", read="duckdb")
 
@@ -193,6 +194,7 @@ class TestDuckDB(Validator):
                 },
             )
 
+        self.validate_identity("SELECT EXP(1)")
         self.validate_identity("""SELECT '{"duck": [1, 2, 3]}' -> '$.duck[#-1]'""")
         self.validate_all(
             """SELECT JSON_EXTRACT('{"duck": [1, 2, 3]}', '/duck/0')""",
@@ -286,6 +288,13 @@ class TestDuckDB(Validator):
         self.validate_identity(
             "SELECT LIST_TRANSFORM(LIST_FILTER([0, 1, 2, 3, 4, 5], LAMBDA x : x % 2 = 0), LAMBDA y : y * y)"
         )
+        self.validate_identity(
+            """ARG_MIN({'d': "DATE", 'ts': "TIMESTAMP", 'i': "INT", 'b': "BIGINT", 's': "VARCHAR"}, "DOUBLE")"""
+        )
+        self.validate_identity(
+            "ARG_MAX(keyword_name, keyword_category, 3 ORDER BY keyword_name DESC)"
+        )
+        self.validate_identity("INSERT INTO t DEFAULT VALUES RETURNING (c1)")
         self.validate_identity("CREATE TABLE notes (watermark TEXT)")
         self.validate_identity("SELECT LIST_TRANSFORM([5, NULL, 6], LAMBDA x : COALESCE(x, 0) + 1)")
         self.validate_identity("SELECT LIST_TRANSFORM(nbr, LAMBDA x : x + 1) FROM article AS a")
@@ -364,6 +373,10 @@ class TestDuckDB(Validator):
 
         self.validate_identity(
             """SELECT '{ "family": "anatidae", "species": [ "duck", "goose", "swan", null ] }' ->> ['$.family', '$.species']""",
+        )
+        self.validate_identity(
+            "SELECT $🦆$foo$🦆$",
+            "SELECT 'foo'",
         )
         self.validate_identity(
             "SELECT * FROM t PIVOT(FIRST(t) AS t, FOR quarter IN ('Q1', 'Q2'))",
@@ -463,7 +476,9 @@ class TestDuckDB(Validator):
 
         self.validate_all("0b1010", write={"": "0 AS b1010"})
         self.validate_all("0x1010", write={"": "0 AS x1010"})
-        self.validate_all("x ~ y", write={"duckdb": "REGEXP_MATCHES(x, y)"})
+        self.validate_identity("x ~ y", "REGEXP_FULL_MATCH(x, y)")
+        self.validate_identity("x !~ y", "NOT REGEXP_FULL_MATCH(x, y)")
+        self.validate_identity("REGEXP_FULL_MATCH(x, y, 'i')")
         self.validate_all("SELECT * FROM 'x.y'", write={"duckdb": 'SELECT * FROM "x.y"'})
         self.validate_all(
             "SELECT LIST(DISTINCT sample_col) FROM sample_table",
@@ -1072,6 +1087,20 @@ class TestDuckDB(Validator):
         )
         self.validate_identity("LIST_COSINE_DISTANCE(x, y)")
         self.validate_identity("LIST_DISTANCE(x, y)")
+
+        self.validate_identity("SELECT * FROM t LIMIT 10 PERCENT")
+        self.validate_identity("SELECT * FROM t LIMIT 10%", "SELECT * FROM t LIMIT 10 PERCENT")
+
+        self.validate_identity(
+            "SELECT CAST(ROW(1, 2) AS ROW(a INTEGER, b INTEGER))",
+            "SELECT CAST(ROW(1, 2) AS STRUCT(a INT, b INT))",
+        )
+
+        self.validate_identity("SELECT row")
+
+        self.validate_identity(
+            "DELETE FROM t USING (VALUES (1)) AS t1(c), (VALUES (1), (2)) AS t2(c) WHERE t.c = t1.c AND t.c = t2.c"
+        )
 
     def test_array_index(self):
         with self.assertLogs(helper_logger) as cm:
@@ -1830,3 +1859,11 @@ class TestDuckDB(Validator):
         self.validate_identity("FORCE INSTALL httpfs FROM community")
         self.validate_identity("FORCE INSTALL httpfs FROM 'https://extensions.duckdb.org'")
         self.validate_identity("FORCE CHECKPOINT db", check_command_warning=True)
+
+    def test_cte_using_key(self):
+        self.validate_identity(
+            "WITH RECURSIVE tbl(a, b) USING KEY (a) AS (SELECT a, b FROM (VALUES (1, 3), (2, 4)) AS t(a, b) UNION SELECT a + 1, b FROM tbl WHERE a < 3) SELECT * FROM tbl"
+        )
+        self.validate_identity(
+            "WITH RECURSIVE tbl(a, b) USING KEY (a, b) AS (SELECT a, b FROM (VALUES (1, 3), (2, 4)) AS t(a, b) UNION SELECT a + 1, b FROM tbl WHERE a < 3) SELECT * FROM tbl"
+        )

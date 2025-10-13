@@ -1338,7 +1338,10 @@ class Generator(metaclass=_Generator):
         elif materialized:
             materialized = "MATERIALIZED "
 
-        return f"{alias_sql} AS {materialized or ''}{self.wrap(expression)}"
+        key_expressions = self.expressions(expression, key="key_expressions", flat=True)
+        key_expressions = f" USING KEY ({key_expressions})" if key_expressions else ""
+
+        return f"{alias_sql}{key_expressions} AS {materialized or ''}{self.wrap(expression)}"
 
     def tablealias_sql(self, expression: exp.TableAlias) -> str:
         alias = self.sql(expression, "this")
@@ -1487,7 +1490,7 @@ class Generator(metaclass=_Generator):
     def delete_sql(self, expression: exp.Delete) -> str:
         this = self.sql(expression, "this")
         this = f" FROM {this}" if this else ""
-        using = self.sql(expression, "using")
+        using = self.expressions(expression, key="using")
         using = f" USING {using}" if using else ""
         cluster = self.sql(expression, "cluster")
         cluster = f" {cluster}" if cluster else ""
@@ -1961,10 +1964,11 @@ class Generator(metaclass=_Generator):
         on_conflict = self.sql(expression, "conflict")
         on_conflict = f" {on_conflict}" if on_conflict else ""
         by_name = " BY NAME" if expression.args.get("by_name") else ""
+        default_values = "DEFAULT VALUES" if expression.args.get("default") else ""
         returning = self.sql(expression, "returning")
 
         if self.RETURNING_END:
-            expression_sql = f"{expression_sql}{on_conflict}{returning}"
+            expression_sql = f"{expression_sql}{on_conflict}{default_values}{returning}"
         else:
             expression_sql = f"{returning}{expression_sql}{on_conflict}"
 
@@ -2210,7 +2214,9 @@ class Generator(metaclass=_Generator):
             expression_sql = f"{from_sql}{where_sql}{returning}"
         else:
             expression_sql = f"{returning}{from_sql}{where_sql}"
-        sql = f"UPDATE {this} SET {set_sql}{expression_sql}{order}{limit}"
+        options = self.expressions(expression, key="options")
+        options = f" OPTION({options})" if options else ""
+        sql = f"UPDATE {this} SET {set_sql}{expression_sql}{order}{limit}{options}"
         return self.prepend_ctes(expression, sql)
 
     def values_sql(self, expression: exp.Values, values_as_table: bool = True) -> str:
@@ -3233,7 +3239,9 @@ class Generator(metaclass=_Generator):
         this = self.sql(expression, "this")
         kind = self.sql(expression, "kind")
         kind = f" {kind}" if kind else ""
-        return f"{this}{kind}{path}"
+
+        ordinality = " FOR ORDINALITY" if expression.args.get("ordinality") else ""
+        return f"{this}{kind}{path}{ordinality}"
 
     def jsonschema_sql(self, expression: exp.JSONSchema) -> str:
         return self.func("COLUMNS", *expression.expressions)
@@ -3646,10 +3654,15 @@ class Generator(metaclass=_Generator):
         kind = self.sql(expression, "kind")
         not_valid = " NOT VALID" if expression.args.get("not_valid") else ""
         check = " WITH CHECK" if expression.args.get("check") else ""
+        cascade = (
+            " CASCADE"
+            if expression.args.get("cascade") and self.dialect.ALTER_TABLE_SUPPORTS_CASCADE
+            else ""
+        )
         this = self.sql(expression, "this")
         this = f" {this}" if this else ""
 
-        return f"ALTER {kind}{exists}{only}{this}{on_cluster}{check}{self.sep()}{actions_sql}{not_valid}{options}"
+        return f"ALTER {kind}{exists}{only}{this}{on_cluster}{check}{self.sep()}{actions_sql}{not_valid}{options}{cascade}"
 
     def altersession_sql(self, expression: exp.AlterSession) -> str:
         items_sql = self.expressions(expression, flat=True)

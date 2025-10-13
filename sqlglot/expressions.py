@@ -1021,8 +1021,8 @@ class Expression(metaclass=_Expression):
 
     def div(self, other: ExpOrStr, typed: bool = False, safe: bool = False) -> Div:
         div = self._binop(Div, other)
-        div.args["typed"] = typed
-        div.args["safe"] = safe
+        div.set("typed", typed)
+        div.set("safe", safe)
         return div
 
     def asc(self, nulls_first: bool = True) -> Ordered:
@@ -1760,6 +1760,7 @@ class CTE(DerivedTable):
         "alias": True,
         "scalar": False,
         "materialized": False,
+        "key_expressions": False,
     }
 
 
@@ -1877,6 +1878,7 @@ class AlterColumn(Expression):
         "comment": False,
         "allow_null": False,
         "visible": False,
+        "rename_to": False,
     }
 
 
@@ -2424,6 +2426,7 @@ class Insert(DDL, DML):
         "partition": False,
         "settings": False,
         "source": False,
+        "default": False,
     }
 
     def with_(
@@ -3672,6 +3675,7 @@ class Update(DML):
         "returning": False,
         "order": False,
         "limit": False,
+        "options": False,
     }
 
     def table(
@@ -5004,6 +5008,7 @@ class Alter(Expression):
         "cluster": False,
         "not_valid": False,
         "check": False,
+        "cascade": False,
     }
 
     @property
@@ -5889,6 +5894,7 @@ class ArrayConstructCompact(Func):
 
 
 class ArrayContains(Binary, Func):
+    arg_types = {"this": True, "expression": True, "ensure_variant": False}
     _sql_names = ["ARRAY_CONTAINS", "ARRAY_HAS"]
 
 
@@ -6450,6 +6456,10 @@ class Exp(Func):
     pass
 
 
+class Factorial(Func):
+    pass
+
+
 # https://docs.snowflake.com/en/sql-reference/functions/flatten
 class Explode(Func, UDTF):
     arg_types = {"this": True, "expressions": False}
@@ -6813,7 +6823,13 @@ class JSONExists(Func):
 # https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/JSON_TABLE.html
 # Note: parsing of JSON column definitions is currently incomplete.
 class JSONColumnDef(Expression):
-    arg_types = {"this": False, "kind": False, "path": False, "nested_schema": False}
+    arg_types = {
+        "this": False,
+        "kind": False,
+        "path": False,
+        "nested_schema": False,
+        "ordinality": False,
+    }
 
 
 class JSONSchema(Expression):
@@ -7385,6 +7401,10 @@ class RegexpILike(Binary, Func):
     arg_types = {"this": True, "expression": True, "flag": False}
 
 
+class RegexpFullMatch(Binary, Func):
+    arg_types = {"this": True, "expression": True, "options": False}
+
+
 class RegexpInstr(Func):
     arg_types = {
         "this": True,
@@ -7560,6 +7580,19 @@ class FindInSet(Func):
     """
 
     arg_types = {"this": True, "expression": True}
+
+
+# Snowflake: https://docs.snowflake.com/en/sql-reference/functions/search
+# BigQuery: https://cloud.google.com/bigquery/docs/reference/standard-sql/search_functions#search
+class Search(Func):
+    arg_types = {
+        "this": True,  # data_to_search / search_data
+        "expression": True,  # search_query / search_string
+        "json_scope": False,  # BigQuery: JSON_VALUES | JSON_KEYS | JSON_KEYS_AND_VALUES
+        "analyzer": False,  # Both: analyzer / ANALYZER
+        "analyzer_options": False,  # BigQuery: analyzer_options_values
+        "search_mode": False,  # Snowflake: OR | AND
+    }
 
 
 class StrToDate(Func):

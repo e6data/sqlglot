@@ -148,10 +148,33 @@ def _build_if_from_div0(args: t.List) -> exp.If:
     return exp.If(this=cond, true=true, false=false)
 
 
+# https://docs.snowflake.com/en/sql-reference/functions/div0null
+def _build_if_from_div0null(args: t.List) -> exp.If:
+    lhs = exp._wrap(seq_get(args, 0), exp.Binary)
+    rhs = exp._wrap(seq_get(args, 1), exp.Binary)
+
+    # Returns 0 when divisor is 0 OR NULL
+    cond = exp.EQ(this=rhs, expression=exp.Literal.number(0)).or_(
+        exp.Is(this=rhs, expression=exp.null())
+    )
+    true = exp.Literal.number(0)
+    false = exp.Div(this=lhs, expression=rhs)
+    return exp.If(this=cond, true=true, false=false)
+
+
 # https://docs.snowflake.com/en/sql-reference/functions/zeroifnull
 def _build_if_from_zeroifnull(args: t.List) -> exp.If:
     cond = exp.Is(this=seq_get(args, 0), expression=exp.Null())
     return exp.If(this=cond, true=exp.Literal.number(0), false=seq_get(args, 0))
+
+
+def _build_search(args: t.List) -> exp.Search:
+    kwargs = {
+        "this": seq_get(args, 0),
+        "expression": seq_get(args, 1),
+        **{arg.name.lower(): arg for arg in args[2:] if isinstance(arg, exp.Kwarg)},
+    }
+    return exp.Search(**kwargs)
 
 
 # https://docs.snowflake.com/en/sql-reference/functions/zeroifnull
@@ -542,6 +565,24 @@ class Snowflake(Dialect):
 
     TYPE_TO_EXPRESSIONS = {
         **Dialect.TYPE_TO_EXPRESSIONS,
+        exp.DataType.Type.DOUBLE: {
+            *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.DOUBLE],
+            exp.Cos,
+            exp.Cosh,
+            exp.Cot,
+            exp.Degrees,
+            exp.Exp,
+            exp.Sin,
+            exp.Sinh,
+            exp.Tan,
+            exp.Tanh,
+            exp.Asin,
+            exp.Asinh,
+            exp.Atan,
+            exp.Atan2,
+            exp.Atanh,
+            exp.Cbrt,
+        },
         exp.DataType.Type.INT: {
             *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.INT],
             exp.Ascii,
@@ -598,6 +639,7 @@ class Snowflake(Dialect):
         },
         exp.DataType.Type.BIGINT: {
             *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.BIGINT],
+            exp.Factorial,
             exp.MD5NumberLower64,
             exp.MD5NumberUpper64,
         },
@@ -609,6 +651,13 @@ class Snowflake(Dialect):
         exp.DataType.Type.OBJECT: {
             exp.ParseUrl,
             exp.ParseIp,
+        },
+        exp.DataType.Type.DECIMAL: {
+            exp.RegexpCount,
+        },
+        exp.DataType.Type.BOOLEAN: {
+            *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.BOOLEAN],
+            exp.Search,
         },
     }
 
@@ -622,11 +671,14 @@ class Snowflake(Dialect):
         **{
             expr_type: lambda self, e: self._annotate_by_args(e, "this")
             for expr_type in (
+                exp.Floor,
                 exp.Left,
                 exp.Pad,
                 exp.Right,
                 exp.Stuff,
                 exp.Substring,
+                exp.Round,
+                exp.Ceil,
             )
         },
         **{
@@ -712,7 +764,7 @@ class Snowflake(Dialect):
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
             "ARRAY_CONSTRUCT": lambda args: exp.Array(expressions=args),
             "ARRAY_CONTAINS": lambda args: exp.ArrayContains(
-                this=seq_get(args, 1), expression=seq_get(args, 0)
+                this=seq_get(args, 1), expression=seq_get(args, 0), ensure_variant=False
             ),
             "ARRAY_GENERATE_RANGE": lambda args: exp.GenerateSeries(
                 # ARRAY_GENERATE_RANGE has an exlusive end; we normalize it to be inclusive
@@ -758,6 +810,7 @@ class Snowflake(Dialect):
             "DATEDIFF": _build_datediff,
             "DAYOFWEEKISO": exp.DayOfWeekIso.from_arg_list,
             "DIV0": _build_if_from_div0,
+            "DIV0NULL": _build_if_from_div0null,
             "EDITDISTANCE": lambda args: exp.Levenshtein(
                 this=seq_get(args, 0), expression=seq_get(args, 1), max_dist=seq_get(args, 2)
             ),
@@ -835,6 +888,7 @@ class Snowflake(Dialect):
             "ZEROIFNULL": _build_if_from_zeroifnull,
             "LIKE": _build_like(exp.Like),
             "ILIKE": _build_like(exp.ILike),
+            "SEARCH": _build_search,
         }
         FUNCTIONS.pop("PREDICT")
 
@@ -1404,7 +1458,13 @@ class Snowflake(Dialect):
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
             exp.ArrayConcat: lambda self, e: self.arrayconcat_sql(e, name="ARRAY_CAT"),
-            exp.ArrayContains: lambda self, e: self.func("ARRAY_CONTAINS", e.expression, e.this),
+            exp.ArrayContains: lambda self, e: self.func(
+                "ARRAY_CONTAINS",
+                e.expression
+                if e.args.get("ensure_variant") is False
+                else exp.cast(e.expression, exp.DataType.Type.VARIANT, copy=False),
+                e.this,
+            ),
             exp.ArrayIntersect: rename_func("ARRAY_INTERSECTION"),
             exp.ArrayFilter: rename_func("FILTER"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),

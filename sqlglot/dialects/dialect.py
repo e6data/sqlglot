@@ -528,6 +528,13 @@ class Dialect(metaclass=_Dialect):
     equivalent of CREATE SCHEMA is CREATE DATABASE.
     """
 
+    ALTER_TABLE_SUPPORTS_CASCADE = False
+    """
+    Hive by default does not update the schema of existing partitions when a column is changed.
+    the CASCADE clause is used to indicate that the change should be propagated to all existing partitions.
+    the Spark dialect, while derived from Hive, does not support the CASCADE clause.
+    """
+
     # Whether ADD is present for each column added by ALTER TABLE
     ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN = True
 
@@ -717,8 +724,10 @@ class Dialect(metaclass=_Dialect):
             exp.Exp,
             exp.Ln,
             exp.Log,
+            exp.Pi,
             exp.Pow,
             exp.Quantile,
+            exp.Radians,
             exp.Round,
             exp.SafeDivide,
             exp.Sqrt,
@@ -1193,7 +1202,7 @@ def no_paren_current_date_sql(self: Generator, expression: exp.CurrentDate) -> s
 def no_recursive_cte_sql(self: Generator, expression: exp.With) -> str:
     if expression.args.get("recursive"):
         self.unsupported("Recursive CTEs are unsupported")
-        expression.args["recursive"] = False
+        expression.set("recursive", False)
     return self.with_sql(expression)
 
 

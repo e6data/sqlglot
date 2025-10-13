@@ -40,6 +40,8 @@ class TestParser(unittest.TestCase):
             "Failed to parse 'SELECT * FROM tbl' into <class 'sqlglot.expressions.Table'>",
         )
 
+        self.assertIsInstance(parse_one("foo INT NOT NULL", into=exp.ColumnDef), exp.ColumnDef)
+
     def test_parse_into_error(self):
         expected_message = "Failed to parse 'SELECT 1;' into [<class 'sqlglot.expressions.From'>]"
         expected_errors = [
@@ -932,17 +934,6 @@ class TestParser(unittest.TestCase):
             ).find(exp.Collate)
             self.assertIsInstance(collate_node, exp.Collate)
             self.assertIsInstance(collate_node.expression, collate_pair[1])
-
-    def test_odbc_date_literals(self):
-        for value, cls in [
-            ("{d'2024-01-01'}", exp.Date),
-            ("{t'12:00:00'}", exp.Time),
-            ("{ts'2024-01-01 12:00:00'}", exp.Timestamp),
-        ]:
-            sql = f"INSERT INTO tab(ds) VALUES ({value})"
-            expr = parse_one(sql)
-            self.assertIsInstance(expr, exp.Insert)
-            self.assertIsInstance(expr.expression.expressions[0].expressions[0], cls)
 
     def test_drop_column(self):
         ast = parse_one("ALTER TABLE tbl DROP COLUMN col")

@@ -1536,6 +1536,38 @@ STRUCT<str_col STRING>;
 --------------------------------------
 
 # dialect: snowflake
+ABS(tbl.bigint_col);
+BIGINT;
+
+# dialect: snowflake
+ABS(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+ASIN(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+ASINH(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+ATAN(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+ATAN2(tbl.double_col, tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+ATANH(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+CBRT(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
 AI_AGG('foo', 'bar');
 VARCHAR;
 
@@ -1612,6 +1644,22 @@ CHARINDEX('world', 'hello world', 1);
 INT;
 
 # dialect: snowflake
+CEIL(3.14);
+DOUBLE;
+
+# dialect: snowflake
+CEIL(3.14::FLOAT, 1);
+FLOAT;
+
+# dialect: snowflake
+CEIL(3.14, 1);
+DOUBLE;
+
+# dialect: snowflake
+CEIL(10::NUMERIC);
+NUMBER;
+
+# dialect: snowflake
 CHAR(65);
 VARCHAR;
 
@@ -1624,6 +1672,10 @@ COLLATE('hello', 'utf8');
 VARCHAR;
 
 # dialect: snowflake
+COSH(1.5);
+DOUBLE;
+
+# dialect: snowflake
 COMPRESS('Hello World', 'SNAPPY');
 BINARY;
 
@@ -1632,12 +1684,36 @@ COMPRESS('Hello World', 'zlib(1)');
 BINARY;
 
 # dialect: snowflake
+DEGREES(PI()/3);
+DOUBLE;
+
+# dialect: snowflake
+DEGREES(1);
+DOUBLE;
+
+# dialect: snowflake
 DECOMPRESS_BINARY('compressed_data', 'SNAPPY');
 BINARY;
 
 # dialect: snowflake
 DECOMPRESS_STRING('compressed_data', 'ZSTD');
 VARCHAR;
+
+# dialect: snowflake
+DIV0(10, 0);
+DOUBLE;
+
+# dialect: snowflake
+DIV0(tbl.double_col, tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+DIV0NULL(10, 0);
+DOUBLE;
+
+# dialect: snowflake
+DIV0NULL(tbl.double_col, tbl.double_col);
+DOUBLE;
 
 # dialect: snowflake
 LPAD('Hello', 10, '*');
@@ -1666,6 +1742,14 @@ BINARY;
 # dialect: snowflake
 COLLATION('hello');
 VARCHAR;
+
+# dialect: snowflake
+COT(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+COS(tbl.double_col);
+DOUBLE;
 
 # dialect: snowflake
 CONCAT('Hello', 'World!');
@@ -1714,6 +1798,30 @@ INT;
 # dialect: snowflake
 EDITDISTANCE('hello', 'world', 3);
 INT;
+
+# dialect: snowflake
+EXP(1);
+DOUBLE;
+
+# dialect: snowflake
+EXP(5.5);
+DOUBLE;
+
+# dialect: snowflake
+FACTORIAL(5);
+BIGINT;
+
+# dialect: snowflake
+FLOOR(42);
+INT;
+
+# dialect: snowflake
+FLOOR(135.135, 1);
+DOUBLE;
+
+# dialect: snowflake
+FLOOR(tbl.bigint_col, -1);
+BIGINT;
 
 # dialect: snowflake
 ENDSWITH('hello world', 'world');
@@ -1840,8 +1948,28 @@ POSITION('abc', 'abcdef', 1);
 INT;
 
 # dialect: snowflake
+PI();
+DOUBLE;
+
+# dialect: snowflake
+POW(tbl.double_col, 2);
+DOUBLE;
+
+# dialect: snowflake
+RADIANS(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
 LOWER(tbl.str_col);
 VARCHAR;
+
+# dialect: snowflake
+LN(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+LOG(tbl.double_col);
+DOUBLE;
 
 # dialect: snowflake
 LTRIM('  hello world  ');
@@ -1854,6 +1982,18 @@ VARCHAR;
 # dialect: snowflake
 LTRIM(NULL);
 VARCHAR;
+
+# dialect: snowflake
+MOD(tbl.bigint_col, 3);
+BIGINT;
+
+# dialect: snowflake
+MOD(tbl.double_col, 2.5);
+DOUBLE;
+
+# dialect: snowflake
+MOD(42, 7);
+INT;
 
 # dialect: snowflake
 'foo' REGEXP 'bar';
@@ -2020,6 +2160,26 @@ REVERSE(NULL);
 VARCHAR;
 
 # dialect: snowflake
+ROUND(42);
+INT;
+
+# dialect: snowflake
+ROUND(tbl.bigint_col, -1);
+BIGINT;
+
+# dialect: snowflake
+ROUND(tbl.double_col, 0, 'HALF_TO_EVEN');
+DOUBLE;
+
+# dialect: snowflake
+SQUARE(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+TANH(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
 RIGHT('hello world', 5);
 VARCHAR;
 
@@ -2136,6 +2296,22 @@ SHA2_HEX('foo', null);
 VARCHAR;
 
 # dialect: snowflake
+SIN(tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+SINH(1);
+DOUBLE;
+
+# dialect: snowflake
+SINH(1.5);
+DOUBLE;
+
+# dialect: snowflake
+SIGN(tbl.double_col);
+INT;
+
+# dialect: snowflake
 SOUNDEX(tbl.str_col);
 VARCHAR;
 
@@ -2204,6 +2380,26 @@ STARTSWITH(tbl.bin_col, NULL);
 BOOLEAN;
 
 # dialect: snowflake
+SEARCH(line, 'king');
+BOOLEAN;
+
+# dialect: snowflake
+SEARCH((play, line), 'dream');
+BOOLEAN;
+
+# dialect: snowflake
+SEARCH(line, 'king', ANALYZER => 'UNICODE_ANALYZER');
+BOOLEAN;
+
+# dialect: snowflake
+SEARCH(line, 'king', SEARCH_MODE => 'OR');
+BOOLEAN;
+
+# dialect: snowflake
+SEARCH(line, 'king', ANALYZER => 'UNICODE_ANALYZER', SEARCH_MODE => 'AND');
+BOOLEAN;
+
+# dialect: snowflake
 STRTOK_TO_ARRAY('a,b,c', ',');
 ARRAY;
 
@@ -2222,6 +2418,10 @@ BINARY;
 # dialect: snowflake
 SUBSTR(tbl.str_col, NULL);
 STRING;
+
+# dialect: snowflake
+TAN(tbl.double_col);
+DOUBLE;
 
 # dialect: snowflake
 TRANSLATE('hello world', 'elo', 'XYZ');
@@ -2370,3 +2570,7 @@ OBJECT;
 # dialect: tsql
 SYSDATETIMEOFFSET();
 TIMESTAMPTZ;
+
+# dialect: tsql
+RADIANS(90);
+INT;

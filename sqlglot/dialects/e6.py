@@ -1388,7 +1388,9 @@ class E6(Dialect):
             "ARBITRARY": exp.AnyValue.from_arg_list,
             "ARRAY_AGG": exp.ArrayAgg.from_arg_list,
             "ARRAY_CONCAT": exp.ArrayConcat.from_arg_list,
-            "ARRAY_CONTAINS": exp.ArrayContains.from_arg_list,
+            "ARRAY_CONTAINS": lambda args: exp.ArrayContains(
+                expression=seq_get(args, 1), this=seq_get(args, 0), ensure_variant=False
+            ),
             "ARRAY_JOIN": exp.ArrayToString.from_arg_list,
             "ARRAY_TO_STRING": exp.ArrayToString.from_arg_list,
             "ARRAY_SLICE": lambda args: exp.ArraySlice(

@@ -483,7 +483,7 @@ class Presto(Dialect):
             exp.Array: lambda self, e: f"ARRAY[{self.expressions(e, flat=True)}]",
             exp.ArrayAny: rename_func("ANY_MATCH"),
             exp.ArrayConcat: rename_func("CONCAT"),
-            exp.ArrayContains: rename_func("CONTAINS"),
+            exp.ArrayContains: lambda self, e: self.func("CONTAINS", e.this, e.expression),
             exp.ArraySlice: lambda self, e: self.func(
                 "SLICE",
                 e.args.get("this"),
