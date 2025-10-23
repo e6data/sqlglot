@@ -758,6 +758,7 @@ LANGUAGE js AS
                     "bigquery": "SELECT DATETIME_DIFF('2023-01-01T00:00:00', '2023-01-01T05:00:00', MILLISECOND)",
                     "databricks": "SELECT TIMESTAMPDIFF(MILLISECOND, '2023-01-01T05:00:00', '2023-01-01T00:00:00')",
                     "snowflake": "SELECT TIMESTAMPDIFF(MILLISECOND, '2023-01-01T05:00:00', '2023-01-01T00:00:00')",
+                    "duckdb": "SELECT DATE_DIFF('MILLISECOND', CAST('2023-01-01T05:00:00' AS TIMESTAMP), CAST('2023-01-01T00:00:00' AS TIMESTAMP))",
                 },
             ),
         )
@@ -826,6 +827,13 @@ LANGUAGE js AS
             write={
                 "bigquery": "SELECT TIME_ADD(CAST('09:05:03' AS TIME), INTERVAL '2' HOUR)",
                 "duckdb": "SELECT CAST('09:05:03' AS TIME) + INTERVAL '2' HOUR",
+            },
+        )
+        self.validate_all(
+            "SELECT TIME_SUB(CAST('09:05:03' AS TIME), INTERVAL 2 HOUR)",
+            write={
+                "bigquery": "SELECT TIME_SUB(CAST('09:05:03' AS TIME), INTERVAL '2' HOUR)",
+                "duckdb": "SELECT CAST('09:05:03' AS TIME) - INTERVAL '2' HOUR",
             },
         )
         self.validate_all(
@@ -2516,6 +2524,15 @@ OPTIONS (
 
         for dialect in ("bigquery", "spark", "databricks"):
             parse_one("UNIX_SECONDS(col)", dialect=dialect).assert_is(exp.UnixSeconds)
+
+    def test_unix_micros(self):
+        self.validate_all(
+            "SELECT UNIX_MICROS('2008-12-25 15:30:00+00')",
+            write={
+                "bigquery": "SELECT UNIX_MICROS('2008-12-25 15:30:00+00')",
+                "duckdb": "SELECT EPOCH_US('2008-12-25 15:30:00+00')",
+            },
+        )
 
     def test_regexp_extract(self):
         self.validate_identity("REGEXP_EXTRACT(x, '(?<)')")

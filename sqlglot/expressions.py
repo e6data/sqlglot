@@ -157,14 +157,11 @@ class Expression(metaclass=_Expression):
                         if t is list:
                             for x in v:
                                 if x is not None and x is not False:
-                                    hash_ = hash((hash_, k, x.lower() if isinstance(x, str) else x))
+                                    hash_ = hash((hash_, k, x.lower() if type(x) is str else x))
                                 else:
                                     hash_ = hash((hash_, k))
                         elif v is not None and v is not False:
-                            if isinstance(v, str):
-                                hash_ = hash((hash_, k, v.lower()))
-                            else:
-                                hash_ = hash((hash_, k, v))
+                            hash_ = hash((hash_, k, v.lower() if t is str else v))
 
                 node._hash = hash_
         assert self._hash
@@ -466,9 +463,8 @@ class Expression(metaclass=_Expression):
                 for v in reversed(vs) if reverse else vs:  # type: ignore
                     if hasattr(v, "parent"):
                         yield v
-            else:
-                if hasattr(vs, "parent"):
-                    yield vs
+            elif hasattr(vs, "parent"):
+                yield vs
 
     def find(self, *expression_types: t.Type[E], bfs: bool = True) -> t.Optional[E]:
         """
@@ -943,8 +939,7 @@ class Expression(metaclass=_Expression):
 
     def __getitem__(self, other: ExpOrStr | t.Tuple[ExpOrStr]) -> Bracket:
         return Bracket(
-            this=self.copy(),
-            expressions=[convert(e, copy=True) for e in ensure_list(other)],
+            this=self.copy(), expressions=[convert(e, copy=True) for e in ensure_list(other)]
         )
 
     def __iter__(self) -> t.Iterator:
@@ -1151,11 +1146,7 @@ class Query(Expression):
         return Subquery(this=instance, alias=alias)
 
     def limit(
-        self: Q,
-        expression: ExpOrStr | int,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+        self: Q, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Q:
         """
         Adds a LIMIT clause to this query.
@@ -1189,11 +1180,7 @@ class Query(Expression):
         )
 
     def offset(
-        self: Q,
-        expression: ExpOrStr | int,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+        self: Q, expression: ExpOrStr | int, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Q:
         """
         Set the OFFSET expression.
@@ -1400,11 +1387,7 @@ class Query(Expression):
         )
 
     def union(
-        self,
-        *expressions: ExpOrStr,
-        distinct: bool = True,
-        dialect: DialectType = None,
-        **opts,
+        self, *expressions: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
     ) -> Union:
         """
         Builds a UNION expression.
@@ -1427,11 +1410,7 @@ class Query(Expression):
         return union(self, *expressions, distinct=distinct, dialect=dialect, **opts)
 
     def intersect(
-        self,
-        *expressions: ExpOrStr,
-        distinct: bool = True,
-        dialect: DialectType = None,
-        **opts,
+        self, *expressions: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
     ) -> Intersect:
         """
         Builds an INTERSECT expression.
@@ -1454,11 +1433,7 @@ class Query(Expression):
         return intersect(self, *expressions, distinct=distinct, dialect=dialect, **opts)
 
     def except_(
-        self,
-        *expressions: ExpOrStr,
-        distinct: bool = True,
-        dialect: DialectType = None,
-        **opts,
+        self, *expressions: ExpOrStr, distinct: bool = True, dialect: DialectType = None, **opts
     ) -> Except:
         """
         Builds an EXCEPT expression.
@@ -1797,13 +1772,7 @@ class UnicodeString(Condition):
 
 
 class Column(Condition):
-    arg_types = {
-        "this": True,
-        "table": False,
-        "db": False,
-        "catalog": False,
-        "join_mark": False,
-    }
+    arg_types = {"this": True, "table": False, "db": False, "catalog": False, "join_mark": False}
 
     @property
     def table(self) -> str:
@@ -1933,7 +1902,13 @@ class Comment(Expression):
 
 
 class Comprehension(Expression):
-    arg_types = {"this": True, "expression": True, "iterator": True, "condition": False}
+    arg_types = {
+        "this": True,
+        "expression": True,
+        "position": False,
+        "iterator": True,
+        "condition": False,
+    }
 
 
 # https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree#mergetree-table-ttl
@@ -3679,11 +3654,7 @@ class Update(DML):
     }
 
     def table(
-        self,
-        expression: ExpOrStr,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+        self, expression: ExpOrStr, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Update:
         """
         Set the table to update.
@@ -3877,8 +3848,15 @@ class Update(DML):
         )
 
 
+# DuckDB supports VALUES followed by https://duckdb.org/docs/stable/sql/query_syntax/limit
 class Values(UDTF):
-    arg_types = {"expressions": True, "alias": False}
+    arg_types = {
+        "expressions": True,
+        "alias": False,
+        "order": False,
+        "limit": False,
+        "offset": False,
+    }
 
 
 class Var(Expression):
@@ -3923,11 +3901,7 @@ class Select(Query):
     }
 
     def from_(
-        self,
-        expression: ExpOrStr,
-        dialect: DialectType = None,
-        copy: bool = True,
-        **opts,
+        self, expression: ExpOrStr, dialect: DialectType = None, copy: bool = True, **opts
     ) -> Select:
         """
         Set the FROM expression.
@@ -4420,8 +4394,7 @@ class Select(Query):
         """
         inst = maybe_copy(self, copy)
         inst.set(
-            "hint",
-            Hint(expressions=[maybe_parse(h, copy=copy, dialect=dialect) for h in hints]),
+            "hint", Hint(expressions=[maybe_parse(h, copy=copy, dialect=dialect) for h in hints])
         )
 
         return inst
@@ -5622,11 +5595,15 @@ class BitwiseXorAgg(AggFunc):
     pass
 
 
-class BitwiseCountAgg(AggFunc):
+class BitwiseCount(Func):
     pass
 
 
 class ByteLength(Func):
+    pass
+
+
+class Boolnot(Func):
     pass
 
 
@@ -6325,6 +6302,10 @@ class LastDay(Func, TimeUnit):
     arg_types = {"this": True, "unit": False}
 
 
+class PreviousDay(Func):
+    arg_types = {"this": True, "expression": True}
+
+
 class LaxBool(Func):
     pass
 
@@ -6368,6 +6349,10 @@ class TimestampDiff(Func, TimeUnit):
 
 class TimestampTrunc(Func, TimeUnit):
     arg_types = {"this": True, "unit": True, "zone": False}
+
+
+class TimeSlice(Func, TimeUnit):
+    arg_types = {"this": True, "expression": True, "unit": True, "kind": False}
 
 
 class TimeAdd(Func, TimeUnit):
@@ -6600,6 +6585,11 @@ class WidthBucket(Func):
     arg_types = {"this": True, "minExpr": True, "maxExpr": True, "numBuckets": True}
 
 
+class GreatestIgnoreNulls(Func):
+    arg_types = {"expressions": True}
+    is_var_len_args = True
+
+
 # Trino's `ON OVERFLOW TRUNCATE [filler_string] {WITH | WITHOUT} COUNT`
 # https://trino.io/docs/current/functions/aggregate.html#listagg
 class OverflowTruncateBehavior(Expression):
@@ -6626,6 +6616,18 @@ class HexDecodeString(Func):
 # https://docs.snowflake.com/en/sql-reference/functions/hex_encode
 class HexEncode(Func):
     arg_types = {"this": True, "case": False}
+
+
+class Hour(Func):
+    pass
+
+
+class Minute(Func):
+    pass
+
+
+class Second(Func):
+    pass
 
 
 # T-SQL: https://learn.microsoft.com/en-us/sql/t-sql/functions/compress-transact-sql?view=sql-server-ver17
@@ -7208,6 +7210,10 @@ class Minute(Func):
     arg_types = {"this": True}
 
 
+class Monthname(Func):
+    pass
+
+
 class AddMonths(Func):
     arg_types = {"this": True, "expression": True}
 
@@ -7344,6 +7350,11 @@ class ReadCSV(Func):
     _sql_names = ["READ_CSV"]
     is_var_len_args = True
     arg_types = {"this": True, "expressions": False}
+
+
+class ReadParquet(Func):
+    is_var_len_args = True
+    arg_types = {"expressions": True}
 
 
 class Reduce(Func):
@@ -7824,18 +7835,38 @@ class Uuid(Func):
     arg_types = {"this": False, "name": False}
 
 
+TIMESTAMP_PARTS = {
+    "year": False,
+    "month": False,
+    "day": False,
+    "hour": False,
+    "min": False,
+    "sec": False,
+    "nano": False,
+}
+
+
 class TimestampFromParts(Func):
     _sql_names = ["TIMESTAMP_FROM_PARTS", "TIMESTAMPFROMPARTS"]
     arg_types = {
-        "year": True,
-        "month": True,
-        "day": True,
-        "hour": True,
-        "min": True,
-        "sec": True,
-        "nano": False,
+        **TIMESTAMP_PARTS,
         "zone": False,
         "milli": False,
+        "this": False,
+        "expression": False,
+    }
+
+
+class TimestampLtzFromParts(Func):
+    _sql_names = ["TIMESTAMP_LTZ_FROM_PARTS", "TIMESTAMPLTZFROMPARTS"]
+    arg_types = TIMESTAMP_PARTS.copy()
+
+
+class TimestampTzFromParts(Func):
+    _sql_names = ["TIMESTAMP_TZ_FROM_PARTS", "TIMESTAMPTZFROMPARTS"]
+    arg_types = {
+        **TIMESTAMP_PARTS,
+        "zone": False,
     }
 
 
@@ -7873,6 +7904,10 @@ class VarPop(AggFunc):
     _sql_names = ["VAR_POP"]
 
 
+class WidthBucket(Func):
+    arg_types = {"this": True, "min_value": True, "max_value": True, "num_buckets": True}
+
+
 class CovarSamp(Binary, AggFunc):
     pass
 
@@ -7887,6 +7922,10 @@ class Week(Func):
 
 class WeekStart(Expression):
     pass
+
+
+class NextDay(Func):
+    arg_types = {"this": True, "expression": True}
 
 
 class XMLElement(Func):
@@ -7925,7 +7964,8 @@ class Merge(DML):
     arg_types = {
         "this": True,
         "using": True,
-        "on": True,
+        "on": False,
+        "using_cond": False,
         "whens": True,
         "with": False,
         "returning": False,

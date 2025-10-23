@@ -7,6 +7,8 @@ class TestStarrocks(Validator):
     dialect = "starrocks"
 
     def test_starrocks(self):
+        self.assertEqual(self.validate_identity("arr[1]").expressions[0], exp.Literal.number(0))
+
         self.validate_identity("SELECT ARRAY_JOIN([1, 3, 5, NULL], '_', 'NULL')")
         self.validate_identity("SELECT ARRAY_JOIN([1, 3, 5, NULL], '_')")
         self.validate_identity("ALTER TABLE a SWAP WITH b")
@@ -14,7 +16,14 @@ class TestStarrocks(Validator):
         self.validate_identity("SELECT ST_POINT(10, 20)")
         self.validate_identity("SELECT ST_DISTANCE_SPHERE(10.1, 20.2, 30.3, 40.4)")
         self.validate_identity("ARRAY_FLATTEN(arr)").assert_is(exp.Flatten)
-        self.assertEqual(self.validate_identity("arr[1]").expressions[0], exp.Literal.number(0))
+
+        self.validate_all(
+            "SELECT * FROM t WHERE cond",
+            read={
+                "": "SELECT * FROM t WHERE cond IS TRUE",
+                "starrocks": "SELECT * FROM t WHERE cond",
+            },
+        )
 
     def test_ddl(self):
         self.validate_identity("CREATE TABLE t (c INT) COMMENT 'c'")

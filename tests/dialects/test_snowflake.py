@@ -19,6 +19,7 @@ class TestSnowflake(Validator):
         self.assertEqual(ast.sql("snowflake"), "DATEADD(MONTH, n, d)")
 
         self.validate_identity("SELECT GET(a, b)")
+        self.validate_identity("SELECT GREATEST_IGNORE_NULLS(1, 2, 3, NULL)")
         self.validate_identity("SELECT TAN(x)")
         self.validate_identity("SELECT COS(x)")
         self.validate_identity("SELECT SINH(1.5)")
@@ -44,11 +45,17 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT FACTORIAL(5)")
         self.validate_identity("SELECT BIT_LENGTH('abc')")
         self.validate_identity("SELECT BIT_LENGTH(x'A1B2')")
+        self.validate_identity("SELECT BOOLNOT(0)")
+        self.validate_identity("SELECT BOOLNOT(-3.79)")
+        self.validate_identity("SELECT BOOLXOR(2, 0)")
+        self.validate_identity("SELECT BOOLOR(1, -2)", "SELECT 1 OR -2")
+        self.validate_identity("SELECT BOOLAND(1, -2)", "SELECT 1 AND -2")
         self.validate_identity("SELECT RTRIMMED_LENGTH(' ABCD ')")
         self.validate_identity("SELECT HEX_DECODE_STRING('48656C6C6F')")
         self.validate_identity("SELECT HEX_ENCODE('Hello World')")
         self.validate_identity("SELECT HEX_ENCODE('Hello World', 1)")
         self.validate_identity("SELECT HEX_ENCODE('Hello World', 0)")
+        self.validate_identity("SELECT NEXT_DAY('2025-10-15', 'FRIDAY')")
         self.validate_identity("SELECT CHR(8364)")
         self.validate_identity("SELECT COMPRESS('Hello World', 'ZLIB')")
         self.validate_identity("SELECT DECOMPRESS_BINARY('compressed_data', 'SNAPPY')")
@@ -75,11 +82,14 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT JAROWINKLER_SIMILARITY('hello', 'world')")
         self.validate_identity("SELECT TRANSLATE(column_name, 'abc', '123')")
         self.validate_identity("SELECT UNICODE(column_name)")
+        self.validate_identity("SELECT WIDTH_BUCKET(col, 0, 100, 10)")
         self.validate_identity("SELECT SPLIT_PART('11.22.33', '.', 1)")
         self.validate_identity("SELECT PI()")
         self.validate_identity("SELECT DEGREES(PI() / 3)")
         self.validate_identity("SELECT DEGREES(1)")
         self.validate_identity("SELECT RADIANS(180)")
+        self.validate_identity("SELECT RANDOM()")
+        self.validate_identity("SELECT RANDOM(123)")
         self.validate_identity("PARSE_URL('https://example.com/path')")
         self.validate_identity("PARSE_URL('https://example.com/path', 1)")
         self.validate_identity("SELECT {*} FROM my_table")
@@ -114,7 +124,26 @@ class TestSnowflake(Validator):
         self.validate_identity("ALTER TABLE authors ADD CONSTRAINT c1 UNIQUE (id, email)")
         self.validate_identity("RM @parquet_stage", check_command_warning=True)
         self.validate_identity("REMOVE @parquet_stage", check_command_warning=True)
-        self.validate_identity("SELECT TIMESTAMP_FROM_PARTS(d, t)")
+        self.validate_identity("SELECT TIMESTAMP_FROM_PARTS(2024, 5, 9, 14, 30, 45)")
+        self.validate_identity("SELECT TIMESTAMP_FROM_PARTS(2024, 5, 9, 14, 30, 45, 123)")
+        self.validate_identity("SELECT TIMESTAMP_LTZ_FROM_PARTS(2013, 4, 5, 12, 00, 00)")
+        self.validate_identity("SELECT TIMESTAMP_TZ_FROM_PARTS(2013, 4, 5, 12, 00, 00)")
+        self.validate_identity(
+            "SELECT TIMESTAMP_TZ_FROM_PARTS(2013, 4, 5, 12, 00, 00, 0, 'America/Los_Angeles')"
+        )
+        self.validate_identity(
+            "SELECT TIMESTAMP_FROM_PARTS(CAST('2024-05-09' AS DATE), CAST('14:30:45' AS TIME))"
+        )
+        self.validate_identity(
+            "SELECT TIMESTAMP_NTZ_FROM_PARTS(TO_DATE('2013-04-05'), TO_TIME('12:00:00'))",
+            "SELECT TIMESTAMP_FROM_PARTS(CAST('2013-04-05' AS DATE), CAST('12:00:00' AS TIME))",
+        )
+        self.validate_identity(
+            "SELECT TIMESTAMP_NTZ_FROM_PARTS(2013, 4, 5, 12, 00, 00, 987654321)",
+            "SELECT TIMESTAMP_FROM_PARTS(2013, 4, 5, 12, 00, 00, 987654321)",
+        )
+
+        self.validate_identity("SELECT DATE_FROM_PARTS(1977, 8, 7)")
         self.validate_identity("SELECT GET_PATH(v, 'attr[0].name') FROM vartab")
         self.validate_identity("SELECT TO_ARRAY(CAST(x AS ARRAY))")
         self.validate_identity("SELECT TO_ARRAY(CAST(['test'] AS VARIANT))")
@@ -1425,6 +1454,43 @@ class TestSnowflake(Validator):
         )
         self.validate_identity("VECTOR_L2_DISTANCE(x, y)")
 
+        # EXTRACT - converts to DATE_PART in Snowflake
+        self.validate_identity(
+            "SELECT EXTRACT(YEAR FROM CAST('2024-05-09' AS DATE))",
+            "SELECT DATE_PART(YEAR, CAST('2024-05-09' AS DATE))",
+        )
+        self.validate_identity(
+            "SELECT EXTRACT(MONTH FROM CAST('2024-05-09 08:50:57' AS TIMESTAMP))",
+            "SELECT DATE_PART(MONTH, CAST('2024-05-09 08:50:57' AS TIMESTAMP))",
+        )
+        self.validate_identity(
+            "SELECT EXTRACT(MINUTE, CAST('08:50:57' AS TIME))",
+            "SELECT DATE_PART(MINUTE, CAST('08:50:57' AS TIME))",
+        )
+        self.validate_identity("SELECT HOUR(CAST('08:50:57' AS TIME))")
+        self.validate_identity("SELECT MINUTE(CAST('08:50:57' AS TIME))")
+        self.validate_identity("SELECT SECOND(CAST('08:50:57' AS TIME))")
+        self.validate_identity("SELECT HOUR(CAST('2024-05-09 08:50:57' AS TIMESTAMP))")
+        self.validate_identity("SELECT MONTHNAME(CAST('2024-05-09' AS DATE))")
+        self.validate_identity("SELECT PREVIOUS_DAY(CAST('2024-05-09' AS DATE), 'MONDAY')")
+        self.validate_identity("SELECT TIME_FROM_PARTS(14, 30, 45)")
+        self.validate_identity("SELECT TIME_FROM_PARTS(14, 30, 45, 123)")
+
+        self.validate_identity(
+            "SELECT MONTHS_BETWEEN(CAST('2019-03-15' AS DATE), CAST('2019-02-15' AS DATE))"
+        )
+        self.validate_identity(
+            "SELECT MONTHS_BETWEEN(CAST('2019-03-01 02:00:00' AS TIMESTAMP), CAST('2019-02-15 01:00:00' AS TIMESTAMP))"
+        )
+
+        self.validate_identity(
+            "SELECT TIME_SLICE(CAST('2024-05-09 08:50:57.891' AS TIMESTAMP), 15, 'MINUTE')"
+        )
+        self.validate_identity("SELECT TIME_SLICE(CAST('2024-05-09' AS DATE), 1, 'DAY')")
+        self.validate_identity(
+            "SELECT TIME_SLICE(CAST('2024-05-09 08:50:57.891' AS TIMESTAMP), 1, 'HOUR', 'start')"
+        )
+
         for join in ("FULL OUTER", "LEFT", "RIGHT", "LEFT OUTER", "RIGHT OUTER", "INNER"):
             with self.subTest(f"Testing transpilation of {join} from Snowflake to DuckDB"):
                 self.validate_all(
@@ -1716,6 +1782,18 @@ class TestSnowflake(Validator):
     def test_timestamps(self):
         self.validate_identity("SELECT CAST('12:00:00' AS TIME)")
         self.validate_identity("SELECT DATE_PART(month, a)")
+
+        self.validate_identity(
+            "SELECT DATE_PART(year FROM CAST('2024-04-08' AS DATE))",
+            "SELECT DATE_PART(year, CAST('2024-04-08' AS DATE))",
+        ).expressions[0].assert_is(exp.Extract)
+        self.validate_identity(
+            "SELECT DATE_PART('month' FROM CAST('2024-04-08' AS DATE))",
+            "SELECT DATE_PART('month', CAST('2024-04-08' AS DATE))",
+        ).expressions[0].assert_is(exp.Extract)
+        self.validate_identity(
+            "SELECT DATE_PART(day FROM a)", "SELECT DATE_PART(day, a)"
+        ).expressions[0].assert_is(exp.Extract)
 
         for data_type in (
             "TIMESTAMP",

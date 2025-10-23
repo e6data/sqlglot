@@ -11,7 +11,6 @@ from sqlglot.dialects.dialect import (
     binary_from_function,
     build_default_decimal_type,
     build_replace_with_optional_replacement,
-    build_timestamp_from_parts,
     date_delta_sql,
     date_trunc_to_time,
     datestrtodate_sql,
@@ -23,6 +22,7 @@ from sqlglot.dialects.dialect import (
     rename_func,
     timestamptrunc_sql,
     timestrtotime_sql,
+    unit_to_str,
     var_map_sql,
     map_date_part,
     no_timestamp_sql,
@@ -39,6 +39,9 @@ from sqlglot.tokens import TokenType
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E, B
+
+
+DATE_PARTS = ["YEAR", "QUARTER", "MONTH", "WEEK", "DAY"]
 
 
 def _build_strtok(args: t.List) -> exp.SplitPart:
@@ -547,6 +550,47 @@ def _annotate_reverse(self: TypeAnnotator, expression: exp.Reverse) -> exp.Rever
     return expression
 
 
+def _annotate_timestamp_from_parts(
+    self: TypeAnnotator, expression: exp.TimestampFromParts
+) -> exp.TimestampFromParts:
+    """Annotate TimestampFromParts with correct type based on arguments.
+    TIMESTAMP_FROM_PARTS with time_zone -> TIMESTAMPTZ
+    TIMESTAMP_FROM_PARTS without time_zone -> TIMESTAMP (defaults to TIMESTAMP_NTZ)
+    """
+    self._annotate_args(expression)
+
+    if expression.args.get("zone"):
+        self._set_type(expression, exp.DataType.Type.TIMESTAMPTZ)
+    else:
+        self._set_type(expression, exp.DataType.Type.TIMESTAMP)
+
+    return expression
+
+
+def _build_timestamp_from_parts(args: t.List) -> exp.Func:
+    """Build TimestampFromParts with support for both syntaxes:
+    1. TIMESTAMP_FROM_PARTS(year, month, day, hour, minute, second [, nanosecond] [, time_zone])
+    2. TIMESTAMP_FROM_PARTS(date_expr, time_expr) - Snowflake specific
+    """
+    if len(args) == 2:
+        return exp.TimestampFromParts(this=seq_get(args, 0), expression=seq_get(args, 1))
+
+    return exp.TimestampFromParts.from_arg_list(args)
+
+
+def _annotate_date_or_time_add(self: TypeAnnotator, expression: E) -> E:
+    self._annotate_args(expression)
+
+    if (
+        expression.this.is_type(exp.DataType.Type.DATE)
+        and expression.text("unit").upper() not in DATE_PARTS
+    ):
+        self._set_type(expression, exp.DataType.Type.TIMESTAMPNTZ)
+    else:
+        self._annotate_by_args(expression, "this")
+    return expression
+
+
 class Snowflake(Dialect):
     # https://docs.snowflake.com/en/sql-reference/identifiers-syntax
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
@@ -572,6 +616,7 @@ class Snowflake(Dialect):
             exp.Cot,
             exp.Degrees,
             exp.Exp,
+            exp.MonthsBetween,
             exp.Sin,
             exp.Sinh,
             exp.Tan,
@@ -590,10 +635,14 @@ class Snowflake(Dialect):
             exp.Length,
             exp.RtrimmedLength,
             exp.BitLength,
+            exp.Hour,
             exp.Levenshtein,
             exp.JarowinklerSimilarity,
+            exp.Minute,
+            exp.Second,
             exp.StrPosition,
             exp.Unicode,
+            exp.WidthBucket,
         },
         exp.DataType.Type.VARCHAR: {
             *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.VARCHAR],
@@ -612,6 +661,7 @@ class Snowflake(Dialect):
             exp.TryHexDecodeString,
             exp.HexEncode,
             exp.Initcap,
+            exp.Monthname,
             exp.RegexpExtract,
             exp.RegexpReplace,
             exp.Repeat,
@@ -642,6 +692,7 @@ class Snowflake(Dialect):
             exp.Factorial,
             exp.MD5NumberLower64,
             exp.MD5NumberUpper64,
+            exp.Rand,
         },
         exp.DataType.Type.ARRAY: {
             exp.Split,
@@ -657,7 +708,17 @@ class Snowflake(Dialect):
         },
         exp.DataType.Type.BOOLEAN: {
             *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.BOOLEAN],
+            exp.Boolnot,
             exp.Search,
+        },
+        exp.DataType.Type.DATE: {
+            *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.DATE],
+            exp.NextDay,
+            exp.PreviousDay,
+        },
+        exp.DataType.Type.TIME: {
+            *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.TIME],
+            exp.TimeFromParts,
         },
     }
 
@@ -671,6 +732,7 @@ class Snowflake(Dialect):
         **{
             expr_type: lambda self, e: self._annotate_by_args(e, "this")
             for expr_type in (
+                exp.AddMonths,
                 exp.Floor,
                 exp.Left,
                 exp.Pad,
@@ -679,6 +741,9 @@ class Snowflake(Dialect):
                 exp.Substring,
                 exp.Round,
                 exp.Ceil,
+                exp.DateTrunc,
+                exp.TimeSlice,
+                exp.TimestampTrunc,
             )
         },
         **{
@@ -691,7 +756,17 @@ class Snowflake(Dialect):
             )
         },
         exp.ConcatWs: lambda self, e: self._annotate_by_args(e, "expressions"),
+        exp.ConvertTimezone: lambda self, e: self._annotate_with_type(
+            e,
+            exp.DataType.Type.TIMESTAMPNTZ
+            if e.args.get("source_tz")
+            else exp.DataType.Type.TIMESTAMPTZ,
+        ),
+        exp.DateAdd: _annotate_date_or_time_add,
+        exp.TimeAdd: _annotate_date_or_time_add,
+        exp.GreatestIgnoreNulls: lambda self, e: self._annotate_by_args(e, "expressions"),
         exp.Reverse: _annotate_reverse,
+        exp.TimestampFromParts: _annotate_timestamp_from_parts,
     }
 
     TIME_MAPPING = {
@@ -803,7 +878,9 @@ class Snowflake(Dialect):
             "BITXOR_AGG": exp.BitwiseXorAgg.from_arg_list,
             "BIT_XOR_AGG": exp.BitwiseXorAgg.from_arg_list,
             "BIT_XORAGG": exp.BitwiseXorAgg.from_arg_list,
+            "BOOLOR": binary_from_function(exp.Or),
             "BOOLXOR": _build_bitwise(exp.Xor, "BOOLXOR"),
+            "BOOLAND": binary_from_function(exp.And),
             "DATE": _build_datetime("DATE", exp.DataType.Type.DATE),
             "DATE_TRUNC": _date_trunc_to_time,
             "DATEADD": _build_date_time_add(exp.DateAdd),
@@ -857,10 +934,10 @@ class Snowflake(Dialect):
             "TIMEDIFF": _build_datediff,
             "TIMESTAMPADD": _build_date_time_add(exp.DateAdd),
             "TIMESTAMPDIFF": _build_datediff,
-            "TIMESTAMPFROMPARTS": build_timestamp_from_parts,
-            "TIMESTAMP_FROM_PARTS": build_timestamp_from_parts,
-            "TIMESTAMPNTZFROMPARTS": build_timestamp_from_parts,
-            "TIMESTAMP_NTZ_FROM_PARTS": build_timestamp_from_parts,
+            "TIMESTAMPFROMPARTS": _build_timestamp_from_parts,
+            "TIMESTAMP_FROM_PARTS": _build_timestamp_from_parts,
+            "TIMESTAMPNTZFROMPARTS": _build_timestamp_from_parts,
+            "TIMESTAMP_NTZ_FROM_PARTS": _build_timestamp_from_parts,
             "TRY_PARSE_JSON": lambda args: exp.ParseJSON(this=seq_get(args, 0), safe=True),
             "TRY_TO_DATE": _build_datetime("TRY_TO_DATE", exp.DataType.Type.DATE, safe=True),
             "TRY_TO_TIME": _build_datetime("TRY_TO_TIME", exp.DataType.Type.TIME, safe=True),
@@ -1094,8 +1171,11 @@ class Snowflake(Dialect):
             if not this:
                 return None
 
-            self._match(TokenType.COMMA)
-            expression = self._parse_bitwise()
+            # Handle both syntaxes: DATE_PART(part, expr) and DATE_PART(part FROM expr)
+            expression = (
+                self._match_set((TokenType.FROM, TokenType.COMMA)) and self._parse_bitwise()
+            )
+
             this = map_date_part(this)
             name = this.name.upper()
 
@@ -1577,6 +1657,13 @@ class Snowflake(Dialect):
             exp.Stuff: rename_func("INSERT"),
             exp.StPoint: rename_func("ST_MAKEPOINT"),
             exp.TimeAdd: date_delta_sql("TIMEADD"),
+            exp.TimeSlice: lambda self, e: self.func(
+                "TIME_SLICE",
+                e.this,
+                e.expression,
+                unit_to_str(e),
+                e.args.get("kind"),
+            ),
             exp.Timestamp: no_timestamp_sql,
             exp.TimestampAdd: date_delta_sql("TIMESTAMPADD"),
             exp.TimestampDiff: lambda self, e: self.func(

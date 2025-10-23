@@ -100,6 +100,10 @@ INT;
 LAST_DAY(tbl.timestamp_col);
 DATE;
 
+# dialect: snowflake
+NEXT_DAY(tbl.date_col, 'MONDAY');
+DATE;
+
 JUSTIFY_DAYS(INTERVAL '1' DAY);
 INTERVAL;
 
@@ -1531,6 +1535,14 @@ STRING;
 STRUCT(tbl.str_col);
 STRUCT<str_col STRING>;
 
+# dialect: bigquery
+LENGTH(tbl.str_col);
+BIGINT;
+
+# dialect: bigquery
+LENGTH(tbl.bin_col);
+BIGINT;
+
 --------------------------------------
 -- Snowflake
 --------------------------------------
@@ -1542,6 +1554,14 @@ BIGINT;
 # dialect: snowflake
 ABS(tbl.double_col);
 DOUBLE;
+
+# dialect: snowflake
+ADD_MONTHS(tbl.date_col, 2);
+DATE;
+
+# dialect: snowflake
+ADD_MONTHS(tbl.timestamp_col, -1);
+TIMESTAMP;
 
 # dialect: snowflake
 ASIN(tbl.double_col);
@@ -1636,6 +1656,26 @@ BIT_LENGTH(tbl.bin_col);
 INT;
 
 # dialect: snowflake
+BOOLAND(1, -2);
+BOOLEAN;
+
+# dialect: snowflake
+BOOLNOT(tbl.int_col);
+BOOLEAN;
+
+# dialect: snowflake
+BOOLNOT(NULL);
+BOOLEAN;
+
+# dialect: snowflake
+BOOLOR(1, 0);
+BOOLEAN;
+
+# dialect: snowflake
+BOOLXOR(2, 0);
+BOOLEAN;
+
+# dialect: snowflake
 CHARINDEX('world', 'hello world');
 INT;
 
@@ -1684,12 +1724,44 @@ COMPRESS('Hello World', 'zlib(1)');
 BINARY;
 
 # dialect: snowflake
+DATE_PART('year', tbl.date_col);
+INT;
+
+# dialect: snowflake
+DATE_PART('month', tbl.timestamp_col);
+INT;
+
+# dialect: snowflake
+DATE_PART('day', tbl.date_col);
+INT;
+
+# dialect: snowflake
+DATEADD(HOUR, 3, TO_TIME('05:00:00'));
+TIME;
+
+# dialect: snowflake
+DATEADD(YEAR, 1, TO_TIMESTAMP('2022-05-08 14:30:00'));
+TIMESTAMP;
+
+# dialect: snowflake
+DATEADD(MONTH, 1, '2023-01-31'::DATE);
+DATE;
+
+# dialect: snowflake
+DATEADD(HOUR, 2, '2022-04-05'::DATE);
+TIMESTAMPNTZ;
+
+# dialect: snowflake
 DEGREES(PI()/3);
 DOUBLE;
 
 # dialect: snowflake
 DEGREES(1);
 DOUBLE;
+
+# dialect: snowflake
+DATE_FROM_PARTS(1977, 8, 7);
+DATE;
 
 # dialect: snowflake
 DECOMPRESS_BINARY('compressed_data', 'SNAPPY');
@@ -1788,6 +1860,94 @@ CONTAINS(tbl.bin_col, NULL);
 BOOLEAN;
 
 # dialect: snowflake
+CONVERT_TIMEZONE('America/New_York', '2024-08-06 09:10:00.000');
+TIMESTAMPTZ;
+
+# dialect: snowflake
+CONVERT_TIMEZONE('America/Los_Angeles', 'America/New_York', '2024-08-06 09:10:00.000');
+TIMESTAMPNTZ;
+
+# dialect: snowflake
+DATEDIFF('year', tbl.date_col, tbl.date_col);
+INT;
+
+# dialect: snowflake
+DATEDIFF('month', tbl.timestamp_col, tbl.timestamp_col);
+INT;
+
+# dialect: snowflake
+TIMESTAMPDIFF('year', tbl.date_col, tbl.date_col);
+INT;
+
+# dialect: snowflake
+TIMESTAMPDIFF('month', tbl.timestamp_col, tbl.timestamp_col);
+INT;
+
+# dialect: snowflake
+TIMEDIFF('year', tbl.date_col, tbl.date_col);
+INT;
+
+# dialect: snowflake
+TIMEDIFF('month', tbl.timestamp_col, tbl.timestamp_col);
+INT;
+
+# dialect: snowflake
+DATE_TRUNC('year', TO_DATE('2024-05-09'));
+DATE;
+
+# dialect: snowflake
+DATE_TRUNC('minute', TO_TIME('08:50:48'));
+TIME;
+
+# dialect: snowflake
+DATE_TRUNC('minute', TO_TIMESTAMP('2024-05-09 08:50:57.891'));
+TIMESTAMP;
+
+# dialect: snowflake
+TIMESTAMP_FROM_PARTS(2024, 5, 9, 14, 30, 45);
+TIMESTAMP;
+
+# dialect: snowflake
+TIMESTAMP_FROM_PARTS(2024, 5, 9, 14, 30, 45, 123);
+TIMESTAMP;
+
+# dialect: snowflake
+TIMESTAMP_FROM_PARTS(CAST('2024-05-09' AS DATE), CAST('14:30:45' AS TIME));
+TIMESTAMP;
+
+# dialect: snowflake
+TIMESTAMPFROMPARTS(2024, 5, 9, 14, 30, 45);
+TIMESTAMP;
+
+# dialect: snowflake
+TIMESTAMPFROMPARTS(CAST('2024-05-09' AS DATE), CAST('14:30:45' AS TIME));
+TIMESTAMP;
+
+# dialect: snowflake
+TIMESTAMP_LTZ_FROM_PARTS(2024, 5, 9, 14, 30, 45);
+TIMESTAMPLTZ;
+
+# dialect: snowflake
+TIMESTAMP_LTZ_FROM_PARTS(2024, 5, 9, 14, 30, 45, 123);
+TIMESTAMPLTZ;
+
+# dialect: snowflake
+TIMESTAMP_NTZ_FROM_PARTS(2024, 5, 9, 14, 30, 45);
+TIMESTAMP;
+
+# dialect: snowflake
+TIMESTAMP_NTZ_FROM_PARTS(2024, 5, 9, 14, 30, 45, 123);
+TIMESTAMP;
+
+# dialect: snowflake
+TIMESTAMP_TZ_FROM_PARTS(2024, 5, 9, 14, 30, 45, 123, 'UTC');
+TIMESTAMPTZ;
+
+# dialect: snowflake
+TIMESTAMP_TZ_FROM_PARTS(2024, 5, 9, 14, 30, 45, 123);
+TIMESTAMPTZ;
+
+# dialect: snowflake
 EDITDISTANCE('hello', 'world');
 INT;
 
@@ -1797,6 +1957,18 @@ INT;
 
 # dialect: snowflake
 EDITDISTANCE('hello', 'world', 3);
+INT;
+
+# dialect: snowflake
+EXTRACT(YEAR, CAST('2024-05-09' AS DATE));
+INT;
+
+# dialect: snowflake
+EXTRACT(MONTH FROM CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+INT;
+
+# dialect: snowflake
+EXTRACT(MINUTE, CAST('08:50:57' AS TIME));
 INT;
 
 # dialect: snowflake
@@ -1824,6 +1996,26 @@ FLOOR(tbl.bigint_col, -1);
 BIGINT;
 
 # dialect: snowflake
+GREATEST(tbl.bigint_col, tbl.bigint_col);
+BIGINT;
+
+# dialect: snowflake
+GREATEST(tbl.double_col, tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
+GREATEST(tbl.str_col, tbl.str_col);
+VARCHAR;
+
+# dialect: snowflake
+GREATEST(tbl.double_col, tbl.bigint_col);
+DOUBLE;
+
+# dialect: snowflake
+GREATEST(tbl.bigint_col, tbl.double_col);
+DOUBLE;
+
+# dialect: snowflake
 ENDSWITH('hello world', 'world');
 BOOLEAN;
 
@@ -1838,6 +2030,22 @@ BOOLEAN;
 # dialect: snowflake
 ENDSWITH(tbl.bin_col, NULL);
 BOOLEAN;
+
+# dialect: snowflake
+GREATEST_IGNORE_NULLS(1, 2, 3);
+INT;
+
+# dialect: snowflake
+GREATEST_IGNORE_NULLS(1, 2.5, 3);
+DOUBLE;
+
+# dialect: snowflake
+GREATEST_IGNORE_NULLS('a', 'b', 'c');
+VARCHAR;
+
+# dialect: snowflake
+GREATEST_IGNORE_NULLS(CAST('2023-01-01' AS DATE), CAST('2023-01-02' AS DATE));
+DATE;
 
 # dialect: snowflake
 HEX_DECODE_BINARY('48656C6C6F');
@@ -1858,6 +2066,10 @@ VARCHAR;
 # dialect: snowflake
 HEX_ENCODE('Hello World', 'lower');
 VARCHAR;
+
+# dialect: snowflake
+HOUR(CAST('08:50:57' AS TIME));
+INT;
 
 # dialect: snowflake
 INITCAP('hello world');
@@ -1904,6 +2116,18 @@ LEFT(tbl.bin_col, NULL);
 BINARY;
 
 # dialect: snowflake
+LAST_DAY(CAST('2024-05-09' AS DATE));
+DATE;
+
+# dialect: snowflake
+LAST_DAY(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+DATE;
+
+# dialect: snowflake
+LAST_DAY(CAST('2024-02-15' AS DATE), MONTH);
+DATE;
+
+# dialect: snowflake
 LEN(tbl.str_col);
 INT;
 
@@ -1948,12 +2172,28 @@ POSITION('abc', 'abcdef', 1);
 INT;
 
 # dialect: snowflake
+PREVIOUS_DAY(CAST('2024-05-09' AS DATE), 'MONDAY');
+DATE;
+
+# dialect: snowflake
+PREVIOUS_DAY(CAST('2024-05-09 08:50:57' AS TIMESTAMP), 'MONDAY');
+DATE;
+
+# dialect: snowflake
 PI();
 DOUBLE;
 
 # dialect: snowflake
 POW(tbl.double_col, 2);
 DOUBLE;
+
+# dialect: snowflake
+RANDOM();
+BIGINT;
+
+# dialect: snowflake
+RANDOM(123);
+BIGINT;
 
 # dialect: snowflake
 RADIANS(tbl.double_col);
@@ -1984,6 +2224,18 @@ LTRIM(NULL);
 VARCHAR;
 
 # dialect: snowflake
+MINUTE(CAST('08:50:57' AS TIME));
+INT;
+
+# dialect: snowflake
+MONTHNAME(CAST('2024-05-09' AS DATE));
+VARCHAR;
+
+# dialect: snowflake
+MONTHNAME(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+VARCHAR;
+
+# dialect: snowflake
 MOD(tbl.bigint_col, 3);
 BIGINT;
 
@@ -1994,6 +2246,14 @@ DOUBLE;
 # dialect: snowflake
 MOD(42, 7);
 INT;
+
+# dialect: snowflake
+MONTHS_BETWEEN(tbl.date_col, CAST('2019-01-01' AS DATE));
+DOUBLE;
+
+# dialect: snowflake
+MONTHS_BETWEEN(tbl.timestamp_col, CAST('2019-02-15 01:00:00' AS TIMESTAMP));
+DOUBLE;
 
 # dialect: snowflake
 'foo' REGEXP 'bar';
@@ -2170,6 +2430,10 @@ BIGINT;
 # dialect: snowflake
 ROUND(tbl.double_col, 0, 'HALF_TO_EVEN');
 DOUBLE;
+
+# dialect: snowflake
+SECOND(CAST('08:50:57' AS TIME));
+INT;
 
 # dialect: snowflake
 SQUARE(tbl.double_col);
@@ -2424,11 +2688,67 @@ TAN(tbl.double_col);
 DOUBLE;
 
 # dialect: snowflake
+TIMEADD(hour, 1, CAST('14:30:45' AS TIME));
+TIME;
+
+# dialect: snowflake
+TIMEADD(minute, 30, CAST('2024-05-09 14:30:45' AS TIMESTAMP));
+TIMESTAMP;
+
+# dialect: snowflake
+TIMEADD(day, 1, CAST('2024-05-09' AS DATE));
+DATE;
+
+# dialect: snowflake
+TIMEADD(hour, 1, CAST('2024-05-09' AS DATE));
+TIMESTAMPNTZ;
+
+# dialect: snowflake
+TIME_FROM_PARTS(14, 30, 45);
+TIME;
+
+# dialect: snowflake
+TIME_FROM_PARTS(14, 30, 45, 123);
+TIME;
+
+# dialect: snowflake
+TIMEFROMPARTS(14, 30, 45);
+TIME;
+
+# dialect: snowflake
+TIMEFROMPARTS(14, 30, 45, 123);
+TIME;
+
+# dialect: snowflake
+TIME_SLICE(tbl.timestamp_col, 15, 'minute');
+TIMESTAMP;
+
+# dialect: snowflake
+TIME_SLICE(tbl.date_col, 1, 'day', 'start');
+DATE;
+
+# dialect: snowflake
+TIMESTAMPADD(DAY, 5, CAST('2008-12-25' AS DATE));
+DATE;
+
+# dialect: snowflake
+TIMESTAMPADD(HOUR, 3, TO_TIME('05:00:00'));
+TIME;
+
+# dialect: snowflake
+TIMESTAMPADD(YEAR, 1, TO_TIMESTAMP('2022-05-08 14:30:00'));
+TIMESTAMP;
+
+# dialect: snowflake
 TRANSLATE('hello world', 'elo', 'XYZ');
 VARCHAR;
 
 # dialect: snowflake
 UNICODE('€');
+INT;
+
+# dialect: snowflake
+WIDTH_BUCKET(tbl.double_col, 0, 100, 10);
 INT;
 
 # dialect: snowflake

@@ -134,6 +134,9 @@ class StarRocks(MySQL):
         PARSE_JSON_NAME: t.Optional[str] = "PARSE_JSON"
         WITH_PROPERTIES_PREFIX = "PROPERTIES"
 
+        # StarRocks doesn't support "IS TRUE/FALSE" syntax.
+        IS_BOOL_ALLOWED = False
+
         CAST_MAPPING = {}
 
         TYPE_MAPPING = {

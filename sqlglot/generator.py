@@ -2233,6 +2233,7 @@ class Generator(metaclass=_Generator):
                 and (alias or isinstance(expression.parent, (exp.From, exp.Table)))
                 else values
             )
+            values = self.query_modifiers(expression, values)
             return f"{values} AS {alias}" if alias else values
 
         # Converts `VALUES...` expression into a series of select unions.
@@ -4105,8 +4106,14 @@ class Generator(metaclass=_Generator):
 
         this = self.sql(table)
         using = f"USING {self.sql(expression, 'using')}"
-        on = f"ON {self.sql(expression, 'on')}"
         whens = self.sql(expression, "whens")
+
+        on = self.sql(expression, "on")
+        on = f"ON {on}" if on else ""
+
+        if not on:
+            on = self.expressions(expression, key="using_cond")
+            on = f"USING ({on})" if on else ""
 
         returning = self.sql(expression, "returning")
         if returning:
@@ -4271,10 +4278,12 @@ class Generator(metaclass=_Generator):
     def comprehension_sql(self, expression: exp.Comprehension) -> str:
         this = self.sql(expression, "this")
         expr = self.sql(expression, "expression")
+        position = self.sql(expression, "position")
+        position = f", {position}" if position else ""
         iterator = self.sql(expression, "iterator")
         condition = self.sql(expression, "condition")
         condition = f" IF {condition}" if condition else ""
-        return f"{this} FOR {expr} IN {iterator}{condition}"
+        return f"{this} FOR {expr}{position} IN {iterator}{condition}"
 
     def columnprefix_sql(self, expression: exp.ColumnPrefix) -> str:
         return f"{self.sql(expression, 'this')}({self.sql(expression, 'expression')})"

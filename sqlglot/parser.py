@@ -489,6 +489,7 @@ class Parser(metaclass=_Parser):
     # Tokens that can represent identifiers
     ID_VAR_TOKENS = {
         TokenType.ALL,
+        TokenType.ANALYZE,
         TokenType.ATTACH,
         TokenType.VAR,
         TokenType.ANTI,
@@ -1508,7 +1509,7 @@ class Parser(metaclass=_Parser):
 
     RECURSIVE_CTE_SEARCH_KIND = {"BREADTH", "DEPTH", "CYCLE"}
 
-    MODIFIABLES = (exp.Query, exp.Table, exp.TableFromRows)
+    MODIFIABLES = (exp.Query, exp.Table, exp.TableFromRows, exp.Values)
 
     STRICT_CAST = True
 
@@ -3278,6 +3279,7 @@ class Parser(metaclass=_Parser):
                 this = select
             else:
                 this = exp.select("*").from_(t.cast(exp.From, from_))
+                this = self._parse_query_modifiers(self._parse_set_operations(this))
         else:
             this = (
                 self._parse_table(consume_pipe=True)
@@ -4701,8 +4703,7 @@ class Parser(metaclass=_Parser):
             return None
 
         return self.expression(
-            kind,
-            expressions=[] if with_prefix else self._parse_wrapped_csv(self._parse_column),
+            kind, expressions=[] if with_prefix else self._parse_wrapped_csv(self._parse_bitwise)
         )
 
     def _parse_grouping_sets(self) -> t.Optional[exp.GroupingSets]:
@@ -5195,7 +5196,9 @@ class Parser(metaclass=_Parser):
     def _parse_escape(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
         if not self._match(TokenType.ESCAPE):
             return this
-        return self.expression(exp.Escape, this=this, expression=self._parse_string())
+        return self.expression(
+            exp.Escape, this=this, expression=self._parse_string() or self._parse_null()
+        )
 
     def _parse_interval(self, match_interval: bool = True) -> t.Optional[exp.Add | exp.Interval]:
         index = self._index
@@ -5914,7 +5917,7 @@ class Parser(metaclass=_Parser):
             this = self.expression(exp.Tuple)
         elif isinstance(this, exp.UNWRAPPED_QUERIES):
             this = self._parse_subquery(this=this, parse_alias=False)
-        elif isinstance(this, exp.Subquery):
+        elif isinstance(this, (exp.Subquery, exp.Values)):
             this = self._parse_subquery(
                 this=self._parse_query_modifiers(self._parse_set_operations(this)),
                 parse_alias=False,
@@ -8091,14 +8094,12 @@ class Parser(metaclass=_Parser):
         self._match(TokenType.USING)
         using = self._parse_table()
 
-        self._match(TokenType.ON)
-        on = self._parse_assignment()
-
         return self.expression(
             exp.Merge,
             this=target,
             using=using,
-            on=on,
+            on=self._match(TokenType.ON) and self._parse_assignment(),
+            using_cond=self._match(TokenType.USING) and self._parse_using_identifiers(),
             whens=self._parse_when_matched(),
             returning=self._parse_returning(),
         )
@@ -8294,6 +8295,8 @@ class Parser(metaclass=_Parser):
     ) -> t.Optional[exp.Comprehension]:
         index = self._index
         expression = self._parse_column()
+        position = self._match(TokenType.COMMA) and self._parse_column()
+
         if not self._match(TokenType.IN):
             self._retreat(index - 1)
             return None
@@ -8303,6 +8306,7 @@ class Parser(metaclass=_Parser):
             exp.Comprehension,
             this=this,
             expression=expression,
+            position=position,
             iterator=iterator,
             condition=condition,
         )
@@ -8578,7 +8582,7 @@ class Parser(metaclass=_Parser):
                 # T-SQL's external file format case
                 param.set("expression", self._parse_field())
             else:
-                param.set("expression", self._parse_unquoted_field())
+                param.set("expression", self._parse_unquoted_field() or self._parse_bracket())
 
             options.append(param)
             self._match(sep)
