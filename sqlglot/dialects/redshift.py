@@ -167,6 +167,8 @@ class Redshift(Postgres):
         SUPPORTS_MEDIAN = True
         ALTER_SET_TYPE = "TYPE"
         SUPPORTS_DECODE_CASE = True
+        SUPPORTS_BETWEEN_FLAGS = False
+        LIMIT_FETCH = "LIMIT"
 
         # Redshift doesn't have `WITH` as part of their with_properties so we remove it
         WITH_PROPERTIES_PREFIX = " "
@@ -197,6 +199,7 @@ class Redshift(Postgres):
             exp.DistKeyProperty: lambda self, e: self.func("DISTKEY", e.this),
             exp.DistStyleProperty: lambda self, e: self.naked_property(e),
             exp.Explode: lambda self, e: self.explode_sql(e),
+            exp.FarmFingerprint: rename_func("FARMFINGERPRINT64"),
             exp.FromBase: rename_func("STRTOL"),
             exp.GeneratedAsIdentityColumnConstraint: generatedasidentitycolumnconstraint_sql,
             exp.JSONExtract: json_extract_segments("JSON_EXTRACT_PATH_TEXT"),

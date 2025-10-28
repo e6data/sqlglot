@@ -162,7 +162,7 @@ def _pop_table_column_aliases(derived_tables: t.List[exp.CTE | exp.Subquery]) ->
             continue
         table_alias = derived_table.args.get("alias")
         if table_alias:
-            table_alias.args.pop("columns", None)
+            table_alias.set("columns", None)
 
 
 def _expand_using(scope: Scope, resolver: Resolver) -> t.Dict[str, t.Any]:
@@ -239,7 +239,7 @@ def _expand_using(scope: Scope, resolver: Resolver) -> t.Dict[str, t.Any]:
                 if join_table not in tables:
                     tables[join_table] = None
 
-        join.args.pop("using")
+        join.set("using", None)
         join.set("on", exp.and_(*conditions, copy=False))
 
     if column_tables:
@@ -282,12 +282,15 @@ def _expand_alias_refs(
 
     alias_to_expression: t.Dict[str, t.Tuple[exp.Expression, int]] = {}
     projections = {s.alias_or_name for s in expression.selects}
+    is_bigquery = dialect == "bigquery"
+    replaced = False
 
     def replace_columns(
         node: t.Optional[exp.Expression],
         resolve_table: bool = False,
         literal_index: bool = False,
     ) -> None:
+        nonlocal replaced
         is_group_by = isinstance(node, exp.Group)
         is_having = isinstance(node, exp.Having)
         if not node or (expand_only_groupby and not is_group_by):
@@ -317,20 +320,36 @@ def _expand_alias_refs(
 
                 # BigQuery's having clause gets confused if an alias matches a source.
                 # SELECT x.a, max(x.b) as x FROM x GROUP BY 1 HAVING x > 1;
-                # If HAVING x is expanded to max(x.b), bigquery treats x as the new projection x instead of the table
-                if is_having and dialect == "bigquery":
+                # If "HAVING x" is expanded to "HAVING max(x.b)", BQ would blindly replace the "x" reference with the projection MAX(x.b)
+                # i.e HAVING MAX(MAX(x.b).b), resulting in the error: "Aggregations of aggregations are not allowed"
+                if is_having and is_bigquery:
                     skip_replace = skip_replace or any(
                         node.parts[0].name in projections
                         for node in alias_expr.find_all(exp.Column)
                     )
+            elif is_bigquery and (is_group_by or is_having):
+                column_table = table.name if table else column.table
+                if column_table in projections:
+                    # BigQuery's GROUP BY and HAVING clauses get confused if the column name
+                    # matches a source name and a projection. For instance:
+                    # SELECT id, ARRAY_AGG(col) AS custom_fields FROM custom_fields GROUP BY id HAVING id >= 1
+                    # We should not qualify "id" with "custom_fields" in either clause, since the aggregation shadows the actual table
+                    # and we'd get the error: "Column custom_fields contains an aggregation function, which is not allowed in GROUP BY clause"
+                    column.replace(exp.to_identifier(column.name))
+                    replaced = True
+                    return
 
             if table and (not alias_expr or skip_replace):
                 column.set("table", table)
             elif not column.table and alias_expr and not skip_replace:
-                if isinstance(alias_expr, exp.Literal) and (literal_index or resolve_table):
+                if (isinstance(alias_expr, exp.Literal) or alias_expr.is_number) and (
+                    literal_index or resolve_table
+                ):
                     if literal_index:
                         column.replace(exp.Literal.number(i))
+                        replaced = True
                 else:
+                    replaced = True
                     column = column.replace(exp.paren(alias_expr))
                     simplified = simplify_parens(column, dialect)
                     if simplified is not column:
@@ -342,11 +361,15 @@ def _expand_alias_refs(
             alias_to_expression[projection.alias] = (projection.this, i + 1)
 
     parent_scope = scope
-    while parent_scope.is_union:
+    on_right_sub_tree = False
+    while parent_scope and not parent_scope.is_cte:
+        if parent_scope.is_union:
+            on_right_sub_tree = parent_scope.parent.expression.right is parent_scope.expression
         parent_scope = parent_scope.parent
 
     # We shouldn't expand aliases if they match the recursive CTE's columns
-    if parent_scope.is_cte:
+    # and we are in the recursive part (right sub tree) of the CTE
+    if parent_scope and on_right_sub_tree:
         cte = parent_scope.expression.parent
         if cte.find_ancestor(exp.With).recursive:
             for recursive_cte_column in cte.args["alias"].columns or cte.this.selects:
@@ -363,7 +386,8 @@ def _expand_alias_refs(
         for join in expression.args.get("joins") or []:
             replace_columns(join)
 
-    scope.clear_cache()
+    if replaced:
+        scope.clear_cache()
 
 
 def _expand_group_by(scope: Scope, dialect: DialectType) -> None:
@@ -450,6 +474,7 @@ def _expand_positional_references(
 
                 if (
                     isinstance(select, exp.CONSTANTS)
+                    or select.is_number
                     or select.find(exp.Explode, exp.Unnest)
                     or ambiguous
                 ):
@@ -534,7 +559,8 @@ def _qualify_columns(scope: Scope, resolver: Resolver, allow_partial_qualificati
                 continue
 
             # column_table can be a '' because bigquery unnest has no table alias
-            column_table = resolver.get_table(column_name)
+            column_table = resolver.get_table(column)
+
             if column_table:
                 column.set("table", column_table)
             elif (
@@ -863,7 +889,7 @@ def qualify_outputs(scope_or_expression: Scope | exp.Expression) -> None:
         if isinstance(selection, exp.Subquery):
             if not selection.output_name:
                 selection.set("alias", exp.TableAlias(this=exp.to_identifier(f"_col_{i}")))
-        elif not isinstance(selection, exp.Alias) and not selection.is_star:
+        elif not isinstance(selection, (exp.Alias, exp.Aliases)) and not selection.is_star:
             selection = alias(
                 selection,
                 alias=selection.output_name or f"_col_{i}",
@@ -933,21 +959,29 @@ class Resolver:
         self._infer_schema = infer_schema
         self._get_source_columns_cache: t.Dict[t.Tuple[str, bool], t.Sequence[str]] = {}
 
-    def get_table(self, column_name: str) -> t.Optional[exp.Identifier]:
+    def get_table(self, column: str | exp.Column) -> t.Optional[exp.Identifier]:
         """
         Get the table for a column name.
 
         Args:
-            column_name: The column name to find the table for.
+            column: The column expression (or column name) to find the table for.
         Returns:
             The table name if it can be found/inferred.
         """
-        if self._unambiguous_columns is None:
-            self._unambiguous_columns = self._get_unambiguous_columns(
-                self._get_all_source_columns()
-            )
+        column_name = column if isinstance(column, str) else column.name
 
-        table_name = self._unambiguous_columns.get(column_name)
+        table_name = self._get_table_name_from_sources(column_name)
+
+        if not table_name and isinstance(column, exp.Column):
+            # Fall-back case: If we couldn't find the `table_name` from ALL of the sources,
+            # attempt to disambiguate the column based on other characteristics e.g if this column is in a join condition,
+            # we may be able to disambiguate based on the source order.
+            if join_context := self._get_column_join_context(column):
+                # In this case, the return value will be the join that _may_ be able to disambiguate the column
+                # and we can use the source columns available at that join to get the table name
+                table_name = self._get_table_name_from_sources(
+                    column_name, self._get_available_source_columns(join_context)
+                )
 
         if not table_name and self._infer_schema:
             sources_without_schema = tuple(
@@ -982,6 +1016,44 @@ class Resolver:
             }
         return self._all_columns
 
+    def get_source_columns_from_set_op(self, expression: exp.Expression) -> t.List[str]:
+        if isinstance(expression, exp.Select):
+            return expression.named_selects
+        if isinstance(expression, exp.Subquery) and isinstance(expression.this, exp.SetOperation):
+            # Different types of SET modifiers can be chained together if they're explicitly grouped by nesting
+            return self.get_source_columns_from_set_op(expression.this)
+        if not isinstance(expression, exp.SetOperation):
+            raise OptimizeError(f"Unknown set operation: {expression}")
+
+        set_op = expression
+
+        # BigQuery specific set operations modifiers, e.g INNER UNION ALL BY NAME
+        on_column_list = set_op.args.get("on")
+
+        if on_column_list:
+            # The resulting columns are the columns in the ON clause:
+            # {INNER | LEFT | FULL} UNION ALL BY NAME ON (col1, col2, ...)
+            columns = [col.name for col in on_column_list]
+        elif set_op.side or set_op.kind:
+            side = set_op.side
+            kind = set_op.kind
+
+            # Visit the children UNIONs (if any) in a post-order traversal
+            left = self.get_source_columns_from_set_op(set_op.left)
+            right = self.get_source_columns_from_set_op(set_op.right)
+
+            # We use dict.fromkeys to deduplicate keys and maintain insertion order
+            if side == "LEFT":
+                columns = left
+            elif side == "FULL":
+                columns = list(dict.fromkeys(left + right))
+            elif kind == "INNER":
+                columns = list(dict.fromkeys(left).keys() & dict.fromkeys(right).keys())
+        else:
+            columns = set_op.named_selects
+
+        return columns
+
     def get_source_columns(self, name: str, only_visible: bool = False) -> t.Sequence[str]:
         """Resolve the source columns for a given source `name`."""
         cache_key = (name, only_visible)
@@ -1006,31 +1078,8 @@ class Resolver:
                         for k in source.expression.type.expressions:  # type: ignore
                             columns.append(k.name)
             elif isinstance(source, Scope) and isinstance(source.expression, exp.SetOperation):
-                set_op = source.expression
+                columns = self.get_source_columns_from_set_op(source.expression)
 
-                # BigQuery specific set operations modifiers, e.g INNER UNION ALL BY NAME
-                on_column_list = set_op.args.get("on")
-
-                if on_column_list:
-                    # The resulting columns are the columns in the ON clause:
-                    # {INNER | LEFT | FULL} UNION ALL BY NAME ON (col1, col2, ...)
-                    columns = [col.name for col in on_column_list]
-                elif set_op.side or set_op.kind:
-                    side = set_op.side
-                    kind = set_op.kind
-
-                    left = set_op.left.named_selects
-                    right = set_op.right.named_selects
-
-                    # We use dict.fromkeys to deduplicate keys and maintain insertion order
-                    if side == "LEFT":
-                        columns = left
-                    elif side == "FULL":
-                        columns = list(dict.fromkeys(left + right))
-                    elif kind == "INNER":
-                        columns = list(dict.fromkeys(left).keys() & dict.fromkeys(right).keys())
-                else:
-                    columns = set_op.named_selects
             else:
                 select = seq_get(source.expression.selects, 0)
 
@@ -1071,6 +1120,77 @@ class Resolver:
                 )
             }
         return self._source_columns
+
+    def _get_table_name_from_sources(
+        self, column_name: str, source_columns: t.Optional[t.Dict[str, t.Sequence[str]]] = None
+    ) -> t.Optional[str]:
+        if not source_columns:
+            # If not supplied, get all sources to calculate unambiguous columns
+            if self._unambiguous_columns is None:
+                self._unambiguous_columns = self._get_unambiguous_columns(
+                    self._get_all_source_columns()
+                )
+
+            unambiguous_columns = self._unambiguous_columns
+        else:
+            unambiguous_columns = self._get_unambiguous_columns(source_columns)
+
+        return unambiguous_columns.get(column_name)
+
+    def _get_column_join_context(self, column: exp.Column) -> t.Optional[exp.Join]:
+        """
+        Check if a column participating in a join can be qualified based on the source order.
+        """
+        args = self.scope.expression.args
+        joins = args.get("joins")
+
+        if not joins or args.get("laterals") or args.get("pivots"):
+            # Feature gap: We currently don't try to disambiguate columns if other sources
+            # (e.g laterals, pivots) exist alongside joins
+            return None
+
+        join_ancestor = column.find_ancestor(exp.Join, exp.Select)
+
+        if (
+            isinstance(join_ancestor, exp.Join)
+            and join_ancestor.alias_or_name in self.scope.selected_sources
+        ):
+            # Ensure that the found ancestor is a join that contains an actual source,
+            # e.g in Clickhouse `b` is an array expression in `a ARRAY JOIN b`
+            return join_ancestor
+
+        return None
+
+    def _get_available_source_columns(
+        self, join_ancestor: exp.Join
+    ) -> t.Dict[str, t.Sequence[str]]:
+        """
+        Get the source columns that are available at the point where a column is referenced.
+
+        For columns in JOIN conditions, this only includes tables that have been joined
+        up to that point. Example:
+
+        ```
+        SELECT * FROM t_1 INNER JOIN ... INNER JOIN t_n ON t_1.a = c INNER JOIN t_n+1 ON ...
+        ```                                                        ^
+                                                                   |
+                                +----------------------------------+
+                                |
+                                ⌄
+        The unqualified column `c` is not ambiguous if no other sources up until that
+        join i.e t_1, ..., t_n, contain a column named `c`.
+
+        """
+        args = self.scope.expression.args
+
+        # Collect tables in order: FROM clause tables + joined tables up to current join
+        from_name = args["from"].alias_or_name
+        available_sources = {from_name: self.get_source_columns(from_name)}
+
+        for join in args["joins"][: t.cast(int, join_ancestor.index) + 1]:
+            available_sources[join.alias_or_name] = self.get_source_columns(join.alias_or_name)
+
+        return available_sources
 
     def _get_unambiguous_columns(
         self, source_columns: t.Dict[str, t.Sequence[str]]

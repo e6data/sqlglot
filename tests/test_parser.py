@@ -40,6 +40,8 @@ class TestParser(unittest.TestCase):
             "Failed to parse 'SELECT * FROM tbl' into <class 'sqlglot.expressions.Table'>",
         )
 
+        self.assertIsInstance(parse_one("foo INT NOT NULL", into=exp.ColumnDef), exp.ColumnDef)
+
     def test_parse_into_error(self):
         expected_message = "Failed to parse 'SELECT 1;' into [<class 'sqlglot.expressions.From'>]"
         expected_errors = [
@@ -209,7 +211,7 @@ class TestParser(unittest.TestCase):
         self.assertIsNone(expression.this)
         self.assertEqual(expression.args["modes"][0], "READ WRITE")
         self.assertEqual(expression.args["modes"][1], "ISOLATION LEVEL SERIALIZABLE")
-        self.assertEqual(expression.sql(), "BEGIN")
+        self.assertEqual(expression.sql(), "BEGIN READ WRITE, ISOLATION LEVEL SERIALIZABLE")
 
         expression = parse_one("BEGIN", read="bigquery")
         self.assertNotIsInstance(expression, exp.Transaction)
@@ -787,6 +789,7 @@ class TestParser(unittest.TestCase):
         warn_over_threshold("SELECT * FROM a " + ("LEFT JOIN b ON a.id = b.id " * 38))
         warn_over_threshold("SELECT * FROM a " + ("LEFT JOIN UNNEST(ARRAY[]) " * 15))
         warn_over_threshold("SELECT * FROM a " + ("OUTER APPLY (SELECT * FROM b) " * 30))
+        warn_over_threshold("SELECT * FROM a " + ("NATURAL FULL OUTER JOIN x " * 30))
 
     def test_parse_properties(self):
         self.assertEqual(
@@ -932,17 +935,6 @@ class TestParser(unittest.TestCase):
             self.assertIsInstance(collate_node, exp.Collate)
             self.assertIsInstance(collate_node.expression, collate_pair[1])
 
-    def test_odbc_date_literals(self):
-        for value, cls in [
-            ("{d'2024-01-01'}", exp.Date),
-            ("{t'12:00:00'}", exp.Time),
-            ("{ts'2024-01-01 12:00:00'}", exp.Timestamp),
-        ]:
-            sql = f"INSERT INTO tab(ds) VALUES ({value})"
-            expr = parse_one(sql)
-            self.assertIsInstance(expr, exp.Insert)
-            self.assertIsInstance(expr.expression.expressions[0].expressions[0], cls)
-
     def test_drop_column(self):
         ast = parse_one("ALTER TABLE tbl DROP COLUMN col")
         self.assertEqual(len(list(ast.find_all(exp.Table))), 1)
@@ -1018,3 +1010,37 @@ class TestParser(unittest.TestCase):
             parse_one("select * from tbl pivot(col1 for col2 in (val1, val1))")
 
         self.assertIn("Expecting an aggregation function in PIVOT", str(ctx.exception))
+
+    def test_multiple_query_modifiers(self):
+        sql = "SELECT * FROM a WHERE b = 'true' AND c > 50 WHERE c = 'false'"
+
+        with self.assertRaises(ParseError) as ctx:
+            parse_one(sql)
+
+        self.assertIn("Found multiple 'WHERE' clauses. Line 1, Col: 49.", str(ctx.exception))
+
+        self.assertEqual(
+            parse_one(sql, error_level=ErrorLevel.IGNORE).sql(),
+            "SELECT * FROM a WHERE c = 'false'",
+        )
+
+    def test_parse_into_grant_principal(self):
+        self.assertIsInstance(parse_one("ROLE blah", into=exp.GrantPrincipal), exp.GrantPrincipal)
+        self.assertIsInstance(parse_one("GROUP blah", into=exp.GrantPrincipal), exp.GrantPrincipal)
+        self.assertIsInstance(parse_one("blah", into=exp.GrantPrincipal), exp.GrantPrincipal)
+        self.assertIsInstance(
+            parse_one("ROLE `blah`", into=exp.GrantPrincipal, dialect="databricks"),
+            exp.GrantPrincipal,
+        )
+        self.assertEqual(
+            parse_one("ROLE `blah`", into=exp.GrantPrincipal, dialect="databricks").sql(
+                dialect="databricks"
+            ),
+            "ROLE `blah`",
+        )
+
+    def test_parse_into_grant_privilege(self):
+        self.assertIsInstance(parse_one("SELECT", into=exp.GrantPrivilege), exp.GrantPrivilege)
+        self.assertIsInstance(
+            parse_one("ALL PRIVILEGES", into=exp.GrantPrivilege), exp.GrantPrivilege
+        )

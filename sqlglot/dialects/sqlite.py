@@ -91,6 +91,7 @@ class SQLite(Dialect):
     SUPPORTS_SEMI_ANTI_JOIN = False
     TYPED_DIVISION = True
     SAFE_DIVISION = True
+    SAFE_TO_ELIMINATE_DOUBLE_NEGATION = False
 
     class Tokenizer(tokens.Tokenizer):
         IDENTIFIERS = ['"', ("[", "]"), "`"]
@@ -112,6 +113,7 @@ class SQLite(Dialect):
         STRING_ALIASES = True
         ALTER_RENAME_REQUIRES_COLUMN = False
         JOINS_HAVE_EQUAL_PRECEDENCE = True
+        ADD_JOIN_ON_TRUE = True
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -158,6 +160,7 @@ class SQLite(Dialect):
         EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
         SUPPORTS_MEDIAN = False
         JSON_KEY_VALUE_PAIR_SEP = ","
+        PARSE_JSON_NAME: t.Optional[str] = None
 
         SUPPORTED_JSON_PATH_PARTS = {
             exp.JSONPathKey,
@@ -342,3 +345,12 @@ class SQLite(Dialect):
 
         def respectnulls_sql(self, expression: exp.RespectNulls) -> str:
             return self.sql(expression.this)
+
+        def windowspec_sql(self, expression: exp.WindowSpec) -> str:
+            if (
+                expression.text("kind").upper() == "RANGE"
+                and expression.text("start").upper() == "CURRENT ROW"
+            ):
+                return "RANGE CURRENT ROW"
+
+            return super().windowspec_sql(expression)

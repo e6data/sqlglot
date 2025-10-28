@@ -74,6 +74,15 @@ class TestExpressions(unittest.TestCase):
             exp.DataType.build("int"),
             exp.DataType(this=exp.DataType.Type.INT, nested=False),
         )
+        self.assertNotEqual(
+            exp.Identifier(this="a", temporary=True),
+            exp.Identifier(this="a"),
+        )
+
+    def test_eq_on_same_instance_short_circuits(self):
+        expr = parse_one("1")
+        expr == expr
+        self.assertIsNone(expr._hash)
 
     def test_find(self):
         expression = parse_one("CREATE TABLE x STORED AS PARQUET AS SELECT * FROM y")
@@ -1277,3 +1286,7 @@ FROM foo""",
 
         self.assertIsInstance(result, exp.TsOrDsToTime)
         self.assertEqual(result.sql(), "CAST('12:00:00' AS TIME)")
+
+    def test_hash_large_ast(self):
+        expr = parse_one("SELECT 1 UNION ALL " * 3000 + "SELECT 1")
+        assert expr == expr

@@ -200,7 +200,7 @@ def _build_hashbytes(args: t.List) -> exp.Expression:
     return exp.func("HASHBYTES", *args)
 
 
-DATEPART_ONLY_FORMATS = {"DW", "WK", "HOUR", "QUARTER"}
+DATEPART_ONLY_FORMATS = {"DW", "WK", "HOUR", "QUARTER", "ISO_WEEK"}
 
 
 def _format_sql(self: TSQL.Generator, expression: exp.NumberToStr | exp.TimeToStr) -> str:
@@ -423,6 +423,11 @@ class TSQL(Dialect):
 
     TIME_FORMAT = "'yyyy-mm-dd hh:mm:ss'"
 
+    ANNOTATORS = {
+        **Dialect.ANNOTATORS,
+        exp.Radians: lambda self, e: self._annotate_by_args(e, "this"),
+    }
+
     TIME_MAPPING = {
         "year": "%Y",
         "dayofyear": "%j",
@@ -432,6 +437,9 @@ class TSQL(Dialect):
         "week": "%W",
         "ww": "%W",
         "wk": "%W",
+        "isowk": "%IW",
+        "isoww": "%IW",
+        "iso_week": "%IW",
         "hour": "%h",
         "hh": "%I",
         "minute": "%M",
@@ -668,12 +676,30 @@ class TSQL(Dialect):
             "NEXT": lambda self: self._parse_next_value_for(),
         }
 
+        FUNCTION_PARSERS: t.Dict[str, t.Callable] = {
+            **parser.Parser.FUNCTION_PARSERS,
+            "JSON_ARRAYAGG": lambda self: self.expression(
+                exp.JSONArrayAgg,
+                this=self._parse_bitwise(),
+                order=self._parse_order(),
+                null_handling=self._parse_on_handling("NULL", "NULL", "ABSENT"),
+            ),
+        }
+
         # The DCOLON (::) operator serves as a scope resolution (exp.ScopeResolution) operator in T-SQL
         COLUMN_OPERATORS = {
             **parser.Parser.COLUMN_OPERATORS,
             TokenType.DCOLON: lambda self, this, to: self.expression(exp.Cast, this=this, to=to)
             if isinstance(to, exp.DataType) and to.this != exp.DataType.Type.USERDEFINED
             else self.expression(exp.ScopeResolution, this=this, expression=to),
+        }
+
+        SET_OP_MODIFIERS = {"offset"}
+
+        ODBC_DATETIME_LITERALS = {
+            "d": exp.Date,
+            "t": exp.Time,
+            "ts": exp.Timestamp,
         }
 
         def _parse_alter_table_set(self) -> exp.AlterSet:
@@ -909,6 +935,11 @@ class TSQL(Dialect):
                 this = self._parse_schema(self._parse_id_var(any_token=False))
 
             return self.expression(exp.UniqueColumnConstraint, this=this)
+
+        def _parse_update(self) -> exp.Update:
+            expression = super()._parse_update()
+            expression.set("options", self._parse_options())
+            return expression
 
         def _parse_partition(self) -> t.Optional[exp.Partition]:
             if not self._match_text_seq("WITH", "(", "PARTITIONS"):
@@ -1224,7 +1255,8 @@ class TSQL(Dialect):
 
         def create_sql(self, expression: exp.Create) -> str:
             kind = expression.kind
-            exists = expression.args.pop("exists", None)
+            exists = expression.args.get("exists")
+            expression.set("exists", None)
 
             like_property = expression.find(exp.LikeProperty)
             if like_property:

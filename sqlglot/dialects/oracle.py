@@ -107,6 +107,7 @@ class Oracle(Dialect):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "CONVERT": exp.ConvertToCharset.from_arg_list,
+            "L2_DISTANCE": exp.EuclideanDistance.from_arg_list,
             "NVL": lambda args: build_coalesce(args, is_nvl=True),
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
             "TO_CHAR": build_timetostr_or_tochar,
@@ -310,7 +311,7 @@ class Oracle(Dialect):
                 "TO_DATE", e.this, exp.Literal.string("YYYY-MM-DD")
             ),
             exp.DateTrunc: lambda self, e: self.func("TRUNC", e.this, e.unit),
-            exp.Group: transforms.preprocess([transforms.unalias_group]),
+            exp.EuclideanDistance: rename_func("L2_DISTANCE"),
             exp.ILike: no_ilike_sql,
             exp.LogicalOr: rename_func("MAX"),
             exp.LogicalAnd: rename_func("MIN"),
@@ -341,6 +342,8 @@ class Oracle(Dialect):
             exp.Unicode: lambda self, e: f"ASCII(UNISTR({self.sql(e.this)}))",
             exp.UnixToTime: lambda self,
             e: f"TO_DATE('1970-01-01', 'YYYY-MM-DD') + ({self.sql(e, 'this')} / 86400)",
+            exp.UtcTimestamp: rename_func("UTC_TIMESTAMP"),
+            exp.UtcTime: rename_func("UTC_TIME"),
         }
 
         PROPERTIES_LOCATION = {
