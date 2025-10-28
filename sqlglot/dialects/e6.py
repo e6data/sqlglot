@@ -425,14 +425,14 @@ def qualify_columns_with_table_alias(expression: exp.Select) -> exp.Select:
         return expression
 
     # Step 1: Check if there's a LEFT JOIN with USING clause
-    joins = expression.args.get('joins', [])
+    joins = expression.args.get("joins", [])
     has_left_join_with_using = False
 
     for join in joins:
         if isinstance(join, exp.Join):
-            side_value = join.args.get('side')
-            is_left_join = str(side_value).upper() == 'LEFT' if side_value else False
-            has_using = join.args.get('using') is not None
+            side_value = join.args.get("side")
+            is_left_join = str(side_value).upper() == "LEFT" if side_value else False
+            has_using = join.args.get("using") is not None
             if is_left_join and has_using:
                 has_left_join_with_using = True
                 break
@@ -442,7 +442,7 @@ def qualify_columns_with_table_alias(expression: exp.Select) -> exp.Select:
         return expression
 
     # Step 2: Get table/subquery alias from FROM clause
-    from_clause = expression.args.get('from')
+    from_clause = expression.args.get("from")
     if not from_clause or not isinstance(from_clause, exp.From):
         return expression
 
@@ -460,11 +460,11 @@ def qualify_columns_with_table_alias(expression: exp.Select) -> exp.Select:
     def add_table_qualifier(node):
         if isinstance(node, exp.Column):
             # Get column name for reference
-            col_name = node.this.this if isinstance(node.this, exp.Identifier) else str(node.this)
+            # col_name = node.this.this if isinstance(node.this, exp.Identifier) else str(node.this)
 
             # Add table alias if column doesn't have one
             if not node.table:
-                node.set('table', exp.Identifier(this=table_alias, quoted=False))
+                node.set("table", exp.Identifier(this=table_alias, quoted=False))
 
         return node
 
@@ -474,24 +474,24 @@ def qualify_columns_with_table_alias(expression: exp.Select) -> exp.Select:
             expression.expressions[i] = select_expr.transform(add_table_qualifier)
 
     # Step 5: Apply to WHERE clause
-    where_clause = expression.args.get('where')
+    where_clause = expression.args.get("where")
     if where_clause:
-        expression.set('where', where_clause.transform(add_table_qualifier))
+        expression.set("where", where_clause.transform(add_table_qualifier))
 
     # Step 6: Apply to GROUP BY clause
-    group_clause = expression.args.get('group')
+    group_clause = expression.args.get("group")
     if group_clause:
-        expression.set('group', group_clause.transform(add_table_qualifier))
+        expression.set("group", group_clause.transform(add_table_qualifier))
 
     # Step 7: Apply to HAVING clause
-    having_clause = expression.args.get('having')
+    having_clause = expression.args.get("having")
     if having_clause:
-        expression.set('having', having_clause.transform(add_table_qualifier))
+        expression.set("having", having_clause.transform(add_table_qualifier))
 
     # Step 8: Apply to ORDER BY clause
-    order_clause = expression.args.get('order')
+    order_clause = expression.args.get("order")
     if order_clause:
-        expression.set('order', order_clause.transform(add_table_qualifier))
+        expression.set("order", order_clause.transform(add_table_qualifier))
 
     return expression
 
@@ -1684,6 +1684,24 @@ class E6(Dialect):
             comment = comment + " " if comment[-1].strip() else comment
             return comment
 
+        def alias_sql(self, expression: exp.Alias) -> str:
+            """
+            Override to handle reserved keyword aliases specially.
+            If the alias is a reserved keyword, output it quoted without AS.
+            """
+            alias = expression.args.get("alias")
+
+            # Check if alias is a reserved keyword (case-insensitive)
+            if alias and isinstance(alias, exp.Identifier):
+                if alias.this.lower() in self.RESERVED_DATATYPE_KEYWORDS:
+                    # Mark as quoted and output without AS keyword
+                    alias.set("quoted", True)
+
+                    return f"{self.sql(expression, 'this')} {alias}"
+
+            # Otherwise, use default behavior (with AS)
+            return super().alias_sql(expression)
+
         def ordered_sql(self, expression: exp.Ordered) -> str:
             """
             Generate the SQL string for an ORDER BY clause in the E6 dialect.
@@ -1865,7 +1883,6 @@ class E6(Dialect):
             else:
                 # Return an empty string if either 'this' or 'unit' is missing
                 return f"INTERVAL {expression.this if expression.this else ''} {expression.unit if expression.unit else ''}"
-
 
         # Need to look at the problem here regarding double casts appearing
         def _last_day_sql(self: E6.Generator, expression: exp.LastDay) -> str:
@@ -2609,6 +2626,33 @@ class E6(Dialect):
             exp.VarMap: map_sql,
             exp.Upper: rename_func("UPPER"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
+        }
+
+        RESERVED_DATATYPE_KEYWORDS = {
+            "bigint",
+            "char",
+            "character",
+            "decimal",
+            "double",
+            "float",
+            "int",
+            "integer",
+            "smallint",
+            "string",
+            "varchar",
+            "variant",
+            "boolean",
+            "date",
+            "datetime",
+            "timestamp",
+            "time",
+            "binary",
+            "json",
+            "array",
+            "map",
+            "struct",
+            "text",
+            "tinyint",
         }
 
         RESERVED_KEYWORDS = {
