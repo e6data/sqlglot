@@ -420,7 +420,7 @@ def qualify_columns_with_table_alias(expression: exp.Select) -> exp.Select:
         Output: SELECT pv.start_tstamp_date FROM gold.spruce.table pv LEFT JOIN pw USING (id)
     """
     # Check environment variable - default is False (opt-in behavior)
-    is_enabled = os.getenv("ENABLE_TABLE_ALIAS_QUALIFICATION") == "true"
+    is_enabled = os.getenv("ENABLE_TABLE_ALIAS_QUALIFICATION", "false") == "true"
     if not is_enabled:
         return expression
 
