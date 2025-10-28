@@ -95,12 +95,6 @@ async def convert_query(
         )
         return {"converted_query": ""}
 
-    # Set table alias qualification flag from feature_flags (similar to PRETTY_PRINT)
-    from sqlglot.dialects.e6 import E6
-
-    original_qualification_flag = E6.ENABLE_TABLE_ALIAS_QUALIFICATION
-    E6.ENABLE_TABLE_ALIAS_QUALIFICATION = flags_dict.get("ENABLE_TABLE_ALIAS_QUALIFICATION", False)
-
     try:
         logger.info(
             "%s AT %s FROM %s — Original:\n%s",
@@ -171,9 +165,6 @@ async def convert_query(
             exc_info=True,
         )
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        # Always restore the original flag value
-        E6.ENABLE_TABLE_ALIAS_QUALIFICATION = original_qualification_flag
 
 
 @app.get("/health")

@@ -2742,10 +2742,10 @@ class TestE6(Validator):
 
     def test_table_alias_qualification(self):
         """Test table alias qualification for LEFT JOIN with USING clause"""
-        from sqlglot.dialects.e6 import E6
+        import os
 
-        # Enable the feature flag
-        E6.ENABLE_TABLE_ALIAS_QUALIFICATION = True
+        # Enable the feature via environment variable (set to "true" for boolean True)
+        os.environ["ENABLE_TABLE_ALIAS_QUALIFICATION"] = "true"
 
         try:
             # Test 1: Simple LEFT JOIN with USING - columns should be qualified
@@ -2827,5 +2827,5 @@ class TestE6(Validator):
             )
 
         finally:
-            # Always reset flag to default after tests
-            E6.ENABLE_TABLE_ALIAS_QUALIFICATION = False
+            # Reset environment variable to default (remove it)
+            os.environ.pop("ENABLE_TABLE_ALIAS_QUALIFICATION", None)
