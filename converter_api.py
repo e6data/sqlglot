@@ -97,6 +97,7 @@ async def convert_query(
 
     # Set table alias qualification flag from feature_flags (similar to PRETTY_PRINT)
     from sqlglot.dialects.e6 import E6
+
     original_qualification_flag = E6.ENABLE_TABLE_ALIAS_QUALIFICATION
     E6.ENABLE_TABLE_ALIAS_QUALIFICATION = flags_dict.get("ENABLE_TABLE_ALIAS_QUALIFICATION", False)
 
