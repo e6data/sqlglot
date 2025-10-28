@@ -2716,6 +2716,30 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            'SELECT ean "STRING" FROM silver_postgres_v2.thor_inbound.inbound_sku',
+            read={
+                "databricks": "SELECT ean STRING FROM silver_postgres_v2.thor_inbound.inbound_sku"
+            },
+        )
+
+        self.validate_all(
+            'SELECT ean "INT" FROM silver_postgres_v2.thor_inbound.inbound_sku',
+            read={"databricks": "SELECT ean INT FROM silver_postgres_v2.thor_inbound.inbound_sku"},
+        )
+        self.validate_all(
+            'SELECT ean "FLOAT" FROM silver_postgres_v2.thor_inbound.inbound_sku',
+            read={
+                "databricks": "SELECT ean FLOAT FROM silver_postgres_v2.thor_inbound.inbound_sku"
+            },
+        )
+        self.validate_all(
+            'SELECT ean "DECIMAL" FROM silver_postgres_v2.thor_inbound.inbound_sku',
+            read={
+                "databricks": "SELECT ean DECIMAL FROM silver_postgres_v2.thor_inbound.inbound_sku"
+            },
+        )
+
     def test_table_alias_qualification(self):
         """Test table alias qualification for LEFT JOIN with USING clause"""
         from sqlglot.dialects.e6 import E6
