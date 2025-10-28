@@ -20,6 +20,7 @@ class TestSnowflake(Validator):
 
         self.validate_identity("SELECT GET(a, b)")
         self.validate_identity("SELECT GREATEST_IGNORE_NULLS(1, 2, 3, NULL)")
+        self.validate_identity("SELECT LEAST_IGNORE_NULLS(5, NULL, 7, 3)")
         self.validate_identity("SELECT TAN(x)")
         self.validate_identity("SELECT COS(x)")
         self.validate_identity("SELECT SINH(1.5)")
@@ -41,15 +42,17 @@ class TestSnowflake(Validator):
         expr.selects[0].assert_is(exp.AggFunc)
         self.assertEqual(expr.sql(dialect="snowflake"), "SELECT APPROX_TOP_K(C4, 3, 5) FROM t")
 
+        self.validate_identity("SELECT EQUAL_NULL(1, 2)")
         self.validate_identity("SELECT EXP(1)")
         self.validate_identity("SELECT FACTORIAL(5)")
         self.validate_identity("SELECT BIT_LENGTH('abc')")
         self.validate_identity("SELECT BIT_LENGTH(x'A1B2')")
         self.validate_identity("SELECT BOOLNOT(0)")
         self.validate_identity("SELECT BOOLNOT(-3.79)")
+        self.validate_identity("SELECT BOOLAND(1, -2)")
         self.validate_identity("SELECT BOOLXOR(2, 0)")
-        self.validate_identity("SELECT BOOLOR(1, -2)", "SELECT 1 OR -2")
-        self.validate_identity("SELECT BOOLAND(1, -2)", "SELECT 1 AND -2")
+        self.validate_identity("SELECT BOOLOR(1, 0)")
+        self.validate_identity("SELECT IS_NULL_VALUE(GET_PATH(payload, 'field'))")
         self.validate_identity("SELECT RTRIMMED_LENGTH(' ABCD ')")
         self.validate_identity("SELECT HEX_DECODE_STRING('48656C6C6F')")
         self.validate_identity("SELECT HEX_ENCODE('Hello World')")
@@ -88,6 +91,7 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT DEGREES(PI() / 3)")
         self.validate_identity("SELECT DEGREES(1)")
         self.validate_identity("SELECT RADIANS(180)")
+        self.validate_identity("SELECT REGR_VALX(y, x)")
         self.validate_identity("SELECT RANDOM()")
         self.validate_identity("SELECT RANDOM(123)")
         self.validate_identity("PARSE_URL('https://example.com/path')")
@@ -152,9 +156,16 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT AI_SUMMARIZE_AGG(review)")
         self.validate_identity("SELECT AI_CLASSIFY('text', ['travel', 'cooking'])")
         self.validate_identity("SELECT OBJECT_CONSTRUCT()")
+        self.validate_identity("SELECT YEAR(CURRENT_TIMESTAMP())")
+        self.validate_identity("SELECT YEAROFWEEK(CURRENT_TIMESTAMP())")
+        self.validate_identity("SELECT YEAROFWEEKISO(CURRENT_TIMESTAMP())")
+        self.validate_identity("SELECT WEEK(CURRENT_TIMESTAMP())")
+        self.validate_identity("SELECT WEEKISO(CURRENT_TIMESTAMP())")
+        self.validate_identity("SELECT MONTH(CURRENT_TIMESTAMP())")
+        self.validate_identity("SELECT DAY(CURRENT_TIMESTAMP())")
         self.validate_identity("SELECT DAYOFMONTH(CURRENT_TIMESTAMP())")
         self.validate_identity("SELECT DAYOFYEAR(CURRENT_TIMESTAMP())")
-        self.validate_identity("WEEKOFYEAR(tstamp)")
+        self.validate_identity("WEEKOFYEAR(tstamp)", "WEEK(tstamp)")
         self.validate_identity("SELECT QUARTER(CURRENT_TIMESTAMP())")
         self.validate_identity("SELECT SUM(amount) FROM mytable GROUP BY ALL")
         self.validate_identity("WITH x AS (SELECT 1 AS foo) SELECT foo FROM IDENTIFIER('x')")
@@ -1190,6 +1201,26 @@ class TestSnowflake(Validator):
             write={
                 "duckdb": "CASE WHEN TRUE = (a.b = 'value') OR (TRUE IS NULL AND (a.b = 'value') IS NULL) THEN 'value' END",
                 "snowflake": "DECODE(TRUE, a.b = 'value', 'value')",
+            },
+        )
+        self.validate_all(
+            "SELECT BOOLAND(1, -2)",
+            read={
+                "snowflake": "SELECT BOOLAND(1, -2)",
+            },
+            write={
+                "snowflake": "SELECT BOOLAND(1, -2)",
+                "duckdb": "SELECT ((1) AND (-2))",
+            },
+        )
+        self.validate_all(
+            "SELECT BOOLOR(1, 0)",
+            read={
+                "snowflake": "SELECT BOOLOR(1, 0)",
+            },
+            write={
+                "snowflake": "SELECT BOOLOR(1, 0)",
+                "duckdb": "SELECT ((1) OR (0))",
             },
         )
         self.validate_all(
@@ -2668,7 +2699,7 @@ FROM persons AS p, LATERAL FLATTEN(input => p.c, path => 'contact') AS _flattene
             "REGEXP_REPLACE(subject, pattern)",
             write={
                 "bigquery": "REGEXP_REPLACE(subject, pattern, '')",
-                "duckdb": "REGEXP_REPLACE(subject, pattern, '')",
+                "duckdb": "REGEXP_REPLACE(subject, pattern, '', 'g')",
                 "hive": "REGEXP_REPLACE(subject, pattern, '')",
                 "snowflake": "REGEXP_REPLACE(subject, pattern, '')",
                 "spark": "REGEXP_REPLACE(subject, pattern, '')",
@@ -2684,7 +2715,8 @@ FROM persons AS p, LATERAL FLATTEN(input => p.c, path => 'contact') AS _flattene
             },
             write={
                 "bigquery": "REGEXP_REPLACE(subject, pattern, replacement)",
-                "duckdb": "REGEXP_REPLACE(subject, pattern, replacement)",
+                "duckdb": "REGEXP_REPLACE(subject, pattern, replacement, 'g')",
+                "postgres": "REGEXP_REPLACE(subject, pattern, replacement, 'g')",
                 "hive": "REGEXP_REPLACE(subject, pattern, replacement)",
                 "snowflake": "REGEXP_REPLACE(subject, pattern, replacement)",
                 "spark": "REGEXP_REPLACE(subject, pattern, replacement)",
@@ -2697,20 +2729,31 @@ FROM persons AS p, LATERAL FLATTEN(input => p.c, path => 'contact') AS _flattene
             },
             write={
                 "bigquery": "REGEXP_REPLACE(subject, pattern, replacement)",
-                "duckdb": "REGEXP_REPLACE(subject, pattern, replacement)",
+                "duckdb": "REGEXP_REPLACE(subject, pattern, replacement, 'g')",
+                "postgres": "REGEXP_REPLACE(subject, pattern, replacement, position, 'g')",
                 "hive": "REGEXP_REPLACE(subject, pattern, replacement)",
                 "snowflake": "REGEXP_REPLACE(subject, pattern, replacement, position)",
                 "spark": "REGEXP_REPLACE(subject, pattern, replacement, position)",
             },
         )
         self.validate_all(
-            "REGEXP_REPLACE(subject, pattern, replacement, position, occurrence, parameters)",
+            "REGEXP_REPLACE(subject, pattern, replacement, position, occurrence, 'c')",
             write={
                 "bigquery": "REGEXP_REPLACE(subject, pattern, replacement)",
-                "duckdb": "REGEXP_REPLACE(subject, pattern, replacement, parameters)",
+                "duckdb": "REGEXP_REPLACE(subject, pattern, replacement, 'c')",
+                "postgres": "REGEXP_REPLACE(subject, pattern, replacement, position, occurrence, 'c')",
                 "hive": "REGEXP_REPLACE(subject, pattern, replacement)",
-                "snowflake": "REGEXP_REPLACE(subject, pattern, replacement, position, occurrence, parameters)",
+                "snowflake": "REGEXP_REPLACE(subject, pattern, replacement, position, occurrence, 'c')",
                 "spark": "REGEXP_REPLACE(subject, pattern, replacement, position)",
+            },
+        )
+
+        self.validate_all(
+            "REGEXP_REPLACE(subject, pattern, replacement, 1, 0, 'c')",
+            write={
+                "snowflake": "REGEXP_REPLACE(subject, pattern, replacement, 1, 0, 'c')",
+                "duckdb": "REGEXP_REPLACE(subject, pattern, replacement, 'cg')",
+                "postgres": "REGEXP_REPLACE(subject, pattern, replacement, 1, 0, 'cg')",
             },
         )
 

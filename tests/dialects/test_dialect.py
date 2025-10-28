@@ -3786,6 +3786,19 @@ FROM subquery2""",
             },
         )
 
+    def test_week_of_year(self):
+        self.validate_all(
+            "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+            write={
+                "duckdb": "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+                "exasol": "WEEK(CAST('2025-01-01' AS DATE))",
+                "hive": "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+                "mysql": "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+                "spark": "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+                "snowflake": "WEEKISO(CAST('2025-01-01' AS DATE))",
+            },
+        )
+
     def test_justify(self):
         self.validate_all(
             "JUSTIFY_DAYS(INTERVAL '1' DAY)",
@@ -4293,3 +4306,16 @@ FROM subquery2""",
                 "postgres": "SELECT col IS NOT NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
             },
         )
+
+    def test_regexp_replace(self):
+        for target_dialect in ("postgres", "duckdb"):
+            # Transpilations from other dialects to Postgres or DuckDB should append 'g'
+            # since their semantics is to replace all occurrences of the pattern.
+            for read_dialect in ("", "bigquery", "presto", "trino", "spark", "databricks"):
+                with self.subTest(
+                    f"Testing REGEXP_REPLACE appending 'g' flag from {read_dialect} to {target_dialect}"
+                ):
+                    sql = parse_one("REGEXP_REPLACE('aaa', 'a', 'b')", read=read_dialect).sql(
+                        target_dialect
+                    )
+                    self.assertEqual(sql, "REGEXP_REPLACE('aaa', 'a', 'b', 'g')")

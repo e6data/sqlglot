@@ -1117,6 +1117,11 @@ class TestDuckDB(Validator):
         self.validate_identity("SELECT * FROM t LIMIT 10 PERCENT")
         self.validate_identity("SELECT * FROM t LIMIT 10%", "SELECT * FROM t LIMIT 10 PERCENT")
 
+        self.validate_identity("SELECT * FROM t LIMIT 10 PERCENT OFFSET 1")
+        self.validate_identity(
+            "SELECT * FROM t LIMIT 10% OFFSET 1", "SELECT * FROM t LIMIT 10 PERCENT OFFSET 1"
+        )
+
         self.validate_identity(
             "SELECT CAST(ROW(1, 2) AS ROW(a INTEGER, b INTEGER))",
             "SELECT CAST(ROW(1, 2) AS STRUCT(a INT, b INT))",
@@ -1207,8 +1212,21 @@ class TestDuckDB(Validator):
         self.validate_identity("SELECT CURRENT_TIMESTAMP")
 
         self.validate_all(
+            "SELECT CAST(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AS DATE)",
+            read={
+                "bigquery": "SELECT CURRENT_DATE('UTC')",
+                "duckdb": "SELECT CAST(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AS DATE)",
+            },
+        )
+        self.validate_all(
             "SELECT MAKE_DATE(2016, 12, 25)",
-            read={"bigquery": "SELECT DATE(2016, 12, 25)"},
+            read={
+                "bigquery": "SELECT DATE(2016, 12, 25)",
+            },
+            write={
+                "bigquery": "SELECT DATE(2016, 12, 25)",
+                "duckdb": "SELECT MAKE_DATE(2016, 12, 25)",
+            },
         )
         self.validate_all(
             "SELECT CAST(CAST('2016-12-25 23:59:59' AS TIMESTAMP) AS DATE)",

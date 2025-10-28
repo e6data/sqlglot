@@ -370,6 +370,13 @@ LANGUAGE js AS
             },
         )
         self.validate_all(
+            "SELECT DATE(2024, 1, 15)",
+            write={
+                "bigquery": "SELECT DATE(2024, 1, 15)",
+                "duckdb": "SELECT MAKE_DATE(2024, 1, 15)",
+            },
+        )
+        self.validate_all(
             "EXTRACT(HOUR FROM DATETIME(2008, 12, 25, 15, 30, 00))",
             write={
                 "bigquery": "EXTRACT(HOUR FROM DATETIME(2008, 12, 25, 15, 30, 00))",
@@ -801,6 +808,7 @@ LANGUAGE js AS
             write={
                 "bigquery": "SELECT TIMESTAMP_ADD(CAST('2008-12-25 15:30:00+00' AS TIMESTAMP), INTERVAL '10' MINUTE)",
                 "databricks": "SELECT DATE_ADD(MINUTE, '10', CAST('2008-12-25 15:30:00+00' AS TIMESTAMP))",
+                "duckdb": "SELECT CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ) + INTERVAL '10' MINUTE",
                 "mysql": "SELECT DATE_ADD(TIMESTAMP('2008-12-25 15:30:00+00'), INTERVAL '10' MINUTE)",
                 "spark": "SELECT DATE_ADD(MINUTE, '10', CAST('2008-12-25 15:30:00+00' AS TIMESTAMP))",
                 "snowflake": "SELECT TIMESTAMPADD(MINUTE, '10', CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ))",
@@ -1430,6 +1438,7 @@ LANGUAGE js AS
             "CURRENT_DATE('UTC')",
             write={
                 "bigquery": "CURRENT_DATE('UTC')",
+                "duckdb": "CAST(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AS DATE)",
                 "mysql": "CURRENT_DATE AT TIME ZONE 'UTC'",
                 "postgres": "CURRENT_DATE AT TIME ZONE 'UTC'",
                 "snowflake": "CAST(CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP()) AS DATE)",
@@ -2530,7 +2539,14 @@ OPTIONS (
             "SELECT UNIX_MICROS('2008-12-25 15:30:00+00')",
             write={
                 "bigquery": "SELECT UNIX_MICROS('2008-12-25 15:30:00+00')",
-                "duckdb": "SELECT EPOCH_US('2008-12-25 15:30:00+00')",
+                "duckdb": "SELECT EPOCH_US(CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ))",
+            },
+        )
+        self.validate_all(
+            "SELECT UNIX_MICROS(TIMESTAMP '2008-12-25 15:30:00+00')",
+            write={
+                "bigquery": "SELECT UNIX_MICROS(CAST('2008-12-25 15:30:00+00' AS TIMESTAMP))",
+                "duckdb": "SELECT EPOCH_US(CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ))",
             },
         )
 

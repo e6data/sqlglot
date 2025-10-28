@@ -8,6 +8,7 @@ from sqlglot.dialects.dialect import (
     NormalizationStrategy,
     annotate_with_type_lambda,
     build_timetostr_or_tochar,
+    build_like,
     binary_from_function,
     build_default_decimal_type,
     build_replace_with_optional_replacement,
@@ -361,15 +362,6 @@ def _build_regexp_extract(expr_type: t.Type[E]) -> t.Callable[[t.List], E]:
     return _builder
 
 
-def _build_like(expr_type: t.Type[E]) -> t.Callable[[t.List], E | exp.Escape]:
-    def _builder(args: t.List) -> E | exp.Escape:
-        like_expr = expr_type(this=args[0], expression=args[1])
-        escape = seq_get(args, 2)
-        return exp.Escape(this=like_expr, expression=escape) if escape else like_expr
-
-    return _builder
-
-
 def _regexpextract_sql(self, expression: exp.RegexpExtract | exp.RegexpExtractAll) -> str:
     # Other dialects don't support all of the following parameters, so we need to
     # generate default values as necessary to ensure the transpilation is correct
@@ -617,6 +609,7 @@ class Snowflake(Dialect):
             exp.Degrees,
             exp.Exp,
             exp.MonthsBetween,
+            exp.RegrValx,
             exp.Sin,
             exp.Sinh,
             exp.Tan,
@@ -709,6 +702,10 @@ class Snowflake(Dialect):
         exp.DataType.Type.BOOLEAN: {
             *Dialect.TYPE_TO_EXPRESSIONS[exp.DataType.Type.BOOLEAN],
             exp.Boolnot,
+            exp.Booland,
+            exp.Boolor,
+            exp.EqualNull,
+            exp.IsNullValue,
             exp.Search,
         },
         exp.DataType.Type.DATE: {
@@ -765,6 +762,7 @@ class Snowflake(Dialect):
         exp.DateAdd: _annotate_date_or_time_add,
         exp.TimeAdd: _annotate_date_or_time_add,
         exp.GreatestIgnoreNulls: lambda self, e: self._annotate_by_args(e, "expressions"),
+        exp.LeastIgnoreNulls: lambda self, e: self._annotate_by_args(e, "expressions"),
         exp.Reverse: _annotate_reverse,
         exp.TimestampFromParts: _annotate_timestamp_from_parts,
     }
@@ -878,9 +876,7 @@ class Snowflake(Dialect):
             "BITXOR_AGG": exp.BitwiseXorAgg.from_arg_list,
             "BIT_XOR_AGG": exp.BitwiseXorAgg.from_arg_list,
             "BIT_XORAGG": exp.BitwiseXorAgg.from_arg_list,
-            "BOOLOR": binary_from_function(exp.Or),
             "BOOLXOR": _build_bitwise(exp.Xor, "BOOLXOR"),
-            "BOOLAND": binary_from_function(exp.And),
             "DATE": _build_datetime("DATE", exp.DataType.Type.DATE),
             "DATE_TRUNC": _date_trunc_to_time,
             "DATEADD": _build_date_time_add(exp.DateAdd),
@@ -963,9 +959,11 @@ class Snowflake(Dialect):
             "VAR_SAMP": exp.VarSamp.from_arg_list,
             "VECTOR_L2_DISTANCE": exp.EuclideanDistance.from_arg_list,
             "ZEROIFNULL": _build_if_from_zeroifnull,
-            "LIKE": _build_like(exp.Like),
-            "ILIKE": _build_like(exp.ILike),
+            "LIKE": build_like(exp.Like),
+            "ILIKE": build_like(exp.ILike),
             "SEARCH": _build_search,
+            "WEEKISO": exp.WeekOfYear.from_arg_list,
+            "WEEKOFYEAR": exp.Week.from_arg_list,
         }
         FUNCTIONS.pop("PREDICT")
 
@@ -1687,7 +1685,11 @@ class Snowflake(Dialect):
             exp.UnixToTime: rename_func("TO_TIMESTAMP"),
             exp.Uuid: rename_func("UUID_STRING"),
             exp.VarMap: lambda self, e: var_map_sql(self, e, "OBJECT_CONSTRUCT"),
-            exp.WeekOfYear: rename_func("WEEKOFYEAR"),
+            exp.Booland: rename_func("BOOLAND"),
+            exp.Boolor: rename_func("BOOLOR"),
+            exp.WeekOfYear: rename_func("WEEKISO"),
+            exp.YearOfWeek: rename_func("YEAROFWEEK"),
+            exp.YearOfWeekIso: rename_func("YEAROFWEEKISO"),
             exp.Xor: rename_func("BOOLXOR"),
             exp.ByteLength: rename_func("OCTET_LENGTH"),
         }

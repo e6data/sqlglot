@@ -1656,15 +1656,15 @@ BIT_LENGTH(tbl.bin_col);
 INT;
 
 # dialect: snowflake
-BOOLAND(1, -2);
-BOOLEAN;
-
-# dialect: snowflake
 BOOLNOT(tbl.int_col);
 BOOLEAN;
 
 # dialect: snowflake
 BOOLNOT(NULL);
+BOOLEAN;
+
+# dialect: snowflake
+BOOLAND(1, -2);
 BOOLEAN;
 
 # dialect: snowflake
@@ -1960,6 +1960,10 @@ EDITDISTANCE('hello', 'world', 3);
 INT;
 
 # dialect: snowflake
+EQUAL_NULL(1, 2);
+BOOLEAN;
+
+# dialect: snowflake
 EXTRACT(YEAR, CAST('2024-05-09' AS DATE));
 INT;
 
@@ -1970,6 +1974,110 @@ INT;
 # dialect: snowflake
 EXTRACT(MINUTE, CAST('08:50:57' AS TIME));
 INT;
+
+# dialect: snowflake
+YEAR(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+YEAR(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+YEAROFWEEK(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+YEAROFWEEK(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+YEAROFWEEKISO(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+YEAROFWEEKISO(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+DAY(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+DAY(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+DAYOFMONTH(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+DAYOFMONTH(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+DAYOFWEEK(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+DAYOFWEEK(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+DAYOFWEEKISO(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+DAYOFWEEKISO(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+DAYOFYEAR(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+DAYOFYEAR(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+WEEK(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+WEEK(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+WEEKOFYEAR(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+WEEKOFYEAR(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+WEEKISO(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+WEEKISO(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+MONTH(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+MONTH(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
+
+# dialect: snowflake
+QUARTER(CAST('2024-05-09' AS DATE));
+TINYINT;
+
+# dialect: snowflake
+QUARTER(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
+TINYINT;
 
 # dialect: snowflake
 EXP(1);
@@ -2048,6 +2156,22 @@ GREATEST_IGNORE_NULLS(CAST('2023-01-01' AS DATE), CAST('2023-01-02' AS DATE));
 DATE;
 
 # dialect: snowflake
+LEAST_IGNORE_NULLS(1, 2, 3);
+INT;
+
+# dialect: snowflake
+LEAST_IGNORE_NULLS(1, 2.5, 3);
+DOUBLE;
+
+# dialect: snowflake
+LEAST_IGNORE_NULLS('a', 'b', 'c');
+VARCHAR;
+
+# dialect: snowflake
+LEAST_IGNORE_NULLS(CAST('2023-01-01' AS DATE), CAST('2023-01-02' AS DATE));
+DATE;
+
+# dialect: snowflake
 HEX_DECODE_BINARY('48656C6C6F');
 BINARY;
 
@@ -2082,6 +2206,18 @@ VARCHAR;
 # dialect: snowflake
 INITCAP(tbl.str_col);
 VARCHAR;
+
+# dialect: snowflake
+IS_NULL_VALUE(payload:field);
+BOOLEAN;
+
+# dialect: snowflake
+1 IN (1, 2, 3);
+BOOLEAN;
+
+# dialect: snowflake
+1 NOT IN (1, 2, 3);
+BOOLEAN;
 
 # dialect: snowflake
 JAROWINKLER_SIMILARITY('hello', 'world');
@@ -2236,6 +2372,22 @@ MONTHNAME(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
 VARCHAR;
 
 # dialect: snowflake
+NULLIFZERO(5);
+INT;
+
+# dialect: snowflake
+NULLIFZERO(5::BIGINT);
+BIGINT;
+
+# dialect: snowflake
+NULLIFZERO(5.5);
+DOUBLE;
+
+# dialect: snowflake
+NULLIFZERO(5.5::FLOAT);
+FLOAT;
+
+# dialect: snowflake
 MOD(tbl.bigint_col, 3);
 BIGINT;
 
@@ -2253,6 +2405,10 @@ DOUBLE;
 
 # dialect: snowflake
 MONTHS_BETWEEN(tbl.timestamp_col, CAST('2019-02-15 01:00:00' AS TIMESTAMP));
+DOUBLE;
+
+# dialect: snowflake
+REGR_VALX(1.0, 2.0);
 DOUBLE;
 
 # dialect: snowflake
@@ -2750,6 +2906,26 @@ INT;
 # dialect: snowflake
 WIDTH_BUCKET(tbl.double_col, 0, 100, 10);
 INT;
+
+# dialect: snowflake
+ZEROIFNULL(5);
+INT;
+
+# dialect: snowflake
+ZEROIFNULL(5::BIGINT);
+BIGINT;
+
+# dialect: snowflake
+ZEROIFNULL(5.5);
+DOUBLE;
+
+# dialect: snowflake
+ZEROIFNULL(5.5::FLOAT);
+FLOAT;
+
+# dialect: snowflake
+ZEROIFNULL(5.12::DECIMAL(10,2));
+DECIMAL(10, 2);
 
 # dialect: snowflake
 TRIM('hello world');

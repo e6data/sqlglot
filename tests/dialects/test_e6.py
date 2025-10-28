@@ -1427,7 +1427,8 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT ILIKE('Spark', '_PARK')", read={"databricks": "SELECT ilike('Spark', '_PARK')"}
+            "SELECT 'Spark' ILIKE '_PARK'",  # This syntax worked on COPS BETA
+            read={"databricks": "SELECT ILIKE('Spark', '_PARK')"},
         )
 
         self.validate_all(

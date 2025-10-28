@@ -102,16 +102,7 @@ class Expression(metaclass=_Expression):
 
     key = "expression"
     arg_types = {"this": True}
-    __slots__ = (
-        "args",
-        "parent",
-        "arg_key",
-        "index",
-        "comments",
-        "_type",
-        "_meta",
-        "_hash",
-    )
+    __slots__ = ("args", "parent", "arg_key", "index", "comments", "_type", "_meta", "_hash")
 
     def __init__(self, **args: t.Any):
         self.args: t.Dict[str, t.Any] = args
@@ -127,7 +118,7 @@ class Expression(metaclass=_Expression):
             self._set_parent(arg_key, value)
 
     def __eq__(self, other) -> bool:
-        return type(self) is type(other) and hash(self) == hash(other)
+        return self is other or (type(self) is type(other) and hash(self) == hash(other))
 
     def __hash__(self) -> int:
         if self._hash is None:
@@ -5607,6 +5598,14 @@ class Boolnot(Func):
     pass
 
 
+class Booland(Func):
+    arg_types = {"this": True, "expression": True}
+
+
+class Boolor(Func):
+    arg_types = {"this": True, "expression": True}
+
+
 # https://cloud.google.com/bigquery/docs/reference/standard-sql/json_functions#bool_for_json
 class JSONBool(Func):
     pass
@@ -6282,6 +6281,14 @@ class WeekOfYear(Func):
     _sql_names = ["WEEK_OF_YEAR", "WEEKOFYEAR"]
 
 
+class YearOfWeek(Func):
+    _sql_names = ["YEAR_OF_WEEK", "YEAROFWEEK"]
+
+
+class YearOfWeekIso(Func):
+    _sql_names = ["YEAR_OF_WEEK_ISO", "YEAROFWEEKISO"]
+
+
 class MonthsBetween(Func):
     arg_types = {"this": True, "expression": True, "roundoff": False}
 
@@ -6437,6 +6444,10 @@ class Encode(Func):
     arg_types = {"this": True, "charset": True}
 
 
+class EqualNull(Func):
+    arg_types = {"this": True, "expression": True}
+
+
 class Exp(Func):
     pass
 
@@ -6586,6 +6597,11 @@ class GreatestIgnoreNulls(Func):
     is_var_len_args = True
 
 
+class LeastIgnoreNulls(Func):
+    arg_types = {"expressions": True}
+    is_var_len_args = True
+
+
 # Trino's `ON OVERFLOW TRUNCATE [filler_string] {WITH | WITHOUT} COUNT`
 # https://trino.io/docs/current/functions/aggregate.html#listagg
 class OverflowTruncateBehavior(Expression):
@@ -6674,6 +6690,10 @@ class Int64(Func):
 
 class IsInf(Func):
     _sql_names = ["IS_INF", "ISINF"]
+
+
+class IsNullValue(Func):
+    pass
 
 
 # https://www.postgresql.org/docs/current/functions-json.html
@@ -7345,16 +7365,6 @@ class Reduce(Func):
     arg_types = {"this": True, "initial": True, "merge": True, "finish": False}
 
 
-class RegexpCount(Func):
-    _sql_names = ["REGEXP_COUNT"]
-    arg_types = {
-        "this": True,
-        "expression": True,
-        "position": False,
-        "parameters": False,
-    }
-
-
 class RegexpExtract(Func):
     arg_types = {
         "this": True,
@@ -7385,6 +7395,7 @@ class RegexpReplace(Func):
         "position": False,
         "occurrence": False,
         "modifiers": False,
+        "single_replace": False,
     }
 
 
@@ -7416,6 +7427,20 @@ class RegexpInstr(Func):
 # limit is the number of times a pattern is applied
 class RegexpSplit(Func):
     arg_types = {"this": True, "expression": True, "limit": False}
+
+
+class RegexpCount(Func):
+    _sql_names = ["REGEXP_COUNT"]
+    arg_types = {
+        "this": True,
+        "expression": True,
+        "position": False,
+        "parameters": False,
+    }
+
+
+class RegrValx(Func):
+    arg_types = {"this": True, "expression": True}
 
 
 class Repeat(Func):
@@ -9474,6 +9499,26 @@ def replace_tree(
                 stack.append(new_node)
 
     return new_node
+
+
+def find_tables(expression: Expression) -> t.Set[Table]:
+    """
+    Find all tables referenced in a query.
+
+    Args:
+        expressions: The query to find the tables in.
+
+    Returns:
+        A set of all the tables.
+    """
+    from sqlglot.optimizer.scope import traverse_scope
+
+    return {
+        table
+        for scope in traverse_scope(expression)
+        for table in scope.tables
+        if table.name and table.name not in scope.cte_sources
+    }
 
 
 def column_table_names(expression: Expression, exclude: str = "") -> t.Set[str]:
