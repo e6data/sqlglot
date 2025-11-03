@@ -680,6 +680,7 @@ class DuckDB(Dialect):
         ARRAY_SIZE_DIM_REQUIRED = False
         NORMALIZE_EXTRACT_DATE_PARTS = True
         SUPPORTS_LIKE_QUANTIFIERS = False
+        SET_ASSIGNMENT_REQUIRES_VARIABLE_KEYWORD = True
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -785,6 +786,7 @@ class DuckDB(Dialect):
             exp.TimestampDiff: lambda self, e: self.func(
                 "DATE_DIFF", exp.Literal.string(e.unit), e.expression, e.this
             ),
+            exp.TimestampSub: date_delta_to_binary_interval_op(),
             exp.TimestampTrunc: timestamptrunc_sql(),
             exp.TimeStrToDate: lambda self, e: self.sql(exp.cast(e.this, exp.DataType.Type.DATE)),
             exp.TimeStrToTime: timestrtotime_sql,
@@ -803,6 +805,12 @@ class DuckDB(Dialect):
                 exp.cast(e.this, exp.DataType.Type.TIMESTAMP),
             ),
             exp.UnixMicros: lambda self, e: self.func("EPOCH_US", _implicit_datetime_cast(e.this)),
+            exp.UnixMillis: lambda self, e: self.func("EPOCH_MS", _implicit_datetime_cast(e.this)),
+            exp.UnixSeconds: lambda self, e: self.sql(
+                exp.cast(
+                    self.func("EPOCH", _implicit_datetime_cast(e.this)), exp.DataType.Type.BIGINT
+                )
+            ),
             exp.UnixToStr: lambda self, e: self.func(
                 "STRFTIME", self.func("TO_TIMESTAMP", e.this), self.format_time(e)
             ),

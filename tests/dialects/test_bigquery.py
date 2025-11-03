@@ -818,6 +818,7 @@ LANGUAGE js AS
             'SELECT TIMESTAMP_SUB(TIMESTAMP "2008-12-25 15:30:00+00", INTERVAL 10 MINUTE)',
             write={
                 "bigquery": "SELECT TIMESTAMP_SUB(CAST('2008-12-25 15:30:00+00' AS TIMESTAMP), INTERVAL '10' MINUTE)",
+                "duckdb": "SELECT CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ) - INTERVAL '10' MINUTE",
                 "mysql": "SELECT DATE_SUB(TIMESTAMP('2008-12-25 15:30:00+00'), INTERVAL '10' MINUTE)",
                 "snowflake": "SELECT TIMESTAMPADD(MINUTE, '10' * -1, CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ))",
                 "spark": "SELECT CAST('2008-12-25 15:30:00+00' AS TIMESTAMP) - INTERVAL '10' MINUTE",
@@ -1859,6 +1860,14 @@ WHERE
             },
         )
 
+        self.validate_all(
+            "SELECT ARRAY_CONCAT_AGG(1)",
+            write={
+                "snowflake": "SELECT ARRAY_FLATTEN(ARRAY_AGG(1))",
+                "bigquery": "SELECT ARRAY_CONCAT_AGG(1)",
+            },
+        )
+
     def test_errors(self):
         with self.assertRaises(ParseError):
             self.parse_one("SELECT * FROM a - b.c.d2")
@@ -2526,7 +2535,7 @@ OPTIONS (
             write={
                 "spark": "SELECT UNIX_SECONDS('2008-12-25 15:30:00+00')",
                 "databricks": "SELECT UNIX_SECONDS('2008-12-25 15:30:00+00')",
-                "duckdb": "SELECT DATE_DIFF('SECONDS', CAST('1970-01-01 00:00:00+00' AS TIMESTAMPTZ), '2008-12-25 15:30:00+00')",
+                "duckdb": "SELECT CAST(EPOCH(CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ)) AS BIGINT)",
                 "snowflake": "SELECT TIMESTAMPDIFF(SECONDS, CAST('1970-01-01 00:00:00+00' AS TIMESTAMPTZ), '2008-12-25 15:30:00+00')",
             },
         )
@@ -2547,6 +2556,22 @@ OPTIONS (
             write={
                 "bigquery": "SELECT UNIX_MICROS(CAST('2008-12-25 15:30:00+00' AS TIMESTAMP))",
                 "duckdb": "SELECT EPOCH_US(CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ))",
+            },
+        )
+
+    def test_unix_millis(self):
+        self.validate_all(
+            "SELECT UNIX_MILLIS('2008-12-25 15:30:00+00')",
+            write={
+                "bigquery": "SELECT UNIX_MILLIS('2008-12-25 15:30:00+00')",
+                "duckdb": "SELECT EPOCH_MS(CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ))",
+            },
+        )
+        self.validate_all(
+            "SELECT UNIX_MILLIS(TIMESTAMP '2008-12-25 15:30:00+00')",
+            write={
+                "bigquery": "SELECT UNIX_MILLIS(CAST('2008-12-25 15:30:00+00' AS TIMESTAMP))",
+                "duckdb": "SELECT EPOCH_MS(CAST('2008-12-25 15:30:00+00' AS TIMESTAMPTZ))",
             },
         )
 

@@ -542,6 +542,37 @@ def _annotate_reverse(self: TypeAnnotator, expression: exp.Reverse) -> exp.Rever
     return expression
 
 
+def _annotate_decode_case(self: TypeAnnotator, expression: exp.DecodeCase) -> exp.DecodeCase:
+    """Annotate DecodeCase with the type inferred from return values only.
+
+    DECODE uses the format: DECODE(expr, val1, ret1, val2, ret2, ..., default)
+    We only look at the return values (ret1, ret2, ..., default) to determine the type,
+    not the comparison values (val1, val2, ...) or the expression being compared.
+    """
+    self._annotate_args(expression)
+
+    expressions = expression.expressions
+
+    # Return values are at indices 2, 4, 6, ... and the last element (if even length)
+    # DECODE(expr, val1, ret1, val2, ret2, ..., default)
+    return_types = [expressions[i].type for i in range(2, len(expressions), 2)]
+
+    # If the total number of expressions is even, the last one is the default
+    # Example:
+    #   DECODE(x, 1, 'a', 2, 'b')             -> len=5 (odd), no default
+    #   DECODE(x, 1, 'a', 2, 'b', 'default')  -> len=6 (even), has default
+    if len(expressions) % 2 == 0:
+        return_types.append(expressions[-1].type)
+
+    # Determine the common type from all return values
+    last_type = None
+    for ret_type in return_types:
+        last_type = self._maybe_coerce(last_type or ret_type, ret_type)
+
+    self._set_type(expression, last_type)
+    return expression
+
+
 def _annotate_timestamp_from_parts(
     self: TypeAnnotator, expression: exp.TimestampFromParts
 ) -> exp.TimestampFromParts:
@@ -610,6 +641,7 @@ class Snowflake(Dialect):
             exp.Exp,
             exp.MonthsBetween,
             exp.RegrValx,
+            exp.RegrValy,
             exp.Sin,
             exp.Sinh,
             exp.Tan,
@@ -628,6 +660,7 @@ class Snowflake(Dialect):
             exp.Length,
             exp.RtrimmedLength,
             exp.BitLength,
+            exp.Getbit,
             exp.Hour,
             exp.Levenshtein,
             exp.JarowinklerSimilarity,
@@ -763,6 +796,7 @@ class Snowflake(Dialect):
         exp.TimeAdd: _annotate_date_or_time_add,
         exp.GreatestIgnoreNulls: lambda self, e: self._annotate_by_args(e, "expressions"),
         exp.LeastIgnoreNulls: lambda self, e: self._annotate_by_args(e, "expressions"),
+        exp.DecodeCase: _annotate_decode_case,
         exp.Reverse: _annotate_reverse,
         exp.TimestampFromParts: _annotate_timestamp_from_parts,
     }
@@ -1456,6 +1490,15 @@ class Snowflake(Dialect):
 
             return self.expression(exp.SemanticView, **kwargs)
 
+        def _parse_set(self, unset: bool = False, tag: bool = False) -> exp.Set | exp.Command:
+            set = super()._parse_set(unset=unset, tag=tag)
+
+            if isinstance(set, exp.Set):
+                for expr in set.expressions:
+                    if isinstance(expr, exp.SetItem):
+                        expr.set("kind", "VARIABLE")
+            return set
+
     class Tokenizer(tokens.Tokenizer):
         STRING_ESCAPES = ["\\", "'"]
         HEX_STRINGS = [("x'", "'"), ("X'", "'")]
@@ -1692,6 +1735,9 @@ class Snowflake(Dialect):
             exp.YearOfWeekIso: rename_func("YEAROFWEEKISO"),
             exp.Xor: rename_func("BOOLXOR"),
             exp.ByteLength: rename_func("OCTET_LENGTH"),
+            exp.ArrayConcatAgg: lambda self, e: self.func(
+                "ARRAY_FLATTEN", exp.ArrayAgg(this=e.this)
+            ),
         }
 
         SUPPORTED_JSON_PATH_PARTS = {

@@ -58,7 +58,10 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT HEX_ENCODE('Hello World')")
         self.validate_identity("SELECT HEX_ENCODE('Hello World', 1)")
         self.validate_identity("SELECT HEX_ENCODE('Hello World', 0)")
+        self.validate_identity("SELECT IFNULL(col1, col2)", "SELECT COALESCE(col1, col2)")
         self.validate_identity("SELECT NEXT_DAY('2025-10-15', 'FRIDAY')")
+        self.validate_identity("SELECT NVL2(col1, col2, col3)")
+        self.validate_identity("SELECT NVL(col1, col2)", "SELECT COALESCE(col1, col2)")
         self.validate_identity("SELECT CHR(8364)")
         self.validate_identity("SELECT COMPRESS('Hello World', 'ZLIB')")
         self.validate_identity("SELECT DECOMPRESS_BINARY('compressed_data', 'SNAPPY')")
@@ -92,6 +95,7 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT DEGREES(1)")
         self.validate_identity("SELECT RADIANS(180)")
         self.validate_identity("SELECT REGR_VALX(y, x)")
+        self.validate_identity("SELECT REGR_VALY(y, x)")
         self.validate_identity("SELECT RANDOM()")
         self.validate_identity("SELECT RANDOM(123)")
         self.validate_identity("PARSE_URL('https://example.com/path')")
@@ -614,6 +618,14 @@ class TestSnowflake(Validator):
             write={
                 "duckdb": "SELECT MAKE_TIME(12, 34, 56 + (987654321 / 1000000000.0))",
                 "snowflake": "SELECT TIME_FROM_PARTS(12, 34, 56, 987654321)",
+            },
+        )
+        self.validate_all(
+            "SELECT GETBIT(11, 3)",
+            write={
+                "snowflake": "SELECT GETBIT(11, 3)",
+                "databricks": "SELECT GETBIT(11, 3)",
+                "redshift": "SELECT GETBIT(11, 3)",
             },
         )
         self.validate_identity(
@@ -1341,6 +1353,7 @@ class TestSnowflake(Validator):
         self.validate_identity("SELECT BIT_XOR(a, b, 'LEFT')", "SELECT BITXOR(a, b, 'LEFT')")
         self.validate_identity("SELECT BITSHIFTLEFT(a, 1)")
         self.validate_identity("SELECT BIT_SHIFTLEFT(a, 1)", "SELECT BITSHIFTLEFT(a, 1)")
+        self.validate_identity("SELECT BITSHIFTRIGHT(a, 1)")
         self.validate_identity("SELECT BIT_SHIFTRIGHT(a, 1)", "SELECT BITSHIFTRIGHT(a, 1)")
         self.validate_all(
             "AS_VARCHAR(Col1)",
@@ -1623,6 +1636,15 @@ class TestSnowflake(Validator):
             write={
                 "snowflake": "SELECT x'ABCD'",
                 "duckdb": "SELECT CAST(HEX(FROM_HEX('ABCD')) AS VARBINARY)",
+            },
+        )
+
+        self.validate_all(
+            "SET a = 1",
+            write={
+                "snowflake": "SET a = 1",
+                "bigquery": "SET a = 1",
+                "duckdb": "SET VARIABLE a = 1",
             },
         )
 
@@ -3575,3 +3597,14 @@ FROM SEMANTIC_VIEW(
         self.validate_identity(
             "SELECT * FROM TABLE(model_trained_with_labeled_data!DETECT_ANOMALIES(INPUT_DATA => TABLE(view_with_data_to_analyze), TIMESTAMP_COLNAME => 'date', TARGET_COLNAME => 'sales', CONFIG_OBJECT => OBJECT_CONSTRUCT('prediction_interval', 0.99)))"
         )
+
+    def test_set_item_kind_attribute(self):
+        expr = parse_one("ALTER SESSION SET autocommit = FALSE", read="snowflake")
+        set_item = expr.find(exp.SetItem)
+        self.assertIsNotNone(set_item)
+        self.assertIsNone(set_item.args.get("kind"))
+
+        expr = parse_one("SET a = 1", read="snowflake")
+        set_item = expr.find(exp.SetItem)
+        self.assertIsNotNone(set_item)
+        self.assertEqual(set_item.args.get("kind"), "VARIABLE")

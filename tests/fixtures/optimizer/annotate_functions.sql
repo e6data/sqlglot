@@ -1656,11 +1656,43 @@ BIT_LENGTH(tbl.bin_col);
 INT;
 
 # dialect: snowflake
-BOOLNOT(tbl.int_col);
-BOOLEAN;
+BITOR(2, 4);
+INT;
+
+# dialect: snowflake
+BITOR(tbl.bin_col, tbl.bin_col);
+BINARY;
+
+# dialect: snowflake
+BITSHIFTLEFT(2, 1);
+INT;
+
+# dialect: snowflake
+BITSHIFTLEFT(tbl.bin_col, 4);
+BINARY;
+
+# dialect: snowflake
+BITSHIFTRIGHT(24, 1);
+INT;
+
+# dialect: snowflake
+BITSHIFTRIGHT(tbl.bin_col, 4);
+BINARY;
+
+# dialect: snowflake
+BITXOR(5, 3);
+INT;
+
+# dialect: snowflake
+BITXOR(tbl.bin_col, tbl.bin_col);
+BINARY;
 
 # dialect: snowflake
 BOOLNOT(NULL);
+BOOLEAN;
+
+# dialect: snowflake
+BOOLAND(1, -2);
 BOOLEAN;
 
 # dialect: snowflake
@@ -1682,6 +1714,18 @@ INT;
 # dialect: snowflake
 CHARINDEX('world', 'hello world', 1);
 INT;
+
+# dialect: snowflake
+CASE WHEN score >= 90 THEN 100 WHEN score >= 80 THEN 220 END;
+INT;
+
+# dialect: snowflake
+CASE WHEN score >= 90 THEN 'A' WHEN score >= 80 THEN 'B' ELSE 'C' END;
+VARCHAR;
+
+# dialect: snowflake
+CASE WHEN score >= 90 THEN TRUE WHEN score >= 80 THEN FALSE ELSE NULL END;
+BOOLEAN;
 
 # dialect: snowflake
 CEIL(3.14);
@@ -1714,6 +1758,30 @@ VARCHAR;
 # dialect: snowflake
 COSH(1.5);
 DOUBLE;
+
+# dialect: snowflake
+COALESCE(42, 0, 100);
+INT;
+
+# dialect: snowflake
+COALESCE(1.5, 2.7);
+DOUBLE;
+
+# dialect: snowflake
+COALESCE(1::BIGINT, 2::BIGINT);
+BIGINT;
+
+# dialect: snowflake
+COALESCE('hello', 'world');
+VARCHAR;
+
+# dialect: snowflake
+COALESCE(CAST('2024-01-01' AS DATE), CAST('2024-12-31' AS DATE));
+DATE;
+
+# dialect: snowflake
+COALESCE(TRUE, FALSE);
+BOOLEAN;
 
 # dialect: snowflake
 COMPRESS('Hello World', 'SNAPPY');
@@ -2104,6 +2172,10 @@ FLOOR(tbl.bigint_col, -1);
 BIGINT;
 
 # dialect: snowflake
+GETBIT(11, 3);
+INT;
+
+# dialect: snowflake
 GREATEST(tbl.bigint_col, tbl.bigint_col);
 BIGINT;
 
@@ -2206,6 +2278,50 @@ VARCHAR;
 # dialect: snowflake
 INITCAP(tbl.str_col);
 VARCHAR;
+
+# dialect: snowflake
+IFF(TRUE, 42, 0);
+INT;
+
+# dialect: snowflake
+IFF(TRUE, 42, NULL);
+INT;
+
+# dialect: snowflake
+IFF(col1 > 0, 'yes', 'no');
+VARCHAR;
+
+# dialect: snowflake
+IFF(FALSE, 1.5, 2.7);
+DOUBLE;
+
+# dialect: snowflake
+IFF(TRUE, CAST('2024-01-01' AS DATE), CAST('2024-12-31' AS DATE));
+DATE;
+
+# dialect: snowflake
+IFNULL('hello', 'world');
+VARCHAR;
+
+# dialect: snowflake
+IFNULL(1, 2);
+INT;
+
+# dialect: snowflake
+IFNULL(1.5, 2.7);
+DOUBLE;
+
+# dialect: snowflake
+IFNULL(5::BIGINT, 10::BIGINT);
+BIGINT;
+
+# dialect: snowflake
+IFNULL(CAST('2024-01-01' AS DATE), CAST('2024-12-31' AS DATE));
+DATE;
+
+# dialect: snowflake
+IFNULL(5::BIGINT, 2.71::FLOAT);
+FLOAT;
 
 # dialect: snowflake
 IS_NULL_VALUE(payload:field);
@@ -2316,6 +2432,22 @@ PREVIOUS_DAY(CAST('2024-05-09 08:50:57' AS TIMESTAMP), 'MONDAY');
 DATE;
 
 # dialect: snowflake
+DECODE(x, 1, 100, 2, 200, 0);
+INT;
+
+# dialect: snowflake
+DECODE(status, 'A', 'Active', 'I', 'Inactive', 'Neither');
+VARCHAR;
+
+# dialect: snowflake
+DECODE(100, 100, 1, 90, 2, 5.5);
+DOUBLE;
+
+# dialect: snowflake
+DECODE(x, 1, 100, NULL);
+INT;
+
+# dialect: snowflake
 PI();
 DOUBLE;
 
@@ -2372,6 +2504,54 @@ MONTHNAME(CAST('2024-05-09 08:50:57' AS TIMESTAMP));
 VARCHAR;
 
 # dialect: snowflake
+NVL2(col1, col2, col3);
+UNKNOWN;
+
+# dialect: snowflake
+NVL('hello', 'world');
+VARCHAR;
+
+# dialect: snowflake
+NVL(tbl.int_col, 42);
+INT;
+
+# dialect: snowflake
+NVL(tbl.date_col, CAST('2024-01-01' AS DATE));
+DATE;
+
+# dialect: snowflake
+NVL(1, 3.14);
+DOUBLE;
+
+# dialect: snowflake
+NVL(5::BIGINT, 2.71::FLOAT);
+FLOAT;
+
+# dialect: snowflake
+NULLIF(1, 2);
+INT;
+
+# dialect: snowflake
+NULLIF(1.5, 2.7);
+DOUBLE;
+
+# dialect: snowflake
+NULLIF(5::BIGINT, 10::BIGINT);
+BIGINT;
+
+# dialect: snowflake
+NULLIF(CAST('2024-01-01' AS DATE), CAST('2024-12-31' AS DATE));
+DATE;
+
+# dialect: snowflake
+NULLIF(1::INT, 2::BIGINT);
+BIGINT;
+
+# dialect: snowflake
+NULLIF(1::INT, 2.5::DOUBLE);
+DOUBLE;
+
+# dialect: snowflake
 NULLIFZERO(5);
 INT;
 
@@ -2409,6 +2589,14 @@ DOUBLE;
 
 # dialect: snowflake
 REGR_VALX(1.0, 2.0);
+DOUBLE;
+
+# dialect: snowflake
+REGR_VALX(1.0, 2.0);
+DOUBLE;
+
+# dialect: snowflake
+REGR_VALY(1.0, 2.0);
 DOUBLE;
 
 # dialect: snowflake

@@ -5969,11 +5969,11 @@ class Lead(AggFunc):
 # some dialects have a distinction between first and first_value, usually first is an aggregate func
 # and first_value is a window func
 class First(AggFunc):
-    pass
+    arg_types = {"this": True, "expression": False}
 
 
 class Last(AggFunc):
-    pass
+    arg_types = {"this": True, "expression": False}
 
 
 class FirstValue(AggFunc):
@@ -6584,6 +6584,10 @@ class GenerateTimestampArray(Func):
 
 # https://docs.snowflake.com/en/sql-reference/functions/get
 class GetExtract(Func):
+    arg_types = {"this": True, "expression": True}
+
+
+class Getbit(Func):
     arg_types = {"this": True, "expression": True}
 
 
@@ -7440,6 +7444,10 @@ class RegexpCount(Func):
 
 
 class RegrValx(Func):
+    arg_types = {"this": True, "expression": True}
+
+
+class RegrValy(Func):
     arg_types = {"this": True, "expression": True}
 
 
