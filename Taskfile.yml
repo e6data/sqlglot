@@ -61,6 +61,12 @@ tasks:
     cmds:
       - .venv/bin/pytest api-tests/ -v
 
+  test:load:
+    desc: Run k6 load tests for inline transpile endpoint
+    dir: "{{.ROOT_DIR}}"
+    cmds:
+      - k6 run load-tests/inline-transpile.js
+
   clean:
     desc: Clean build artifacts
     cmds:
