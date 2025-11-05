@@ -1,40 +1,49 @@
 [project]
-name = "sqlglot"
-dynamic = ["version", "optional-dependencies"]
-description = "An easily customizable SQL parser and transpiler"
+name = "e6-transpiler"
+version = "1.0.0"
+description = "SQL transpiler API for E6 dialect with support for multiple source dialects"
 readme = "README.md"
-authors = [{ name = "Toby Mao", email = "toby.mao@gmail.com" }]
+authors = [{ name = "E6 Data", email = "admin@e6data.com" }]
 license-files = ["LICENSE"]
 requires-python = ">= 3.9"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: SQL",
     "Programming Language :: Python :: 3 :: Only",
 ]
+dependencies = [
+    "fastapi>=0.115.6",
+    "uvicorn>=0.24.0",
+    "python-multipart>=0.0.20",
+    "pydantic>=2.0.0",
+    "orjson>=3.9.0",
+    "pyarrow>=21.0.0",
+    "pandas>=2.2.0",
+    "python-dateutil>=2.9.0",
+    "requests>=2.32.0",
+    "celery[redis]>=5.3.4",
+    "redis>=4.6.0",
+    "pyiceberg>=0.5.1",
+    "sqlalchemy>=2.0.35",
+    "s3fs>=2023.12.0",
+    "tqdm>=4.66.1",
+]
 
 [project.urls]
-Homepage = "https://sqlglot.com/"
-Documentation = "https://sqlglot.com/sqlglot.html"
-Repository = "https://github.com/tobymao/sqlglot"
-Issues = "https://github.com/tobymao/sqlglot/issues"
+Homepage = "https://e6data.com"
+Repository = "https://github.com/e6data/sqlglot"
 
 [build-system]
-requires = ["setuptools >= 61.0", "setuptools_scm"]
+requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 include-package-data = false
 
-[tool.setuptools_scm]
-version_file = "sqlglot/_version.py"
-fallback_version = "0.0.0"
-local_scheme = "no-local-version"
-
 [tool.setuptools.packages.find]
-include = ["sqlglot", "sqlglot.*"]
+include = ["sqlglot", "sqlglot.*", "apis", "apis.*"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]

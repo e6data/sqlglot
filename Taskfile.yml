@@ -7,6 +7,13 @@ vars:
   FRONTEND_DIR: "{{.ROOT_DIR}}/ui"
 
 tasks:
+  setup:
+    desc: Setup development environment (venv + dependencies)
+    cmds:
+      - python3 -m venv .venv
+      - .venv/bin/pip install -e .
+      - task: install:frontend
+
   install:
     desc: Install dependencies for both backend and frontend
     cmds:
@@ -17,7 +24,7 @@ tasks:
     desc: Install Python dependencies
     dir: "{{.BACKEND_DIR}}"
     cmds:
-      - pip install -r requirements.txt
+      - .venv/bin/pip install -e .
 
   install:frontend:
     desc: Install Node.js dependencies
@@ -35,7 +42,7 @@ tasks:
     desc: Start backend API server
     dir: "{{.BACKEND_DIR}}"
     cmds:
-      - python converter_api.py
+      - .venv/bin/python converter_api.py
     env:
       PORT: "{{.BACKEND_PORT}}"
 
@@ -64,7 +71,7 @@ tasks:
     desc: Start backend in production mode
     dir: "{{.BACKEND_DIR}}"
     cmds:
-      - python converter_api.py
+      - .venv/bin/python converter_api.py
     env:
       PORT: "{{.BACKEND_PORT}}"
 

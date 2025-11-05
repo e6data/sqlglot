@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Form, HTTPException, Response
+from fastapi.responses import ORJSONResponse
 from typing import Optional
 import typing as t
 import uvicorn
@@ -8,7 +9,6 @@ import json
 import sqlglot
 import logging
 from datetime import datetime
-from log_collector import setup_logger, log_records
 import pyarrow.parquet as pq
 import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
@@ -35,11 +35,28 @@ from apis.utils.helpers import (
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
-setup_logger()
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - TRANSPILER - %(levelname)s - %(message)s"
+)
 
-app = FastAPI()
+# Create FastAPI app with ORJSONResponse for better performance
+app = FastAPI(
+    title="E6 SQL Transpiler API",
+    description="SQL transpiler API for E6 dialect with support for multiple source dialects",
+    version="1.0.0",
+    default_response_class=ORJSONResponse,
+)
 
 logger = logging.getLogger(__name__)
+
+# Import and include v1 routers
+from apis.routers.v1 import inline, batch, meta
+
+app.include_router(inline.router, prefix="/api/v1/inline", tags=["Inline Mode"])
+app.include_router(batch.router, prefix="/api/v1/batch", tags=["Batch Mode"])
+app.include_router(meta.router, prefix="/api/v1", tags=["Meta"])
 
 
 def escape_unicode(s: str) -> str:
@@ -244,7 +261,6 @@ async def stats_api(
                 "unsupported_functions_after_transpilation": [],
                 "executable": "NO",
                 "error": True,
-                "log_records": log_records,
             }
 
         item = "condenast"
@@ -363,7 +379,6 @@ async def stats_api(
             "joins_list": joins_list,
             "cte_values_subquery_list": cte_values_subquery_list,
             "error": error_flag,
-            "log_records": log_records,
         }
 
     except Exception as e:
@@ -389,7 +404,6 @@ async def stats_api(
             "joins_list": [],
             "cte_values_subquery_list": [],
             "error": True,
-            "log_records": log_records,
         }
 
 
