@@ -27,12 +27,12 @@ export function FeatureFlagsDialog({ flags, onChange }: FeatureFlagsDialogProps)
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Settings className="h-4 w-4 mr-2" />
-          Feature Flags
+          Options
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Feature Flags</DialogTitle>
+          <DialogTitle>Options</DialogTitle>
         </DialogHeader>
         <div className="space-y-6">
           <div className="space-y-2">

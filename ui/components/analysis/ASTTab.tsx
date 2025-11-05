@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import ReactJson from "@microlink/react-json-view";
 import { Button } from "@/components/ui/button";
-import { Copy, Download } from "lucide-react";
+import { Copy, Download, ChevronDown, ChevronUp } from "lucide-react";
 
 interface ASTTabProps {
   sourceAst?: any;
@@ -12,6 +13,9 @@ interface ASTTabProps {
 }
 
 export function ASTTab({ sourceAst, transpiledAst, sourceDialect, targetDialect }: ASTTabProps) {
+  const [sourceCollapsed, setSourceCollapsed] = useState<number | boolean>(2);
+  const [transpiledCollapsed, setTranspiledCollapsed] = useState<number | boolean>(2);
+
   const handleCopy = (ast: any) => {
     navigator.clipboard.writeText(JSON.stringify(ast, null, 2));
   };
@@ -44,6 +48,22 @@ export function ASTTab({ sourceAst, transpiledAst, sourceDialect, targetDialect 
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setSourceCollapsed(true)}
+              disabled={!sourceAst}
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSourceCollapsed(false)}
+              disabled={!sourceAst}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => handleCopy(sourceAst)}
               disabled={!sourceAst}
             >
@@ -65,7 +85,7 @@ export function ASTTab({ sourceAst, transpiledAst, sourceDialect, targetDialect 
               <ReactJson
                 src={sourceAst}
                 theme="rjv-default"
-                collapsed={2}
+                collapsed={sourceCollapsed}
                 displayDataTypes={false}
                 displayObjectSize={true}
                 enableClipboard={true}
@@ -92,6 +112,22 @@ export function ASTTab({ sourceAst, transpiledAst, sourceDialect, targetDialect 
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setTranspiledCollapsed(true)}
+              disabled={!transpiledAst}
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTranspiledCollapsed(false)}
+              disabled={!transpiledAst}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => handleCopy(transpiledAst)}
               disabled={!transpiledAst}
             >
@@ -113,7 +149,7 @@ export function ASTTab({ sourceAst, transpiledAst, sourceDialect, targetDialect 
               <ReactJson
                 src={transpiledAst}
                 theme="rjv-default"
-                collapsed={2}
+                collapsed={transpiledCollapsed}
                 displayDataTypes={false}
                 displayObjectSize={true}
                 enableClipboard={true}
