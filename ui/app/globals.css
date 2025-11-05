@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@plugin "tailwindcss-animate";
+
+:root {
+  --e6-cream: 255 253 250; 
+  --e6-white: 255 255 255; 
+  --e6-green: 73 245 159;  
+  --e6-purple: 136 0 255;  
+  --e6-dark: 51 50 46;     
+  --e6-beige: 229 223 207; 
+  --e6-gray: 153 148 138;  
+  --e6-border: 204 198 184;
+
+  --background: rgb(var(--e6-cream));
+  --foreground: rgb(var(--e6-dark));
+  --card: rgb(var(--e6-white));
+  --card-foreground: rgb(var(--e6-dark));
+  --popover: rgb(var(--e6-white));
+  --popover-foreground: rgb(var(--e6-dark));
+  --primary: rgb(var(--e6-green));
+  --primary-foreground: rgb(var(--e6-dark));
+  --secondary: rgb(var(--e6-beige));
+  --secondary-foreground: rgb(var(--e6-dark));
+  --muted: rgb(var(--e6-beige));
+  --muted-foreground: rgb(var(--e6-gray));
+  --accent: rgb(var(--e6-beige));
+  --accent-foreground: rgb(var(--e6-dark));
+  --destructive: 220 38 38;
+  --destructive-foreground: 255 255 255;
+  --border: rgb(var(--e6-border));
+  --input: rgb(var(--e6-border));
+  --ring: rgb(var(--e6-green));
+  --radius: 0rem;
+  --sidebar: rgb(var(--e6-white));
+  --sidebar-foreground: rgb(var(--e6-dark));
+  --sidebar-primary: rgb(var(--e6-green));
+  --sidebar-primary-foreground: rgb(var(--e6-dark));
+  --sidebar-accent: rgb(var(--e6-beige));
+  --sidebar-accent-foreground: rgb(var(--e6-dark));
+  --sidebar-border: rgb(var(--e6-border));
+  --sidebar-ring: rgb(var(--e6-green));
+}
+
+@theme inline {
+  --radius-sm: 0rem;
+  --radius-md: 0rem;
+  --radius-lg: 0rem;
+  --radius-xl: 0rem;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary,
+  button.bg-primary,
+  a.bg-primary {
+    @apply border border-foreground;
+  }
+}

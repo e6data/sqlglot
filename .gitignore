@@ -149,3 +149,5 @@ sqlglot/_version.py
 test_converter_api.py
 csv_converter_api.py
 run.py
+tmp/
+ui/.next

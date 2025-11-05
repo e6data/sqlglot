@@ -1,0 +1,91 @@
+version: "3"
+
+vars:
+  BACKEND_PORT: 8100
+  FRONTEND_PORT: 3000
+  BACKEND_DIR: "{{.ROOT_DIR}}"
+  FRONTEND_DIR: "{{.ROOT_DIR}}/ui"
+
+tasks:
+  install:
+    desc: Install dependencies for both backend and frontend
+    cmds:
+      - task: install:backend
+      - task: install:frontend
+
+  install:backend:
+    desc: Install Python dependencies
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - pip install -r requirements.txt
+
+  install:frontend:
+    desc: Install Node.js dependencies
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm install
+
+  dev:
+    desc: Start both backend and frontend in development mode
+    deps:
+      - dev:backend
+      - dev:frontend
+
+  dev:backend:
+    desc: Start backend API server
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - python converter_api.py
+    env:
+      PORT: "{{.BACKEND_PORT}}"
+
+  dev:frontend:
+    desc: Start frontend development server
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm run dev
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:{{.BACKEND_PORT}}
+      PORT: "{{.FRONTEND_PORT}}"
+
+  build:
+    desc: Build frontend for production
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm run build
+
+  start:
+    desc: Start production servers
+    deps:
+      - start:backend
+      - start:frontend
+
+  start:backend:
+    desc: Start backend in production mode
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - python converter_api.py
+    env:
+      PORT: "{{.BACKEND_PORT}}"
+
+  start:frontend:
+    desc: Start frontend in production mode
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm start
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:{{.BACKEND_PORT}}
+      PORT: "{{.FRONTEND_PORT}}"
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.FRONTEND_DIR}}/.next
+      - rm -rf {{.FRONTEND_DIR}}/node_modules
+      - find {{.BACKEND_DIR}} -type d -name "__pycache__" -exec rm -rf {} +
+      - find {{.BACKEND_DIR}} -type f -name "*.pyc" -delete
+
+  help:
+    desc: Show available tasks
+    cmds:
+      - task --list
