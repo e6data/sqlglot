@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Form, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 from typing import Optional
 import typing as t
@@ -47,6 +48,15 @@ app = FastAPI(
     description="SQL transpiler API for E6 dialect with support for multiple source dialects",
     version="1.0.0",
     default_response_class=ORJSONResponse,
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 logger = logging.getLogger(__name__)
@@ -410,16 +420,19 @@ async def stats_api(
 
 
 if __name__ == "__main__":
-    workers = int(os.getenv("UVICORN_WORKERS", "1"))
+    from apis.config import get_transpiler_config
 
-    logger.info(f"Starting with {workers} worker(s)")
+    config = get_transpiler_config()
+
+    logger.info("Starting SQLGlot Transpiler with configuration:")
+    logger.info(config.model_dump())
 
     uvicorn.run(
         "converter_api:app",
-        host="0.0.0.0",
-        port=8100,
+        host=config.uvicorn_host,
+        port=config.uvicorn_port,
         proxy_headers=True,
-        workers=workers,
+        workers=config.uvicorn_workers,
         access_log=False,
-        log_level="info"
+        log_level=config.log_level.lower()
     )

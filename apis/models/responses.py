@@ -9,6 +9,21 @@ class QueryStatus(str, Enum):
     ERROR = "error"
 
 
+class ConfigFieldInfo(BaseModel):
+    """Information about a single configuration field"""
+    name: str = Field(..., description="Configuration field name")
+    value: Any = Field(..., description="Current value of the configuration")
+    description: str = Field(..., description="Description of what this field does")
+    type: str = Field(..., description="Type of the field (e.g., 'int', 'str', 'bool')")
+
+
+class ConfigResponse(BaseModel):
+    """Response containing deployment configuration"""
+    server: List[ConfigFieldInfo] = Field(..., description="Server configuration settings")
+    api: List[ConfigFieldInfo] = Field(..., description="API configuration settings")
+    transpilation_defaults: List[ConfigFieldInfo] = Field(..., description="Default transpilation settings")
+
+
 class TranspileResponse(BaseModel):
     """Response for single query transpilation"""
     transpiled_query: str = Field(..., description="Transpiled SQL query")

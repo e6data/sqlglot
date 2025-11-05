@@ -402,11 +402,8 @@ def qualify_columns_with_table_alias(expression: exp.Select) -> exp.Select:
     the table alias in the FROM clause.
 
     Only enabled when:
-    1. E6.ENABLE_TABLE_ALIAS_QUALIFICATION flag is True (default: False - opt-in)
+    1. enable_table_alias_qualification in PerRequestConfig is True (default: False - opt-in)
     2. There is a LEFT JOIN with USING clause present
-
-    To enable this feature:
-        E6.ENABLE_TABLE_ALIAS_QUALIFICATION = True
 
     Args:
         expression: The SELECT statement AST node
@@ -418,8 +415,14 @@ def qualify_columns_with_table_alias(expression: exp.Select) -> exp.Select:
         Input:  SELECT start_tstamp_date FROM gold.spruce.table pv LEFT JOIN pw USING (id)
         Output: SELECT pv.start_tstamp_date FROM gold.spruce.table pv LEFT JOIN pw USING (id)
     """
-    # Check feature flag - must check at runtime
-    if not getattr(E6, "ENABLE_TABLE_ALIAS_QUALIFICATION", False):
+    # Check feature flag from per-request context
+    try:
+        from apis.context import get_per_request_config_safe
+        config = get_per_request_config_safe()
+        if not config or not config.enable_table_alias_qualification:
+            return expression
+    except ImportError:
+        # If context module not available (e.g., in tests), skip qualification
         return expression
 
     # Step 1: Check if there's a LEFT JOIN with USING clause
@@ -508,10 +511,8 @@ class E6(Dialect):
     # Define the offset for array indexing, starting from 1 instead of the default 0.
     INDEX_OFFSET = 1
 
-    # Feature flag: Qualify columns with table alias for LEFT JOIN with USING clause
-    # Set to True to enable automatic table alias qualification (e.g., column -> pv.column)
-    # Default: False (opt-in behavior)
-    ENABLE_TABLE_ALIAS_QUALIFICATION = False
+    # Note: Table alias qualification is now controlled via per-request context variables
+    # See apis/context.py for PerRequestConfig
 
     # Mapping for time formatting tokens, converting dialect-specific formats to Python-compatible ones.
     TIME_MAPPING = {
@@ -2579,15 +2580,7 @@ class E6(Dialect):
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
             exp.RegexpSplit: split_sql,
-            exp.Select: transforms.preprocess(
-                [
-                    lambda e: (
-                        qualify_columns_with_table_alias(e)  # type: ignore[arg-type]
-                        if getattr(E6, "ENABLE_TABLE_ALIAS_QUALIFICATION", False)
-                        else e
-                    )
-                ]
-            ),
+            exp.Select: transforms.preprocess([qualify_columns_with_table_alias]),  # type: ignore[list-item]
             exp.Space: lambda self, e: self.func("REPEAT", exp.Literal.string(" "), e.this),
             exp.Split: split_sql,
             exp.SplitPart: rename_func("SPLIT_PART"),

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { FileText, FolderOpen, BookOpen } from "lucide-react";
+import { FileText, FolderOpen, BookOpen, Settings } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8100";
 
@@ -17,6 +17,11 @@ const navItems = [
     title: "Batch Mode",
     href: "/batch",
     icon: FolderOpen,
+  },
+  {
+    title: "Config",
+    href: "/config",
+    icon: Settings,
   },
   {
     title: "API Docs",

@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
-import { SQLEditor } from "@/components/SQLEditor";
 import { DialectSelector } from "@/components/DialectSelector";
+
+const SQLEditor = dynamic(() => import("@/components/SQLEditor").then(mod => ({ default: mod.SQLEditor })), {
+  ssr: false,
+  loading: () => <div className="h-[500px] bg-muted animate-pulse rounded" />
+});
 import { FeatureFlagsDialog } from "@/components/FeatureFlagsDialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

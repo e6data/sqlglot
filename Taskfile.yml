@@ -10,7 +10,10 @@ tasks:
   setup:
     desc: Setup development environment (venv + dependencies)
     cmds:
+      - rm -rf .venv
       - python3 -m venv .venv
+      - .venv/bin/python -m ensurepip
+      - .venv/bin/pip install --upgrade pip setuptools wheel
       - .venv/bin/pip install -e .
       - task: install:frontend
 

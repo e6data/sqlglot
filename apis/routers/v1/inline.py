@@ -31,6 +31,7 @@ from apis.utils.helpers import (
     extract_joins_from_query,
     extract_cte_n_subquery_list,
 )
+from apis.context import set_per_request_config, PerRequestConfig
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -50,6 +51,15 @@ async def transpile_inline(request: TranspileRequest):
             f"{request.query_id} AT {timestamp.isoformat()} FROM {request.source_dialect.upper()} — Starting transpilation"
         )
 
+        # Set per-request configuration
+        per_request_config = PerRequestConfig(
+            enable_table_alias_qualification=request.options.table_alias_qualification,
+            use_two_phase_qualification_scheme=request.options.use_two_phase_qualification_scheme,
+            skip_e6_transpilation=request.options.skip_e6_transpilation,
+            pretty_print=request.options.pretty_print,
+        )
+        set_per_request_config(per_request_config)
+
         # Normalize and clean query
         query = normalize_unicode_spaces(request.query)
         query, comment = strip_comment(query, "condenast")
@@ -57,62 +67,52 @@ async def transpile_inline(request: TranspileRequest):
         if not query.strip():
             raise HTTPException(status_code=400, detail="Empty query provided")
 
-        # Set E6 dialect flags
-        from sqlglot.dialects.e6 import E6
-        original_qualification_flag = E6.ENABLE_TABLE_ALIAS_QUALIFICATION
-        E6.ENABLE_TABLE_ALIAS_QUALIFICATION = request.options.table_alias_qualification
+        # Parse query
+        tree = sqlglot.parse_one(query, read=request.source_dialect, error_level=None)
 
-        try:
-            # Parse query
-            tree = sqlglot.parse_one(query, read=request.source_dialect, error_level=None)
+        # Handle two-phase qualification if enabled
+        if request.options.use_two_phase_qualification_scheme:
+            if request.options.skip_e6_transpilation:
+                transformed_query = transform_catalog_schema_only(query, request.source_dialect)
+                transformed_query = add_comment_to_query(transformed_query, comment)
+                return TranspileResponse(
+                    transpiled_query=transformed_query,
+                    source_dialect=request.source_dialect,
+                    target_dialect=request.target_dialect,
+                    query_id=request.query_id,
+                )
+            tree = transform_table_part(tree)
 
-            # Handle two-phase qualification if enabled
-            if request.options.use_two_phase_qualification_scheme:
-                if request.options.skip_e6_transpilation:
-                    transformed_query = transform_catalog_schema_only(query, request.source_dialect)
-                    transformed_query = add_comment_to_query(transformed_query, comment)
-                    return TranspileResponse(
-                        transpiled_query=transformed_query,
-                        source_dialect=request.source_dialect,
-                        target_dialect=request.target_dialect,
-                        query_id=request.query_id,
-                    )
-                tree = transform_table_part(tree)
+        # Qualify identifiers
+        tree2 = quote_identifiers(tree, dialect=request.target_dialect)
 
-            # Qualify identifiers
-            tree2 = quote_identifiers(tree, dialect=request.target_dialect)
+        # Ensure SELECT FROM VALUES
+        values_ensured_ast = ensure_select_from_values(tree2)
 
-            # Ensure SELECT FROM VALUES
-            values_ensured_ast = ensure_select_from_values(tree2)
+        # Set CTE names case-sensitively
+        cte_names_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
 
-            # Set CTE names case-sensitively
-            cte_names_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
+        # Generate SQL
+        transpiled_query = cte_names_checked_ast.sql(
+            dialect=request.target_dialect,
+            from_dialect=request.source_dialect,
+            pretty=request.options.pretty_print,
+        )
 
-            # Generate SQL
-            transpiled_query = cte_names_checked_ast.sql(
-                dialect=request.target_dialect,
-                from_dialect=request.source_dialect,
-                pretty=request.options.pretty_print,
-            )
+        # Post-process
+        transpiled_query = replace_struct_in_query(transpiled_query)
+        transpiled_query = add_comment_to_query(transpiled_query, comment)
 
-            # Post-process
-            transpiled_query = replace_struct_in_query(transpiled_query)
-            transpiled_query = add_comment_to_query(transpiled_query, comment)
+        logger.info(
+            f"{request.query_id} — Transpilation completed in {(datetime.now() - timestamp).total_seconds():.3f}s"
+        )
 
-            logger.info(
-                f"{request.query_id} — Transpilation completed in {(datetime.now() - timestamp).total_seconds():.3f}s"
-            )
-
-            return TranspileResponse(
-                transpiled_query=transpiled_query,
-                source_dialect=request.source_dialect,
-                target_dialect=request.target_dialect,
-                query_id=request.query_id,
-            )
-
-        finally:
-            # Restore original flag
-            E6.ENABLE_TABLE_ALIAS_QUALIFICATION = original_qualification_flag
+        return TranspileResponse(
+            transpiled_query=transpiled_query,
+            source_dialect=request.source_dialect,
+            target_dialect=request.target_dialect,
+            query_id=request.query_id,
+        )
 
     except Exception as e:
         logger.error(
@@ -139,6 +139,15 @@ async def analyze_inline(request: AnalyzeRequest):
         logger.info(
             f"{request.query_id} AT {start_time.isoformat()} FROM {request.source_dialect.upper()} — Starting analysis"
         )
+
+        # Set per-request configuration
+        per_request_config = PerRequestConfig(
+            enable_table_alias_qualification=request.options.table_alias_qualification,
+            use_two_phase_qualification_scheme=request.options.use_two_phase_qualification_scheme,
+            skip_e6_transpilation=request.options.skip_e6_transpilation,
+            pretty_print=request.options.pretty_print,
+        )
+        set_per_request_config(per_request_config)
 
         # Normalize and clean query
         query = normalize_unicode_spaces(request.query)

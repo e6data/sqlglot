@@ -3,11 +3,44 @@ from typing import Optional, Dict, Any, List
 
 
 class TranspileOptions(BaseModel):
-    """Options for transpilation"""
-    pretty_print: bool = Field(default=True, description="Format output with proper indentation")
-    table_alias_qualification: bool = Field(default=False, description="Enable table alias qualification")
-    use_two_phase_qualification_scheme: bool = Field(default=False, description="Use two-phase qualification")
-    skip_e6_transpilation: bool = Field(default=False, description="Skip E6 transpilation, only transform catalog.schema")
+    """
+    Per-request options for transpilation.
+
+    These options can be customized for each API request and override deployment defaults.
+    All options are optional and will use deployment defaults if not specified.
+    """
+
+    pretty_print: bool = Field(
+        default=True,
+        description="Format output with proper indentation and line breaks"
+    )
+
+    table_alias_qualification: bool = Field(
+        default=False,
+        description=(
+            "Enable table alias qualification for column references. "
+            "When enabled, column names will be prefixed with table aliases "
+            "(e.g., 'users.id' instead of 'id') for clearer SQL."
+        )
+    )
+
+    use_two_phase_qualification_scheme: bool = Field(
+        default=False,
+        description=(
+            "Use two-phase qualification scheme for catalog and schema handling. "
+            "This transforms catalog.schema references in a separate phase before "
+            "main transpilation."
+        )
+    )
+
+    skip_e6_transpilation: bool = Field(
+        default=False,
+        description=(
+            "Skip E6 transpilation and only transform catalog.schema references. "
+            "Only applies when use_two_phase_qualification_scheme is enabled. "
+            "Useful for lightweight schema transformations without full transpilation."
+        )
+    )
 
 
 class TranspileRequest(BaseModel):

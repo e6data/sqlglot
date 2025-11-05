@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Sidebar } from "@/components/navigation/Sidebar";
 import "./globals.css";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Transpiler - E6 SQL Converter",
   description: "Convert SQL queries to E6 dialect",
