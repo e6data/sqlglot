@@ -112,14 +112,6 @@ class ErrorDetail(BaseModel):
     details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
 
 
-class BatchResultItem(BaseModel):
-    """Single result item in batch response"""
-    id: str = Field(..., description="Query identifier from request")
-    status: QueryStatus = Field(..., description="Processing status")
-    transpiled_query: Optional[str] = Field(None, description="Transpiled query if successful")
-    error: Optional[ErrorDetail] = Field(None, description="Error details if failed")
-
-
 class BatchAnalysisResultItem(BaseModel):
     """Single analysis result item in batch response"""
     id: str = Field(..., description="Query identifier from request")
@@ -131,18 +123,58 @@ class BatchAnalysisResultItem(BaseModel):
     error: Optional[ErrorDetail] = Field(None, description="Error details if failed")
 
 
+class ExecutionSummary(BaseModel):
+    """Summary of execution statistics"""
+    total_queries: int = Field(..., description="Total number of queries")
+    succeeded: int = Field(..., description="Number of successful analyses")
+    failed: int = Field(..., description="Number of failed analyses")
+    executable_queries: int = Field(..., description="Number of queries executable on target dialect")
+    non_executable_queries: int = Field(..., description="Number of queries with unsupported features")
+    success_rate_percentage: float = Field(..., description="Success rate as percentage")
+
+
+class FunctionSummary(BaseModel):
+    """Summary of function analysis across all queries"""
+    unique_supported_count: int = Field(..., description="Count of unique supported functions")
+    unique_unsupported_count: int = Field(..., description="Count of unique unsupported functions")
+    total_udfs: int = Field(..., description="Total unique user-defined functions")
+
+
+class ComplexitySummary(BaseModel):
+    """Summary of query complexity metrics"""
+    total_unique_tables: int = Field(..., description="Total unique tables referenced")
+    total_unique_schemas: int = Field(..., description="Total unique schemas referenced")
+    avg_tables_per_query: float = Field(..., description="Average tables per query")
+    avg_functions_per_query: float = Field(..., description="Average functions per query")
+    total_joins: int = Field(..., description="Total joins across all queries")
+    total_ctes: int = Field(..., description="Total CTEs across all queries")
+    total_subqueries: int = Field(..., description="Total subqueries across all queries")
+
+
+class TimingSummary(BaseModel):
+    """Summary of timing statistics"""
+    total_duration_ms: float = Field(..., description="Total batch processing time in milliseconds")
+    avg_query_duration_ms: float = Field(..., description="Average time per query")
+    min_query_duration_ms: float = Field(..., description="Fastest query time")
+    max_query_duration_ms: float = Field(..., description="Slowest query time")
+    avg_parsing_ms: Optional[float] = Field(None, description="Average parsing time")
+    avg_transpilation_ms: Optional[float] = Field(None, description="Average transpilation time")
+    avg_function_analysis_ms: Optional[float] = Field(None, description="Average function analysis time")
+
+
+class DialectSummary(BaseModel):
+    """Summary of dialects used"""
+    source_dialect: str = Field(..., description="Source SQL dialect")
+    target_dialect: str = Field(..., description="Target SQL dialect")
+
+
 class BatchSummary(BaseModel):
-    """Summary of batch processing"""
-    total: int = Field(..., description="Total queries processed")
-    succeeded: int = Field(..., description="Number of successful transpilations")
-    failed: int = Field(..., description="Number of failed transpilations")
-    duration_ms: float = Field(..., description="Total processing time in milliseconds")
-
-
-class BatchTranspileResponse(BaseModel):
-    """Response for batch transpilation"""
-    results: List[BatchResultItem] = Field(..., description="Individual query results")
-    summary: BatchSummary = Field(..., description="Batch processing summary")
+    """Comprehensive summary of batch processing"""
+    execution: ExecutionSummary = Field(..., description="Execution statistics")
+    functions: FunctionSummary = Field(..., description="Function analysis summary")
+    complexity: ComplexitySummary = Field(..., description="Query complexity metrics")
+    timing: TimingSummary = Field(..., description="Timing statistics")
+    dialects: DialectSummary = Field(..., description="Dialect information")
 
 
 class BatchAnalyzeResponse(BaseModel):

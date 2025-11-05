@@ -73,18 +73,6 @@ class BatchQueryItem(BaseModel):
     query: str = Field(..., description="SQL query", min_length=1)
 
 
-class BatchTranspileRequest(BaseModel):
-    """Request for batch transpilation"""
-    queries: List[BatchQueryItem] = Field(..., description="List of queries to transpile", min_items=1)
-    source_dialect: str = Field(..., description="Source SQL dialect", alias="from_sql")
-    target_dialect: str = Field(default="e6", description="Target SQL dialect", alias="to_sql")
-    options: Optional[TranspileOptions] = Field(default_factory=TranspileOptions)
-    stop_on_error: bool = Field(default=False, description="Stop processing on first error")
-
-    class Config:
-        populate_by_name = True
-
-
 class BatchAnalyzeRequest(BaseModel):
     """Request for batch analysis"""
     queries: List[BatchQueryItem] = Field(..., description="List of queries to analyze", min_items=1)
