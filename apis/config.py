@@ -74,6 +74,10 @@ class TranspilerConfig(BaseSettings):
         default=False,
         description="Default setting for skipping E6 transpilation"
     )
+    default_normalize_ascii: bool = Field(
+        default=False,
+        description="Default setting for ASCII normalization in transpilation"
+    )
 
     model_config = {
         "env_file": ".env",

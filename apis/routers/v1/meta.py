@@ -156,6 +156,12 @@ async def get_config():
             description="Default setting for skipping full E6 transpilation (only catalog.schema transformation)",
             type="boolean"
         ),
+        ConfigFieldInfo(
+            name="Default Normalize ASCII",
+            value=config.default_normalize_ascii,
+            description="Default setting for ASCII normalization in SQL transpilation",
+            type="boolean"
+        ),
     ]
 
     return ConfigResponse(

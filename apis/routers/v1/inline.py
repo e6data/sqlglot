@@ -32,6 +32,7 @@ from apis.utils.helpers import (
     extract_cte_n_subquery_list,
 )
 from apis.context import set_per_request_config, PerRequestConfig
+from apis.config import get_transpiler_config
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -60,8 +61,13 @@ async def transpile_inline(request: TranspileRequest):
         )
         set_per_request_config(per_request_config)
 
+        # Get deployment config for ASCII normalization
+        config = get_transpiler_config()
+
         # Normalize and clean query
-        query = normalize_unicode_spaces(request.query)
+        query = request.query
+        if config.default_normalize_ascii:
+            query = normalize_unicode_spaces(query)
         query, comment = strip_comment(query, "condenast")
 
         if not query.strip():
@@ -149,16 +155,25 @@ async def analyze_inline(request: AnalyzeRequest):
         )
         set_per_request_config(per_request_config)
 
-        # Normalize and clean query
-        query = normalize_unicode_spaces(request.query)
+        # Get deployment config for ASCII normalization
+        config = get_transpiler_config()
+
+        # Preprocessing: Normalization
+        phase_start = datetime.now()
+        query = request.query
+        if config.default_normalize_ascii:
+            query = normalize_unicode_spaces(query)
         query, comment = strip_comment(query, "condenast")
+        timings['normalization_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
         if not query.strip():
             raise HTTPException(status_code=400, detail="Empty query provided")
 
-        # Load supported functions
+        # Preprocessing: Config Loading
+        phase_start = datetime.now()
         supported_functions_in_target = load_supported_functions(request.target_dialect)
         supported_functions_in_source = load_supported_functions(request.source_dialect)
+        timings['config_loading_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
         # Function extraction patterns
         functions_as_keywords = ["LIKE", "ILIKE", "RLIKE", "AT TIME ZONE", "||", "DISTINCT", "QUALIFY"]
@@ -172,66 +187,116 @@ async def analyze_inline(request: AnalyzeRequest):
         original_ast = parse_one(query, read=request.source_dialect)
         timings['parsing_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
-        # Phase 2: Function Analysis
+        # Phase 2: Function Analysis (detailed)
+        function_analysis_start = datetime.now()
+
         phase_start = datetime.now()
         all_functions = extract_functions_from_query(query, function_pattern, keyword_pattern, exclusion_list)
-        supported, unsupported = categorize_functions(all_functions, supported_functions_in_target, functions_as_keywords)
-        udf_list, unsupported = extract_udfs(unsupported, supported_functions_in_source)
-        supported, unsupported = unsupported_functionality_identifiers(original_ast, unsupported, supported)
-        timings['function_analysis_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+        timings['function_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
-        # Phase 3: Metadata Extraction
+        phase_start = datetime.now()
+        supported, unsupported = categorize_functions(all_functions, supported_functions_in_target, functions_as_keywords)
+        timings['function_categorization_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        phase_start = datetime.now()
+        udf_list, unsupported = extract_udfs(unsupported, supported_functions_in_source)
+        timings['udf_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        phase_start = datetime.now()
+        supported, unsupported = unsupported_functionality_identifiers(original_ast, unsupported, supported)
+        timings['unsupported_detection_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        timings['function_analysis_ms'] = (datetime.now() - function_analysis_start).total_seconds() * 1000
+
+        # Phase 3: Metadata Extraction (detailed)
+        metadata_extraction_start = datetime.now()
+
         phase_start = datetime.now()
         tables_list = extract_db_and_Table_names(original_ast)
+        timings['table_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        phase_start = datetime.now()
         joins_list = extract_joins_from_query(original_ast)
+        timings['join_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
         # extract_cte_n_subquery_list returns [cte_list, values_list, subquery_list]
+        phase_start = datetime.now()
         cte_values_subquery_result = extract_cte_n_subquery_list(original_ast)
         cte_list = cte_values_subquery_result[0] if len(cte_values_subquery_result) > 0 else []
         values_list = cte_values_subquery_result[1] if len(cte_values_subquery_result) > 1 else []
         subquery_list = cte_values_subquery_result[2] if len(cte_values_subquery_result) > 2 else []
+        timings['cte_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
         # Extract schemas from tables
+        phase_start = datetime.now()
         schemas_set = set()
         for table in tables_list:
             if '.' in table:
                 schema = table.split('.')[0]
                 schemas_set.add(schema)
         schemas_list = list(schemas_set)
-        timings['metadata_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+        timings['schema_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
-        # Phase 4: Transpilation
+        timings['metadata_extraction_ms'] = (datetime.now() - metadata_extraction_start).total_seconds() * 1000
+
+        # Phase 4: Transpilation (detailed)
+        transpilation_start = datetime.now()
+
         phase_start = datetime.now()
         values_ensured_ast = ensure_select_from_values(original_ast)
         cte_names_ast = set_cte_names_case_sensitively(values_ensured_ast)
         query = cte_names_ast.sql(request.source_dialect)
+        timings['ast_preprocessing_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
+        phase_start = datetime.now()
         tree = sqlglot.parse_one(query, read=request.source_dialect, error_level=None)
-        tree2 = quote_identifiers(tree, dialect=request.target_dialect)
+        timings['transpilation_parsing_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
+        phase_start = datetime.now()
+        tree2 = quote_identifiers(tree, dialect=request.target_dialect)
+        timings['identifier_qualification_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        phase_start = datetime.now()
         transpiled_query = tree2.sql(
             dialect=request.target_dialect,
             from_dialect=request.source_dialect,
             pretty=request.options.pretty_print,
         )
+        timings['sql_generation_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
+        phase_start = datetime.now()
         transpiled_query = replace_struct_in_query(transpiled_query)
         transpiled_query = add_comment_to_query(transpiled_query, comment)
-        timings['transpilation_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+        timings['post_processing_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
-        # Phase 5: Post-Transpilation Analysis
+        timings['transpilation_ms'] = (datetime.now() - transpilation_start).total_seconds() * 1000
+
+        # Phase 5: Post-Transpilation Analysis (detailed)
+        post_analysis_start = datetime.now()
+
         phase_start = datetime.now()
         transpiled_ast = parse_one(transpiled_query, read=request.target_dialect)
+        timings['transpiled_parsing_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        phase_start = datetime.now()
         all_functions_transpiled = extract_functions_from_query(transpiled_query, function_pattern, keyword_pattern, exclusion_list)
+        timings['transpiled_function_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        phase_start = datetime.now()
         supported_transpiled, unsupported_transpiled = categorize_functions(all_functions_transpiled, supported_functions_in_target, functions_as_keywords)
         supported_transpiled, unsupported_transpiled = unsupported_functionality_identifiers(transpiled_ast, unsupported_transpiled, supported_transpiled)
-        timings['post_analysis_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+        timings['transpiled_function_analysis_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        timings['post_analysis_ms'] = (datetime.now() - post_analysis_start).total_seconds() * 1000
 
         # Determine if executable
         executable = len(unsupported_transpiled) == 0
 
-        # Generate ASTs
+        # Final: AST Serialization
+        phase_start = datetime.now()
         source_ast_dict = original_ast.dump()
         transpiled_ast_dict = transpiled_ast.dump()
+        timings['ast_serialization_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
         # Calculate total time
         total_time = (datetime.now() - start_time).total_seconds() * 1000

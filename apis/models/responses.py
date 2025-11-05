@@ -51,11 +51,44 @@ class QueryMetadata(BaseModel):
 class TimingInfo(BaseModel):
     """Timing information for different phases"""
     total_ms: float = Field(..., description="Total time in milliseconds")
-    parsing_ms: Optional[float] = Field(None, description="Time to parse source query")
-    function_analysis_ms: Optional[float] = Field(None, description="Time to analyze functions")
-    metadata_extraction_ms: Optional[float] = Field(None, description="Time to extract metadata")
-    transpilation_ms: Optional[float] = Field(None, description="Time to transpile query")
-    post_analysis_ms: Optional[float] = Field(None, description="Time to analyze transpiled query")
+
+    # Preprocessing
+    normalization_ms: Optional[float] = Field(None, description="Time for Unicode normalization and comment stripping")
+    config_loading_ms: Optional[float] = Field(None, description="Time to load supported functions for dialects")
+
+    # Phase 1: Source Parsing
+    parsing_ms: Optional[float] = Field(None, description="Time to parse source query to AST")
+
+    # Phase 2: Function Analysis (detailed)
+    function_extraction_ms: Optional[float] = Field(None, description="Time to extract functions via regex")
+    function_categorization_ms: Optional[float] = Field(None, description="Time to categorize functions as supported/unsupported")
+    udf_extraction_ms: Optional[float] = Field(None, description="Time to identify user-defined functions")
+    unsupported_detection_ms: Optional[float] = Field(None, description="Time to detect unsupported features in AST")
+    function_analysis_ms: Optional[float] = Field(None, description="Total function analysis time (legacy field)")
+
+    # Phase 3: Metadata Extraction (detailed)
+    table_extraction_ms: Optional[float] = Field(None, description="Time to extract table names")
+    join_extraction_ms: Optional[float] = Field(None, description="Time to extract join information")
+    cte_extraction_ms: Optional[float] = Field(None, description="Time to extract CTEs, VALUES, and subqueries")
+    schema_extraction_ms: Optional[float] = Field(None, description="Time to extract schemas from table names")
+    metadata_extraction_ms: Optional[float] = Field(None, description="Total metadata extraction time (legacy field)")
+
+    # Phase 4: Transpilation (detailed)
+    ast_preprocessing_ms: Optional[float] = Field(None, description="Time for VALUES wrapping and CTE case fixing")
+    transpilation_parsing_ms: Optional[float] = Field(None, description="Time to re-parse after preprocessing")
+    identifier_qualification_ms: Optional[float] = Field(None, description="Time to qualify identifiers with quotes")
+    sql_generation_ms: Optional[float] = Field(None, description="Time to generate target SQL from AST")
+    post_processing_ms: Optional[float] = Field(None, description="Time for STRUCT replacement and comment re-insertion")
+    transpilation_ms: Optional[float] = Field(None, description="Total transpilation time (legacy field)")
+
+    # Phase 5: Post-Transpilation Analysis (detailed)
+    transpiled_parsing_ms: Optional[float] = Field(None, description="Time to parse transpiled query AST")
+    transpiled_function_extraction_ms: Optional[float] = Field(None, description="Time to extract functions from transpiled query")
+    transpiled_function_analysis_ms: Optional[float] = Field(None, description="Time to analyze transpiled query functions")
+    post_analysis_ms: Optional[float] = Field(None, description="Total post-transpilation analysis time (legacy field)")
+
+    # Final Steps
+    ast_serialization_ms: Optional[float] = Field(None, description="Time to serialize ASTs via .dump()")
 
 
 class AnalyzeResponse(BaseModel):
