@@ -8,16 +8,7 @@ const errorRate = new Rate('errors');
 // Test configuration
 export const options = {
   stages: [
-    // Smoke test
-    { duration: '30s', target: 1 },
-    // Load test - ramp up
-    { duration: '2m', target: 50 },
-    // Load test - sustain
-    { duration: '3m', target: 50 },
-    // Stress test - ramp up further
-    { duration: '3m', target: 100 },
-    // Ramp down
-    { duration: '1m', target: 0 },
+    { duration: '1m', target: 500 },
   ],
   thresholds: {
     http_req_duration: ['p(95)<500', 'p(99)<2000'], // 95% of requests under 500ms, 99% under 2s

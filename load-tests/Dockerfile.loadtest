@@ -1,0 +1,18 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Copy project files
+COPY pyproject.toml ./
+COPY sqlglot ./sqlglot
+COPY apis ./apis
+COPY converter_api.py ./
+
+# Install dependencies
+RUN pip install --no-cache-dir -e .
+
+# Expose port
+EXPOSE 8100
+
+# Run the API
+CMD ["python", "converter_api.py"]
