@@ -1,4 +1,4 @@
-import { Database, GitMerge, Layers, FunctionSquare, Code } from "lucide-react";
+import { Database, GitMerge, Layers, FunctionSquare, Code, FolderTree } from "lucide-react";
 import { type QueryMetadata } from "@/lib/types";
 
 interface MetadataDisplayProps {
@@ -11,14 +11,34 @@ export function MetadataDisplay({ metadata }: MetadataDisplayProps) {
   const hasCtes = metadata.ctes.length > 0;
   const hasSubqueries = metadata.subqueries.length > 0;
   const hasUdfs = metadata.udfs.length > 0;
+  const hasSchemas = metadata.schemas && metadata.schemas.length > 0;
 
-  if (!hasTables && !hasJoins && !hasCtes && !hasSubqueries && !hasUdfs) {
+  if (!hasTables && !hasJoins && !hasCtes && !hasSubqueries && !hasUdfs && !hasSchemas) {
     return null;
   }
 
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground">Query Metadata</h3>
+
+      {hasSchemas && (
+        <div className="flex items-start gap-2">
+          <FolderTree className="h-4 w-4 text-muted-foreground mt-0.5" />
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground mb-1">Schemas/Databases</p>
+            <div className="flex flex-wrap gap-2">
+              {metadata.schemas.map((schema) => (
+                <span
+                  key={schema}
+                  className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-foreground"
+                >
+                  {schema}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {hasTables && (
         <div className="flex items-start gap-2">

@@ -11,6 +11,7 @@ from apis.models.responses import (
     AnalyzeResponse,
     FunctionAnalysis,
     QueryMetadata,
+    TimingInfo,
 )
 from apis.utils.helpers import (
     strip_comment,
@@ -131,11 +132,12 @@ async def analyze_inline(request: AnalyzeRequest):
     - Tables, joins, CTEs, subqueries
     - Whether query is executable on target dialect
     """
-    timestamp = datetime.now()
+    start_time = datetime.now()
+    timings = {}
 
     try:
         logger.info(
-            f"{request.query_id} AT {timestamp.isoformat()} FROM {request.source_dialect.upper()} — Starting analysis"
+            f"{request.query_id} AT {start_time.isoformat()} FROM {request.source_dialect.upper()} — Starting analysis"
         )
 
         # Normalize and clean query
@@ -156,13 +158,21 @@ async def analyze_inline(request: AnalyzeRequest):
         function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
         keyword_pattern = r"\b(?:" + "|".join([f"\\{func}" for func in functions_as_keywords]) + r")\b"
 
-        # Extract and categorize functions
+        # Phase 1: Parsing
+        phase_start = datetime.now()
+        original_ast = parse_one(query, read=request.source_dialect)
+        timings['parsing_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
+
+        # Phase 2: Function Analysis
+        phase_start = datetime.now()
         all_functions = extract_functions_from_query(query, function_pattern, keyword_pattern, exclusion_list)
         supported, unsupported = categorize_functions(all_functions, supported_functions_in_target, functions_as_keywords)
         udf_list, unsupported = extract_udfs(unsupported, supported_functions_in_source)
+        supported, unsupported = unsupported_functionality_identifiers(original_ast, unsupported, supported)
+        timings['function_analysis_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
-        # Parse and analyze query structure
-        original_ast = parse_one(query, read=request.source_dialect)
+        # Phase 3: Metadata Extraction
+        phase_start = datetime.now()
         tables_list = extract_db_and_Table_names(original_ast)
         joins_list = extract_joins_from_query(original_ast)
         # extract_cte_n_subquery_list returns [cte_list, values_list, subquery_list]
@@ -171,10 +181,17 @@ async def analyze_inline(request: AnalyzeRequest):
         values_list = cte_values_subquery_result[1] if len(cte_values_subquery_result) > 1 else []
         subquery_list = cte_values_subquery_result[2] if len(cte_values_subquery_result) > 2 else []
 
-        # Check for unsupported functionality
-        supported, unsupported = unsupported_functionality_identifiers(original_ast, unsupported, supported)
+        # Extract schemas from tables
+        schemas_set = set()
+        for table in tables_list:
+            if '.' in table:
+                schema = table.split('.')[0]
+                schemas_set.add(schema)
+        schemas_list = list(schemas_set)
+        timings['metadata_extraction_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
-        # Transpile query
+        # Phase 4: Transpilation
+        phase_start = datetime.now()
         values_ensured_ast = ensure_select_from_values(original_ast)
         cte_names_ast = set_cte_names_case_sensitively(values_ensured_ast)
         query = cte_names_ast.sql(request.source_dialect)
@@ -190,12 +207,15 @@ async def analyze_inline(request: AnalyzeRequest):
 
         transpiled_query = replace_struct_in_query(transpiled_query)
         transpiled_query = add_comment_to_query(transpiled_query, comment)
+        timings['transpilation_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
-        # Analyze transpiled query
+        # Phase 5: Post-Transpilation Analysis
+        phase_start = datetime.now()
         transpiled_ast = parse_one(transpiled_query, read=request.target_dialect)
         all_functions_transpiled = extract_functions_from_query(transpiled_query, function_pattern, keyword_pattern, exclusion_list)
         supported_transpiled, unsupported_transpiled = categorize_functions(all_functions_transpiled, supported_functions_in_target, functions_as_keywords)
         supported_transpiled, unsupported_transpiled = unsupported_functionality_identifiers(transpiled_ast, unsupported_transpiled, supported_transpiled)
+        timings['post_analysis_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
         # Determine if executable
         executable = len(unsupported_transpiled) == 0
@@ -204,8 +224,12 @@ async def analyze_inline(request: AnalyzeRequest):
         source_ast_dict = original_ast.dump()
         transpiled_ast_dict = transpiled_ast.dump()
 
+        # Calculate total time
+        total_time = (datetime.now() - start_time).total_seconds() * 1000
+        timings['total_ms'] = total_time
+
         logger.info(
-            f"{request.query_id} — Analysis completed in {(datetime.now() - timestamp).total_seconds():.3f}s"
+            f"{request.query_id} — Analysis completed in {total_time:.2f}ms"
         )
 
         return AnalyzeResponse(
@@ -224,9 +248,11 @@ async def analyze_inline(request: AnalyzeRequest):
                 ctes=cte_list,
                 subqueries=subquery_list,
                 udfs=list(udf_list),
+                schemas=schemas_list,
             ),
             source_ast=source_ast_dict,
             transpiled_ast=transpiled_ast_dict,
+            timing=TimingInfo(**timings),
         )
 
     except Exception as e:

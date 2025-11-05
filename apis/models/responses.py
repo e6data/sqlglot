@@ -30,6 +30,17 @@ class QueryMetadata(BaseModel):
     ctes: List[str] = Field(default_factory=list, description="Common Table Expressions")
     subqueries: List[str] = Field(default_factory=list, description="Subqueries found")
     udfs: List[str] = Field(default_factory=list, description="User-defined functions")
+    schemas: List[str] = Field(default_factory=list, description="Schemas/databases referenced in query")
+
+
+class TimingInfo(BaseModel):
+    """Timing information for different phases"""
+    total_ms: float = Field(..., description="Total time in milliseconds")
+    parsing_ms: Optional[float] = Field(None, description="Time to parse source query")
+    function_analysis_ms: Optional[float] = Field(None, description="Time to analyze functions")
+    metadata_extraction_ms: Optional[float] = Field(None, description="Time to extract metadata")
+    transpilation_ms: Optional[float] = Field(None, description="Time to transpile query")
+    post_analysis_ms: Optional[float] = Field(None, description="Time to analyze transpiled query")
 
 
 class AnalyzeResponse(BaseModel):
@@ -43,6 +54,7 @@ class AnalyzeResponse(BaseModel):
     metadata: QueryMetadata = Field(..., description="Query structure metadata")
     source_ast: Optional[Dict[str, Any]] = Field(None, description="SQLGlot AST of source query")
     transpiled_ast: Optional[Dict[str, Any]] = Field(None, description="SQLGlot AST of transpiled query")
+    timing: Optional[TimingInfo] = Field(None, description="Timing information for different phases")
 
 
 class ErrorDetail(BaseModel):
