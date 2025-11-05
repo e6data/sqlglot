@@ -11,6 +11,7 @@ import { useConverter } from "@/hooks/useConverter";
 import { OutputTab } from "@/components/analysis/OutputTab";
 import { StatsTab } from "@/components/analysis/StatsTab";
 import { DiffTab } from "@/components/analysis/DiffTab";
+import { ASTTab } from "@/components/analysis/ASTTab";
 import { type Dialect, type FeatureFlags } from "@/lib/types";
 
 export default function InlineMode() {
@@ -103,6 +104,7 @@ export default function InlineMode() {
                   <TabsTrigger value="output">Output</TabsTrigger>
                   <TabsTrigger value="stats">Stats</TabsTrigger>
                   <TabsTrigger value="diff">Diff</TabsTrigger>
+                  <TabsTrigger value="ast">AST</TabsTrigger>
                 </TabsList>
                 <TabsContent value="output" className="space-y-4">
                   <OutputTab
@@ -118,6 +120,14 @@ export default function InlineMode() {
                   <DiffTab
                     sourceQuery={sourceQuery}
                     transpiledQuery={result.transpiled_query}
+                    sourceDialect={dialect}
+                    targetDialect={targetDialect}
+                  />
+                </TabsContent>
+                <TabsContent value="ast">
+                  <ASTTab
+                    sourceAst={result.source_ast}
+                    transpiledAst={result.transpiled_ast}
                     sourceDialect={dialect}
                     targetDialect={targetDialect}
                   />

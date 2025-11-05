@@ -67,7 +67,7 @@ def escape_unicode(s: str) -> str:
     return s.encode("unicode_escape").decode("ascii")
 
 
-@app.post("/convert-query")
+@app.post("/convert-query", deprecated=True)
 async def convert_query(
     query: str = Form(...),
     query_id: Optional[str] = Form("NO_ID_MENTIONED"),
@@ -175,7 +175,7 @@ async def convert_query(
         E6.ENABLE_TABLE_ALIAS_QUALIFICATION = original_qualification_flag
 
 
-@app.get("/health")
+@app.get("/health", deprecated=True)
 def health_check():
     return Response(status_code=200)
 
@@ -184,7 +184,7 @@ def health_check():
 
 
 
-@app.post("/statistics")
+@app.post("/statistics", deprecated=True)
 async def stats_api(
     query: str = Form(...),
     query_id: Optional[str] = Form("NO_ID_MENTIONED"),

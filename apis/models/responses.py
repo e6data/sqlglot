@@ -41,6 +41,8 @@ class AnalyzeResponse(BaseModel):
     executable: bool = Field(..., description="Whether query is executable on target dialect")
     functions: FunctionAnalysis = Field(..., description="Function compatibility analysis")
     metadata: QueryMetadata = Field(..., description="Query structure metadata")
+    source_ast: Optional[Dict[str, Any]] = Field(None, description="SQLGlot AST of source query")
+    transpiled_ast: Optional[Dict[str, Any]] = Field(None, description="SQLGlot AST of transpiled query")
 
 
 class ErrorDetail(BaseModel):

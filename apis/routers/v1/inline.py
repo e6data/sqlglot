@@ -200,6 +200,10 @@ async def analyze_inline(request: AnalyzeRequest):
         # Determine if executable
         executable = len(unsupported_transpiled) == 0
 
+        # Generate ASTs
+        source_ast_dict = original_ast.dump()
+        transpiled_ast_dict = transpiled_ast.dump()
+
         logger.info(
             f"{request.query_id} — Analysis completed in {(datetime.now() - timestamp).total_seconds():.3f}s"
         )
@@ -221,6 +225,8 @@ async def analyze_inline(request: AnalyzeRequest):
                 subqueries=subquery_list,
                 udfs=list(udf_list),
             ),
+            source_ast=source_ast_dict,
+            transpiled_ast=transpiled_ast_dict,
         )
 
     except Exception as e:
