@@ -16,12 +16,13 @@ import { type Dialect, type FeatureFlags } from "@/lib/types";
 export default function InlineMode() {
   const [sourceQuery, setSourceQuery] = useState("");
   const [dialect, setDialect] = useState<Dialect>("snowflake");
+  const [targetDialect, setTargetDialect] = useState<Dialect>("e6");
   const [flags, setFlags] = useState<FeatureFlags>({ PRETTY_PRINT: true });
   const { convert, loading, error, result } = useConverter();
 
   const handleConvert = () => {
     if (!sourceQuery.trim()) return;
-    convert({ query: sourceQuery, fromDialect: dialect, featureFlags: flags });
+    convert({ query: sourceQuery, fromDialect: dialect, targetDialect, featureFlags: flags });
   };
 
   const handleCopy = async () => {
@@ -57,7 +58,16 @@ export default function InlineMode() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Source SQL</h2>
-              <DialectSelector value={dialect} onChange={setDialect} />
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">From:</span>
+                  <DialectSelector value={dialect} onChange={setDialect} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">To:</span>
+                  <DialectSelector value={targetDialect} onChange={setTargetDialect} />
+                </div>
+              </div>
             </div>
             <SQLEditor value={sourceQuery} onChange={setSourceQuery} />
             <Button
@@ -72,7 +82,7 @@ export default function InlineMode() {
                   Converting...
                 </>
               ) : (
-                "Convert to E6"
+                "Convert"
               )}
             </Button>
           </div>
@@ -109,7 +119,7 @@ export default function InlineMode() {
                     sourceQuery={sourceQuery}
                     transpiledQuery={result.transpiled_query}
                     sourceDialect={dialect}
-                    targetDialect="e6"
+                    targetDialect={targetDialect}
                   />
                 </TabsContent>
               </Tabs>

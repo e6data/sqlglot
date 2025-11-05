@@ -21,6 +21,7 @@ export function useConverter() {
         body: JSON.stringify({
           query: params.query,
           from_sql: params.fromDialect,
+          to_sql: params.targetDialect,
           feature_flags: params.featureFlags,
         }),
       });
