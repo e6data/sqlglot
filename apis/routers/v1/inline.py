@@ -165,7 +165,11 @@ async def analyze_inline(request: AnalyzeRequest):
         original_ast = parse_one(query, read=request.source_dialect)
         tables_list = extract_db_and_Table_names(original_ast)
         joins_list = extract_joins_from_query(original_ast)
-        cte_subquery_list = extract_cte_n_subquery_list(original_ast)
+        # extract_cte_n_subquery_list returns [cte_list, values_list, subquery_list]
+        cte_values_subquery_result = extract_cte_n_subquery_list(original_ast)
+        cte_list = cte_values_subquery_result[0] if len(cte_values_subquery_result) > 0 else []
+        values_list = cte_values_subquery_result[1] if len(cte_values_subquery_result) > 1 else []
+        subquery_list = cte_values_subquery_result[2] if len(cte_values_subquery_result) > 2 else []
 
         # Check for unsupported functionality
         supported, unsupported = unsupported_functionality_identifiers(original_ast, unsupported, supported)
@@ -213,8 +217,8 @@ async def analyze_inline(request: AnalyzeRequest):
             metadata=QueryMetadata(
                 tables=list(tables_list),
                 joins=joins_list,
-                ctes=cte_subquery_list.get("ctes", []),
-                subqueries=cte_subquery_list.get("subqueries", []),
+                ctes=cte_list,
+                subqueries=subquery_list,
                 udfs=list(udf_list),
             ),
         )

@@ -26,7 +26,7 @@ class FunctionAnalysis(BaseModel):
 class QueryMetadata(BaseModel):
     """Metadata extracted from query"""
     tables: List[str] = Field(default_factory=list, description="Tables referenced in query")
-    joins: List[str] = Field(default_factory=list, description="Types of joins used")
+    joins: List[List[Any]] = Field(default_factory=list, description="Join information as nested structure")
     ctes: List[str] = Field(default_factory=list, description="Common Table Expressions")
     subqueries: List[str] = Field(default_factory=list, description="Subqueries found")
     udfs: List[str] = Field(default_factory=list, description="User-defined functions")

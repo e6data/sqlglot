@@ -55,34 +55,11 @@ tasks:
       NEXT_PUBLIC_API_URL: http://localhost:{{.BACKEND_PORT}}
       PORT: "{{.FRONTEND_PORT}}"
 
-  build:
-    desc: Build frontend for production
-    dir: "{{.FRONTEND_DIR}}"
-    cmds:
-      - npm run build
-
-  start:
-    desc: Start production servers
-    deps:
-      - start:backend
-      - start:frontend
-
-  start:backend:
-    desc: Start backend in production mode
+  test:api:
+    desc: Run API tests
     dir: "{{.BACKEND_DIR}}"
     cmds:
-      - .venv/bin/python converter_api.py
-    env:
-      PORT: "{{.BACKEND_PORT}}"
-
-  start:frontend:
-    desc: Start frontend in production mode
-    dir: "{{.FRONTEND_DIR}}"
-    cmds:
-      - npm start
-    env:
-      NEXT_PUBLIC_API_URL: http://localhost:{{.BACKEND_PORT}}
-      PORT: "{{.FRONTEND_PORT}}"
+      - .venv/bin/pytest api-tests/ -v
 
   clean:
     desc: Clean build artifacts
@@ -91,8 +68,3 @@ tasks:
       - rm -rf {{.FRONTEND_DIR}}/node_modules
       - find {{.BACKEND_DIR}} -type d -name "__pycache__" -exec rm -rf {} +
       - find {{.BACKEND_DIR}} -type f -name "*.pyc" -delete
-
-  help:
-    desc: Show available tasks
-    cmds:
-      - task --list
