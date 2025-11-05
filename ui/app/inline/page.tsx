@@ -7,6 +7,9 @@ import { DialectSelector } from "@/components/DialectSelector";
 import { FeatureFlagsDialog } from "@/components/FeatureFlagsDialog";
 import { Button } from "@/components/ui/button";
 import { useConverter } from "@/hooks/useConverter";
+import { ExecutableStatus } from "@/components/analysis/ExecutableStatus";
+import { FunctionsList } from "@/components/analysis/FunctionsList";
+import { MetadataDisplay } from "@/components/analysis/MetadataDisplay";
 import { type Dialect, type FeatureFlags } from "@/lib/types";
 
 export default function InlineMode() {
@@ -21,17 +24,21 @@ export default function InlineMode() {
   };
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(result);
+    if (result) {
+      await navigator.clipboard.writeText(result.transpiled_query);
+    }
   };
 
   const handleDownload = () => {
-    const blob = new Blob([result], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "converted_query.sql";
-    a.click();
-    URL.revokeObjectURL(url);
+    if (result) {
+      const blob = new Blob([result.transpiled_query], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "converted_query.sql";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (
@@ -93,7 +100,16 @@ export default function InlineMode() {
                 </Button>
               </div>
             </div>
-            <SQLEditor value={result} onChange={() => {}} readOnly />
+            <SQLEditor value={result?.transpiled_query || ""} onChange={() => {}} readOnly />
+
+            {result && (
+              <div className="space-y-4 p-4 border border-border rounded-lg bg-background">
+                <ExecutableStatus executable={result.executable} />
+                <FunctionsList functions={result.functions} />
+                <MetadataDisplay metadata={result.metadata} />
+              </div>
+            )}
+
             {error && (
               <div className="p-4 border border-red-500 bg-red-50 text-red-700 text-sm">
                 <strong>Error:</strong> {error}

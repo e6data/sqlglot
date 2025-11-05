@@ -410,17 +410,9 @@ async def stats_api(
 
 
 if __name__ == "__main__":
-    import multiprocessing
+    workers = int(os.getenv("UVICORN_WORKERS", "1"))
 
-    # Calculate optimal workers based on CPU cores
-    cpu_cores = multiprocessing.cpu_count()
-    # Formula: (2 × CPU_cores) + 1, with min 2 and max 20
-    optimal_workers = min(max((2 * cpu_cores) + 1, 2), 20)
-
-    # Allow override via environment variable
-    workers = int(os.getenv("UVICORN_WORKERS", optimal_workers))
-
-    logger.info(f"Detected {cpu_cores} CPU cores, using {workers} workers")
+    logger.info(f"Starting with {workers} worker(s)")
 
     uvicorn.run(
         "converter_api:app",

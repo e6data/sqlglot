@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { type ConvertParams, type ConvertResponse, type ConvertError } from "@/lib/types";
+import { type ConvertParams, type AnalyzeResponse, type ConvertError } from "@/lib/types";
 
 export function useConverter() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<string>("");
+  const [result, setResult] = useState<AnalyzeResponse | null>(null);
 
   const convert = async (params: ConvertParams) => {
     setLoading(true);
@@ -31,18 +31,18 @@ export function useConverter() {
         throw new Error((data as ConvertError).detail || "Conversion failed");
       }
 
-      setResult((data as ConvertResponse).converted_query);
+      setResult(data as AnalyzeResponse);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error occurred";
       setError(message);
-      setResult("");
+      setResult(null);
     } finally {
       setLoading(false);
     }
   };
 
   const clear = () => {
-    setResult("");
+    setResult(null);
     setError(null);
   };
 

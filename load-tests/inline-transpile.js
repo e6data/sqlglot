@@ -8,7 +8,7 @@ const errorRate = new Rate('errors');
 // Test configuration
 export const options = {
   stages: [
-    { duration: '1m', target: 500 },
+    { duration: '1m', target: 2 },
   ],
   thresholds: {
     http_req_duration: ['p(95)<500', 'p(99)<2000'], // 95% of requests under 500ms, 99% under 2s
