@@ -1,30 +1,39 @@
-FROM python:3.12-alpine
+FROM python:3.12-alpine AS builder
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Install dependencies required for building certain packages
-RUN apk add --no-cache gcc g++ cmake make libxml2-dev libxslt-dev openssl && \
-    adduser --home /app e6 --disabled-password
+# Install build dependencies
+RUN apk add --no-cache gcc g++ cmake make libxml2-dev libxslt-dev openssl
 
-# Copy the requirements file into the container
-COPY requirements.txt .
+# Copy necessary files for package installation
+COPY pyproject.toml setup.py ./
+COPY sqlglotrs/Cargo.toml sqlglotrs/Cargo.toml
 
-# Install any dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install the package dependencies
+RUN pip install --no-cache-dir -e .
 
-# Install specific FastAPI, Uvicorn, and multipart dependencies
-RUN pip install fastapi==0.115.4 uvicorn==0.32.0 python-multipart 
-
-# Copy the rest of the application code into the container
+# Copy application code
 COPY . .
 
-# Make port 8100 available to the world outside this container
+# Final stage
+FROM python:3.12-alpine
+
+WORKDIR /app
+
+# Install only runtime dependencies (no build tools)
+RUN apk add --no-cache libxml2 libxslt openssl && \
+    adduser --home /app e6 --disabled-password
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY --from=builder /app /app
+
 USER e6
 EXPOSE 8100
 
 HEALTHCHECK none
 
-# Run the FastAPI app using Uvicorn
-# Workers will be calculated dynamically based on CPU cores
 CMD ["python", "converter_api.py"]

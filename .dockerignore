@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Node.js / Frontend
+ui/node_modules/
+ui/.next/
+ui/out/
+ui/.cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Documentation
+*.md
+docs/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
