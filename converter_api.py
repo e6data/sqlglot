@@ -13,9 +13,6 @@ import pyarrow.parquet as pq
 import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
-from guardrail.main import StorageServiceClient
-from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
-from guardrail.rules_validator import validate_queries
 from apis.utils.helpers import (
     strip_comment,
     unsupported_functionality_identifiers,
@@ -40,24 +37,9 @@ if t.TYPE_CHECKING:
 
 setup_logger()
 
-ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
-STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
-STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
-
-storage_service_client = None
-
 app = FastAPI()
 
 logger = logging.getLogger(__name__)
-
-
-if ENABLE_GUARDRAIL.lower() == "true":
-    logger.info("Storage Engine URL: ", STORAGE_ENGINE_URL)
-    logger.info("Storage Engine Port: ", STORAGE_ENGINE_PORT)
-
-    storage_service_client = StorageServiceClient(host=STORAGE_ENGINE_URL, port=STORAGE_ENGINE_PORT)
-
-logger.info("Storage Service Client is created")
 
 
 def escape_unicode(s: str) -> str:
@@ -181,88 +163,8 @@ def health_check():
     return Response(status_code=200)
 
 
-@app.post("/guardrail")
-async def gaurd(
-    query: str = Form(...),
-    schema: str = Form(...),
-    catalog: str = Form(...),
-):
-    try:
-        if storage_service_client is not None:
-            parsed = sqlglot.parse(query, error_level=None)
-
-            queries, tables = extract_sql_components_per_table_with_alias(parsed)
-
-            # tables = client.get_table_names(catalog_name="hive", db_name="tpcds_1000")
-            table_map = get_table_infos(tables, storage_service_client, catalog, schema)
-            logger.info("table info is ", table_map)
-
-            violations_found = validate_queries(queries, table_map)
-
-            if violations_found:
-                return {"action": "deny", "violations": violations_found}
-            else:
-                return {"action": "allow", "violations": []}
-        else:
-            detail = (
-                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
-            )
-            logger.error(detail)
-            raise HTTPException(status_code=500, detail=detail)
-
-    except Exception as e:
-        logger.error(f"Error in guardrail API: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/transpile-guardrail")
-async def Transgaurd(
-    query: str = Form(...),
-    schema: str = Form(...),
-    catalog: str = Form(...),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("e6"),
-):
-    to_sql = to_sql.lower()
-    try:
-        if storage_service_client is not None:
-            # This is the main method will which help in transpiling to our e6data SQL dialects from other dialects
-            converted_query = sqlglot.transpile(query, read=from_sql, write=to_sql, identify=False)[
-                0
-            ]
-
-            # This is additional steps to replace the STRUCT(STRUCT()) --> {{}}
-            converted_query = replace_struct_in_query(converted_query)
-
-            converted_query_ast = parse_one(converted_query, read=to_sql)
-
-            double_quotes_added_query = quote_identifiers(converted_query_ast, dialect=to_sql).sql(
-                dialect=to_sql
-            )
-
-            # ------------------------#
-            # GuardRail Application
-            parsed = sqlglot.parse(double_quotes_added_query, error_level=None)
-
-            # now lets validate the query
-            queries, tables = extract_sql_components_per_table_with_alias(parsed)
-
-            table_map = get_table_infos(tables, storage_service_client, catalog, schema)
-
-            violations_found = validate_queries(queries, table_map)
-
-            if violations_found:
-                return {"action": "deny", "violations": violations_found}
-            else:
-                return {"action": "allow", "violations": []}
-        else:
-            detail = (
-                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
-            )
-            raise HTTPException(status_code=500, detail=detail)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/statistics")
@@ -491,163 +393,6 @@ async def stats_api(
         }
 
 
-@app.post("/guardstats")
-async def guardstats(
-    query: str = Form(...),
-    from_sql: str = Form(...),
-    to_sql: Optional[str] = Form("e6"),
-    schema: str = Form(...),
-    catalog: str = Form(...),
-):
-    to_sql = to_sql.lower()
-    try:
-        supported_functions_in_e6 = load_supported_functions(to_sql)
-
-        # Functions treated as keywords (no parentheses required)
-        functions_as_keywords = [
-            "LIKE",
-            "ILIKE",
-            "RLIKE",
-            "AT TIME ZONE",
-            "||",
-            "DISTINCT",
-            "QUALIFY",
-        ]
-
-        # Exclusion list for words that are followed by '(' but are not functions
-        exclusion_list = [
-            "AS",
-            "AND",
-            "THEN",
-            "OR",
-            "ELSE",
-            "WHEN",
-            "WHERE",
-            "FROM",
-            "JOIN",
-            "OVER",
-            "ON",
-            "ALL",
-            "NOT",
-            "BETWEEN",
-            "UNION",
-            "SELECT",
-            "BY",
-            "GROUP",
-            "EXCEPT",
-        ]
-
-        # Regex patterns
-        function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
-        keyword_pattern = (
-            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
-        )
-
-        item = "condenast"
-        query, comment = strip_comment(query, item)
-
-        # Extract functions from the query
-        all_functions = extract_functions_from_query(
-            query, function_pattern, keyword_pattern, exclusion_list
-        )
-        supported, unsupported = categorize_functions(
-            all_functions, supported_functions_in_e6, functions_as_keywords
-        )
-        logger.info(f"supported: {supported}\n\nunsupported: {unsupported}")
-
-        original_ast = parse_one(query, read=from_sql)
-        tables_list = extract_db_and_Table_names(original_ast)
-        supported, unsupported = unsupported_functionality_identifiers(
-            original_ast, unsupported, supported
-        )
-        values_ensured_ast = ensure_select_from_values(original_ast)
-        query = values_ensured_ast.sql(dialect=from_sql)
-
-        tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-
-        tree2 = quote_identifiers(tree, dialect=to_sql)
-
-        double_quotes_added_query = tree2.sql(dialect=to_sql, from_dialect=from_sql)
-
-        double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
-
-        double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
-
-        all_functions_converted_query = extract_functions_from_query(
-            double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
-        )
-        supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
-            categorize_functions(
-                all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
-            )
-        )
-
-        double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
-        supported_in_converted, unsupported_in_converted = unsupported_functionality_identifiers(
-            double_quote_ast,
-            unsupported_functions_in_converted_query,
-            supported_functions_in_converted_query,
-        )
-
-        from_dialect_func_list = load_supported_functions(from_sql)
-
-        udf_list, unsupported = extract_udfs(unsupported, from_dialect_func_list)
-
-        executable = "NO" if unsupported_in_converted else "YES"
-
-        if storage_service_client is not None:
-            parsed = sqlglot.parse(double_quotes_added_query, error_level=None)
-
-            queries, tables = extract_sql_components_per_table_with_alias(parsed)
-
-            # tables = client.get_table_names(catalog_name="hive", db_name="tpcds_1000")
-            table_map = get_table_infos(tables, storage_service_client, catalog, schema)
-            logger.info("table info is ", table_map)
-
-            violations_found = validate_queries(queries, table_map)
-
-            joins_list = extract_joins_from_query(original_ast)
-
-            cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
-
-            if violations_found:
-                return {
-                    "supported_functions": supported,
-                    "unsupported_functions": unsupported,
-                    "udf_list": udf_list,
-                    "converted-query": double_quotes_added_query,
-                    "unsupported_functions_after_transpilation": unsupported_in_converted,
-                    "executable": executable,
-                    "tables_list": tables_list,
-                    "joins_list": joins_list,
-                    "cte_values_subquery_list": cte_values_subquery_list,
-                    "action": "deny",
-                    "violations": violations_found,
-                    "log_records": log_records,
-                }
-            else:
-                return {
-                    "supported_functions": supported,
-                    "unsupported_functions": unsupported,
-                    "converted-query": double_quotes_added_query,
-                    "unsupported_functions_after_transpilation": unsupported_in_converted,
-                    "udf_list": udf_list,
-                    "executable": executable,
-                    "tables_list": tables_list,
-                    "joins_list": joins_list,
-                    "cte_values_subquery_list": cte_values_subquery_list,
-                    "action": "allow",
-                    "violations": [],
-                    "log_records": log_records,
-                }
-        else:
-            detail = (
-                "Storage Service Not Initialized. Guardrail service status: " + ENABLE_GUARDRAIL
-            )
-            raise HTTPException(status_code=500, detail=detail)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

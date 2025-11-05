@@ -55,20 +55,6 @@ def replace_struct_in_query(query: str) -> str:
         return query
 
 
-def process_guardrail(query, schema, catalog, storage_service_client):
-    """
-    Validate a SQL query against guardrails.
-    """
-    from sqlglot import parse
-    from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
-    from guardrail.rules_validator import validate_queries
-
-    parsed = parse(query, error_level=None)
-    queries, tables = extract_sql_components_per_table_with_alias(parsed)
-    table_map = get_table_infos(tables, storage_service_client, catalog, schema)
-    return validate_queries(queries, table_map)
-
-
 def find_double_pipe(query: str) -> list:
     """
     Find '||' used as a string concatenation operator.
