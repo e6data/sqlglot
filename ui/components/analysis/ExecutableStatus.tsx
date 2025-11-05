@@ -15,7 +15,7 @@ export function ExecutableStatus({ executable }: ExecutableStatusProps) {
       ) : (
         <>
           <XCircle className="h-5 w-5 text-red-600" />
-          <span className="text-sm font-medium text-red-600">Not Executable - Manual fixes required</span>
+          <span className="text-sm font-medium text-red-600">Not Executable</span>
         </>
       )}
     </div>

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { FileText, FolderOpen } from "lucide-react";
+import { FileText, FolderOpen, BookOpen } from "lucide-react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8100";
 
 const navItems = [
   {
@@ -15,6 +17,12 @@ const navItems = [
     title: "Batch Mode",
     href: "/batch",
     icon: FolderOpen,
+  },
+  {
+    title: "API Docs",
+    href: `${API_URL}/docs`,
+    icon: BookOpen,
+    external: true,
   },
 ];
 
@@ -40,6 +48,8 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              target={item.external ? "_blank" : undefined}
+              rel={item.external ? "noopener noreferrer" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                 "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",

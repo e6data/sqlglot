@@ -34,44 +34,64 @@ export function FeatureFlagsDialog({ flags, onChange }: FeatureFlagsDialogProps)
         <DialogHeader>
           <DialogTitle>Feature Flags</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">
-              Enable Table Alias Qualification
-            </label>
-            <Switch
-              checked={flags.ENABLE_TABLE_ALIAS_QUALIFICATION || false}
-              onCheckedChange={(checked) =>
-                updateFlag("ENABLE_TABLE_ALIAS_QUALIFICATION", checked)
-              }
-            />
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">
+                Enable Table Alias Qualification
+              </label>
+              <Switch
+                checked={flags.ENABLE_TABLE_ALIAS_QUALIFICATION || false}
+                onCheckedChange={(checked) =>
+                  updateFlag("ENABLE_TABLE_ALIAS_QUALIFICATION", checked)
+                }
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Automatically adds table aliases to column references for clearer SQL (e.g., users.id instead of id)
+            </p>
           </div>
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Pretty Print</label>
-            <Switch
-              checked={flags.PRETTY_PRINT !== false}
-              onCheckedChange={(checked) => updateFlag("PRETTY_PRINT", checked)}
-            />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Pretty Print</label>
+              <Switch
+                checked={flags.PRETTY_PRINT !== false}
+                onCheckedChange={(checked) => updateFlag("PRETTY_PRINT", checked)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Formats the output SQL with proper indentation and line breaks for better readability
+            </p>
           </div>
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">
-              Two Phase Qualification Scheme
-            </label>
-            <Switch
-              checked={flags.USE_TWO_PHASE_QUALIFICATION_SCHEME || false}
-              onCheckedChange={(checked) =>
-                updateFlag("USE_TWO_PHASE_QUALIFICATION_SCHEME", checked)
-              }
-            />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">
+                Two Phase Qualification Scheme
+              </label>
+              <Switch
+                checked={flags.USE_TWO_PHASE_QUALIFICATION_SCHEME || false}
+                onCheckedChange={(checked) =>
+                  updateFlag("USE_TWO_PHASE_QUALIFICATION_SCHEME", checked)
+                }
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Uses advanced column resolution to handle complex queries with multiple joins and subqueries
+            </p>
           </div>
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Skip E6 Transpilation</label>
-            <Switch
-              checked={flags.SKIP_E6_TRANSPILATION || false}
-              onCheckedChange={(checked) =>
-                updateFlag("SKIP_E6_TRANSPILATION", checked)
-              }
-            />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Skip E6 Transpilation</label>
+              <Switch
+                checked={flags.SKIP_E6_TRANSPILATION || false}
+                onCheckedChange={(checked) =>
+                  updateFlag("SKIP_E6_TRANSPILATION", checked)
+                }
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Only parse and validate the SQL without converting to E6 dialect
+            </p>
           </div>
         </div>
       </DialogContent>

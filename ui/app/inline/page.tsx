@@ -48,7 +48,6 @@ export default function InlineMode() {
       <header className="border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-foreground">Inline Mode</h2>
-          <FeatureFlagsDialog flags={flags} onChange={setFlags} />
         </div>
       </header>
 
@@ -59,6 +58,7 @@ export default function InlineMode() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Source SQL</h2>
               <div className="flex items-center gap-4">
+                <FeatureFlagsDialog flags={flags} onChange={setFlags} />
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">From:</span>
                   <DialectSelector value={dialect} onChange={setDialect} />
