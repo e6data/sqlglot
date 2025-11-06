@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 import pyarrow.parquet as pq
 import pyarrow.fs as fs
+from pythonjsonlogger import jsonlogger
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from apis.utils.helpers import (
@@ -36,13 +37,14 @@ from apis.utils.helpers import (
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - TRANSPILER - %(levelname)s - %(message)s"
-)
+# Setup structured logging
+handler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter()
+handler.setFormatter(formatter)
+logging.getLogger().handlers = []
+logging.getLogger().addHandler(handler)
+logging.getLogger().setLevel(logging.INFO)
 
-# Create FastAPI app with ORJSONResponse for better performance
 app = FastAPI(
     title="E6 SQL Transpiler API",
     description="SQL transpiler API for E6 dialect with support for multiple source dialects",
@@ -287,15 +289,11 @@ async def stats_api(
         from_dialect_function_list = load_supported_functions(from_sql)
         udf_list, unsupported = extract_udfs(unsupported, from_dialect_function_list)
 
-        # --------------------------
-        # HANDLING PARSING ERRORS
-        # --------------------------
+        # Parse and transpile query
         executable = "YES"
         error_flag = False
         try:
-            # ------------------------------
-            # Step 1: Parse the Original Query
-            # ------------------------------
+            # Parse the original query
             original_ast = parse_one(query, read=from_sql)
             tables_list = extract_db_and_Table_names(original_ast)
             supported, unsupported = unsupported_functionality_identifiers(
@@ -305,9 +303,7 @@ async def stats_api(
             cte_names_equivalence_ast = set_cte_names_case_sensitively(values_ensured_ast)
             query = cte_names_equivalence_ast.sql(from_sql)
 
-            # ------------------------------
-            # Step 2: Transpile the Query
-            # ------------------------------
+            # Transpile the query
             tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
             tree2 = quote_identifiers(tree, dialect=to_sql)
 
@@ -346,28 +342,13 @@ async def stats_api(
                 executable = "NO"
 
             logger.info(
-                f"{query_id} executed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} seconds FROM {from_sql.upper()}\n"
-                "-----------------------\n"
-                "--- Original query ---\n"
-                "-----------------------\n"
-                f"{query}"
-                "-----------------------\n"
-                "--- Transpiled query ---\n"
-                "-----------------------\n"
-                f"{double_quotes_added_query}"
+                f"{query_id} — Completed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds():.3f}s FROM {from_sql.upper()}"
             )
 
         except Exception as e:
-            logger.info(
-                f"{query_id} executed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} seconds FROM {from_sql.upper()}\n"
-                "-----------------------\n"
-                "--- Original query ---\n"
-                "-----------------------\n"
-                f"{query}"
-                "-----------------------\n"
-                "-------- Error --------\n"
-                "-----------------------\n"
-                f"{str(e)}"
+            logger.error(
+                f"{query_id} — Failed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds():.3f}s FROM {from_sql.upper()} — Error: {str(e)}",
+                exc_info=True
             )
             error_message = f"{str(e)}"
             error_flag = True
@@ -393,15 +374,8 @@ async def stats_api(
 
     except Exception as e:
         logger.error(
-            f"{query_id} occurred at time {datetime.now().isoformat()} with processing time {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} FROM {from_sql.upper()}\n"
-            "-----------------------\n"
-            "--- Original query ---\n"
-            "-----------------------\n"
-            f"{query}"
-            "-----------------------\n"
-            "-------- Error --------\n"
-            "-----------------------\n"
-            f"{str(e)}"
+            f"{query_id} — Fatal error at {datetime.now().isoformat()} after {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds():.3f}s FROM {from_sql.upper()} — Error: {str(e)}",
+            exc_info=True
         )
         return {
             "supported_functions": [],
@@ -425,13 +399,15 @@ if __name__ == "__main__":
 
     config = get_transpiler_config()
 
-    logger.info("Starting SQLGlot Transpiler with configuration:")
-    logger.info(config.model_dump())
+    logger.info(
+        "transpiler_starting",
+        extra={"config": config.model_dump()},
+    )
 
     # Configure E6 dialect from system config
-    logger.info("Configuring E6 dialect from system configuration...")
+    logger.info("e6_dialect_configuring")
     configure_e6_dialect_from_system_config()
-    logger.info("E6 dialect configured successfully")
+    logger.info("e6_dialect_configured")
 
     uvicorn.run(
         "converter_api:app",
