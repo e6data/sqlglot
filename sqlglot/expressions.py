@@ -5296,6 +5296,10 @@ class Distinct(Expression):
     arg_types = {"expressions": False, "on": False}
 
 
+class AllAgg(Expression):
+    arg_types = {"expressions": False, "on": False}
+
+
 class In(Predicate):
     arg_types = {
         "this": True,

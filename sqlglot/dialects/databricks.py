@@ -139,6 +139,22 @@ class Databricks(Spark):
             result = super()._parse_colon_as_variant_extract(this)
             return result
 
+        def _parse_lambda(self, alias: bool = False) -> t.Optional[exp.Expression]:
+            """Override to support ALL keyword in aggregate functions for Databricks"""
+            # Check for ALL first before delegating to parent
+            if self._match(TokenType.ALL):
+                this = self.expression(
+                    exp.AllAgg, expressions=self._parse_csv(self._parse_assignment)
+                )
+                return self._parse_limit(
+                    self._parse_order(
+                        self._parse_having_max(self._parse_respect_or_ignore_nulls(this))
+                    )
+                )
+
+            # Let parent handle DISTINCT and other cases
+            return super()._parse_lambda(alias=alias)
+
     class Generator(Spark.Generator):
         TABLESAMPLE_SEED_KEYWORD = "REPEATABLE"
         COPY_PARAMS_ARE_WRAPPED = False

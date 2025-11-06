@@ -2919,6 +2919,11 @@ class Generator(metaclass=_Generator):
             this = self.wrap(this)
         return f"ALL {this}"
 
+    def allagg_sql(self, expression: exp.AllAgg) -> str:
+        this = self.expressions(expression, flat=True)
+        this = f" {this}" if this else ""
+        return f"ALL{this}"
+
     def any_sql(self, expression: exp.Any) -> str:
         this = self.sql(expression, "this")
         if isinstance(expression.this, (*exp.UNWRAPPED_QUERIES, exp.Paren)):
