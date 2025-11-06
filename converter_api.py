@@ -213,7 +213,7 @@ async def convert_query(
         logger.info(
             "%s AT %s FROM %s — Transpiled Query:\n%s",
             query_id,
-            timestamp,
+            end_timestamp,
             from_sql.upper(),
             double_quotes_added_query,
         )
@@ -797,4 +797,4 @@ if __name__ == "__main__":
 
     logger.info(f"Detected {cpu_cores} CPU cores, using {workers} workers")
 
-    uvicorn.run("converter_api:app", host="0.0.0.0", port=8101, proxy_headers=True, workers=workers, loop="uvloop")
+    uvicorn.run("converter_api:app", host="0.0.0.0", port=8100, proxy_headers=True, workers=workers, loop="uvloop")
