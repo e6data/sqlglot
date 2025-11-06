@@ -80,6 +80,12 @@ class BatchAnalyzeRequest(BaseModel):
     target_dialect: str = Field(default="e6", description="Target SQL dialect", alias="to_sql")
     options: Optional[TranspileOptions] = Field(default_factory=TranspileOptions)
     stop_on_error: bool = Field(default=False, description="Stop processing on first error")
+    chunk_size: int = Field(
+        default=1000,
+        ge=100,
+        le=10000,
+        description="Number of queries per processing chunk for parallel execution"
+    )
 
     class Config:
         populate_by_name = True

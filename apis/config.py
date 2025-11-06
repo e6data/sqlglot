@@ -125,6 +125,18 @@ class TranspilerConfig(BaseSettings):
         description="Comma-separated histogram bucket values (in seconds) for duration metrics"
     )
 
+    # Batch Processing Configuration
+    batch_pool_size: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Number of worker processes for batch job processing"
+    )
+    batch_result_dir: str = Field(
+        default="batch-results",
+        description="Directory where batch job results are stored"
+    )
+
     model_config = {
         "env_file": ".env",
         "env_prefix": "E6_",

@@ -1,238 +1,337 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi.responses import FileResponse
 import logging
+import sqlglot
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
+from sqlglot.optimizer.qualify_columns import quote_identifiers
 
-from apis.models.requests import BatchAnalyzeRequest
+from apis.models.requests import BatchAnalyzeRequest, AnalyzeRequest, TranspileOptions
 from apis.models.responses import (
-    BatchAnalyzeResponse,
-    BatchAnalysisResultItem,
-    BatchSummary,
-    QueryStatus,
-    ErrorDetail,
-    FunctionAnalysis,
-    QueryMetadata,
+    JobSubmitResponse,
+    JobStatusResponse,
+    JobListResponse,
+    JobListItem,
+    JobDeleteResponse,
 )
-from apis.routers.v1.inline import analyze_inline
-from apis.models.requests import AnalyzeRequest
-from apis.metrics import record_batch
+from apis.batch_manager import get_batch_manager
+from apis.utils.helpers import (
+    strip_comment,
+    normalize_unicode_spaces,
+    replace_struct_in_query,
+    ensure_select_from_values,
+    set_cte_names_case_sensitively,
+    transform_table_part,
+    transform_catalog_schema_only,
+    add_comment_to_query,
+    extract_functions_from_query,
+    categorize_functions,
+    load_supported_functions,
+    extract_udfs,
+    unsupported_functionality_identifiers,
+    extract_db_and_Table_names,
+    extract_joins_from_query,
+    extract_cte_n_subquery_list,
+)
+from apis.config import get_transpiler_config
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/analyze", response_model=BatchAnalyzeResponse)
-async def analyze_batch(request: BatchAnalyzeRequest):
+def _process_query_worker(query_item: Dict[str, Any], **kwargs) -> Dict[str, Any]:
     """
-    Analyze multiple SQL queries in batch.
+    Worker function to process a single query.
+    Must be at module level for pickling by ProcessPoolExecutor.
 
-    Processes each query and returns transpilation + detailed analysis metadata.
-    Can optionally stop on first error.
+    This function replicates the core logic from analyze_inline endpoint
+    in a synchronous, serializable manner for use in ProcessPoolExecutor.
+
+    Args:
+        query_item: Dict with 'id' and 'query' fields
+        **kwargs: source_dialect, target_dialect, options
+
+    Returns:
+        Dict with analysis results
     """
-    start_time = datetime.now()
-    results: List[BatchAnalysisResultItem] = []
-    succeeded = 0
-    failed = 0
-    executable_count = 0
+    try:
+        source_dialect = kwargs.get('source_dialect')
+        target_dialect = kwargs.get('target_dialect')
+        options_dict = kwargs.get('options', {})
+        query_id = query_item['id']
+        query = query_item['query']
 
-    # Aggregate tracking
-    all_supported_functions = set()
-    all_unsupported_functions = set()
-    all_udfs = set()
-    all_tables = set()
-    all_schemas = set()
-    total_joins = 0
-    total_ctes = 0
-    total_subqueries = 0
+        # Reconstruct options object
+        options = TranspileOptions(**options_dict) if options_dict else TranspileOptions()
 
-    # Timing tracking
-    query_durations = []
-    parsing_times = []
-    transpilation_times = []
-    function_analysis_times = []
+        # Get config
+        config = get_transpiler_config()
 
-    # Complexity tracking
-    tables_per_query = []
-    functions_per_query = []
+        # Normalize and clean query
+        if config.default_normalize_ascii:
+            query = normalize_unicode_spaces(query)
+        query, comment = strip_comment(query, "condenast")
 
-    logger.info(f"Starting batch analysis of {len(request.queries)} queries")
+        if not query.strip():
+            raise ValueError("Empty query provided")
 
-    for query_item in request.queries:
-        try:
-            # Create individual analyze request
-            analyze_req = AnalyzeRequest(
-                query=query_item.query,
-                source_dialect=request.source_dialect,
-                target_dialect=request.target_dialect,
-                query_id=query_item.id,
-                options=request.options,
-            )
+        # Parse query
+        tree = sqlglot.parse_one(query, read=source_dialect, error_level=None)
 
-            # Analyze using inline endpoint
-            response = await analyze_inline(analyze_req)
+        # Handle two-phase qualification if enabled
+        if options.use_two_phase_qualification_scheme:
+            if options.skip_e6_transpilation:
+                transformed_query = transform_catalog_schema_only(query, source_dialect)
+                transpiled = add_comment_to_query(transformed_query, comment)
+                return {
+                    'transpiled_query': transpiled,
+                    'executable': True,
+                    'functions': {'supported': [], 'unsupported': []},
+                    'metadata': {
+                        'tables': [],
+                        'joins': [],
+                        'ctes': [],
+                        'subqueries': [],
+                        'udfs': [],
+                        'schemas': []
+                    }
+                }
+            else:
+                tree = transform_table_part(tree)
 
-            results.append(
-                BatchAnalysisResultItem(
-                    id=query_item.id,
-                    status=QueryStatus.SUCCESS,
-                    transpiled_query=response.transpiled_query,
-                    executable=response.executable,
-                    functions=response.functions,
-                    metadata=response.metadata,
-                )
-            )
-            succeeded += 1
+        # Load supported functions for dialects
+        target_supported_functions = load_supported_functions(target_dialect)
+        source_supported_functions = load_supported_functions(source_dialect)
 
-            # Aggregate statistics
-            if response.executable:
-                executable_count += 1
+        # Extract and categorize functions from source
+        extracted_functions = extract_functions_from_query(query)
+        supported, unsupported = categorize_functions(
+            extracted_functions,
+            source_supported_functions,
+            target_supported_functions
+        )
 
-            # Function aggregates
-            all_supported_functions.update(response.functions.supported)
-            all_unsupported_functions.update(response.functions.unsupported)
-            all_udfs.update(response.metadata.udfs)
+        # Extract UDFs and check for unsupported features
+        udfs = extract_udfs(tree, set(extracted_functions))
+        unsupported_features = unsupported_functionality_identifiers(tree)
 
-            # Metadata aggregates
-            all_tables.update(response.metadata.tables)
-            all_schemas.update(response.metadata.schemas)
-            total_joins += len(response.metadata.joins)
-            total_ctes += len(response.metadata.ctes)
-            total_subqueries += len(response.metadata.subqueries)
+        # Extract metadata
+        tables = extract_db_and_Table_names(tree)
+        joins = extract_joins_from_query(query)
+        ctes, subqueries = extract_cte_n_subquery_list(tree)
+        schemas = list(set(table.split('.')[0] for table in tables if '.' in table))
 
-            # Timing aggregates
-            if response.timing:
-                query_durations.append(response.timing.total_ms)
-                if response.timing.parsing_ms is not None:
-                    parsing_times.append(response.timing.parsing_ms)
-                if response.timing.transpilation_ms is not None:
-                    transpilation_times.append(response.timing.transpilation_ms)
-                if response.timing.function_analysis_ms is not None:
-                    function_analysis_times.append(response.timing.function_analysis_ms)
+        # Transpile
+        tree = ensure_select_from_values(tree)
+        tree = set_cte_names_case_sensitively(tree)
+        transpiled = tree.sql(dialect=target_dialect, pretty=options.pretty_print)
 
-            # Complexity tracking
-            tables_per_query.append(len(response.metadata.tables))
-            total_functions = len(response.functions.supported) + len(response.functions.unsupported)
-            functions_per_query.append(total_functions)
+        # Post-processing
+        transpiled = replace_struct_in_query(transpiled)
+        transpiled = add_comment_to_query(transpiled, comment)
 
-        except HTTPException as e:
-            error_detail = ErrorDetail(
-                message=e.detail,
-                code=str(e.status_code),
-            )
-            results.append(
-                BatchAnalysisResultItem(
-                    id=query_item.id,
-                    status=QueryStatus.ERROR,
-                    error=error_detail,
-                )
-            )
-            failed += 1
+        # Quote identifiers if enabled
+        if config.enable_identifier_quoting:
+            transpiled_tree = sqlglot.parse_one(transpiled, read=target_dialect, error_level=None)
+            transpiled_tree = quote_identifiers(transpiled_tree, dialect=target_dialect)
+            transpiled = transpiled_tree.sql(dialect=target_dialect, pretty=options.pretty_print)
 
-            logger.warning(f"Query {query_item.id} failed: {e.detail}")
+        # Determine executability
+        executable = len(unsupported) == 0 and len(unsupported_features) == 0
 
-            if request.stop_on_error:
-                logger.info(f"Stopping batch processing due to error in query {query_item.id}")
-                break
+        return {
+            'transpiled_query': transpiled,
+            'executable': executable,
+            'functions': {
+                'supported': sorted(list(supported)),
+                'unsupported': sorted(list(unsupported))
+            },
+            'metadata': {
+                'tables': sorted(list(tables)),
+                'joins': joins,
+                'ctes': ctes,
+                'subqueries': subqueries,
+                'udfs': sorted(list(udfs)),
+                'schemas': sorted(list(schemas))
+            }
+        }
 
-        except Exception as e:
-            error_detail = ErrorDetail(
-                message=str(e),
-                code="INTERNAL_ERROR",
-            )
-            results.append(
-                BatchAnalysisResultItem(
-                    id=query_item.id,
-                    status=QueryStatus.ERROR,
-                    error=error_detail,
-                )
-            )
-            failed += 1
+    except Exception as e:
+        # Return error in a format that can be serialized
+        raise Exception(f"Query processing failed: {str(e)}")
 
-            logger.error(f"Query {query_item.id} failed with unexpected error: {str(e)}", exc_info=True)
 
-            if request.stop_on_error:
-                logger.info(f"Stopping batch processing due to error in query {query_item.id}")
-                break
+@router.post("/analyze", response_model=JobSubmitResponse)
+async def analyze_batch(request: BatchAnalyzeRequest, background_tasks: BackgroundTasks):
+    """
+    Submit a batch of SQL queries for asynchronous analysis.
 
-    duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+    Creates a background job that processes queries in parallel using ProcessPoolExecutor.
+    Returns immediately with a job_id that can be used to:
+    - Check job status/progress: GET /batch/jobs/{job_id}
+    - Retrieve results: GET /batch/jobs/{job_id}/results
+    - Cancel job: DELETE /batch/jobs/{job_id}
+    """
+    batch_manager = get_batch_manager()
 
-    # Calculate summary statistics
-    total_queries = len(results)
-    non_executable_count = succeeded - executable_count
-    success_rate = (succeeded / total_queries * 100) if total_queries > 0 else 0.0
+    # Create job
+    job_id = batch_manager.create_job(
+        total_queries=len(request.queries),
+        chunk_size=request.chunk_size
+    )
 
-    # Timing calculations
-    avg_query_duration = sum(query_durations) / len(query_durations) if query_durations else 0.0
-    min_query_duration = min(query_durations) if query_durations else 0.0
-    max_query_duration = max(query_durations) if query_durations else 0.0
-    avg_parsing = sum(parsing_times) / len(parsing_times) if parsing_times else None
-    avg_transpilation = sum(transpilation_times) / len(transpilation_times) if transpilation_times else None
-    avg_function_analysis = sum(function_analysis_times) / len(function_analysis_times) if function_analysis_times else None
+    # Convert queries to dict format for worker
+    queries_dict = [
+        {'id': q.id, 'query': q.query}
+        for q in request.queries
+    ]
 
-    # Complexity calculations
-    avg_tables = sum(tables_per_query) / len(tables_per_query) if tables_per_query else 0.0
-    avg_functions = sum(functions_per_query) / len(functions_per_query) if functions_per_query else 0.0
+    # Prepare processor kwargs (these will be passed to each worker)
+    processor_kwargs = {
+        'source_dialect': request.source_dialect,
+        'target_dialect': request.target_dialect,
+        'options': request.options.dict() if request.options else {},
+    }
+
+    # Submit job for background processing
+    background_tasks.add_task(
+        batch_manager.process_batch,
+        job_id=job_id,
+        queries=queries_dict,
+        processor_func=_process_query_worker,
+        **processor_kwargs
+    )
+
+    # Get job info to return
+    job = batch_manager.get_job_status(job_id)
+    if not job:
+        raise HTTPException(status_code=500, detail="Failed to create job")
 
     logger.info(
-        f"Batch analysis completed: {succeeded} succeeded, {failed} failed, {executable_count} executable, {duration_ms:.2f}ms"
+        f"Created batch job {job_id}: {len(request.queries)} queries, "
+        f"chunk_size={request.chunk_size}"
     )
 
-    from apis.models.responses import (
-        ExecutionSummary,
-        FunctionSummary,
-        ComplexitySummary,
-        TimingSummary,
-        DialectSummary,
+    return JobSubmitResponse(
+        job_id=job.job_id,
+        status=job.status.value,
+        total_queries=job.total_queries,
+        chunk_size=job.chunk_size,
+        created_at=job.created_at.isoformat()
     )
 
-    # Record batch metrics
-    record_batch(
-        source_dialect=request.source_dialect,
-        target_dialect=request.target_dialect,
-        batch_size=total_queries,
-        duration_seconds=duration_ms / 1000.0,
-        succeeded=succeeded,
-        failed=failed,
-        success_rate=success_rate / 100.0  # Convert percentage to 0.0-1.0
+
+@router.get("/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_job_status(job_id: str):
+    """
+    Get the status and progress of a batch job.
+
+    Returns detailed information about the job including:
+    - Current status (queued/processing/completed/failed/cancelled)
+    - Progress metrics (processed, succeeded, failed)
+    - Timing information (duration, ETA)
+    - Success rate
+    """
+    batch_manager = get_batch_manager()
+    job = batch_manager.get_job_status(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    job_dict = job.to_dict()
+    return JobStatusResponse(**job_dict)
+
+
+@router.get("/jobs", response_model=JobListResponse)
+async def list_jobs(
+    limit: int = Query(default=100, ge=1, le=1000, description="Number of jobs to return"),
+    offset: int = Query(default=0, ge=0, description="Offset for pagination")
+):
+    """
+    List all batch jobs with pagination.
+
+    Jobs are sorted by creation time (most recent first).
+    Use limit and offset parameters for pagination.
+    """
+    batch_manager = get_batch_manager()
+    jobs = batch_manager.get_all_jobs(limit=limit, offset=offset)
+
+    job_items = [
+        JobListItem(
+            job_id=job.job_id,
+            status=job.status.value,
+            total_queries=job.total_queries,
+            processed=job.processed,
+            succeeded=job.succeeded,
+            failed=job.failed,
+            created_at=job.created_at.isoformat(),
+            progress_percentage=job.progress_percentage
+        )
+        for job in jobs
+    ]
+
+    return JobListResponse(
+        jobs=job_items,
+        total=len(job_items),
+        limit=limit,
+        offset=offset
     )
 
-    return BatchAnalyzeResponse(
-        results=results,
-        summary=BatchSummary(
-            execution=ExecutionSummary(
-                total_queries=total_queries,
-                succeeded=succeeded,
-                failed=failed,
-                executable_queries=executable_count,
-                non_executable_queries=non_executable_count,
-                success_rate_percentage=success_rate,
-            ),
-            functions=FunctionSummary(
-                unique_supported_count=len(all_supported_functions),
-                unique_unsupported_count=len(all_unsupported_functions),
-                total_udfs=len(all_udfs),
-            ),
-            complexity=ComplexitySummary(
-                total_unique_tables=len(all_tables),
-                total_unique_schemas=len(all_schemas),
-                avg_tables_per_query=avg_tables,
-                avg_functions_per_query=avg_functions,
-                total_joins=total_joins,
-                total_ctes=total_ctes,
-                total_subqueries=total_subqueries,
-            ),
-            timing=TimingSummary(
-                total_duration_ms=duration_ms,
-                avg_query_duration_ms=avg_query_duration,
-                min_query_duration_ms=min_query_duration,
-                max_query_duration_ms=max_query_duration,
-                avg_parsing_ms=avg_parsing,
-                avg_transpilation_ms=avg_transpilation,
-                avg_function_analysis_ms=avg_function_analysis,
-            ),
-            dialects=DialectSummary(
-                source_dialect=request.source_dialect,
-                target_dialect=request.target_dialect,
-            ),
-        ),
+
+@router.get("/jobs/{job_id}/results")
+async def get_job_results(job_id: str):
+    """
+    Download the results of a completed batch job as a JSONL file.
+
+    Each line in the file is a JSON object representing one query result.
+    The file can be streamed line-by-line to avoid loading the entire result set in memory.
+
+    Returns 404 if job doesn't exist or results file is not available yet.
+    """
+    batch_manager = get_batch_manager()
+    job = batch_manager.get_job_status(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result_file = batch_manager.get_result_file(job_id)
+    if not result_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Results not available yet for job {job_id}. Check job status first."
+        )
+
+    return FileResponse(
+        path=str(result_file),
+        media_type="application/x-ndjson",
+        filename=f"{job_id}.jsonl"
+    )
+
+
+@router.delete("/jobs/{job_id}", response_model=JobDeleteResponse)
+async def delete_job(job_id: str):
+    """
+    Delete a batch job and its results.
+
+    If the job is currently processing, it will be marked as cancelled.
+    The job record and result file will be removed.
+
+    Returns 404 if the job doesn't exist.
+    """
+    batch_manager = get_batch_manager()
+
+    # Try to cancel first if processing
+    batch_manager.cancel_job(job_id)
+
+    # Then delete
+    deleted = batch_manager.delete_job(job_id)
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    logger.info(f"Deleted batch job {job_id}")
+
+    return JobDeleteResponse(
+        job_id=job_id,
+        deleted=True
     )

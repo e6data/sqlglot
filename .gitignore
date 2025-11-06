@@ -152,3 +152,6 @@ run.py
 tmp/
 ui/.next
 load-tests/results/
+
+# Batch processing results
+batch-results/

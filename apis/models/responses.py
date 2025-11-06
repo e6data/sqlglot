@@ -199,3 +199,61 @@ class HealthResponse(BaseModel):
     """Health check response"""
     status: str = Field(default="healthy", description="Service health status")
     version: str = Field(default="1.0.0", description="API version")
+
+
+# ===========================
+# Batch Job Response Models
+# ===========================
+
+class JobSubmitResponse(BaseModel):
+    """Response when a batch job is submitted"""
+    job_id: str = Field(..., description="Unique job identifier")
+    status: str = Field(..., description="Initial job status (typically 'queued')")
+    total_queries: int = Field(..., description="Total number of queries in the batch")
+    chunk_size: int = Field(..., description="Number of queries per processing chunk")
+    created_at: str = Field(..., description="Job creation timestamp (ISO format)")
+
+
+class JobStatusResponse(BaseModel):
+    """Response containing job status and progress"""
+    job_id: str = Field(..., description="Unique job identifier")
+    status: str = Field(..., description="Current job status (queued/processing/completed/failed/cancelled)")
+    total_queries: int = Field(..., description="Total number of queries in the batch")
+    processed: int = Field(..., description="Number of queries processed so far")
+    succeeded: int = Field(..., description="Number of queries that succeeded")
+    failed: int = Field(..., description="Number of queries that failed")
+    chunk_size: int = Field(..., description="Number of queries per processing chunk")
+    created_at: str = Field(..., description="Job creation timestamp (ISO format)")
+    started_at: Optional[str] = Field(None, description="Job start timestamp (ISO format)")
+    completed_at: Optional[str] = Field(None, description="Job completion timestamp (ISO format)")
+    error: Optional[str] = Field(None, description="Error message if job failed")
+    progress_percentage: float = Field(..., description="Progress as percentage (0-100)")
+    success_rate: float = Field(..., description="Success rate as percentage (0-100)")
+    duration_ms: Optional[float] = Field(None, description="Job duration in milliseconds")
+    eta_ms: Optional[float] = Field(None, description="Estimated time remaining in milliseconds")
+
+
+class JobListItem(BaseModel):
+    """Summary of a single job in a list"""
+    job_id: str = Field(..., description="Unique job identifier")
+    status: str = Field(..., description="Current job status")
+    total_queries: int = Field(..., description="Total number of queries")
+    processed: int = Field(..., description="Number of queries processed")
+    succeeded: int = Field(..., description="Number of queries that succeeded")
+    failed: int = Field(..., description="Number of queries that failed")
+    created_at: str = Field(..., description="Job creation timestamp")
+    progress_percentage: float = Field(..., description="Progress as percentage")
+
+
+class JobListResponse(BaseModel):
+    """Response containing a list of jobs"""
+    jobs: List[JobListItem] = Field(..., description="List of batch jobs")
+    total: int = Field(..., description="Total number of jobs")
+    limit: int = Field(..., description="Number of jobs per page")
+    offset: int = Field(..., description="Offset for pagination")
+
+
+class JobDeleteResponse(BaseModel):
+    """Response when a job is deleted"""
+    job_id: str = Field(..., description="Job identifier that was deleted")
+    deleted: bool = Field(..., description="Whether the deletion was successful")
