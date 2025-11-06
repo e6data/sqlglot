@@ -137,6 +137,24 @@ class TranspilerConfig(BaseSettings):
         description="Directory where batch job results are stored"
     )
 
+    # S3 Configuration (for batch Parquet file reading)
+    s3_endpoint_url: str = Field(
+        default="http://localhost:9000",
+        description="S3-compatible endpoint URL (e.g., MinIO, AWS S3)"
+    )
+    s3_access_key_id: str = Field(
+        default="minioadmin",
+        description="S3 access key ID"
+    )
+    s3_secret_access_key: str = Field(
+        default="minioadmin",
+        description="S3 secret access key"
+    )
+    s3_region: str = Field(
+        default="us-east-1",
+        description="S3 region"
+    )
+
     model_config = {
         "env_file": ".env",
         "env_prefix": "E6_",

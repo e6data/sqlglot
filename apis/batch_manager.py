@@ -1,8 +1,10 @@
 """
 Scalable batch processing using ProcessPoolExecutor.
 
-Handles large batch jobs (100K+ queries) without external dependencies.
-Uses Python's ProcessPoolExecutor for parallel execution and file-based streaming.
+Handles large batch jobs (100K+ queries) using:
+- Polars for fast Parquet streaming from S3
+- ProcessPoolExecutor for parallel execution
+- File-based result streaming (no memory accumulation)
 """
 
 import logging
@@ -11,13 +13,78 @@ import json
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Iterator
 from enum import Enum
 from pydantic import BaseModel, Field, computed_field
 
 from apis.config import get_transpiler_config
 
 logger = logging.getLogger(__name__)
+
+
+def stream_parquet_from_s3(
+    s3_uri: str,
+    chunk_size: int,
+    s3_endpoint_url: str,
+    s3_access_key_id: str,
+    s3_secret_access_key: str,
+    s3_region: str
+) -> Iterator[List[Dict[str, Any]]]:
+    """
+    Stream Parquet file from S3 in chunks using Polars.
+
+    Memory efficient - only loads one chunk at a time using lazy evaluation.
+
+    Args:
+        s3_uri: S3 URI (e.g., s3://bucket/queries.parquet)
+        chunk_size: Number of rows per chunk
+        s3_endpoint_url: S3 endpoint URL
+        s3_access_key_id: S3 access key
+        s3_secret_access_key: S3 secret key
+        s3_region: S3 region
+
+    Yields:
+        List of dicts with 'id' and 'query' fields
+
+    Expected Parquet schema:
+        - id: string
+        - query: string
+    """
+    import polars as pl
+
+    logger.info(f"Starting Parquet stream from {s3_uri} with chunk_size={chunk_size}")
+
+    try:
+        # Configure S3 storage options for Polars
+        storage_options = {
+            "aws_endpoint_url": s3_endpoint_url,
+            "aws_access_key_id": s3_access_key_id,
+            "aws_secret_access_key": s3_secret_access_key,
+            "aws_region": s3_region,
+            "aws_allow_http": "true" if "localhost" in s3_endpoint_url or "127.0.0.1" in s3_endpoint_url else "false"
+        }
+
+        # Lazy scan (doesn't load data yet)
+        lf = pl.scan_parquet(s3_uri, storage_options=storage_options)
+
+        # Get total count for logging
+        total_rows = lf.select(pl.count()).collect().item()
+        logger.info(f"Parquet file contains {total_rows} rows, will stream in chunks of {chunk_size}")
+
+        # Stream in batches
+        chunk_count = 0
+        for batch_df in lf.collect(streaming=True).iter_slices(chunk_size):
+            chunk_count += 1
+            # Convert to list of dicts
+            chunk_dicts = batch_df.to_dicts()
+            logger.debug(f"Yielding chunk {chunk_count} with {len(chunk_dicts)} rows")
+            yield chunk_dicts
+
+        logger.info(f"Completed streaming {chunk_count} chunks from Parquet file")
+
+    except Exception as e:
+        logger.error(f"Error streaming Parquet from S3: {e}", exc_info=True)
+        raise RuntimeError(f"Failed to stream Parquet from S3: {str(e)}")
 
 
 class JobStatus(str, Enum):

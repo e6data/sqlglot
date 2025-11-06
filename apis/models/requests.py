@@ -67,19 +67,22 @@ class AnalyzeRequest(BaseModel):
         populate_by_name = True
 
 
-class BatchQueryItem(BaseModel):
-    """Single query item in a batch request"""
-    id: str = Field(..., description="Unique identifier for this query in the batch")
-    query: str = Field(..., description="SQL query", min_length=1)
-
-
 class BatchAnalyzeRequest(BaseModel):
-    """Request for batch analysis"""
-    queries: List[BatchQueryItem] = Field(..., description="List of queries to analyze", min_items=1)
+    """
+    Request for batch analysis from S3 Parquet file.
+
+    The Parquet file must have the following schema:
+    - id: string (unique identifier for each query)
+    - query: string (SQL query text)
+    """
+    s3_uri: str = Field(
+        ...,
+        description="S3 URI to Parquet file containing queries (e.g., s3://bucket/queries.parquet)",
+        pattern=r"^s3://[a-zA-Z0-9.\-_]+/.+\.parquet$"
+    )
     source_dialect: str = Field(..., description="Source SQL dialect", alias="from_sql")
     target_dialect: str = Field(default="e6", description="Target SQL dialect", alias="to_sql")
     options: Optional[TranspileOptions] = Field(default_factory=TranspileOptions)
-    stop_on_error: bool = Field(default=False, description="Stop processing on first error")
     chunk_size: int = Field(
         default=1000,
         ge=100,

@@ -76,6 +76,25 @@ services:
       greptime-init:
         condition: service_completed_successfully
 
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   backend:
     container_name: sqlglot-backend
     image: sqlglot-backend:latest
@@ -98,6 +117,8 @@ services:
           memory: ${BACKEND_MEMORY_RESERVATION:-512m}
     depends_on:
       greptime:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:8100/health"]
@@ -123,3 +144,4 @@ services:
 volumes:
   greptime-data:
   prometheus-data:
+  minio-data:
