@@ -64,62 +64,21 @@ tasks:
     cmds:
       - .venv/bin/pytest api-tests/ -v
 
-  load:build:
-    desc: Build Docker image for load testing
-    dir: "{{.ROOT_DIR}}"
-    cmds:
-      - docker build -f load-tests/Dockerfile.loadtest -t sqlglot-loadtest .
-
-  load:start:
-    desc: Start backend in Docker with resource limits (usage - task load:start cores=2 memory=1g workers=5)
-    dir: "{{.ROOT_DIR}}"
-    cmds:
-      - docker stop sqlglot-loadtest-backend 2>/dev/null || true
-      - docker rm sqlglot-loadtest-backend 2>/dev/null || true
-      - |
-        CORES="{{.cores | default "2"}}"
-        MEMORY="{{.memory | default "1g"}}"
-        WORKERS="{{.workers | default "5"}}"
-        echo "Starting backend with ${CORES} cores, ${MEMORY} memory, and ${WORKERS} workers..."
-        docker run -d \
-          --name sqlglot-loadtest-backend \
-          --cpus="${CORES}" \
-          --memory="${MEMORY}" \
-          -p 8100:8100 \
-          -e UVICORN_WORKERS="${WORKERS}" \
-          sqlglot-loadtest
-      - echo "Waiting for backend to be ready..."
-      - sleep 3
-      - curl -s http://localhost:8100/health || echo "Backend started"
-
-  load:run:
-    desc: Run k6 load test against running backend
+  loadtest:run:
+    desc: Run k6 load test against localhost:8100
     dir: "{{.ROOT_DIR}}"
     cmds:
       - |
         TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-        NANO_CPUS=$(docker inspect sqlglot-loadtest-backend -f '{{"{{"}} .HostConfig.NanoCpus {{"}}"}}')
+        NANO_CPUS=$(docker inspect sqlglot-backend -f '{{"{{"}} .HostConfig.NanoCpus {{"}}"}}')
         CORES=$(echo "scale=1; $NANO_CPUS / 1000000000" | bc)
-        MEM_BYTES=$(docker inspect sqlglot-loadtest-backend -f '{{"{{"}} .HostConfig.Memory {{"}}"}}')
+        MEM_BYTES=$(docker inspect sqlglot-backend -f '{{"{{"}} .HostConfig.Memory {{"}}"}}')
         MEMORY=$(echo "scale=0; $MEM_BYTES / 1048576" | bc)
-        WORKERS=$(docker exec sqlglot-loadtest-backend printenv UVICORN_WORKERS 2>/dev/null || echo "unknown")
+        WORKERS=$(docker exec sqlglot-backend printenv E6_UVICORN_WORKERS 2>/dev/null || echo "unknown")
         FILENAME="load-tests/results/${TIMESTAMP}_${CORES}core_${MEMORY}M_${WORKERS}workers.json"
         mkdir -p load-tests/results
         echo "Running k6 test, results will be saved to ${FILENAME}"
         k6 run --summary-export="${FILENAME}" load-tests/inline-transpile.js
-
-  load:stats:
-    desc: Show Docker container stats (CPU/memory usage)
-    dir: "{{.ROOT_DIR}}"
-    cmds:
-      - docker stats sqlglot-loadtest-backend --no-stream
-
-  load:stop:
-    desc: Stop and remove load test container
-    dir: "{{.ROOT_DIR}}"
-    cmds:
-      - docker stop sqlglot-loadtest-backend 2>/dev/null || true
-      - docker rm sqlglot-loadtest-backend 2>/dev/null || true
 
   clean:
     desc: Clean build artifacts

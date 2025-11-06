@@ -1,0 +1,18 @@
+# GreptimeDB Configuration
+# Standalone mode
+
+[storage]
+type = "File"
+data_home = "/tmp/greptimedb"
+
+[http]
+addr = "0.0.0.0:4000"
+
+[grpc]
+addr = "0.0.0.0:4001"
+
+[mysql]
+addr = "0.0.0.0:4002"
+
+[postgres]
+addr = "0.0.0.0:4003"

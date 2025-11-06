@@ -143,7 +143,7 @@ export function CSVUpload({ onQueriesLoaded, onClear }: CSVUploadProps) {
             </div>
             <Button
               onClick={handleClear}
-              variant="ghost"
+              variant="outline"
               size="sm"
               className="h-8 w-8 p-0"
             >

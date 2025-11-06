@@ -1,0 +1,74 @@
+# Vector configuration for log collection and forwarding to GreptimeDB
+
+[api]
+enabled = true
+address = "0.0.0.0:8686"
+
+# =============================================================================
+# Sources - Collect logs from Docker containers
+# =============================================================================
+
+[sources.docker_logs]
+type = "docker_logs"
+include_containers = ["sqlglot-backend"]  # Only collect backend logs
+include_labels = ["logging=json"]  # Only containers with this label
+
+# =============================================================================
+# Transforms - Process and parse JSON logs
+# =============================================================================
+
+[transforms.parse_json]
+type = "remap"
+inputs = ["docker_logs"]
+source = '''
+  # Parse JSON log and merge into root
+  parsed, err = parse_json(.message)
+
+  if err == null {
+    # If successful JSON parse, merge fields into root
+    . = merge!(., parsed)
+    .service = "transpiler"
+  } else {
+    # If not JSON, keep as plain text
+    .level = "info"
+    .service = "transpiler"
+  }
+'''
+
+# Add service label
+[transforms.add_labels]
+type = "remap"
+inputs = ["parse_json"]
+source = '''
+  .service = "transpiler"
+'''
+
+# =============================================================================
+# Sinks - Send to GreptimeDB
+# =============================================================================
+
+# Send logs to GreptimeDB via native sink
+[sinks.greptimedb_logs]
+type = "greptimedb_logs"
+inputs = ["add_labels"]
+endpoint = "http://greptime:4000"
+dbname = "public"
+table = "transpiler_logs"
+pipeline_name = "log_pipeline"
+compression = "gzip"
+batch.max_events = 100
+batch.timeout_secs = 5
+
+# Optional: Console output for debugging
+[sinks.console]
+type = "console"
+inputs = ["add_labels"]
+encoding.codec = "json"
+target = "stdout"
+
+# =============================================================================
+# Health check endpoint
+# =============================================================================
+
+[sources.internal_metrics]
+type = "internal_metrics"

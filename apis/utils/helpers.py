@@ -121,7 +121,7 @@ def extract_functions_from_query(
     """
     Extract function names from the sanitized query.
     """
-    logger.info("Extracting functions from query")
+    logger.debug("Extracting functions from query")
     sanitized_query = processing_comments(query)
 
     try:
@@ -154,7 +154,7 @@ def extract_functions_from_query(
     if pipe_matches:
         all_functions.add("||")
 
-    logger.info(f"All Functions: {all_functions}")
+    logger.debug(f"All Functions: {all_functions}")
 
     return all_functions
 
@@ -162,7 +162,7 @@ def extract_functions_from_query(
 def unsupported_functionality_identifiers(
     expression, unsupported_list: t.List, supported_list: t.List
 ):
-    logger.info("Identifying unsupported functionality.....")
+    logger.debug("Identifying unsupported functionality.....")
     try:
         for cte in expression.find_all(exp.CTE, exp.Subquery):
             cte_name = cte.alias.upper()
@@ -232,7 +232,7 @@ def categorize_functions(extracted_functions, supported_functions_in_e6, functio
     """
     Categorize functions into supported and unsupported.
     """
-    logger.info("Categorizing extracted functions into supported and unsupported.....")
+    logger.debug("Categorizing extracted functions into supported and unsupported.....")
     supported_functions = set()
     unsupported_functions = set()
 
@@ -288,7 +288,7 @@ def strip_comment(query: str, item: str) -> tuple:
         tuple: (stripped_query, extracted_comment)
     """
     # Use a regex pattern to find comments like /* item::UUID */
-    logger.info("Stripping Comments!")
+    logger.debug("Stripping Comments!")
     try:
         comment_pattern = rf"/\*\s*{item}::[a-zA-Z0-9]+\s*\*/"
 
@@ -314,7 +314,7 @@ def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
     """
     Ensures that any CTE using VALUES directly is modified to SELECT * FROM VALUES(...).
     """
-    logger.info("Ensuring select from values.....")
+    logger.debug("Ensuring select from values.....")
     for cte in expression.find_all(exp.CTE):
         cte_query = cte.this
         # Check if the CTE contains only a VALUES clause
@@ -331,7 +331,7 @@ def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
 
 
 def extract_udfs(unsupported_list, from_dialect_func_list):
-    logger.info("Extracting UDFs from unsupported functions list.....")
+    logger.debug("Extracting UDFs from unsupported functions list.....")
     udf_list = set()
     remaining_unsupported = []
     for unsupported_function in unsupported_list:
@@ -382,7 +382,7 @@ def load_supported_functions(dialect: str):
 
 
 def extract_db_and_Table_names(sql_query_ast):
-    logger.info("Extracting database and table names....")
+    logger.debug("Extracting database and table names....")
     tables_list = []
     if sql_query_ast:
         for table in sql_query_ast.find_all(exp.Table):
@@ -411,7 +411,7 @@ def extract_joins_from_query(sql_query_ast):
                 ...
             ]
     """
-    logger.info("Extracting joins from query.....")
+    logger.debug("Extracting joins from query.....")
 
     join_info_list = []
     joins_list = []
@@ -495,7 +495,7 @@ def set_cte_names_case_sensitively(sql_query_ast):
 
 
 def extract_cte_n_subquery_list(sql_query_ast):
-    logger.info("Extracting cte, subqueries and values....")
+    logger.debug("Extracting cte, subqueries and values....")
     cte_list = []
     subquery_list = []
     values_list = []

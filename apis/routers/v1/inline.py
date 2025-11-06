@@ -49,7 +49,7 @@ async def transpile_inline(request: TranspileRequest):
     timestamp = datetime.now()
 
     try:
-        logger.info(
+        logger.debug(
             "transpilation_started",
             extra={
                 "query_id": request.query_id,
@@ -135,7 +135,7 @@ async def transpile_inline(request: TranspileRequest):
         logger.debug("phase_post_processing_completed", extra={"query_id": request.query_id})
 
         duration_s = (datetime.now() - timestamp).total_seconds()
-        logger.info(
+        logger.debug(
             "transpilation_completed",
             extra={
                 "query_id": request.query_id,
@@ -201,7 +201,7 @@ async def analyze_inline(request: AnalyzeRequest):
     timings = {}
 
     try:
-        logger.info(
+        logger.debug(
             "analysis_started",
             extra={
                 "query_id": request.query_id,
@@ -386,7 +386,7 @@ async def analyze_inline(request: AnalyzeRequest):
         total_time = (datetime.now() - start_time).total_seconds() * 1000
         timings['total_ms'] = total_time
 
-        logger.info(
+        logger.debug(
             "analysis_completed",
             extra={
                 "query_id": request.query_id,

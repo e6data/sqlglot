@@ -87,8 +87,7 @@ export function BatchQueryDetail({ result, onClose }: BatchQueryDetailProps) {
               <h3 className="text-sm font-semibold mb-3">Function Analysis</h3>
               {result.functions ? (
                 <FunctionsList
-                  supported={result.functions.supported}
-                  unsupported={result.functions.unsupported}
+                  functions={result.functions}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">No function data available</p>

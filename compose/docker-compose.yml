@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  greptime:
+    image: greptime/greptimedb:latest
+    container_name: greptime
+    ports:
+      - "4000:4000"   # HTTP API & Dashboard
+      - "4001:4001"   # gRPC
+      - "4002:4002"   # MySQL protocol
+      - "4003:4003"   # PostgreSQL protocol
+    command: standalone start --http-addr=0.0.0.0:4000
+    volumes:
+      - greptime-data:/tmp/greptimedb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  greptime-init:
+    image: curlimages/curl:latest
+    container_name: greptime-init
+    volumes:
+      - ./init-logs-table.sql:/init-logs-table.sql
+      - ./log-pipeline.yaml:/log-pipeline.yaml
+    depends_on:
+      greptime:
+        condition: service_healthy
+    command: >
+      sh -c '
+        echo "Initializing GreptimeDB...";
+        echo "Creating logs table...";
+        curl -X POST http://greptime:4000/v1/sql \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          --data-urlencode "sql@/init-logs-table.sql";
+        echo "Creating log pipeline...";
+        curl -X POST http://greptime:4000/v1/events/pipelines/log_pipeline \
+          -H "Content-Type: application/x-yaml" \
+          --data-binary "@/log-pipeline.yaml";
+        echo "GreptimeDB initialization complete!";
+      '
+    restart: "no"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"   # Prometheus UI
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    depends_on:
+      greptime:
+        condition: service_healthy
+
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: vector
+    ports:
+      - "8686:8686"   # Vector API/UI
+    volumes:
+      - ./vector.toml:/etc/vector/vector.toml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: --config /etc/vector/vector.toml
+    depends_on:
+      greptime:
+        condition: service_healthy
+      greptime-init:
+        condition: service_completed_successfully
+
+  backend:
+    container_name: sqlglot-backend
+    image: sqlglot-backend:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8100"
+    env_file:
+      - .env
+    labels:
+      - "logging=json"
+    deploy:
+      resources:
+        limits:
+          cpus: '${BACKEND_CPUS:-4}'
+          memory: ${BACKEND_MEMORY:-2g}
+        reservations:
+          cpus: '${BACKEND_CPUS_RESERVATION:-1}'
+          memory: ${BACKEND_MEMORY_RESERVATION:-512m}
+    depends_on:
+      greptime:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:8100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    container_name: sqlglot-frontend
+    image: sqlglot-frontend:latest
+    build:
+      context: ../ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  greptime-data:
+  prometheus-data:

@@ -120,7 +120,7 @@ export function BatchResultsTable({ results, onViewDetails }: BatchResultsTableP
                         <div className="flex items-center gap-2">
                           <Button
                             onClick={() => copyToClipboard(result.transpiled_query!)}
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             className="h-7 px-2"
                           >

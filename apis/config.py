@@ -92,8 +92,10 @@ class TranspilerConfig(BaseSettings):
         default="LOWERCASE",
         description="Strategy for normalizing SQL keywords"
     )
-    index_offset: Literal[0, 1] = Field(
+    index_offset: int = Field(
         default=1,
+        ge=0,
+        le=1,
         description="Array indexing offset (0-based or 1-based)"
     )
     preserve_original_names: bool = Field(

@@ -11,12 +11,12 @@ import { BatchSummaryStats } from "@/components/batch/BatchSummaryStats";
 import { BatchResultsTable } from "@/components/batch/BatchResultsTable";
 import { BatchQueryDetail } from "@/components/batch/BatchQueryDetail";
 import { useBatchConverter } from "@/hooks/useBatchConverter";
-import type { BatchQueryItem, BatchAnalysisResultItem, FeatureFlags } from "@/lib/types";
+import type { BatchQueryItem, BatchAnalysisResultItem, FeatureFlags, Dialect } from "@/lib/types";
 
 export default function BatchMode() {
   const [queries, setQueries] = useState<BatchQueryItem[]>([]);
-  const [fromDialect, setFromDialect] = useState("snowflake");
-  const [toDialect, setToDialect] = useState("e6");
+  const [fromDialect, setFromDialect] = useState<Dialect>("snowflake");
+  const [toDialect, setToDialect] = useState<Dialect>("e6");
   const [stopOnError, setStopOnError] = useState(false);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags>({
     ENABLE_TABLE_ALIAS_QUALIFICATION: false,
@@ -98,7 +98,6 @@ export default function BatchMode() {
                     <DialectSelector
                       value={fromDialect}
                       onChange={setFromDialect}
-                      excludeDialect={toDialect}
                     />
                   </div>
 
@@ -107,7 +106,6 @@ export default function BatchMode() {
                     <DialectSelector
                       value={toDialect}
                       onChange={setToDialect}
-                      excludeDialect={fromDialect}
                     />
                   </div>
                 </div>

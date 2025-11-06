@@ -1,0 +1,35 @@
+# Prometheus configuration for scraping backend metrics
+# and forwarding to GreptimeDB via remote write
+
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  external_labels:
+    cluster: 'sqlglot-transpiler'
+    environment: 'docker-compose'
+
+scrape_configs:
+  # Scrape backend metrics
+  - job_name: 'sqlglot-transpiler'
+    static_configs:
+      - targets: ['backend:8100']
+        labels:
+          service: 'transpiler'
+          component: 'backend'
+
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+# Send metrics to GreptimeDB via Prometheus remote write
+remote_write:
+  - url: http://greptime:4000/v1/prometheus/write?db=public
+    queue_config:
+      capacity: 10000
+      max_shards: 5
+      min_shards: 1
+      max_samples_per_send: 5000
+      batch_send_deadline: 5s

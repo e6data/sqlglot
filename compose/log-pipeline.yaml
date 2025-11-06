@@ -1,0 +1,30 @@
+processors:
+  - date:
+      field: timestamp
+      formats:
+        - "%Y-%m-%dT%H:%M:%S%.f%:z"
+        - "%Y-%m-%dT%H:%M:%S%.f"
+        - "%Y-%m-%dT%H:%M:%S"
+      ignore_missing: true
+      timezone: UTC
+
+transform:
+  - fields:
+      - timestamp, ts
+      - level
+      - message
+      - service
+      - container_name
+      - query_id
+      - source_dialect
+      - target_dialect
+      - duration_ms
+      - duration_s
+      - executable
+      - error
+      - phase
+      - endpoint
+    type: string
+
+output:
+  table: transpiler_logs
