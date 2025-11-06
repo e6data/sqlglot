@@ -15,6 +15,7 @@ from apis.models.responses import (
 )
 from apis.routers.v1.inline import analyze_inline
 from apis.models.requests import AnalyzeRequest
+from apis.metrics import record_batch
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -182,6 +183,17 @@ async def analyze_batch(request: BatchAnalyzeRequest):
         ComplexitySummary,
         TimingSummary,
         DialectSummary,
+    )
+
+    # Record batch metrics
+    record_batch(
+        source_dialect=request.source_dialect,
+        target_dialect=request.target_dialect,
+        batch_size=total_queries,
+        duration_seconds=duration_ms / 1000.0,
+        succeeded=succeeded,
+        failed=failed,
+        success_rate=success_rate / 100.0  # Convert percentage to 0.0-1.0
     )
 
     return BatchAnalyzeResponse(

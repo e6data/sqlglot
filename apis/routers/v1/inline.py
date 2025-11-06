@@ -33,6 +33,7 @@ from apis.utils.helpers import (
 )
 from apis.context import set_per_request_config, PerRequestConfig
 from apis.config import get_transpiler_config
+from apis.metrics import record_transpilation, record_analysis
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -144,6 +145,16 @@ async def transpile_inline(request: TranspileRequest):
             },
         )
 
+        # Record metrics
+        query_size_bytes = len(request.query.encode('utf-8'))
+        record_transpilation(
+            endpoint="transpile",
+            source_dialect=request.source_dialect,
+            target_dialect=request.target_dialect,
+            status="success",
+            query_size_bytes=query_size_bytes
+        )
+
         return TranspileResponse(
             transpiled_query=transpiled_query,
             source_dialect=request.source_dialect,
@@ -162,6 +173,17 @@ async def transpile_inline(request: TranspileRequest):
             },
             exc_info=True,
         )
+
+        # Record error metrics
+        error_type = type(e).__name__
+        record_transpilation(
+            endpoint="transpile",
+            source_dialect=request.source_dialect,
+            target_dialect=request.target_dialect,
+            status="failure",
+            error_type=error_type
+        )
+
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -375,6 +397,31 @@ async def analyze_inline(request: AnalyzeRequest):
             },
         )
 
+        # Record metrics
+        query_size_bytes = len(request.query.encode('utf-8'))
+        record_transpilation(
+            endpoint="analyze",
+            source_dialect=request.source_dialect,
+            target_dialect=request.target_dialect,
+            status="success",
+            query_size_bytes=query_size_bytes
+        )
+
+        record_analysis(
+            source_dialect=request.source_dialect,
+            target_dialect=request.target_dialect,
+            executable=executable,
+            query_size_bytes=query_size_bytes,
+            supported_functions_count=len(supported_transpiled),
+            unsupported_functions_count=len(unsupported_transpiled),
+            udf_count=len(udf_list),
+            tables_count=len(tables_list),
+            joins_count=len(joins_list),
+            ctes_count=len(cte_list),
+            subqueries_count=len(subquery_list),
+            timings=timings
+        )
+
         return AnalyzeResponse(
             transpiled_query=transpiled_query,
             source_dialect=request.source_dialect,
@@ -409,4 +456,15 @@ async def analyze_inline(request: AnalyzeRequest):
             },
             exc_info=True,
         )
+
+        # Record error metrics
+        error_type = type(e).__name__
+        record_transpilation(
+            endpoint="analyze",
+            source_dialect=request.source_dialect,
+            target_dialect=request.target_dialect,
+            status="failure",
+            error_type=error_type
+        )
+
         raise HTTPException(status_code=500, detail=str(e))

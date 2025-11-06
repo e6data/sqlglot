@@ -61,6 +61,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add Prometheus middleware (if metrics enabled)
+from apis.config import get_transpiler_config
+config = get_transpiler_config()
+if config.enable_metrics:
+    from apis.middleware.prometheus import PrometheusMiddleware
+    app.add_middleware(PrometheusMiddleware)
+
 logger = logging.getLogger(__name__)
 
 # Import and include v1 routers
@@ -190,6 +197,37 @@ async def convert_query(
 @app.get("/health", deprecated=True)
 def health_check():
     return Response(status_code=200)
+
+
+@app.get("/metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint.
+
+    Returns metrics in Prometheus text format for scraping.
+    """
+    from apis.config import get_transpiler_config
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, REGISTRY
+    from prometheus_client.multiprocess import MultiProcessCollector
+    from fastapi import HTTPException
+
+    config = get_transpiler_config()
+
+    if not config.enable_metrics:
+        raise HTTPException(status_code=404, detail="Metrics are disabled")
+
+    # Check if using multiprocess mode
+    if config.uvicorn_workers > 1 and os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
+        # Use multiprocess collector to aggregate metrics from all workers
+        from prometheus_client import CollectorRegistry
+        registry = CollectorRegistry()
+        MultiProcessCollector(registry)
+        metrics_output = generate_latest(registry)
+    else:
+        # Single process mode
+        metrics_output = generate_latest(REGISTRY)
+
+    return Response(content=metrics_output, media_type=CONTENT_TYPE_LATEST)
 
 
 
@@ -396,6 +434,8 @@ async def stats_api(
 if __name__ == "__main__":
     from apis.config import get_transpiler_config
     from sqlglot.dialects.e6 import configure_e6_dialect_from_system_config
+    import tempfile
+    import shutil
 
     config = get_transpiler_config()
 
@@ -408,6 +448,18 @@ if __name__ == "__main__":
     logger.info("e6_dialect_configuring")
     configure_e6_dialect_from_system_config()
     logger.info("e6_dialect_configured")
+
+    # Configure Prometheus multiprocess mode if using multiple workers
+    if config.enable_metrics and config.uvicorn_workers > 1:
+        # Create temporary directory for multiprocess metrics
+        multiproc_dir = tempfile.mkdtemp(prefix="prometheus_multiproc_")
+        os.environ["PROMETHEUS_MULTIPROC_DIR"] = multiproc_dir
+        logger.info("prometheus_multiprocess_configured", extra={"dir": multiproc_dir})
+
+    # Initialize metrics
+    if config.enable_metrics:
+        from apis.metrics import initialize_metrics
+        initialize_metrics()
 
     uvicorn.run(
         "converter_api:app",
