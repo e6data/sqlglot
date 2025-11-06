@@ -421,11 +421,17 @@ async def stats_api(
 
 if __name__ == "__main__":
     from apis.config import get_transpiler_config
+    from sqlglot.dialects.e6 import configure_e6_dialect_from_system_config
 
     config = get_transpiler_config()
 
     logger.info("Starting SQLGlot Transpiler with configuration:")
     logger.info(config.model_dump())
+
+    # Configure E6 dialect from system config
+    logger.info("Configuring E6 dialect from system configuration...")
+    configure_e6_dialect_from_system_config()
+    logger.info("E6 dialect configured successfully")
 
     uvicorn.run(
         "converter_api:app",

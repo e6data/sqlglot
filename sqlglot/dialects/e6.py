@@ -25,6 +25,45 @@ if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
 
+def configure_e6_dialect_from_system_config():
+    """
+    Configure E6 dialect class-level attributes from system configuration.
+
+    This function should be called at application startup to apply system-wide
+    dialect configuration from environment variables.
+
+    Note: This modifies class-level attributes, so changes affect all instances.
+    """
+    try:
+        from apis.config import get_transpiler_config
+
+        config = get_transpiler_config()
+
+        # Apply system config to E6 dialect class
+        E6.PRESERVE_ORIGINAL_NAMES = config.preserve_original_names
+        E6.INDEX_OFFSET = config.index_offset
+
+        # Map string normalization strategy to enum
+        normalization_map = {
+            "LOWERCASE": NormalizationStrategy.LOWERCASE,
+            "UPPERCASE": NormalizationStrategy.UPPERCASE,
+            "CASE_SENSITIVE": NormalizationStrategy.CASE_SENSITIVE,
+            "CASE_INSENSITIVE": NormalizationStrategy.CASE_INSENSITIVE,
+        }
+        E6.NORMALIZATION_STRATEGY = normalization_map.get(
+            config.normalization_strategy,
+            NormalizationStrategy.LOWERCASE
+        )
+
+        # Configure identifier quote character in Tokenizer
+        # Note: IDENTIFIERS is set in the Tokenizer class below
+        E6.Tokenizer.IDENTIFIERS = [config.identifier_quote_char]
+
+    except ImportError:
+        # If apis.config is not available (e.g., in tests), use defaults
+        pass
+
+
 def epoch_cast_to_ts_e6(expression: exp.Expression) -> exp.Expression:
     """Replace 'epoch' in casts by the E6-specific ISO timestamp literal."""
     if (
@@ -501,14 +540,15 @@ class E6(Dialect):
     """
     The E6 Dialect for SQLGlot, customized for specific SQL syntax and behavior.
     This class defines strategies, mappings, and tokenization rules unique to the E6 dialect.
+
+    Note: Key dialect settings are now configurable via system configuration.
+    See apis/config.py for TranspilerConfig and environment variables.
     """
 
+    # These will be overridden by system config if available
+    # Defaults kept for backward compatibility
     PRESERVE_ORIGINAL_NAMES = True
-
-    # Strategy to normalize keywords: Here, keywords will be converted to lowercase.
     NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
-
-    # Define the offset for array indexing, starting from 1 instead of the default 0.
     INDEX_OFFSET = 1
 
     # Note: Table alias qualification is now controlled via per-request context variables

@@ -78,6 +78,32 @@ class TranspilerConfig(BaseSettings):
         default=False,
         description="Default setting for ASCII normalization in transpilation"
     )
+    default_error_level: Literal["IGNORE", "WARN", "RAISE"] = Field(
+        default="RAISE",
+        description="Default error handling level for SQL parsing"
+    )
+
+    # SQLGlot Dialect Configuration
+    identifier_quote_char: str = Field(
+        default='"',
+        description="Character used to quote identifiers (table/column names)"
+    )
+    normalization_strategy: Literal["LOWERCASE", "UPPERCASE", "CASE_SENSITIVE", "CASE_INSENSITIVE"] = Field(
+        default="LOWERCASE",
+        description="Strategy for normalizing SQL keywords"
+    )
+    index_offset: Literal[0, 1] = Field(
+        default=1,
+        description="Array indexing offset (0-based or 1-based)"
+    )
+    preserve_original_names: bool = Field(
+        default=True,
+        description="Preserve original identifier case sensitivity"
+    )
+    enable_identifier_quoting: bool = Field(
+        default=True,
+        description="Enable automatic quoting of identifiers with quote_identifiers()"
+    )
 
     model_config = {
         "env_file": ".env",

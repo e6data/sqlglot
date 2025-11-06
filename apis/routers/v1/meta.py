@@ -162,6 +162,42 @@ async def get_config():
             description="Default setting for ASCII normalization in SQL transpilation",
             type="boolean"
         ),
+        ConfigFieldInfo(
+            name="Default Error Level",
+            value=config.default_error_level,
+            description="Default error handling level for SQL parsing (IGNORE/WARN/RAISE)",
+            type="string"
+        ),
+        ConfigFieldInfo(
+            name="Identifier Quote Character",
+            value=config.identifier_quote_char,
+            description="Character used to quote identifiers (table/column names)",
+            type="string"
+        ),
+        ConfigFieldInfo(
+            name="Normalization Strategy",
+            value=config.normalization_strategy,
+            description="Strategy for normalizing SQL keywords (LOWERCASE/UPPERCASE/CASE_SENSITIVE/CASE_INSENSITIVE)",
+            type="string"
+        ),
+        ConfigFieldInfo(
+            name="Index Offset",
+            value=config.index_offset,
+            description="Array indexing offset (0-based or 1-based)",
+            type="integer"
+        ),
+        ConfigFieldInfo(
+            name="Preserve Original Names",
+            value=config.preserve_original_names,
+            description="Preserve original identifier case sensitivity",
+            type="boolean"
+        ),
+        ConfigFieldInfo(
+            name="Enable Identifier Quoting",
+            value=config.enable_identifier_quoting,
+            description="Enable automatic quoting of identifiers with quote_identifiers()",
+            type="boolean"
+        ),
     ]
 
     return ConfigResponse(

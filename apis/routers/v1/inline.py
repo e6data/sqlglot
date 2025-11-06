@@ -89,8 +89,11 @@ async def transpile_inline(request: TranspileRequest):
                 )
             tree = transform_table_part(tree)
 
-        # Qualify identifiers
-        tree2 = quote_identifiers(tree, dialect=request.target_dialect)
+        # Qualify identifiers (if enabled in system config)
+        if config.enable_identifier_quoting:
+            tree2 = quote_identifiers(tree, dialect=request.target_dialect)
+        else:
+            tree2 = tree
 
         # Ensure SELECT FROM VALUES
         values_ensured_ast = ensure_select_from_values(tree2)
@@ -253,7 +256,10 @@ async def analyze_inline(request: AnalyzeRequest):
         timings['transpilation_parsing_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
         phase_start = datetime.now()
-        tree2 = quote_identifiers(tree, dialect=request.target_dialect)
+        if config.enable_identifier_quoting:
+            tree2 = quote_identifiers(tree, dialect=request.target_dialect)
+        else:
+            tree2 = tree
         timings['identifier_qualification_ms'] = (datetime.now() - phase_start).total_seconds() * 1000
 
         phase_start = datetime.now()
