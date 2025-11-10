@@ -92,7 +92,9 @@ class Databricks(Spark):
 
     class Tokenizer(Spark.Tokenizer):
         IDENTIFIERS = (
-            ["`", '"'] if os.getenv("ENABLE_ANSI_MODE", "false").lower() == "true" else ["`"]
+            ["`", '"']
+            if os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower() == "true"
+            else ["`"]
         )
         KEYWORDS = {
             **Spark.Tokenizer.KEYWORDS,
