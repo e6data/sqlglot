@@ -2820,7 +2820,8 @@ class TestE6(Validator):
     def test_double_quotes(self):
         self.validate_all(
             "GREATEST(AVG(voluntary_cancellation_mrr.'CANCEL FROM PAID'), 0) * 0.15"
-            if os.getenv("ENABLE_ANSI_MODE", "false").lower() == "false"
+            if os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower()
+            == "false"
             else 'GREATEST(AVG(voluntary_cancellation_mrr."CANCEL FROM PAID"), 0) * 0.15',
             read={
                 "databricks": """ GREATEST( AVG( voluntary_cancellation_mrr."CANCEL FROM PAID" ), 0 ) * 0.15 """
@@ -2828,7 +2829,8 @@ class TestE6(Validator):
         )
         self.validate_all(
             "INTERVAL ('time_col') 'hour'"
-            if os.getenv("ENABLE_ANSI_MODE", "false").lower() == "false"
+            if os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower()
+            == "false"
             else "INTERVAL \"time_col\" 'hour'",
             read={
                 "databricks": "(\"time_col\" || ' hours')::INTERVAL",
