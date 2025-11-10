@@ -1,3 +1,5 @@
+import os
+
 from tests.dialects.test_dialect import Validator
 
 
@@ -1223,13 +1225,6 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT AVG(DISTINCT col) FROM (VALUES (1), (1), (2)) AS tab(col)",
             read={"databricks": "SELECT avg(DISTINCT col) FROM VALUES (1), (1), (2) AS tab(col);"},
-        )
-
-        self.validate_all(
-            "GREATEST(AVG(voluntary_cancellation_mrr.'CANCEL FROM PAID'), 0) * 0.15",
-            read={
-                "databricks": """ GREATEST( AVG( voluntary_cancellation_mrr."CANCEL FROM PAID" ), 0 ) * 0.15 """
-            },
         )
 
         self.validate_all(
@@ -2676,14 +2671,6 @@ class TestE6(Validator):
             },
         )
 
-        # Test with quoted identifiers and plural conversion
-        self.validate_all(
-            "INTERVAL ('time_col') 'hour'",
-            read={
-                "databricks": "(\"time_col\" || ' hours')::INTERVAL",
-            },
-        )
-
         # Test multiple interval expressions with plural conversion
         self.validate_all(
             "SELECT INTERVAL col1 'hour', INTERVAL col2 'minute'",
@@ -2829,3 +2816,21 @@ class TestE6(Validator):
         finally:
             # Always reset flag to default after tests
             E6.ENABLE_TABLE_ALIAS_QUALIFICATION = False
+
+    def test_double_quotes(self):
+        self.validate_all(
+            "GREATEST(AVG(voluntary_cancellation_mrr.'CANCEL FROM PAID'), 0) * 0.15"
+            if os.getenv("ENABLE_ANSI_MODE", "false").lower() == "false"
+            else 'GREATEST(AVG(voluntary_cancellation_mrr."CANCEL FROM PAID"), 0) * 0.15',
+            read={
+                "databricks": """ GREATEST( AVG( voluntary_cancellation_mrr."CANCEL FROM PAID" ), 0 ) * 0.15 """
+            },
+        )
+        self.validate_all(
+            "INTERVAL ('time_col') 'hour'"
+            if os.getenv("ENABLE_ANSI_MODE", "false").lower() == "false"
+            else "INTERVAL \"time_col\" 'hour'",
+            read={
+                "databricks": "(\"time_col\" || ' hours')::INTERVAL",
+            },
+        )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 from collections import defaultdict
 
@@ -90,6 +91,9 @@ class Databricks(Spark):
         IDENTIFIERS = ["`", '"']
 
     class Tokenizer(Spark.Tokenizer):
+        IDENTIFIERS = (
+            ["`", '"'] if os.getenv("ENABLE_ANSI_MODE", "false").lower() == "true" else ["`"]
+        )
         KEYWORDS = {
             **Spark.Tokenizer.KEYWORDS,
             "VOID": TokenType.VOID,
