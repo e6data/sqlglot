@@ -5,9 +5,6 @@ import uvicorn
 import re
 import os
 import json
-
-from uvicorn.loops import uvloop
-
 import sqlglot
 import logging
 import time
@@ -39,6 +36,9 @@ from apis.utils.helpers import (
     set_cte_names_case_sensitively,
 )
 
+# Prometheus imports
+from prometheus_client import Counter, Histogram, Gauge, CONTENT_TYPE_LATEST, CollectorRegistry, multiprocess, generate_latest as prom_generate_latest
+
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
@@ -53,6 +53,67 @@ storage_service_client = None
 app = FastAPI()
 
 logger = logging.getLogger(__name__)
+
+# ==================== Prometheus Metrics Setup ====================
+PROMETHEUS_MULTIPROC_DIR = os.getenv('PROMETHEUS_MULTIPROC_DIR', '/tmp/prometheus_multiproc_dir')
+if not os.path.exists(PROMETHEUS_MULTIPROC_DIR):
+    os.makedirs(PROMETHEUS_MULTIPROC_DIR, exist_ok=True)
+os.environ['PROMETHEUS_MULTIPROC_DIR'] = PROMETHEUS_MULTIPROC_DIR
+
+# Create a custom registry for multiprocess mode
+registry = CollectorRegistry()
+
+# ==================== Prometheus Metrics ====================
+# Request counters
+requests_total = Counter(
+    'requests_total',
+    'Total number of requests',
+    ['from_dialect', 'to_dialect', 'status'],
+    registry=registry
+)
+
+errors_total = Counter(
+    'errors_total',
+    'Total number of errors',
+    ['from_dialect', 'to_dialect', 'error_type'],
+    registry=registry
+)
+
+# Duration histogram
+request_duration_seconds = Histogram(
+    'request_duration_seconds',
+    'Duration of requests in seconds',
+    ['from_dialect', 'to_dialect'],
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0],
+    registry=registry
+)
+
+# Process duration histograms
+process_duration_seconds = Histogram(
+    'process_duration_seconds',
+    'Duration of individual processing steps',
+    ['step_name', 'from_dialect', 'to_dialect'],
+    buckets=[0.0001, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
+    registry=registry
+)
+
+# Active requests gauge - use 'pid' mode for multiprocess
+active_requests = Gauge(
+    'active_requests',
+    'Number of requests currently being processed',
+    ['from_dialect', 'to_dialect'],
+    registry=registry,
+    multiprocess_mode='livesum'
+)
+
+# Query characteristics
+query_size_bytes = Histogram(
+    'query_size_bytes',
+    'Size of input queries in bytes',
+    ['from_dialect', 'to_dialect'],
+    buckets=[100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000],
+    registry=registry
+)
 
 
 if ENABLE_GUARDRAIL.lower() == "true":
@@ -85,17 +146,37 @@ async def convert_query(
     timestamp = datetime.now().isoformat()
     logger.info("%s — Query received at: %s", query_id, timestamp)
     to_sql = to_sql.lower()
+    from_sql_upper = from_sql.upper()
+    to_sql_lower = to_sql.lower()
 
-    # Timing: Feature flags parsing
-    t0 = time.perf_counter()
+    # Increment active requests gauge
+    active_requests.labels(from_dialect=from_sql_upper, to_dialect=to_sql_lower).inc()
+
+    # Record query size
+    query_size = len(query.encode('utf-8'))
+    query_size_bytes.labels(from_dialect=from_sql_upper, to_dialect=to_sql_lower).observe(query_size)
+
+    # Feature flags parsing
+    logger.info("%s — Started: Feature flags parsing", query_id)
+    step_start = time.perf_counter()
     flags_dict = {}
     if feature_flags:
         try:
             flags_dict = json.loads(feature_flags)
         except json.JSONDecodeError as je:
+            active_requests.labels(from_dialect=from_sql_upper, to_dialect=to_sql_lower).dec()
+            errors_total.labels(
+                from_dialect=from_sql_upper,
+                to_dialect=to_sql_lower,
+                error_type="json_decode_error"
+            ).inc()
             return HTTPException(status_code=500, detail=str(je))
-    t_flags = time.perf_counter() - t0
-    logger.info("%s — Timing: Feature flags parsing took %.4f ms at %s", query_id, t_flags * 1000, datetime.now().isoformat())
+    process_duration_seconds.labels(
+        step_name="feature_flags_parsing",
+        from_dialect=from_sql_upper,
+        to_dialect=to_sql_lower
+    ).observe(time.perf_counter() - step_start)
+    logger.info("%s — Completed: Feature flags parsing", query_id)
 
     if not query or not query.strip():
         logger.info(
@@ -104,6 +185,12 @@ async def convert_query(
             timestamp,
             from_sql.upper(),
         )
+        active_requests.labels(from_dialect=from_sql_upper, to_dialect=to_sql_lower).dec()
+        requests_total.labels(
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower,
+            status="empty_query"
+        ).inc()
         return {"converted_query": ""}
 
     # Set table alias qualification flag from feature_flags (similar to PRETTY_PRINT)
@@ -121,11 +208,16 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        # Timing: Unicode normalization
-        t0 = time.perf_counter()
+        # Unicode normalization
+        logger.info("%s — Started: Unicode normalization", query_id)
+        step_start = time.perf_counter()
         query = normalize_unicode_spaces(query)
-        t_normalize = time.perf_counter() - t0
-        logger.info("%s — Timing: Unicode normalization took %.4f ms at %s", query_id, t_normalize * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="unicode_normalization",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: Unicode normalization", query_id)
 
         logger.info(
             "%s AT %s FROM %s — Normalized (escaped):\n%s",
@@ -135,29 +227,43 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        # Timing: Comment stripping
-        t0 = time.perf_counter()
+        # Comment stripping
+        logger.info("%s — Started: Comment stripping", query_id)
+        step_start = time.perf_counter()
         item = "condenast"
         query, comment = strip_comment(query, item)
-        t_strip_comment = time.perf_counter() - t0
-        logger.info("%s — Timing: Comment stripping took %.4f ms at %s", query_id, t_strip_comment * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="comment_stripping",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: Comment stripping", query_id)
 
-        # Timing: Initial parsing
-        t0 = time.perf_counter()
+        # Initial parsing
+        logger.info("%s — Started: SQL parsing", query_id)
+        step_start = time.perf_counter()
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-        t_parse = time.perf_counter() - t0
-        logger.info("%s — Timing: Initial SQL parsing took %.4f ms at %s", query_id, t_parse * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="parsing",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: Initial SQL parsing", query_id)
 
-        # Timing: Two-phase qualification (if enabled)
-        t_two_phase = 0.0
+        # Two-phase qualification (if enabled)
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
-            t0 = time.perf_counter()
+            logger.info("%s — Started: Two-phase qualification", query_id)
+            step_start = time.perf_counter()
             # Check if we should only transform catalog.schema without full transpilation
             if flags_dict.get("SKIP_E6_TRANSPILATION", False):
                 transformed_query = transform_catalog_schema_only(query, from_sql)
                 transformed_query = add_comment_to_query(transformed_query, comment)
-                t_two_phase = time.perf_counter() - t0
-                logger.info("%s — Timing: Two-phase catalog.schema transform took %.4f ms", query_id, t_two_phase * 1000)
+                process_duration_seconds.labels(
+                    step_name="two_phase_catalog_schema",
+                    from_dialect=from_sql_upper,
+                    to_dialect=to_sql_lower
+                ).observe(time.perf_counter() - step_start)
+                logger.info("%s — Completed: Two-phase catalog.schema transform", query_id)
                 logger.info(
                     "%s AT %s FROM %s — Catalog.Schema Transformed Query:\n%s",
                     query_id,
@@ -166,54 +272,112 @@ async def convert_query(
                     transformed_query,
                 )
                 total_time = time.perf_counter() - start_time_total
-                logger.info("%s — Timing: TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
+                request_duration_seconds.labels(
+                    from_dialect=from_sql_upper,
+                    to_dialect=to_sql_lower
+                ).observe(total_time)
+                requests_total.labels(
+                    from_dialect=from_sql_upper,
+                    to_dialect=to_sql_lower,
+                    status="success"
+                ).inc()
+                active_requests.labels(from_dialect=from_sql_upper, to_dialect=to_sql_lower).dec()
+                logger.info("%s — TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
                 return {"converted_query": transformed_query}
             tree = transform_table_part(tree)
-            t_two_phase = time.perf_counter() - t0
-            logger.info("%s — Timing: Two-phase table transform took %.4f ms", query_id, t_two_phase * 1000)
+            process_duration_seconds.labels(
+                step_name="two_phase_table_transform",
+                from_dialect=from_sql_upper,
+                to_dialect=to_sql_lower
+            ).observe(time.perf_counter() - step_start)
+            logger.info("%s — Completed: Two-phase table transform", query_id)
 
-        # Timing: Quote identifiers
-        t0 = time.perf_counter()
+        # Quote identifiers
+        logger.info("%s — Started: Quote identifiers", query_id)
+        step_start = time.perf_counter()
         tree2 = quote_identifiers(tree, dialect=to_sql)
-        t_quote = time.perf_counter() - t0
-        logger.info("%s — Timing: Quote identifiers took %.4f ms at %s", query_id, t_quote * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="quote_identifiers",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: Quote identifiers", query_id)
 
-        # Timing: Ensure select from values
-        t0 = time.perf_counter()
+        # Ensure select from values
+        logger.info("%s — Started: Ensure select from values", query_id)
+        step_start = time.perf_counter()
         values_ensured_ast = ensure_select_from_values(tree2)
-        t_values = time.perf_counter() - t0
-        logger.info("%s — Timing: Ensure select from values took %.4f ms at %s", query_id, t_values * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="ensure_select_from_values",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: Ensure select from values", query_id)
 
-        # Timing: CTE names case sensitivity
-        t0 = time.perf_counter()
+        # CTE names case sensitivity
+        logger.info("%s — Started: Set CTE names case sensitively", query_id)
+        step_start = time.perf_counter()
         cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
-        t_cte = time.perf_counter() - t0
-        logger.info("%s — Timing: Set CTE names case sensitively took %.4f ms at %s", query_id, t_cte * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="set_cte_names_case_sensitively",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: Set CTE names case sensitively", query_id)
 
-        # Timing: SQL generation
-        t0 = time.perf_counter()
+        # SQL generation
+        logger.info("%s — Started: SQL generation", query_id)
+        step_start = time.perf_counter()
         double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
             dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
         )
-        t_sql_gen = time.perf_counter() - t0
-        logger.info("%s — Timing: SQL generation took %.4f ms at %s", query_id, t_sql_gen * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="sql_generation",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: SQL generation", query_id)
 
-        # Timing: Struct replacement
-        t0 = time.perf_counter()
+        # Struct replacement
+        logger.info("%s — Started: Struct replacement", query_id)
+        step_start = time.perf_counter()
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
-        t_struct = time.perf_counter() - t0
-        logger.info("%s — Timing: Struct replacement took %.4f ms at %s", query_id, t_struct * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="struct_replacement",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: Struct replacement", query_id)
 
-        # Timing: Add comment
-        t0 = time.perf_counter()
+        # Add comment
+        logger.info("%s — Started: Add comment", query_id)
+        step_start = time.perf_counter()
         double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
-        t_add_comment = time.perf_counter() - t0
-        logger.info("%s — Timing: Add comment took %.4f ms at %s", query_id, t_add_comment * 1000, datetime.now().isoformat())
+        process_duration_seconds.labels(
+            step_name="add_comment",
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(time.perf_counter() - step_start)
+        logger.info("%s — Completed: Add comment", query_id)
 
         # Total timing
         total_time = time.perf_counter() - start_time_total
         end_timestamp = datetime.now().isoformat()
-        logger.info("%s — Timing: TOTAL /convert-query execution took %.4f ms at %s", query_id, total_time * 1000, end_timestamp)
+
+        # Record total duration
+        request_duration_seconds.labels(
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower
+        ).observe(total_time)
+
+        # Increment success counter
+        requests_total.labels(
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower,
+            status="success"
+        ).inc()
+
+        logger.info("%s — TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
         logger.info("%s — Query left at: %s", query_id, end_timestamp)
 
         logger.info(
@@ -232,6 +396,23 @@ async def convert_query(
         return response
     except Exception as e:
         total_time = time.perf_counter() - start_time_total
+
+        # Determine error type
+        error_type = type(e).__name__
+
+        # Record error metrics
+        errors_total.labels(
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower,
+            error_type=error_type
+        ).inc()
+
+        requests_total.labels(
+            from_dialect=from_sql_upper,
+            to_dialect=to_sql_lower,
+            status="error"
+        ).inc()
+
         logger.error(
             "%s AT %s FROM %s — Error (after %.4f ms):\n%s",
             query_id,
@@ -243,6 +424,9 @@ async def convert_query(
         )
         raise HTTPException(status_code=500, detail=str(e))
     finally:
+        # Decrement active requests gauge
+        active_requests.labels(from_dialect=from_sql_upper, to_dialect=to_sql_lower).dec()
+
         # Always restore the original flag value
         E6.ENABLE_TABLE_ALIAS_QUALIFICATION = original_qualification_flag
 
@@ -251,6 +435,15 @@ async def convert_query(
 def health_check():
     return Response(status_code=200)
 
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus metrics endpoint for multiprocess mode"""
+    # Use multiprocess collector to aggregate metrics from all worker processes
+    from prometheus_client import generate_latest
+    registry_for_metrics = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry_for_metrics)
+    return Response(content=generate_latest(registry_for_metrics), media_type=CONTENT_TYPE_LATEST)
 
 @app.post("/guardrail")
 async def gaurd(
@@ -806,4 +999,4 @@ if __name__ == "__main__":
 
     logger.info(f"Detected {cpu_cores} CPU cores, using {workers} workers")
 
-    uvicorn.run("converter_api:app", host="0.0.0.0", port=8101, proxy_headers=True, workers=workers, loop="uvloop")
+    uvicorn.run("converter_api:app", host="0.0.0.0", port=8100, proxy_headers=True, workers=workers)
