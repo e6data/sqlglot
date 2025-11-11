@@ -394,6 +394,106 @@ def build_locate_strposition(args: t.List):
     )
 
 
+def qualify_columns_with_table_alias(expression: exp.Select) -> exp.Select:
+    """
+    Qualify all columns in SELECT and WHERE clauses with the table alias from FROM clause.
+
+    This adds table qualifiers (e.g., pv.column_name) to unqualified columns based on
+    the table alias in the FROM clause.
+
+    Only enabled when:
+    1. E6.ENABLE_TABLE_ALIAS_QUALIFICATION flag is True (default: False - opt-in)
+    2. There is a LEFT JOIN with USING clause present
+
+    To enable this feature:
+        E6.ENABLE_TABLE_ALIAS_QUALIFICATION = True
+
+    Args:
+        expression: The SELECT statement AST node
+
+    Returns:
+        Modified SELECT expression with qualified columns
+
+    Example:
+        Input:  SELECT start_tstamp_date FROM gold.spruce.table pv LEFT JOIN pw USING (id)
+        Output: SELECT pv.start_tstamp_date FROM gold.spruce.table pv LEFT JOIN pw USING (id)
+    """
+    # Check feature flag - must check at runtime
+    if not getattr(E6, "ENABLE_TABLE_ALIAS_QUALIFICATION", False):
+        return expression
+
+    # Step 1: Check if there's a LEFT JOIN with USING clause
+    joins = expression.args.get("joins", [])
+    has_left_join_with_using = False
+
+    for join in joins:
+        if isinstance(join, exp.Join):
+            side_value = join.args.get("side")
+            is_left_join = str(side_value).upper() == "LEFT" if side_value else False
+            has_using = join.args.get("using") is not None
+            if is_left_join and has_using:
+                has_left_join_with_using = True
+                break
+
+    # Only proceed if LEFT JOIN with USING is present
+    if not has_left_join_with_using:
+        return expression
+
+    # Step 2: Get table/subquery alias from FROM clause
+    from_clause = expression.args.get("from")
+    if not from_clause or not isinstance(from_clause, exp.From):
+        return expression
+
+    from_source = from_clause.this
+    # FROM can be a Table or a Subquery
+    if not isinstance(from_source, (exp.Table, exp.Subquery)):
+        return expression
+
+    # Extract the alias (works for both Table and Subquery)
+    table_alias = from_source.alias_or_name
+    if not table_alias:
+        return expression
+
+    # Step 3: Function to add table alias to columns
+    def add_table_qualifier(node):
+        if isinstance(node, exp.Column):
+            # Get column name for reference
+            # col_name = node.this.this if isinstance(node.this, exp.Identifier) else str(node.this)
+
+            # Add table alias if column doesn't have one
+            if not node.table:
+                node.set("table", exp.Identifier(this=table_alias, quoted=False))
+
+        return node
+
+    # Step 4: Apply qualification to SELECT expressions
+    if expression.expressions:
+        for i, select_expr in enumerate(expression.expressions):
+            expression.expressions[i] = select_expr.transform(add_table_qualifier)
+
+    # Step 5: Apply to WHERE clause
+    where_clause = expression.args.get("where")
+    if where_clause:
+        expression.set("where", where_clause.transform(add_table_qualifier))
+
+    # Step 6: Apply to GROUP BY clause
+    group_clause = expression.args.get("group")
+    if group_clause:
+        expression.set("group", group_clause.transform(add_table_qualifier))
+
+    # Step 7: Apply to HAVING clause
+    having_clause = expression.args.get("having")
+    if having_clause:
+        expression.set("having", having_clause.transform(add_table_qualifier))
+
+    # Step 8: Apply to ORDER BY clause
+    order_clause = expression.args.get("order")
+    if order_clause:
+        expression.set("order", order_clause.transform(add_table_qualifier))
+
+    return expression
+
+
 class E6(Dialect):
     """
     The E6 Dialect for SQLGlot, customized for specific SQL syntax and behavior.
@@ -407,6 +507,11 @@ class E6(Dialect):
 
     # Define the offset for array indexing, starting from 1 instead of the default 0.
     INDEX_OFFSET = 1
+
+    # Feature flag: Qualify columns with table alias for LEFT JOIN with USING clause
+    # Set to True to enable automatic table alias qualification (e.g., column -> pv.column)
+    # Default: False (opt-in behavior)
+    ENABLE_TABLE_ALIAS_QUALIFICATION = False
 
     # Mapping for time formatting tokens, converting dialect-specific formats to Python-compatible ones.
     TIME_MAPPING = {
@@ -1582,6 +1687,24 @@ class E6(Dialect):
             comment = comment + " " if comment[-1].strip() else comment
             return comment
 
+        def alias_sql(self, expression: exp.Alias) -> str:
+            """
+            Override to handle reserved keyword aliases specially.
+            If the alias is a reserved keyword, output it quoted without AS.
+            """
+            alias = expression.args.get("alias")
+
+            # Check if alias is a reserved keyword (case-insensitive)
+            if alias and isinstance(alias, exp.Identifier):
+                if alias.this.lower() in self.RESERVED_DATATYPE_KEYWORDS:
+                    # Mark as quoted and output without AS keyword
+                    alias.set("quoted", True)
+
+                    return f"{self.sql(expression, 'this')} {alias}"
+
+            # Otherwise, use default behavior (with AS)
+            return super().alias_sql(expression)
+
         def ordered_sql(self, expression: exp.Ordered) -> str:
             """
             Generate the SQL string for an ORDER BY clause in the E6 dialect.
@@ -2456,7 +2579,15 @@ class E6(Dialect):
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
             exp.RegexpSplit: split_sql,
-            # exp.Select: select_sql,
+            exp.Select: transforms.preprocess(
+                [
+                    lambda e: (
+                        qualify_columns_with_table_alias(e)  # type: ignore[arg-type]
+                        if getattr(E6, "ENABLE_TABLE_ALIAS_QUALIFICATION", False)
+                        else e
+                    )
+                ]
+            ),
             exp.Space: lambda self, e: self.func("REPEAT", exp.Literal.string(" "), e.this),
             exp.Split: split_sql,
             exp.SplitPart: rename_func("SPLIT_PART"),
@@ -2506,6 +2637,33 @@ class E6(Dialect):
             exp.VarMap: map_sql,
             exp.Upper: rename_func("UPPER"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
+        }
+
+        RESERVED_DATATYPE_KEYWORDS = {
+            "bigint",
+            "char",
+            "character",
+            "decimal",
+            "double",
+            "float",
+            "int",
+            "integer",
+            "smallint",
+            "string",
+            "varchar",
+            "variant",
+            "boolean",
+            "date",
+            "datetime",
+            "timestamp",
+            "time",
+            "binary",
+            "json",
+            "array",
+            "map",
+            "struct",
+            "text",
+            "tinyint",
         }
 
         RESERVED_KEYWORDS = {
