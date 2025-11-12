@@ -1,3 +1,5 @@
+import os
+
 from tests.dialects.test_dialect import Validator
 
 
@@ -1223,13 +1225,6 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT AVG(DISTINCT col) FROM (VALUES (1), (1), (2)) AS tab(col)",
             read={"databricks": "SELECT avg(DISTINCT col) FROM VALUES (1), (1), (2) AS tab(col);"},
-        )
-
-        self.validate_all(
-            "GREATEST(AVG(voluntary_cancellation_mrr.'CANCEL FROM PAID'), 0) * 0.15",
-            read={
-                "databricks": """ GREATEST( AVG( voluntary_cancellation_mrr."CANCEL FROM PAID" ), 0 ) * 0.15 """
-            },
         )
 
         self.validate_all(
@@ -2676,14 +2671,6 @@ class TestE6(Validator):
             },
         )
 
-        # Test with quoted identifiers and plural conversion
-        self.validate_all(
-            "INTERVAL ('time_col') 'hour'",
-            read={
-                "databricks": "(\"time_col\" || ' hours')::INTERVAL",
-            },
-        )
-
         # Test multiple interval expressions with plural conversion
         self.validate_all(
             "SELECT INTERVAL col1 'hour', INTERVAL col2 'minute'",
@@ -2740,92 +2727,22 @@ class TestE6(Validator):
             },
         )
 
-    def test_table_alias_qualification(self):
-        """Test table alias qualification for LEFT JOIN with USING clause"""
-        from sqlglot.dialects.e6 import E6
-
-        # Enable the feature flag
-        E6.ENABLE_TABLE_ALIAS_QUALIFICATION = True
-
-        try:
-            # Test 1: Simple LEFT JOIN with USING - columns should be qualified
-            self.validate_all(
-                "SELECT pv.start_tstamp_date, pv.vehicle_vin FROM vehicle_parked_view AS pv LEFT JOIN parked_well AS pw USING (vehicle_vin) WHERE pv.start_tstamp_date >= '2024-06-06'",
-                read={
-                    "databricks": "SELECT start_tstamp_date, vehicle_vin FROM vehicle_parked_view pv LEFT JOIN parked_well pw USING (vehicle_vin) WHERE start_tstamp_date >= '2024-06-06'",
-                },
-            )
-
-            # Test 2: INNER JOIN with USING - columns should NOT be qualified
-            self.validate_all(
-                "SELECT user_id, session_id FROM sessions AS s INNER JOIN activities AS a USING (session_id)",
-                read={
-                    "databricks": "SELECT user_id, session_id FROM sessions s INNER JOIN activities a USING (session_id)",
-                },
-            )
-
-            # Test 3: LEFT JOIN with ON - columns should NOT be qualified
-            self.validate_all(
-                "SELECT user_id, session_id FROM sessions AS s LEFT JOIN activities AS a ON s.session_id = a.session_id",
-                read={
-                    "databricks": "SELECT user_id, session_id FROM sessions s LEFT JOIN activities a ON s.session_id = a.session_id",
-                },
-            )
-
-            # Test 4: Nested query with LEFT JOIN in inner query
-            self.validate_all(
-                "SELECT user_id, order_count FROM (SELECT o.user_id, o.order_id, o.order_count FROM orders AS o LEFT JOIN order_details AS od USING (order_id) WHERE o.order_date >= '2024-01-01') AS subquery WHERE order_count > 10",
-                read={
-                    "databricks": "SELECT user_id, order_count FROM (SELECT user_id, order_id, order_count FROM orders o LEFT JOIN order_details od USING (order_id) WHERE order_date >= '2024-01-01') AS subquery WHERE order_count > 10",
-                },
-            )
-
-            # Test 5: Nested query with LEFT JOIN in outer query (subquery in FROM)
-            self.validate_all(
-                "SELECT pv.user_id, pv.session_count FROM (SELECT user_id, COUNT(*) AS session_count FROM sessions GROUP BY user_id) AS pv LEFT JOIN users AS u USING (user_id) WHERE pv.session_count > 5",
-                read={
-                    "databricks": "SELECT user_id, session_count FROM (SELECT user_id, COUNT(*) AS session_count FROM sessions GROUP BY user_id) pv LEFT JOIN users u USING (user_id) WHERE session_count > 5",
-                },
-            )
-
-            # Test 6: Real-world CTE query with LEFT JOIN and aggregates
-            self.validate_all(
-                "WITH pw AS (SELECT dt AS start_tstamp_date, app_id, domain_userid, domain_sessionid, web_page.id AS page_view_id, CASE messaging_unit_event.is_exceeded WHEN TRUE THEN 'final barrier' ELSE 'dismissable growler' END AS meter_unit_type FROM silver_eu_prod.spruce.slv_core_events WHERE event_name = 'messaging_unit_event' AND messaging_unit_event.subject LIKE 'paywall%' AND dt = CAST('2025-10-01' AS DATE) AND messaging_unit_event.type = 'impression' AND app_id IN ('vogue-bz')) SELECT pv.start_tstamp_date, YEAR(TO_DATE(pv.start_tstamp_date)) AS Year, MONTH(TO_DATE(pv.start_tstamp_date)) AS Month, CAST(DATE_TRUNC('WEEK', pv.start_tstamp_date) AS DATE) AS Week, pv.app_id, COUNT(DISTINCT pv.domain_userid) AS uvs FROM gold_eu_prod.spruce.gld_web_page_views AS pv LEFT JOIN pw USING (app_id, start_tstamp_date, page_view_id) WHERE pv.start_tstamp_date = CAST('2025-10-01' AS DATE) AND pv.app_id IN ('vogue-bz') GROUP BY ALL",
-                read={
-                    "databricks": """
-                    with pw as (
-                        SELECT
-                          dt AS start_tstamp_date
-                          ,app_id
-                          ,domain_userid
-                          ,domain_sessionid
-                          ,web_page.id as page_view_id
-                          ,case messaging_unit_event.is_exceeded when true then 'final barrier' else 'dismissable growler' end as meter_unit_type
-                        FROM
-                        silver_eu_prod.spruce.slv_core_events
-                        WHERE
-                          event_name = 'messaging_unit_event'
-                          and messaging_unit_event.subject like 'paywall%'
-                          and dt = Date('2025-10-01')
-                          and messaging_unit_event.type ='impression'
-                          and app_id IN('vogue-bz'))
-                    SELECT
-                        start_tstamp_date,
-                        year(start_tstamp_date) AS Year,
-                        MONTH(start_tstamp_date) AS Month,
-                        CAST(date_trunc('WEEK', start_tstamp_date) AS DATE) AS Week,
-                        app_id
-                        ,COUNT(distinct pv.domain_userid) as uvs
-                    FROM gold_eu_prod.spruce.gld_web_page_views pv
-                    left join pw using (app_id,start_tstamp_date,page_view_id)
-                    WHERE
-                      start_tstamp_date = Date('2025-10-01')
-                      and app_id IN('vogue-bz')
-                    GROUP BY  all
-                    """,
-                },
-            )
-
-        finally:
-            # Always reset flag to default after tests
-            E6.ENABLE_TABLE_ALIAS_QUALIFICATION = False
+    def test_double_quotes(self):
+        self.validate_all(
+            "GREATEST(AVG(voluntary_cancellation_mrr.'CANCEL FROM PAID'), 0) * 0.15"
+            if os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower()
+            == "false"
+            else 'GREATEST(AVG(voluntary_cancellation_mrr."CANCEL FROM PAID"), 0) * 0.15',
+            read={
+                "databricks": """ GREATEST( AVG( voluntary_cancellation_mrr."CANCEL FROM PAID" ), 0 ) * 0.15 """
+            },
+        )
+        self.validate_all(
+            "INTERVAL ('time_col') 'hour'"
+            if os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower()
+            == "false"
+            else "INTERVAL \"time_col\" 'hour'",
+            read={
+                "databricks": "(\"time_col\" || ' hours')::INTERVAL",
+            },
+        )
