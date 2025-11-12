@@ -2746,3 +2746,19 @@ class TestE6(Validator):
                 "databricks": "(\"time_col\" || ' hours')::INTERVAL",
             },
         )
+
+    def test_sum_all(self):
+        self.validate_all(
+            "SELECT SUM(ALL column_name) FROM column_name",
+            read={"databricks": "SELECT SUM(ALL column_name) FROM column_name"},
+        )
+        self.validate_all(
+            'SELECT SUM(ALL "amount") FROM transactions',
+            read={"databricks": "SELECT SUM(ALL `amount`) FROM transactions"},
+        )
+        self.validate_all(
+            "SELECT department, SUM(ALL salary) FROM employees GROUP BY department HAVING SUM(ALL salary) > 100000",
+            read={
+                "databricks": "SELECT department, SUM(ALL salary) FROM employees GROUP BY department HAVING SUM(ALL salary) > 100000"
+            },
+        )
