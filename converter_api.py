@@ -36,15 +36,14 @@ from apis.utils.helpers import (
     set_cte_names_case_sensitively,
 )
 
-# Prometheus imports
-from prometheus_client import (
-    Counter,
-    Histogram,
-    Gauge,
-    CONTENT_TYPE_LATEST,
-    CollectorRegistry,
-    multiprocess,
-    generate_latest as prom_generate_latest,
+# Prometheus metrics
+from apis.utils.metrics import (
+    record_query_size,
+    record_query_duration,
+    record_process_duration,
+    record_query_success,
+    record_query_error,
+    get_metrics_response,
 )
 
 if t.TYPE_CHECKING:
@@ -61,74 +60,6 @@ storage_service_client = None
 app = FastAPI()
 
 logger = logging.getLogger(__name__)
-
-# ==================== Prometheus Metrics Setup ====================
-PROMETHEUS_MULTIPROC_DIR = os.getenv("PROMETHEUS_MULTIPROC_DIR", "/tmp/prometheus_multiproc_dir")
-if not os.path.exists(PROMETHEUS_MULTIPROC_DIR):
-    os.makedirs(PROMETHEUS_MULTIPROC_DIR, exist_ok=True)
-os.environ["PROMETHEUS_MULTIPROC_DIR"] = PROMETHEUS_MULTIPROC_DIR
-
-# Create a custom registry for multiprocess mode
-registry = CollectorRegistry()
-
-# ==================== Prometheus Metrics ====================
-# Request counters
-total_queries = Counter(
-    "total_queries",
-    "Total number of requests",
-    ["from_dialect", "to_dialect", "status"],
-    registry=registry,
-)
-
-total_errors = Counter(
-    "total_errors",
-    "Total number of errors",
-    ["from_dialect", "to_dialect", "error_type"],
-    registry=registry,
-)
-
-# Duration histogram
-total_time_by_query = Histogram(
-    "total_time_by_query",
-    "Duration of requests in seconds",
-    ["from_dialect", "to_dialect"],
-    buckets=[
-        0.001,
-        0.005,
-        0.01,
-        0.025,
-        0.05,
-        0.075,
-        0.1,
-        0.25,
-        0.5,
-        0.75,
-        1.0,
-        2.5,
-        5.0,
-        7.5,
-        10.0,
-    ],
-    registry=registry,
-)
-
-# Process duration histograms
-total_time_by_process = Histogram(
-    "total_time_by_process",
-    "Duration of individual processing steps",
-    ["step_name", "from_dialect", "to_dialect"],
-    buckets=[0.0001, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
-    registry=registry,
-)
-
-# Query characteristics
-query_size_bytes = Histogram(
-    "query_size_bytes",
-    "Size of input queries in bytes",
-    ["from_dialect", "to_dialect"],
-    buckets=[100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000],
-    registry=registry,
-)
 
 
 if ENABLE_GUARDRAIL.lower() == "true":
@@ -166,9 +97,7 @@ async def convert_query(
 
     # Record query size
     query_size = len(query.encode("utf-8"))
-    query_size_bytes.labels(from_dialect=from_sql_upper, to_dialect=to_sql_lower).observe(
-        query_size
-    )
+    record_query_size(from_sql_upper, to_sql_lower, query_size)
 
     flags_dict = {}
     if feature_flags:
@@ -204,9 +133,7 @@ async def convert_query(
         logger.info("%s — Started: SQL parsing", query_id)
         step_start = time.perf_counter()
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-        total_time_by_process.labels(
-            step_name="parsing", from_dialect=from_sql_upper, to_dialect=to_sql_lower
-        ).observe(time.perf_counter() - step_start)
+        record_process_duration("parsing", from_sql_upper, to_sql_lower, time.perf_counter() - step_start)
         logger.info(
             "%s — Completed: SQL parsing in %.4f ms",
             query_id,
@@ -225,9 +152,7 @@ async def convert_query(
                     from_sql.upper(),
                     transformed_query,
                 )
-                total_queries.labels(
-                    from_dialect=from_sql_upper, to_dialect=to_sql_lower, status="success"
-                ).inc()
+                record_query_success(from_sql_upper, to_sql_lower)
                 return {"converted_query": transformed_query}
             tree = transform_table_part(tree)
 
@@ -243,9 +168,7 @@ async def convert_query(
         double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
             dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
         )
-        total_time_by_process.labels(
-            step_name="sql_generation", from_dialect=from_sql_upper, to_dialect=to_sql_lower
-        ).observe(time.perf_counter() - step_start)
+        record_process_duration("sql_generation", from_sql_upper, to_sql_lower, time.perf_counter() - step_start)
         logger.info(
             "%s — Completed: SQL generation in %.4f ms",
             query_id,
@@ -260,15 +183,9 @@ async def convert_query(
         total_time = time.perf_counter() - start_time_total
         end_timestamp = datetime.now().isoformat()
 
-        # Record total duration
-        total_time_by_query.labels(from_dialect=from_sql_upper, to_dialect=to_sql_lower).observe(
-            total_time
-        )
-
-        # Increment success counter
-        total_queries.labels(
-            from_dialect=from_sql_upper, to_dialect=to_sql_lower, status="success"
-        ).inc()
+        # Record total duration and success
+        record_query_duration(from_sql_upper, to_sql_lower, total_time)
+        record_query_success(from_sql_upper, to_sql_lower)
 
         logger.info("%s — TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
         logger.info("%s — Query left at: %s", query_id, end_timestamp)
@@ -281,13 +198,7 @@ async def convert_query(
             double_quotes_added_query,
         )
 
-        # Add processing time to response headers
-        from fastapi.responses import JSONResponse
-
-        response = JSONResponse(content={"converted_query": double_quotes_added_query})
-        response.headers["X-Processing-Time-Ms"] = f"{total_time * 1000:.4f}"
-        response.headers["X-Query-Id"] = query_id
-        return response
+        return {"converted_query": double_quotes_added_query}
     except Exception as e:
         total_time = time.perf_counter() - start_time_total
 
@@ -295,13 +206,7 @@ async def convert_query(
         error_type = type(e).__name__
 
         # Record error metrics
-        total_errors.labels(
-            from_dialect=from_sql_upper, to_dialect=to_sql_lower, error_type=error_type
-        ).inc()
-
-        total_queries.labels(
-            from_dialect=from_sql_upper, to_dialect=to_sql_lower, status="error"
-        ).inc()
+        record_query_error(from_sql_upper, to_sql_lower, error_type)
 
         logger.error(
             "%s AT %s FROM %s — Error (after %.4f ms):\n%s",
@@ -323,12 +228,8 @@ def health_check():
 @app.get("/metrics")
 def metrics():
     """Prometheus metrics endpoint for multiprocess mode"""
-    # Use multiprocess collector to aggregate metrics from all worker processes
-    from prometheus_client import generate_latest
-
-    registry_for_metrics = CollectorRegistry()
-    multiprocess.MultiProcessCollector(registry_for_metrics)
-    return Response(content=generate_latest(registry_for_metrics), media_type=CONTENT_TYPE_LATEST)
+    content, media_type = get_metrics_response()
+    return Response(content=content, media_type=media_type)
 
 
 @app.post("/guardrail")
