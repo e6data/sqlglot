@@ -53,3 +53,4 @@ s3fs==2023.12.0
 tqdm==4.66.1
 # uvicorn==0.24.0  # Already installed in Dockerfile
 python-multipart==0.0.20
+prometheus-client==0.21.0

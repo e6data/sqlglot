@@ -5,9 +5,6 @@ import uvicorn
 import re
 import os
 import json
-
-from uvicorn.loops import uvloop
-
 import sqlglot
 import logging
 import time
@@ -37,6 +34,16 @@ from apis.utils.helpers import (
     transform_table_part,
     transform_catalog_schema_only,
     set_cte_names_case_sensitively,
+)
+
+# Prometheus metrics
+from apis.utils.metrics import (
+    record_query_size,
+    record_query_duration,
+    record_process_duration,
+    record_query_success,
+    record_query_error,
+    get_metrics_response,
 )
 
 if t.TYPE_CHECKING:
@@ -85,17 +92,19 @@ async def convert_query(
     timestamp = datetime.now().isoformat()
     logger.info("%s — Query received at: %s", query_id, timestamp)
     to_sql = to_sql.lower()
+    from_sql_upper = from_sql.upper()
+    to_sql_lower = to_sql.lower()
 
-    # Timing: Feature flags parsing
-    t0 = time.perf_counter()
+    # Record query size
+    query_size = len(query.encode("utf-8"))
+    record_query_size(from_sql_upper, to_sql_lower, query_size)
+
     flags_dict = {}
     if feature_flags:
         try:
             flags_dict = json.loads(feature_flags)
         except json.JSONDecodeError as je:
             return HTTPException(status_code=500, detail=str(je))
-    t_flags = time.perf_counter() - t0
-    logger.info("%s — Timing: Feature flags parsing took %.4f ms at %s", query_id, t_flags * 1000, datetime.now().isoformat())
 
     if not query or not query.strip():
         logger.info(
@@ -115,43 +124,27 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        # Timing: Unicode normalization
-        t0 = time.perf_counter()
         query = normalize_unicode_spaces(query)
-        t_normalize = time.perf_counter() - t0
-        logger.info("%s — Timing: Unicode normalization took %.4f ms at %s", query_id, t_normalize * 1000, datetime.now().isoformat())
 
-        logger.info(
-            "%s AT %s FROM %s — Normalized (escaped):\n%s",
-            query_id,
-            timestamp,
-            from_sql.upper(),
-            escape_unicode(query),
-        )
-
-        # Timing: Comment stripping
-        t0 = time.perf_counter()
         item = "condenast"
         query, comment = strip_comment(query, item)
-        t_strip_comment = time.perf_counter() - t0
-        logger.info("%s — Timing: Comment stripping took %.4f ms at %s", query_id, t_strip_comment * 1000, datetime.now().isoformat())
 
-        # Timing: Initial parsing
-        t0 = time.perf_counter()
+        # Parsing
+        logger.info("%s — Started: SQL parsing", query_id)
+        step_start = time.perf_counter()
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-        t_parse = time.perf_counter() - t0
-        logger.info("%s — Timing: Initial SQL parsing took %.4f ms at %s", query_id, t_parse * 1000, datetime.now().isoformat())
+        record_process_duration("parsing", from_sql_upper, to_sql_lower, time.perf_counter() - step_start)
+        logger.info(
+            "%s — Completed: SQL parsing in %.4f ms",
+            query_id,
+            (time.perf_counter() - step_start) * 1000,
+        )
 
-        # Timing: Two-phase qualification (if enabled)
-        t_two_phase = 0.0
+        # Two-phase qualification (if enabled)
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
-            t0 = time.perf_counter()
-            # Check if we should only transform catalog.schema without full transpilation
             if flags_dict.get("SKIP_E6_TRANSPILATION", False):
                 transformed_query = transform_catalog_schema_only(query, from_sql)
                 transformed_query = add_comment_to_query(transformed_query, comment)
-                t_two_phase = time.perf_counter() - t0
-                logger.info("%s — Timing: Two-phase catalog.schema transform took %.4f ms", query_id, t_two_phase * 1000)
                 logger.info(
                     "%s AT %s FROM %s — Catalog.Schema Transformed Query:\n%s",
                     query_id,
@@ -159,55 +152,42 @@ async def convert_query(
                     from_sql.upper(),
                     transformed_query,
                 )
-                total_time = time.perf_counter() - start_time_total
-                logger.info("%s — Timing: TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
+                record_query_success(from_sql_upper, to_sql_lower)
                 return {"converted_query": transformed_query}
             tree = transform_table_part(tree)
-            t_two_phase = time.perf_counter() - t0
-            logger.info("%s — Timing: Two-phase table transform took %.4f ms", query_id, t_two_phase * 1000)
 
-        # Timing: Quote identifiers
-        t0 = time.perf_counter()
         tree2 = quote_identifiers(tree, dialect=to_sql)
-        t_quote = time.perf_counter() - t0
-        logger.info("%s — Timing: Quote identifiers took %.4f ms at %s", query_id, t_quote * 1000, datetime.now().isoformat())
 
-        # Timing: Ensure select from values
-        t0 = time.perf_counter()
         values_ensured_ast = ensure_select_from_values(tree2)
-        t_values = time.perf_counter() - t0
-        logger.info("%s — Timing: Ensure select from values took %.4f ms at %s", query_id, t_values * 1000, datetime.now().isoformat())
 
-        # Timing: CTE names case sensitivity
-        t0 = time.perf_counter()
         cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
-        t_cte = time.perf_counter() - t0
-        logger.info("%s — Timing: Set CTE names case sensitively took %.4f ms at %s", query_id, t_cte * 1000, datetime.now().isoformat())
 
-        # Timing: SQL generation
-        t0 = time.perf_counter()
+        # SQL generation
+        logger.info("%s — Started: SQL generation", query_id)
+        step_start = time.perf_counter()
         double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
             dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
         )
-        t_sql_gen = time.perf_counter() - t0
-        logger.info("%s — Timing: SQL generation took %.4f ms at %s", query_id, t_sql_gen * 1000, datetime.now().isoformat())
+        record_process_duration("sql_generation", from_sql_upper, to_sql_lower, time.perf_counter() - step_start)
+        logger.info(
+            "%s — Completed: SQL generation in %.4f ms",
+            query_id,
+            (time.perf_counter() - step_start) * 1000,
+        )
 
-        # Timing: Struct replacement
-        t0 = time.perf_counter()
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
-        t_struct = time.perf_counter() - t0
-        logger.info("%s — Timing: Struct replacement took %.4f ms at %s", query_id, t_struct * 1000, datetime.now().isoformat())
 
-        # Timing: Add comment
-        t0 = time.perf_counter()
         double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
-        t_add_comment = time.perf_counter() - t0
-        logger.info("%s — Timing: Add comment took %.4f ms at %s", query_id, t_add_comment * 1000, datetime.now().isoformat())
 
         # Total timing
         total_time = time.perf_counter() - start_time_total
         end_timestamp = datetime.now().isoformat()
-        logger.info("%s — Timing: TOTAL /convert-query execution took %.4f ms at %s", query_id, total_time * 1000, end_timestamp)
+
+        # Record total duration and success
+        record_query_duration(from_sql_upper, to_sql_lower, total_time)
+        record_query_success(from_sql_upper, to_sql_lower)
+
+        logger.info("%s — TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
         logger.info("%s — Query left at: %s", query_id, end_timestamp)
 
         logger.info(
@@ -218,14 +198,16 @@ async def convert_query(
             double_quotes_added_query,
         )
 
-        # Add processing time to response headers
-        from fastapi.responses import JSONResponse
-        response = JSONResponse(content={"converted_query": double_quotes_added_query})
-        response.headers["X-Processing-Time-Ms"] = f"{total_time * 1000:.4f}"
-        response.headers["X-Query-Id"] = query_id
-        return response
+        return {"converted_query": double_quotes_added_query}
     except Exception as e:
         total_time = time.perf_counter() - start_time_total
+
+        # Determine error type
+        error_type = type(e).__name__
+
+        # Record error metrics
+        record_query_error(from_sql_upper, to_sql_lower, error_type)
+
         logger.error(
             "%s AT %s FROM %s — Error (after %.4f ms):\n%s",
             query_id,
@@ -241,6 +223,13 @@ async def convert_query(
 @app.get("/health")
 def health_check():
     return Response(status_code=200)
+
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus metrics endpoint for multiprocess mode"""
+    content, media_type = get_metrics_response()
+    return Response(content=content, media_type=media_type)
 
 
 @app.post("/guardrail")
@@ -361,7 +350,9 @@ async def stats_api(
         t0 = time.perf_counter()
         supported_functions_in_e6 = load_supported_functions(to_sql)
         t_load = time.perf_counter() - t0
-        logger.info("%s — Timing: Load supported functions (e6) took %.4f ms", query_id, t_load * 1000)
+        logger.info(
+            "%s — Timing: Load supported functions (e6) took %.4f ms", query_id, t_load * 1000
+        )
 
         # Functions treated as keywords (no parentheses required)
         functions_as_keywords = [
@@ -406,7 +397,9 @@ async def stats_api(
 
         if not query.strip():
             total_time = time.perf_counter() - start_time_total
-            logger.info("Query is empty or only contains comments! (after %.4f ms)", total_time * 1000)
+            logger.info(
+                "Query is empty or only contains comments! (after %.4f ms)", total_time * 1000
+            )
             return {
                 "supported_functions": [],
                 "unsupported_functions": [],
@@ -434,14 +427,22 @@ async def stats_api(
             all_functions, supported_functions_in_e6, functions_as_keywords
         )
         t_extract_funcs = time.perf_counter() - t0
-        logger.info("%s — Timing: Extract/categorize functions (original) took %.4f ms", query_id, t_extract_funcs * 1000)
+        logger.info(
+            "%s — Timing: Extract/categorize functions (original) took %.4f ms",
+            query_id,
+            t_extract_funcs * 1000,
+        )
 
         # Timing: Load from-dialect functions and extract UDFs
         t0 = time.perf_counter()
         from_dialect_function_list = load_supported_functions(from_sql)
         udf_list, unsupported = extract_udfs(unsupported, from_dialect_function_list)
         t_udfs = time.perf_counter() - t0
-        logger.info("%s — Timing: Load from-dialect functions & extract UDFs took %.4f ms", query_id, t_udfs * 1000)
+        logger.info(
+            "%s — Timing: Load from-dialect functions & extract UDFs took %.4f ms",
+            query_id,
+            t_udfs * 1000,
+        )
 
         # --------------------------
         # HANDLING PARSING ERRORS
@@ -456,13 +457,17 @@ async def stats_api(
             t0 = time.perf_counter()
             original_ast = parse_one(query, read=from_sql)
             t_parse_orig = time.perf_counter() - t0
-            logger.info("%s — Timing: Parse original query took %.4f ms", query_id, t_parse_orig * 1000)
+            logger.info(
+                "%s — Timing: Parse original query took %.4f ms", query_id, t_parse_orig * 1000
+            )
 
             # Timing: Extract tables/databases
             t0 = time.perf_counter()
             tables_list = extract_db_and_Table_names(original_ast)
             t_tables = time.perf_counter() - t0
-            logger.info("%s — Timing: Extract tables/databases took %.4f ms", query_id, t_tables * 1000)
+            logger.info(
+                "%s — Timing: Extract tables/databases took %.4f ms", query_id, t_tables * 1000
+            )
 
             # Timing: Identify unsupported functionality
             t0 = time.perf_counter()
@@ -470,7 +475,11 @@ async def stats_api(
                 original_ast, unsupported, supported
             )
             t_unsup_ident = time.perf_counter() - t0
-            logger.info("%s — Timing: Identify unsupported functionality took %.4f ms", query_id, t_unsup_ident * 1000)
+            logger.info(
+                "%s — Timing: Identify unsupported functionality took %.4f ms",
+                query_id,
+                t_unsup_ident * 1000,
+            )
 
             # Timing: Ensure values and CTE names
             t0 = time.perf_counter()
@@ -478,7 +487,9 @@ async def stats_api(
             cte_names_equivalence_ast = set_cte_names_case_sensitively(values_ensured_ast)
             query = cte_names_equivalence_ast.sql(from_sql)
             t_ensure = time.perf_counter() - t0
-            logger.info("%s — Timing: Ensure values & CTE names took %.4f ms", query_id, t_ensure * 1000)
+            logger.info(
+                "%s — Timing: Ensure values & CTE names took %.4f ms", query_id, t_ensure * 1000
+            )
 
             # ------------------------------
             # Step 2: Transpile the Query
@@ -492,14 +503,20 @@ async def stats_api(
                 dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
             )
             t_transpile = time.perf_counter() - t0
-            logger.info("%s — Timing: Parse & transpile query took %.4f ms", query_id, t_transpile * 1000)
+            logger.info(
+                "%s — Timing: Parse & transpile query took %.4f ms", query_id, t_transpile * 1000
+            )
 
             # Timing: Post-processing (struct replacement & comment)
             t0 = time.perf_counter()
             double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
             double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
             t_postproc = time.perf_counter() - t0
-            logger.info("%s — Timing: Post-processing (struct/comment) took %.4f ms", query_id, t_postproc * 1000)
+            logger.info(
+                "%s — Timing: Post-processing (struct/comment) took %.4f ms",
+                query_id,
+                t_postproc * 1000,
+            )
 
             logger.info("Got the converted query!!!!")
 
@@ -514,7 +531,11 @@ async def stats_api(
                 )
             )
             t_extract_conv = time.perf_counter() - t0
-            logger.info("%s — Timing: Extract/categorize functions (converted) took %.4f ms", query_id, t_extract_conv * 1000)
+            logger.info(
+                "%s — Timing: Extract/categorize functions (converted) took %.4f ms",
+                query_id,
+                t_extract_conv * 1000,
+            )
 
             # Timing: Identify unsupported in converted query
             t0 = time.perf_counter()
@@ -527,21 +548,29 @@ async def stats_api(
                 )
             )
             t_unsup_conv = time.perf_counter() - t0
-            logger.info("%s — Timing: Identify unsupported (converted) took %.4f ms", query_id, t_unsup_conv * 1000)
+            logger.info(
+                "%s — Timing: Identify unsupported (converted) took %.4f ms",
+                query_id,
+                t_unsup_conv * 1000,
+            )
 
             # Timing: Extract joins and CTEs
             t0 = time.perf_counter()
             joins_list = extract_joins_from_query(original_ast)
             cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
             t_joins_ctes = time.perf_counter() - t0
-            logger.info("%s — Timing: Extract joins & CTEs took %.4f ms", query_id, t_joins_ctes * 1000)
+            logger.info(
+                "%s — Timing: Extract joins & CTEs took %.4f ms", query_id, t_joins_ctes * 1000
+            )
 
             if unsupported_in_converted:
                 executable = "NO"
 
             # Total timing for successful execution
             total_time = time.perf_counter() - start_time_total
-            logger.info("%s — Timing: TOTAL /statistics execution took %.4f ms", query_id, total_time * 1000)
+            logger.info(
+                "%s — Timing: TOTAL /statistics execution took %.4f ms", query_id, total_time * 1000
+            )
 
             logger.info(
                 f"{query_id} executed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} seconds FROM {from_sql.upper()}\n"
@@ -580,7 +609,9 @@ async def stats_api(
 
         # Final return - add total timing
         total_time_final = time.perf_counter() - start_time_total
-        logger.info("%s — Timing: FINAL /statistics return after %.4f ms", query_id, total_time_final * 1000)
+        logger.info(
+            "%s — Timing: FINAL /statistics return after %.4f ms", query_id, total_time_final * 1000
+        )
 
         return {
             "supported_functions": supported,
@@ -797,4 +828,4 @@ if __name__ == "__main__":
 
     logger.info(f"Detected {cpu_cores} CPU cores, using {workers} workers")
 
-    uvicorn.run("converter_api:app", host="0.0.0.0", port=8100, proxy_headers=True, workers=workers, loop="uvloop")
+    uvicorn.run("converter_api:app", host="0.0.0.0", port=8100, proxy_headers=True, workers=workers)
