@@ -1582,6 +1582,24 @@ class E6(Dialect):
             comment = comment + " " if comment[-1].strip() else comment
             return comment
 
+        def alias_sql(self, expression: exp.Alias) -> str:
+            """
+            Override to handle reserved keyword aliases specially.
+            If the alias is a reserved keyword, output it quoted without AS.
+            """
+            alias = expression.args.get("alias")
+
+            # Check if alias is a reserved keyword (case-insensitive)
+            if alias and isinstance(alias, exp.Identifier):
+                if alias.this.lower() in self.RESERVED_DATATYPE_KEYWORDS:
+                    # Mark as quoted and output without AS keyword
+                    alias.set("quoted", True)
+
+                    return f"{self.sql(expression, 'this')} {alias}"
+
+            # Otherwise, use default behavior (with AS)
+            return super().alias_sql(expression)
+
         def ordered_sql(self, expression: exp.Ordered) -> str:
             """
             Generate the SQL string for an ORDER BY clause in the E6 dialect.
@@ -2506,6 +2524,33 @@ class E6(Dialect):
             exp.VarMap: map_sql,
             exp.Upper: rename_func("UPPER"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
+        }
+
+        RESERVED_DATATYPE_KEYWORDS = {
+            "bigint",
+            "char",
+            "character",
+            "decimal",
+            "double",
+            "float",
+            "int",
+            "integer",
+            "smallint",
+            "string",
+            "varchar",
+            "variant",
+            "boolean",
+            "date",
+            "datetime",
+            "timestamp",
+            "time",
+            "binary",
+            "json",
+            "array",
+            "map",
+            "struct",
+            "text",
+            "tinyint",
         }
 
         RESERVED_KEYWORDS = {
