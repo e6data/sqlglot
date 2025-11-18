@@ -1042,22 +1042,6 @@ class BigQuery(Dialect):
         EXCEPT_INTERSECT_SUPPORT_ALL_CLAUSE = False
         SUPPORTS_UNIX_SECONDS = True
 
-        def json_extract_sql(self, e: exp.JSONExtract) -> str:
-            if self.from_dialect == "bigquery":
-                dquote_escaping = "JSON_QUERY" in DQUOTES_ESCAPING_JSON_FUNCTIONS
-                if dquote_escaping:
-                    self._quote_json_path_key_using_brackets = False
-
-                sql = self.func("JSON_QUERY", e.this, e.expression)
-
-                if dquote_escaping:
-                    self._quote_json_path_key_using_brackets = True
-
-                return sql
-            else:
-                # For other dialects, use the default JSON_EXTRACT
-                return _json_extract_sql(self, e)
-
         SAFE_JSON_PATH_KEY_RE = re.compile(r"^[_\-a-zA-Z][\-\w]*$")
 
         TS_OR_DS_TYPES = (
@@ -1117,7 +1101,7 @@ class BigQuery(Dialect):
             exp.IntDiv: rename_func("DIV"),
             exp.Int64: rename_func("INT64"),
             exp.JSONBool: rename_func("BOOL"),
-            exp.JSONExtract: json_extract_sql,
+            exp.JSONExtract: _json_extract_sql,
             exp.JSONExtractArray: _json_extract_sql,
             exp.JSONExtractScalar: _json_extract_sql,
             exp.JSONFormat: lambda self, e: self.func(
