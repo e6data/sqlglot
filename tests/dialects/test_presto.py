@@ -798,7 +798,6 @@ class TestPresto(Validator):
                 "databricks": "ANY_VALUE(x)",
                 "doris": "ANY_VALUE(x)",
                 "drill": "ANY_VALUE(x)",
-                "duckdb": "ANY_VALUE(x)",
                 "hive": "FIRST(x)",
                 "mysql": "ANY_VALUE(x)",
                 "oracle": "ANY_VALUE(x)",
@@ -1122,6 +1121,13 @@ class TestPresto(Validator):
         self.validate_identity(
             "SELECT id, FIRST_VALUE(is_deleted) OVER (PARTITION BY id) AS first_is_deleted, NTH_VALUE(is_deleted, 2) OVER (PARTITION BY id) AS nth_is_deleted, LAST_VALUE(is_deleted) OVER (PARTITION BY id) AS last_is_deleted FROM my_table"
         )
+        self.validate_all(
+            "SELECT NULLABLE FROM system.jdbc.types",
+            read={
+                "presto": "SELECT NULLABLE FROM system.jdbc.types",
+                "trino": "SELECT NULLABLE FROM system.jdbc.types",
+            },
+        )
 
     def test_format_functions(self):
         # Test FORMAT function
@@ -1370,3 +1376,37 @@ MATCH_RECOGNIZE (
     def test_analyze(self):
         self.validate_identity("ANALYZE tbl")
         self.validate_identity("ANALYZE tbl WITH (prop1=val1, prop2=val2)")
+
+    def test_bit_aggs(self):
+        self.validate_all(
+            "BITWISE_AND_AGG(x)",
+            read={
+                "presto": "BITWISE_AND_AGG(x)",
+                "trino": "BITWISE_AND_AGG(x)",
+                "oracle": "BITWISE_AND_AGG(x)",
+            },
+        )
+        self.validate_all(
+            "BITWISE_OR_AGG(x)",
+            read={
+                "presto": "BITWISE_OR_AGG(x)",
+                "trino": "BITWISE_OR_AGG(x)",
+                "oracle": "BITWISE_OR_AGG(x)",
+            },
+        )
+        self.validate_all(
+            "BITWISE_XOR_AGG(x)",
+            read={
+                "presto": "BITWISE_XOR_AGG(x)",
+                "trino": "BITWISE_XOR_AGG(x)",
+                "oracle": "BITWISE_XOR_AGG(x)",
+            },
+        )
+
+    def test_initcap(self):
+        self.validate_all(
+            "INITCAP(col)",
+            write={
+                "presto": "REGEXP_REPLACE(col, '(\w)(\w*)', x -> UPPER(x[1]) || LOWER(x[2]))",
+            },
+        )

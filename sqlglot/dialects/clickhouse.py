@@ -2,12 +2,14 @@ from __future__ import annotations
 import typing as t
 import datetime
 from sqlglot import exp, generator, parser, tokens
+from sqlglot._typing import E
 from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
     arg_max_or_min_no_count,
     build_date_delta,
     build_formatted_time,
+    build_like,
     inline_array_sql,
     json_extract_segments,
     json_path_key_only_name,
@@ -31,14 +33,19 @@ from sqlglot.generator import unsupported_args
 DATEΤΙΜΕ_DELTA = t.Union[exp.DateAdd, exp.DateDiff, exp.DateSub, exp.TimestampSub, exp.TimestampAdd]
 
 
-def _build_date_format(args: t.List) -> exp.TimeToStr:
-    expr = build_formatted_time(exp.TimeToStr, "clickhouse")(args)
+def _build_datetime_format(
+    expr_type: t.Type[E],
+) -> t.Callable[[t.List], E]:
+    def _builder(args: t.List) -> E:
+        expr = build_formatted_time(expr_type, "clickhouse")(args)
 
-    timezone = seq_get(args, 2)
-    if timezone:
-        expr.set("zone", timezone)
+        timezone = seq_get(args, 2)
+        if timezone:
+            expr.set("zone", timezone)
 
-    return expr
+        return expr
+
+    return _builder
 
 
 def _unix_to_time_sql(self: ClickHouse.Generator, expression: exp.UnixToTime) -> str:
@@ -57,8 +64,7 @@ def _unix_to_time_sql(self: ClickHouse.Generator, expression: exp.UnixToTime) ->
     return self.func(
         "fromUnixTimestamp",
         exp.cast(
-            exp.Div(this=timestamp, expression=exp.func("POW", 10, scale)),
-            exp.DataType.Type.BIGINT,
+            exp.Div(this=timestamp, expression=exp.func("POW", 10, scale)), exp.DataType.Type.BIGINT
         ),
     )
 
@@ -183,7 +189,45 @@ def _map_sql(self: ClickHouse.Generator, expression: exp.Map | exp.VarMap) -> st
     return f"{{{csv_args}}}"
 
 
+def _build_timestamp_trunc(unit: str) -> t.Callable[[t.List], exp.TimestampTrunc]:
+    return lambda args: exp.TimestampTrunc(
+        this=seq_get(args, 0), unit=exp.var(unit), zone=seq_get(args, 1)
+    )
+
+
+def _build_split_by_char(args: t.List) -> exp.Split | exp.Anonymous:
+    sep = seq_get(args, 0)
+    if isinstance(sep, exp.Literal):
+        sep_value = sep.to_py()
+        if isinstance(sep_value, str) and len(sep_value.encode("utf-8")) == 1:
+            return _build_split(exp.Split)(args)
+
+    return exp.Anonymous(this="splitByChar", expressions=args)
+
+
+def _build_split(exp_class: t.Type[E]) -> t.Callable[[t.List], E]:
+    return lambda args: exp_class(
+        this=seq_get(args, 1), expression=seq_get(args, 0), limit=seq_get(args, 2)
+    )
+
+
+# Skip the 'week' unit since ClickHouse's toStartOfWeek
+# uses an extra mode argument to specify the first day of the week
+TIMESTAMP_TRUNC_UNITS = {
+    "MICROSECOND",
+    "MILLISECOND",
+    "SECOND",
+    "MINUTE",
+    "HOUR",
+    "DAY",
+    "MONTH",
+    "QUARTER",
+    "YEAR",
+}
+
+
 class ClickHouse(Dialect):
+    INDEX_OFFSET = 1
     NORMALIZE_FUNCTIONS: bool | str = False
     NULL_ORDERING = "nulls_are_last"
     SUPPORTS_USER_DEFINED_TYPES = False
@@ -302,43 +346,58 @@ class ClickHouse(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            **{
+                f"TOSTARTOF{unit}": _build_timestamp_trunc(unit=unit)
+                for unit in TIMESTAMP_TRUNC_UNITS
+            },
             "ANY": exp.AnyValue.from_arg_list,
             "ARRAYSUM": exp.ArraySum.from_arg_list,
             "ARRAYREVERSE": exp.ArrayReverse.from_arg_list,
             "ARRAYSLICE": exp.ArraySlice.from_arg_list,
             "COUNTIF": _build_count_if,
+            "COSINEDISTANCE": exp.CosineDistance.from_arg_list,
             "DATE_ADD": build_date_delta(exp.DateAdd, default_unit=None),
             "DATEADD": build_date_delta(exp.DateAdd, default_unit=None),
             "DATE_DIFF": build_date_delta(exp.DateDiff, default_unit=None, supports_timezone=True),
             "DATEDIFF": build_date_delta(exp.DateDiff, default_unit=None, supports_timezone=True),
-            "DATE_FORMAT": _build_date_format,
+            "DATE_FORMAT": _build_datetime_format(exp.TimeToStr),
             "DATE_SUB": build_date_delta(exp.DateSub, default_unit=None),
             "DATESUB": build_date_delta(exp.DateSub, default_unit=None),
-            "FORMATDATETIME": _build_date_format,
+            "FORMATDATETIME": _build_datetime_format(exp.TimeToStr),
+            "HAS": exp.ArrayContains.from_arg_list,
+            "ILIKE": build_like(exp.ILike),
             "JSONEXTRACTSTRING": build_json_extract_path(
                 exp.JSONExtractScalar, zero_based_indexing=False
             ),
             "LENGTH": lambda args: exp.Length(this=seq_get(args, 0), binary=True),
+            "LIKE": build_like(exp.Like),
+            "L2Distance": exp.EuclideanDistance.from_arg_list,
             "MAP": parser.build_var_map,
             "MATCH": exp.RegexpLike.from_arg_list,
+            "NOTLIKE": build_like(exp.Like, not_like=True),
+            "PARSEDATETIME": _build_datetime_format(exp.ParseDatetime),
             "RANDCANONICAL": exp.Rand.from_arg_list,
             "STR_TO_DATE": _build_str_to_date,
-            "TUPLE": exp.Struct.from_arg_list,
             "TIMESTAMP_SUB": build_date_delta(exp.TimestampSub, default_unit=None),
             "TIMESTAMPSUB": build_date_delta(exp.TimestampSub, default_unit=None),
             "TIMESTAMP_ADD": build_date_delta(exp.TimestampAdd, default_unit=None),
             "TIMESTAMPADD": build_date_delta(exp.TimestampAdd, default_unit=None),
+            "TOMONDAY": _build_timestamp_trunc("WEEK"),
             "UNIQ": exp.ApproxDistinct.from_arg_list,
             "XOR": lambda args: exp.Xor(expressions=args),
             "MD5": exp.MD5Digest.from_arg_list,
             "SHA256": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(256)),
             "SHA512": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(512)),
+            "SPLITBYCHAR": _build_split_by_char,
+            "SPLITBYREGEXP": _build_split(exp.RegexpSplit),
+            "SPLITBYSTRING": _build_split(exp.Split),
             "SUBSTRINGINDEX": exp.SubstringIndex.from_arg_list,
             "TOTYPENAME": exp.Typeof.from_arg_list,
             "EDITDISTANCE": exp.Levenshtein.from_arg_list,
             "LEVENSHTEINDISTANCE": exp.Levenshtein.from_arg_list,
         }
         FUNCTIONS.pop("TRANSFORM")
+        FUNCTIONS.pop("APPROX_TOP_SUM")
 
         AGG_FUNCTIONS = {
             "count",
@@ -373,6 +432,7 @@ class ClickHouse(Dialect):
             "argMax",
             "avgWeighted",
             "topK",
+            "approx_top_sum",
             "topKWeighted",
             "deltaSum",
             "deltaSumTimestamp",
@@ -494,17 +554,13 @@ class ClickHouse(Dialect):
             }
         )(AGG_FUNCTIONS, AGG_FUNCTIONS_SUFFIXES)
 
-        FUNCTIONS_WITH_ALIASED_ARGS = {
-            *parser.Parser.FUNCTIONS_WITH_ALIASED_ARGS,
-            "TUPLE",
-        }
-
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
             "ARRAYJOIN": lambda self: self.expression(exp.Explode, this=self._parse_expression()),
             "QUANTILE": lambda self: self._parse_quantile(),
             "MEDIAN": lambda self: self._parse_quantile(),
             "COLUMNS": lambda self: self._parse_columns(),
+            "TUPLE": lambda self: exp.Struct.from_arg_list(self._parse_function_args(alias=True)),
         }
 
         FUNCTION_PARSERS.pop("MATCH")
@@ -558,10 +614,7 @@ class ClickHouse(Dialect):
                 "settings",
                 self._advance() or self._parse_csv(self._parse_assignment),
             ),
-            TokenType.FORMAT: lambda self: (
-                "format",
-                self._advance() or self._parse_id_var(),
-            ),
+            TokenType.FORMAT: lambda self: ("format", self._advance() or self._parse_id_var()),
         }
 
         CONSTRAINT_PARSERS = {
@@ -597,15 +650,10 @@ class ClickHouse(Dialect):
             return self._parse_lambda()
 
         def _parse_types(
-            self,
-            check_func: bool = False,
-            schema: bool = False,
-            allow_identifiers: bool = True,
+            self, check_func: bool = False, schema: bool = False, allow_identifiers: bool = True
         ) -> t.Optional[exp.Expression]:
             dtype = super()._parse_types(
-                check_func=check_func,
-                schema=schema,
-                allow_identifiers=allow_identifiers,
+                check_func=check_func, schema=schema, allow_identifiers=allow_identifiers
             )
             if isinstance(dtype, exp.DataType) and dtype.args.get("nullable") is not True:
                 # Mark every type as non-nullable which is ClickHouse's default, unless it's
@@ -771,7 +819,9 @@ class ClickHouse(Dialect):
         ) -> t.Optional[exp.Join]:
             join = super()._parse_join(skip_join_token=skip_join_token, parse_bracket=True)
             if join:
-                join.set("global", join.args.pop("method", None))
+                method = join.args.get("method")
+                join.set("method", None)
+                join.set("global_", method)
 
                 # tbl ARRAY JOIN arr <-- this should be a `Column` reference, not a `Table`
                 # https://clickhouse.com/docs/en/sql-reference/statements/select/array-join
@@ -919,9 +969,7 @@ class ClickHouse(Dialect):
                 return None
 
             return self.expression(
-                exp.ReplacePartition,
-                expression=partition,
-                source=self._parse_table_parts(),
+                exp.ReplacePartition, expression=partition, source=self._parse_table_parts()
             )
 
         def _parse_projection_def(self) -> t.Optional[exp.ProjectionDef]:
@@ -983,6 +1031,14 @@ class ClickHouse(Dialect):
                 )
 
             return value
+
+        def _parse_partitioned_by(self) -> exp.PartitionedByProperty:
+            # ClickHouse allows custom expressions as partition key
+            # https://clickhouse.com/docs/engines/table-engines/mergetree-family/custom-partitioning-key
+            return self.expression(
+                exp.PartitionedByProperty,
+                this=self._parse_assignment(),
+            )
 
     class Generator(generator.Generator):
         QUERY_HINTS = False
@@ -1081,6 +1137,7 @@ class ClickHouse(Dialect):
             exp.AnyValue: rename_func("any"),
             exp.ApproxDistinct: rename_func("uniq"),
             exp.ArrayConcat: rename_func("arrayConcat"),
+            exp.ArrayContains: rename_func("has"),
             exp.ArrayFilter: lambda self, e: self.func("arrayFilter", e.expression, e.this),
             exp.ArrayRemove: remove_from_array_using_filter,
             exp.ArrayReverse: rename_func("arrayReverse"),
@@ -1091,6 +1148,7 @@ class ClickHouse(Dialect):
             exp.Array: inline_array_sql,
             exp.CastToStrType: rename_func("CAST"),
             exp.CountIf: rename_func("countIf"),
+            exp.CosineDistance: rename_func("cosineDistance"),
             exp.CompressColumnConstraint: lambda self,
             e: f"CODEC({self.expressions(e, key='this', flat=True)})",
             exp.ComputedColumnConstraint: lambda self,
@@ -1101,6 +1159,7 @@ class ClickHouse(Dialect):
             exp.DateStrToDate: rename_func("toDate"),
             exp.DateSub: _datetime_delta_sql("DATE_SUB"),
             exp.Explode: rename_func("arrayJoin"),
+            exp.FarmFingerprint: rename_func("farmFingerprint64"),
             exp.Final: lambda self, e: f"{self.sql(e, 'this')} FINAL",
             exp.IsNan: rename_func("isNaN"),
             exp.JSONCast: lambda self, e: f"{self.sql(e, 'this')}.:{self.sql(e, 'to')}",
@@ -1114,12 +1173,13 @@ class ClickHouse(Dialect):
             exp.Nullif: rename_func("nullIf"),
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
             exp.Pivot: no_pivot_sql,
-            exp.Pow: rename_func("POWER"),
             exp.Quantile: _quantile_sql,
             exp.RegexpLike: lambda self, e: self.func("match", e.this, e.expression),
             exp.Rand: rename_func("randCanonical"),
             exp.StartsWith: rename_func("startsWith"),
+            exp.Struct: rename_func("tuple"),
             exp.EndsWith: rename_func("endsWith"),
+            exp.EuclideanDistance: rename_func("L2Distance"),
             exp.StrPosition: lambda self, e: strposition_sql(
                 self,
                 e,
@@ -1140,8 +1200,14 @@ class ClickHouse(Dialect):
             exp.MD5: lambda self, e: self.func("LOWER", self.func("HEX", self.func("MD5", e.this))),
             exp.SHA: rename_func("SHA1"),
             exp.SHA2: sha256_sql,
+            exp.Split: lambda self, e: self.func(
+                "splitByString", e.args.get("expression"), e.this, e.args.get("limit")
+            ),
+            exp.RegexpSplit: lambda self, e: self.func(
+                "splitByRegexp", e.args.get("expression"), e.this, e.args.get("limit")
+            ),
             exp.UnixToTime: _unix_to_time_sql,
-            exp.TimestampTrunc: timestamptrunc_sql(zone=True),
+            exp.TimestampTrunc: timestamptrunc_sql(func="dateTrunc", zone=True),
             exp.Trim: lambda self, e: trim_sql(self, e, default_trim_type="BOTH"),
             exp.Variance: rename_func("varSamp"),
             exp.SchemaCommentProperty: lambda self, e: self.naked_property(e),
@@ -1156,6 +1222,7 @@ class ClickHouse(Dialect):
             exp.Levenshtein: unsupported_args("ins_cost", "del_cost", "sub_cost", "max_dist")(
                 rename_func("editDistance")
             ),
+            exp.ParseDatetime: rename_func("parseDateTime"),
         }
 
         PROPERTIES_LOCATION = {
@@ -1191,6 +1258,17 @@ class ClickHouse(Dialect):
             exp.DataType.Type.POLYGON,
             exp.DataType.Type.MULTIPOLYGON,
         }
+
+        def offset_sql(self, expression: exp.Offset) -> str:
+            offset = super().offset_sql(expression)
+
+            # OFFSET ... FETCH syntax requires a "ROW" or "ROWS" keyword
+            # https://clickhouse.com/docs/sql-reference/statements/select/offset
+            parent = expression.parent
+            if isinstance(parent, exp.Select) and isinstance(parent.args.get("limit"), exp.Fetch):
+                offset = f"{offset} ROWS"
+
+            return offset
 
         def strtodate_sql(self, expression: exp.StrToDate) -> str:
             strtodate_sql = self.function_fallback_sql(expression)
@@ -1397,9 +1475,12 @@ class ClickHouse(Dialect):
             return in_sql
 
         def not_sql(self, expression: exp.Not) -> str:
-            if isinstance(expression.this, exp.In) and expression.this.args.get("is_global"):
-                # let `GLOBAL IN` child interpose `NOT`
-                return self.sql(expression, "this")
+            if isinstance(expression.this, exp.In):
+                if expression.this.args.get("is_global"):
+                    # let `GLOBAL IN` child interpose `NOT`
+                    return self.sql(expression, "this")
+
+                expression.set("this", exp.paren(expression.this, copy=False))
 
             return super().not_sql(expression)
 

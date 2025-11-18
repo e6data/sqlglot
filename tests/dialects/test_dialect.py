@@ -1,3 +1,4 @@
+import typing as t
 import unittest
 
 from typing import Optional
@@ -12,8 +13,10 @@ from sqlglot import (
     exp,
     parse_one,
 )
-from sqlglot.dialects import BigQuery, Hive, Snowflake
+from sqlglot.dialects import BigQuery, Hive, Snowflake, Spark2
 from sqlglot.dialects.dialect import Version
+from sqlglot.dialects.duckdb import WS_CONTROL_CHARS_TO_DUCK
+from sqlglot.generator import logger as generator_logger
 from sqlglot.parser import logger as parser_logger
 
 
@@ -22,6 +25,27 @@ class Validator(unittest.TestCase):
 
     def parse_one(self, sql, **kwargs):
         return parse_one(sql, read=self.dialect, **kwargs)
+
+    def assert_duckdb_sql(
+        self,
+        expression: exp.Expression,
+        *,
+        includes: t.Optional[t.Iterable[str]] = None,
+        excludes: t.Optional[t.Iterable[str]] = None,
+        chr_chars: t.Optional[t.Iterable[str]] = None,
+    ) -> str:
+        duckdb_sql = expression.sql("duckdb")
+
+        for fragment in includes or ():
+            self.assertIn(fragment, duckdb_sql)
+        for fragment in excludes or ():
+            self.assertNotIn(fragment, duckdb_sql)
+        for char in chr_chars or ():
+            code = WS_CONTROL_CHARS_TO_DUCK.get(char)
+            self.assertIsNotNone(code, f"missing DuckDB code for {repr(char)}")
+            self.assertIn(f"CHR({code})", duckdb_sql)
+
+        return duckdb_sql
 
     def validate_identity(
         self,
@@ -219,7 +243,7 @@ class TestDialect(Validator):
                 "postgres": "CAST(a AS TEXT)",
                 "presto": "CAST(a AS VARCHAR)",
                 "redshift": "CAST(a AS VARCHAR(MAX))",
-                "snowflake": "CAST(a AS TEXT)",
+                "snowflake": "CAST(a AS VARCHAR)",
                 "spark": "CAST(a AS STRING)",
                 "starrocks": "CAST(a AS STRING)",
                 "tsql": "CAST(a AS VARCHAR(MAX))",
@@ -303,7 +327,7 @@ class TestDialect(Validator):
                 "postgres": "CAST(a AS TEXT)",
                 "presto": "CAST(a AS VARCHAR)",
                 "redshift": "CAST(a AS VARCHAR(MAX))",
-                "snowflake": "CAST(a AS TEXT)",
+                "snowflake": "CAST(a AS VARCHAR)",
                 "spark": "CAST(a AS STRING)",
                 "starrocks": "CAST(a AS STRING)",
                 "tsql": "CAST(a AS VARCHAR(MAX))",
@@ -1096,7 +1120,7 @@ class TestDialect(Validator):
             },
         )
         self.validate_all(
-            "DATE_TRUNC('millenium', x)",
+            "DATE_TRUNC('millennium', x)",
             write={
                 "mysql": UnsupportedError,
             },
@@ -1135,9 +1159,18 @@ class TestDialect(Validator):
             },
         )
         self.validate_all(
-            "DATE_TRUNC('millenium', x)",
+            "DATE_TRUNC('millennium', x)",
             write={
                 "mysql": UnsupportedError,
+            },
+        )
+        self.validate_all(
+            "NEXT_DAY(x, y)",
+            write={
+                "snowflake": "NEXT_DAY(x, y)",
+                "databricks": "NEXT_DAY(x, y)",
+                "oracle": "NEXT_DAY(x, y)",
+                "redshift": "NEXT_DAY(x, y)",
             },
         )
         self.validate_all(
@@ -1236,13 +1269,13 @@ class TestDialect(Validator):
             "TIMESTAMP_TRUNC(x, DAY, 'UTC')",
             write={
                 "": "TIMESTAMP_TRUNC(x, DAY, 'UTC')",
-                "duckdb": "DATE_TRUNC('DAY', x)",
+                "duckdb": "DATE_TRUNC('DAY', x AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'",
                 "materialize": "DATE_TRUNC('DAY', x, 'UTC')",
                 "presto": "DATE_TRUNC('DAY', x)",
                 "postgres": "DATE_TRUNC('DAY', x, 'UTC')",
                 "snowflake": "DATE_TRUNC('DAY', x)",
                 "databricks": "DATE_TRUNC('DAY', x)",
-                "clickhouse": "DATE_TRUNC('DAY', x, 'UTC')",
+                "clickhouse": "dateTrunc('DAY', x, 'UTC')",
             },
         )
 
@@ -1400,6 +1433,17 @@ class TestDialect(Validator):
                 "databricks": "SLICE(x, 1, 3)",
                 "presto": "SLICE(x, 1, 3)",
                 "trino": "SLICE(x, 1, 3)",
+            },
+        )
+
+        self.validate_all(
+            "SORT_ARRAY(x)",
+            write={
+                "duckdb": "ARRAY_SORT(x)",
+                "hive": "SORT_ARRAY(x)",
+                "presto": "ARRAY_SORT(x)",
+                "snowflake": "ARRAY_SORT(x)",
+                "spark": "SORT_ARRAY(x)",
             },
         )
 
@@ -2474,6 +2518,25 @@ class TestDialect(Validator):
 
     def test_alias(self):
         self.validate_all(
+            "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT x AS x FROM t GROUP BY x",
+            write={
+                "": "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT x AS x FROM t GROUP BY x",
+                "hive": "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT x AS x FROM t GROUP BY x",
+                "oracle": "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT x AS x FROM t GROUP BY x",
+                "presto": "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT x AS x FROM t GROUP BY x",
+            },
+        )
+        self.validate_all(
+            "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT SUM(x) AS y, y AS x FROM t GROUP BY y",
+            write={
+                "": "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT SUM(x) AS y, y AS x FROM t GROUP BY y",
+                "hive": "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT SUM(x) AS y, y AS x FROM t GROUP BY y",
+                "oracle": "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT SUM(x) AS y, y AS x FROM t GROUP BY y",
+                "presto": "WITH t AS (SELECT 1 AS x, 2 AS y) SELECT SUM(x) AS y, y AS x FROM t GROUP BY y",
+            },
+        )
+
+        self.validate_all(
             'SELECT 1 AS "foo"',
             read={
                 "mysql": "SELECT 1 'foo'",
@@ -2495,18 +2558,6 @@ class TestDialect(Validator):
                 with self.assertRaises(ParseError):
                     parse_one("SELECT 1 'foo'", dialect=dialect)
 
-        self.validate_all(
-            "SELECT a AS b FROM x GROUP BY b",
-            write={
-                "drill": "SELECT a AS b FROM x GROUP BY b",
-                "duckdb": "SELECT a AS b FROM x GROUP BY b",
-                "presto": "SELECT a AS b FROM x GROUP BY 1",
-                "hive": "SELECT a AS b FROM x GROUP BY 1",
-                "oracle": "SELECT a AS b FROM x GROUP BY 1",
-                "spark": "SELECT a AS b FROM x GROUP BY b",
-                "spark2": "SELECT a AS b FROM x GROUP BY 1",
-            },
-        )
         self.validate_all(
             "SELECT y x FROM my_table t",
             write={
@@ -2534,6 +2585,23 @@ class TestDialect(Validator):
                 "oracle": "WITH cte1 AS (SELECT a, b FROM table1), cte2 AS (SELECT c, e AS d FROM table2) SELECT b, d AS dd FROM cte1 t CROSS JOIN cte2 WHERE cte1.a = cte2.c",
                 "postgres": "WITH cte1 AS (SELECT a, b FROM table1), cte2 AS (SELECT c, e AS d FROM table2) SELECT b, d AS dd FROM cte1 AS t CROSS JOIN cte2 WHERE cte1.a = cte2.c",
                 "sqlite": "WITH cte1 AS (SELECT a, b FROM table1), cte2 AS (SELECT c, e AS d FROM table2) SELECT b, d AS dd FROM cte1 AS t CROSS JOIN cte2 WHERE cte1.a = cte2.c",
+            },
+        )
+
+        self.validate_all(
+            "SELECT * FROM (SELECT 1 AS col) AS apply",
+            read={
+                "": "SELECT * FROM (SELECT 1 AS col) apply",
+                "hive": "SELECT * FROM (SELECT 1 AS col) apply",
+                "postgres": "SELECT * FROM (SELECT 1 AS col) apply",
+                "duckdb": "SELECT * FROM (SELECT 1 AS col) apply",
+                "presto": "SELECT * FROM (SELECT 1 AS col) apply",
+                "spark": "SELECT * FROM (SELECT 1 AS col) apply",
+                "spark2": "SELECT * FROM (SELECT 1 AS col) apply",
+                "trino": "SELECT * FROM (SELECT 1 AS col) apply",
+                "snowflake": "SELECT * FROM (SELECT 1 AS col) apply",
+                "bigquery": "SELECT * FROM (SELECT 1 AS col) apply",
+                "athena": "SELECT * FROM (SELECT 1 AS col) apply",
             },
         )
 
@@ -2606,14 +2674,14 @@ SELECT
             },
         )
         self.validate_all(
-            "BEGIN",
+            "BEGIN READ WRITE, ISOLATION LEVEL SERIALIZABLE",
             read={
                 "presto": "START TRANSACTION READ WRITE, ISOLATION LEVEL SERIALIZABLE",
                 "trino": "START TRANSACTION READ WRITE, ISOLATION LEVEL SERIALIZABLE",
             },
         )
         self.validate_all(
-            "BEGIN",
+            "BEGIN ISOLATION LEVEL REPEATABLE READ",
             read={
                 "presto": "START TRANSACTION ISOLATION LEVEL REPEATABLE READ",
                 "trino": "START TRANSACTION ISOLATION LEVEL REPEATABLE READ",
@@ -3412,7 +3480,6 @@ FROM subquery2""",
                 "trino": "UUID()",
                 "mysql": "UUID()",
                 "postgres": "GEN_RANDOM_UUID()",
-                "bigquery": "GENERATE_UUID()",
                 "snowflake": "UUID_STRING()",
                 "tsql": "NEWID()",
             },
@@ -3616,73 +3683,12 @@ FROM subquery2""",
             },
         )
 
-    def test_bit_aggs(self):
-        self.validate_all(
-            "BIT_AND(x)",
-            read={
-                "bigquery": "BIT_AND(x)",
-                "spark": "BIT_AND(x)",
-                "databricks": "BIT_AND(x)",
-                "mysql": "BIT_AND(x)",
-                "dremio": "BIT_AND(x)",
-            },
-            write={
-                "bigquery": "BIT_AND(x)",
-                "spark": "BIT_AND(x)",
-                "databricks": "BIT_AND(x)",
-                "mysql": "BIT_AND(x)",
-                "dremio": "BIT_AND(x)",
-            },
-        )
-        self.validate_all(
-            "BIT_OR(x)",
-            read={
-                "bigquery": "BIT_OR(x)",
-                "spark": "BIT_OR(x)",
-                "databricks": "BIT_OR(x)",
-                "mysql": "BIT_OR(x)",
-                "dremio": "BIT_OR(x)",
-            },
-            write={
-                "bigquery": "BIT_OR(x)",
-                "spark": "BIT_OR(x)",
-                "databricks": "BIT_OR(x)",
-                "mysql": "BIT_OR(x)",
-                "dremio": "BIT_OR(x)",
-            },
-        )
-        self.validate_all(
-            "BIT_XOR(x)",
-            read={
-                "bigquery": "BIT_XOR(x)",
-                "spark": "BIT_XOR(x)",
-                "databricks": "BIT_XOR(x)",
-                "mysql": "BIT_XOR(x)",
-            },
-            write={
-                "bigquery": "BIT_XOR(x)",
-                "spark": "BIT_XOR(x)",
-                "databricks": "BIT_XOR(x)",
-                "mysql": "BIT_XOR(x)",
-            },
-        )
-        self.validate_all(
-            "BIT_COUNT(x)",
-            read={
-                "bigquery": "BIT_COUNT(x)",
-                "spark": "BIT_COUNT(x)",
-                "databricks": "BIT_COUNT(x)",
-                "mysql": "BIT_COUNT(x)",
-            },
-            write={
-                "bigquery": "BIT_COUNT(x)",
-                "spark": "BIT_COUNT(x)",
-                "databricks": "BIT_COUNT(x)",
-                "mysql": "BIT_COUNT(x)",
-            },
-        )
-
     def test_between(self):
+        between = exp.column("x").between(1, 2)
+        self.assertEqual(between.sql("postgres"), "x BETWEEN 1 AND 2")
+        self.assertEqual(between.sql("redshift"), "x BETWEEN 1 AND 2")
+        self.assertFalse("symmetric" in between.args)
+
         self.validate_all(
             "SELECT x BETWEEN 2 AND 10",
             read={
@@ -3690,33 +3696,42 @@ FROM subquery2""",
                 "clickhouse": "SELECT x BETWEEN 2 AND 10",
                 "dremio": "SELECT x BETWEEN 2 AND 10",
                 "duckdb": "SELECT x BETWEEN 2 AND 10",
-                "tsql": "SELECT x BETWEEN 2 AND 10",
-                "oracle": "SELECT x BETWEEN 2 AND 10",
+                "materialize": "SELECT x BETWEEN 2 AND 10",
                 "mysql": "SELECT x BETWEEN 2 AND 10",
+                "oracle": "SELECT x BETWEEN 2 AND 10",
                 "postgres": "SELECT x BETWEEN 2 AND 10",
+                "redshift": "SELECT x BETWEEN 2 AND 10",
+                "risingwave": "SELECT x BETWEEN 2 AND 10",
+                "tsql": "SELECT x BETWEEN 2 AND 10",
             },
             write={
                 "": "SELECT x BETWEEN 2 AND 10",
                 "clickhouse": "SELECT x BETWEEN 2 AND 10",
                 "dremio": "SELECT x BETWEEN 2 AND 10",
                 "duckdb": "SELECT x BETWEEN 2 AND 10",
-                "tsql": "SELECT x BETWEEN 2 AND 10",
-                "oracle": "SELECT x BETWEEN 2 AND 10",
+                "materialize": "SELECT x BETWEEN 2 AND 10",
                 "mysql": "SELECT x BETWEEN 2 AND 10",
+                "oracle": "SELECT x BETWEEN 2 AND 10",
                 "postgres": "SELECT x BETWEEN 2 AND 10",
+                "redshift": "SELECT x BETWEEN 2 AND 10",
+                "risingwave": "SELECT x BETWEEN 2 AND 10",
+                "tsql": "SELECT x BETWEEN 2 AND 10",
             },
         )
 
         self.validate_all(
             "SELECT x BETWEEN SYMMETRIC 10 AND 2",
             write={
-                "dremio": "SELECT x BETWEEN SYMMETRIC 10 AND 2",
-                "postgres": "SELECT x BETWEEN SYMMETRIC 10 AND 2",
                 "": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
+                "clickhouse": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
+                "dremio": "SELECT x BETWEEN SYMMETRIC 10 AND 2",
+                "duckdb": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
+                "materialize": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
                 "mysql": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
                 "oracle": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
-                "duckdb": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
-                "clickhouse": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
+                "postgres": "SELECT x BETWEEN SYMMETRIC 10 AND 2",
+                "redshift": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
+                "risingwave": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
                 "tsql": "SELECT (x BETWEEN 10 AND 2 OR x BETWEEN 2 AND 10)",
             },
         )
@@ -3724,13 +3739,16 @@ FROM subquery2""",
         self.validate_all(
             "SELECT x BETWEEN ASYMMETRIC 10 AND 2",
             write={
-                "dremio": "SELECT x BETWEEN ASYMMETRIC 10 AND 2",
-                "postgres": "SELECT x BETWEEN ASYMMETRIC 10 AND 2",
                 "": "SELECT x BETWEEN 10 AND 2",
+                "clickhouse": "SELECT x BETWEEN 10 AND 2",
+                "dremio": "SELECT x BETWEEN ASYMMETRIC 10 AND 2",
+                "duckdb": "SELECT x BETWEEN 10 AND 2",
+                "materialize": "SELECT x BETWEEN 10 AND 2",
                 "mysql": "SELECT x BETWEEN 10 AND 2",
                 "oracle": "SELECT x BETWEEN 10 AND 2",
-                "duckdb": "SELECT x BETWEEN 10 AND 2",
-                "clickhouse": "SELECT x BETWEEN 10 AND 2",
+                "postgres": "SELECT x BETWEEN ASYMMETRIC 10 AND 2",
+                "redshift": "SELECT x BETWEEN 10 AND 2",
+                "risingwave": "SELECT x BETWEEN 10 AND 2",
                 "tsql": "SELECT x BETWEEN 10 AND 2",
             },
         )
@@ -3774,3 +3792,647 @@ FROM subquery2""",
                 "duckdb": "SELECT 'foo' LIKE 'bar' OR 'foo' LIKE 'fo%'",
             },
         )
+
+    def test_date_to_unix_date(self):
+        self.validate_all(
+            "DATE_FROM_UNIX_DATE(1)",
+            write={
+                "": "DATE_ADD(CAST('1970-01-01' AS DATE), 1, 'DAY')",
+                "bigquery": "DATE_FROM_UNIX_DATE(1)",
+                "spark": "DATE_FROM_UNIX_DATE(1)",
+                "databricks": "DATE_FROM_UNIX_DATE(1)",
+                "snowflake": "DATEADD(DAY, 1, CAST('1970-01-01' AS DATE))",
+                "duckdb": "CAST('1970-01-01' AS DATE) + INTERVAL 1 DAY",
+                "redshift": "DATEADD(DAY, 1, CAST('1970-01-01' AS DATE))",
+                "presto": "DATE_ADD('DAY', 1, CAST('1970-01-01' AS DATE))",
+                "trino": "DATE_ADD('DAY', 1, CAST('1970-01-01' AS DATE))",
+            },
+        )
+
+    def test_week_of_year(self):
+        self.validate_all(
+            "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+            write={
+                "duckdb": "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+                "exasol": "WEEK(CAST('2025-01-01' AS DATE))",
+                "hive": "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+                "mysql": "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+                "spark": "WEEKOFYEAR(CAST('2025-01-01' AS DATE))",
+                "snowflake": "WEEKISO(CAST('2025-01-01' AS DATE))",
+            },
+        )
+
+    def test_justify(self):
+        self.validate_all(
+            "JUSTIFY_DAYS(INTERVAL '1' DAY)",
+            read={
+                "": "JUSTIFY_DAYS(INTERVAL '1' DAY)",
+                "bigquery": "JUSTIFY_DAYS(INTERVAL '1' DAY)",
+                "postgres": "JUSTIFY_DAYS(INTERVAL '1 DAY')",
+                "materialize": "JUSTIFY_DAYS(INTERVAL '1 DAY')",
+            },
+            write={
+                "bigquery": "JUSTIFY_DAYS(INTERVAL '1' DAY)",
+                "postgres": "JUSTIFY_DAYS(INTERVAL '1 DAY')",
+                "materialize": "JUSTIFY_DAYS(INTERVAL '1 DAY')",
+            },
+        )
+        self.validate_all(
+            "JUSTIFY_HOURS(INTERVAL '1' HOUR)",
+            read={
+                "": "JUSTIFY_HOURS(INTERVAL '1' HOUR)",
+                "bigquery": "JUSTIFY_HOURS(INTERVAL '1' HOUR)",
+                "postgres": "JUSTIFY_HOURS(INTERVAL '1 HOUR')",
+                "materialize": "JUSTIFY_HOURS(INTERVAL '1 HOUR')",
+            },
+            write={
+                "bigquery": "JUSTIFY_HOURS(INTERVAL '1' HOUR)",
+                "postgres": "JUSTIFY_HOURS(INTERVAL '1 HOUR')",
+                "materialize": "JUSTIFY_HOURS(INTERVAL '1 HOUR')",
+            },
+        )
+        self.validate_all(
+            "JUSTIFY_INTERVAL(INTERVAL '1' HOUR)",
+            read={
+                "": "JUSTIFY_INTERVAL(INTERVAL '1' HOUR)",
+                "bigquery": "JUSTIFY_INTERVAL(INTERVAL '1' HOUR)",
+                "postgres": "JUSTIFY_INTERVAL(INTERVAL '1 HOUR')",
+                "materialize": "JUSTIFY_INTERVAL(INTERVAL '1 HOUR')",
+            },
+            write={
+                "bigquery": "JUSTIFY_INTERVAL(INTERVAL '1' HOUR)",
+                "postgres": "JUSTIFY_INTERVAL(INTERVAL '1 HOUR')",
+                "materialize": "JUSTIFY_INTERVAL(INTERVAL '1 HOUR')",
+            },
+        )
+
+    def test_unix_time(self):
+        self.validate_all(
+            "UNIX_MICROS(foo)",
+            read={
+                "": "UNIX_MICROS(foo)",
+                "bigquery": "UNIX_MICROS(foo)",
+                "spark": "UNIX_MICROS(foo)",
+                "databricks": "UNIX_MICROS(foo)",
+            },
+            write={
+                "bigquery": "UNIX_MICROS(foo)",
+                "spark": "UNIX_MICROS(foo)",
+                "databricks": "UNIX_MICROS(foo)",
+            },
+        )
+        self.validate_all(
+            "UNIX_MILLIS(foo)",
+            read={
+                "": "UNIX_MILLIS(foo)",
+                "bigquery": "UNIX_MILLIS(foo)",
+                "spark": "UNIX_MILLIS(foo)",
+                "databricks": "UNIX_MILLIS(foo)",
+            },
+            write={
+                "bigquery": "UNIX_MILLIS(foo)",
+                "spark": "UNIX_MILLIS(foo)",
+                "databricks": "UNIX_MILLIS(foo)",
+            },
+        )
+
+    def test_reverse(self):
+        self.validate_all(
+            "REVERSE(x)",
+            read={
+                "": "REVERSE(x)",
+                "bigquery": "REVERSE(x)",
+                "hive": "REVERSE(x)",
+                "spark2": "REVERSE(x)",
+                "spark": "REVERSE(x)",
+                "databricks": "REVERSE(x)",
+                "mysql": "REVERSE(x)",
+                "postgres": "REVERSE(x)",
+                "tsql": "REVERSE(x)",
+                "snowflake": "REVERSE(x)",
+                "doris": "REVERSE(x)",
+                "presto": "REVERSE(x)",
+                "trino": "REVERSE(x)",
+                "clickhouse": "REVERSE(x)",
+                "redshift": "REVERSE(x)",
+            },
+            write={
+                "bigquery": "REVERSE(x)",
+                "hive": "REVERSE(x)",
+                "spark2": "REVERSE(x)",
+                "spark": "REVERSE(x)",
+                "databricks": "REVERSE(x)",
+                "mysql": "REVERSE(x)",
+                "postgres": "REVERSE(x)",
+                "tsql": "REVERSE(x)",
+                "snowflake": "REVERSE(x)",
+                "doris": "REVERSE(x)",
+                "presto": "REVERSE(x)",
+                "trino": "REVERSE(x)",
+                "clickhouse": "REVERSE(x)",
+                "redshift": "REVERSE(x)",
+            },
+        )
+
+    def test_translate(self):
+        self.validate_all(
+            "TRANSLATE(x, y, z)",
+            read={
+                "": "TRANSLATE(x, y, z)",
+                "bigquery": "TRANSLATE(x, y, z)",
+                "hive": "TRANSLATE(x, y, z)",
+                "spark2": "TRANSLATE(x, y, z)",
+                "spark": "TRANSLATE(x, y, z)",
+                "databricks": "TRANSLATE(x, y, z)",
+                "postgres": "TRANSLATE(x, y, z)",
+                "tsql": "TRANSLATE(x, y, z)",
+                "snowflake": "TRANSLATE(x, y, z)",
+                "doris": "TRANSLATE(x, y, z)",
+                "trino": "TRANSLATE(x, y, z)",
+                "clickhouse": "TRANSLATE(x, y, z)",
+                "redshift": "TRANSLATE(x, y, z)",
+                "oracle": "TRANSLATE(x, y, z)",
+            },
+            write={
+                "": "TRANSLATE(x, y, z)",
+                "bigquery": "TRANSLATE(x, y, z)",
+                "hive": "TRANSLATE(x, y, z)",
+                "spark2": "TRANSLATE(x, y, z)",
+                "spark": "TRANSLATE(x, y, z)",
+                "databricks": "TRANSLATE(x, y, z)",
+                "postgres": "TRANSLATE(x, y, z)",
+                "tsql": "TRANSLATE(x, y, z)",
+                "snowflake": "TRANSLATE(x, y, z)",
+                "doris": "TRANSLATE(x, y, z)",
+                "trino": "TRANSLATE(x, y, z)",
+                "clickhouse": "TRANSLATE(x, y, z)",
+                "redshift": "TRANSLATE(x, y, z)",
+                "oracle": "TRANSLATE(x, y, z)",
+            },
+        )
+
+    def test_soundex(self):
+        self.validate_all(
+            "SOUNDEX(x)",
+            read={
+                "": "SOUNDEX(x)",
+                "bigquery": "SOUNDEX(x)",
+                "hive": "SOUNDEX(x)",
+                "spark2": "SOUNDEX(x)",
+                "spark": "SOUNDEX(x)",
+                "databricks": "SOUNDEX(x)",
+                "mysql": "SOUNDEX(x)",
+                "postgres": "SOUNDEX(x)",
+                "tsql": "SOUNDEX(x)",
+                "snowflake": "SOUNDEX(x)",
+                "dremio": "SOUNDEX(x)",
+                "trino": "SOUNDEX(x)",
+                "clickhouse": "SOUNDEX(x)",
+                "redshift": "SOUNDEX(x)",
+                "oracle": "SOUNDEX(x)",
+            },
+            write={
+                "bigquery": "SOUNDEX(x)",
+                "hive": "SOUNDEX(x)",
+                "spark2": "SOUNDEX(x)",
+                "spark": "SOUNDEX(x)",
+                "databricks": "SOUNDEX(x)",
+                "mysql": "SOUNDEX(x)",
+                "postgres": "SOUNDEX(x)",
+                "tsql": "SOUNDEX(x)",
+                "snowflake": "SOUNDEX(x)",
+                "dremio": "SOUNDEX(x)",
+                "trino": "SOUNDEX(x)",
+                "clickhouse": "SOUNDEX(x)",
+                "redshift": "SOUNDEX(x)",
+                "oracle": "SOUNDEX(x)",
+            },
+        )
+
+    def test_grouping(self):
+        self.validate_all(
+            "GROUPING(x)",
+            read={
+                "": "GROUPING(x)",
+                "bigquery": "GROUPING(x)",
+                "hive": "GROUPING(x)",
+                "spark2": "GROUPING(x)",
+                "spark": "GROUPING(x)",
+                "databricks": "GROUPING(x)",
+                "mysql": "GROUPING(x)",
+                "postgres": "GROUPING(x)",
+                "tsql": "GROUPING(x)",
+                "snowflake": "GROUPING(x)",
+                "clickhouse": "GROUPING(x)",
+                "redshift": "GROUPING(x)",
+                "oracle": "GROUPING(x)",
+            },
+            write={
+                "bigquery": "GROUPING(x)",
+                "hive": "GROUPING(x)",
+                "spark2": "GROUPING(x)",
+                "spark": "GROUPING(x)",
+                "databricks": "GROUPING(x)",
+                "mysql": "GROUPING(x)",
+                "postgres": "GROUPING(x)",
+                "tsql": "GROUPING(x)",
+                "snowflake": "GROUPING(x)",
+                "clickhouse": "GROUPING(x)",
+                "redshift": "GROUPING(x)",
+                "oracle": "GROUPING(x)",
+            },
+        )
+        self.validate_all(
+            "GROUPING(col1, col2, col3)",
+            read={
+                "": "GROUPING(col1, col2, col3)",
+                "snowflake": "GROUPING(col1, col2, col3)",
+                "mysql": "GROUPING(col1, col2, col3)",
+                "postgres": "GROUPING(col1, col2, col3)",
+                "clickhouse": "GROUPING(col1, col2, col3)",
+                "redshift": "GROUPING(col1, col2, col3)",
+            },
+            write={
+                "snowflake": "GROUPING(col1, col2, col3)",
+                "mysql": "GROUPING(col1, col2, col3)",
+                "postgres": "GROUPING(col1, col2, col3)",
+                "clickhouse": "GROUPING(col1, col2, col3)",
+                "redshift": "GROUPING(col1, col2, col3)",
+            },
+        )
+
+    def test_farm_fingerprint(self):
+        self.validate_all(
+            "FARM_FINGERPRINT(x)",
+            read={
+                "": "FARM_FINGERPRINT(x)",
+                "bigquery": "FARM_FINGERPRINT(x)",
+                "clickhouse": "farmFingerprint64(x)",
+                "redshift": "FARMFINGERPRINT64(x)",
+            },
+            write={
+                "bigquery": "FARM_FINGERPRINT(x)",
+                "clickhouse": "farmFingerprint64(x)",
+                "redshift": "FARMFINGERPRINT64(x)",
+            },
+        )
+
+    def test_from_to_base32(self):
+        self.validate_all(
+            "FROM_BASE32(x)",
+            read={
+                "": "FROM_BASE32(x)",
+                "bigquery": "FROM_BASE32(x)",
+                "presto": "FROM_BASE32(x)",
+                "trino": "FROM_BASE32(x)",
+            },
+            write={
+                "bigquery": "FROM_BASE32(x)",
+                "presto": "FROM_BASE32(x)",
+                "trino": "FROM_BASE32(x)",
+            },
+        )
+        self.validate_all(
+            "TO_BASE32(x)",
+            read={
+                "": "TO_BASE32(x)",
+                "bigquery": "TO_BASE32(x)",
+                "presto": "TO_BASE32(x)",
+                "trino": "TO_BASE32(x)",
+            },
+            write={
+                "bigquery": "TO_BASE32(x)",
+                "presto": "TO_BASE32(x)",
+                "trino": "TO_BASE32(x)",
+            },
+        )
+
+    def test_regexp_instr(self):
+        self.validate_all(
+            "REGEXP_INSTR(src, reg)",
+            read={
+                "": "REGEXP_INSTR(src, reg)",
+                "bigquery": "REGEXP_INSTR(src, reg)",
+                "snowflake": "REGEXP_INSTR(src, reg)",
+                "oracle": "REGEXP_INSTR(src, reg)",
+                "spark": "REGEXP_INSTR(src, reg)",
+                "databricks": "REGEXP_INSTR(src, reg)",
+                "tsql": "REGEXP_INSTR(src, reg)",
+                "mysql": "REGEXP_INSTR(src, reg)",
+                "postgres": "REGEXP_INSTR(src, reg)",
+                "redshift": "REGEXP_INSTR(src, reg)",
+            },
+            write={
+                "bigquery": "REGEXP_INSTR(src, reg)",
+                "snowflake": "REGEXP_INSTR(src, reg)",
+                "oracle": "REGEXP_INSTR(src, reg)",
+                "spark": "REGEXP_INSTR(src, reg)",
+                "databricks": "REGEXP_INSTR(src, reg)",
+                "tsql": "REGEXP_INSTR(src, reg)",
+                "mysql": "REGEXP_INSTR(src, reg)",
+                "postgres": "REGEXP_INSTR(src, reg)",
+                "redshift": "REGEXP_INSTR(src, reg)",
+            },
+        )
+        self.validate_all(
+            "REGEXP_INSTR(src, reg, pos, occ, opt)",
+            read={
+                "": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "bigquery": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "snowflake": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "oracle": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "tsql": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "mysql": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "postgres": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "redshift": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+            },
+            write={
+                "bigquery": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "snowflake": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "oracle": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "tsql": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "mysql": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "postgres": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+                "redshift": "REGEXP_INSTR(src, reg, pos, occ, opt)",
+            },
+        )
+        self.validate_all(
+            "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+            read={
+                "": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "snowflake": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "oracle": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "tsql": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "mysql": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "postgres": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "redshift": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+            },
+            write={
+                "snowflake": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "oracle": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "tsql": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "mysql": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "postgres": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+                "redshift": "REGEXP_INSTR(src, reg, pos, occ, opt, par)",
+            },
+        )
+        self.validate_all(
+            "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+            read={
+                "": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+                "snowflake": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+                "oracle": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+                "tsql": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+                "postgres": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+            },
+            write={
+                "snowflake": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+                "oracle": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+                "tsql": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+                "postgres": "REGEXP_INSTR(src, reg, pos, occ, opt, par, grp)",
+            },
+        )
+
+    def test_format(self):
+        self.validate_all(
+            "FORMAT('str fmt1 fmt2', 1, 'a')",
+            read={
+                "": "FORMAT('str fmt1 fmt2', 1, 'a')",
+                "bigquery": "FORMAT('str fmt1 fmt2', 1, 'a')",
+                "postgres": "FORMAT('str fmt1 fmt2', 1, 'a')",
+                "duckdb": "FORMAT('str fmt1 fmt2', 1, 'a')",
+            },
+            write={
+                "bigquery": "FORMAT('str fmt1 fmt2', 1, 'a')",
+                "postgres": "FORMAT('str fmt1 fmt2', 1, 'a')",
+                "spark2": "FORMAT_STRING('str fmt1 fmt2', 1, 'a')",
+                "spark": "FORMAT_STRING('str fmt1 fmt2', 1, 'a')",
+                "databricks": "FORMAT_STRING('str fmt1 fmt2', 1, 'a')",
+                "duckdb": "FORMAT('str fmt1 fmt2', 1, 'a')",
+            },
+        )
+
+    def test_json_array_append(self):
+        self.validate_all(
+            """JSON_ARRAY_APPEND(PARSE_JSON('["a", "b", "c"]'), '$', 1)""",
+            read={
+                "": """JSON_ARRAY_APPEND(PARSE_JSON('["a", "b", "c"]'), '$', 1)""",
+                "bigquery": """JSON_ARRAY_APPEND(PARSE_JSON('["a", "b", "c"]'), '$', 1)""",
+            },
+            write={
+                "bigquery": """JSON_ARRAY_APPEND(PARSE_JSON('["a", "b", "c"]'), '$', 1)""",
+                "mysql": """JSON_ARRAY_APPEND('["a", "b", "c"]', '$', 1)""",
+            },
+        )
+
+    def test_json_array_insert(self):
+        self.validate_all(
+            """JSON_ARRAY_INSERT(PARSE_JSON('["a", ["b", "c"], "d"]'), '$[1]', 1)""",
+            read={
+                "": """JSON_ARRAY_INSERT(PARSE_JSON('["a", ["b", "c"], "d"]'), '$[1]', 1)""",
+                "bigquery": """JSON_ARRAY_INSERT(PARSE_JSON('["a", ["b", "c"], "d"]'), '$[1]', 1)""",
+            },
+            write={
+                "bigquery": """JSON_ARRAY_INSERT(PARSE_JSON('["a", ["b", "c"], "d"]'), '$[1]', 1)""",
+                "mysql": """JSON_ARRAY_INSERT('["a", ["b", "c"], "d"]', '$[1]', 1)""",
+            },
+        )
+
+    def test_json_remove(self):
+        self.validate_all(
+            """JSON_REMOVE(PARSE_JSON('["a", ["b", "c"], "d"]'), '$[1]', '$[1]')""",
+            read={
+                "": """JSON_REMOVE(PARSE_JSON('["a", ["b", "c"], "d"]'), '$[1]', '$[1]')""",
+                "bigquery": """JSON_REMOVE(PARSE_JSON('["a", ["b", "c"], "d"]'), '$[1]', '$[1]')""",
+            },
+            write={
+                "bigquery": """JSON_REMOVE(PARSE_JSON('["a", ["b", "c"], "d"]'), '$[1]', '$[1]')""",
+                "mysql": """JSON_REMOVE('["a", ["b", "c"], "d"]', '$[1]', '$[1]')""",
+                "sqlite": """JSON_REMOVE('["a", ["b", "c"], "d"]', '$[1]', '$[1]')""",
+            },
+        )
+
+    def test_json_set(self):
+        self.validate_all(
+            """JSON_SET(PARSE_JSON('{"a": 1}'), '$', PARSE_JSON('{"b": 2, "c": 3}'))""",
+            read={
+                "": """JSON_SET(PARSE_JSON('{"a": 1}'), '$', PARSE_JSON('{"b": 2, "c": 3}'))""",
+                "bigquery": """JSON_SET(PARSE_JSON('{"a": 1}'), '$', PARSE_JSON('{"b": 2, "c": 3}'))""",
+            },
+            write={
+                "bigquery": """JSON_SET(PARSE_JSON('{"a": 1}'), '$', PARSE_JSON('{"b": 2, "c": 3}'))""",
+                "mysql": """JSON_SET('{"a": 1}', '$', '{"b": 2, "c": 3}')""",
+                "sqlite": """JSON_SET('{"a": 1}', '$', '{"b": 2, "c": 3}')""",
+                "doris": """JSON_SET('{"a": 1}', '$', '{"b": 2, "c": 3}')""",
+            },
+        )
+
+    def test_json_strip_nulls(self):
+        self.validate_all(
+            """JSON_STRIP_NULLS(PARSE_JSON('[{"f1":1,"f2":null},2,null,3]'))""",
+            read={
+                "": """JSON_STRIP_NULLS(PARSE_JSON('[{"f1":1,"f2":null},2,null,3]'))""",
+                "bigquery": """JSON_STRIP_NULLS(PARSE_JSON('[{"f1":1,"f2":null},2,null,3]'))""",
+            },
+            write={
+                "bigquery": """JSON_STRIP_NULLS(PARSE_JSON('[{"f1":1,"f2":null},2,null,3]'))""",
+                "postgres": """JSON_STRIP_NULLS(CAST('[{"f1":1,"f2":null},2,null,3]' AS JSON))""",
+            },
+        )
+
+    def test_is_unknown(self):
+        # In many dialects `<...> IS UNKNOWN` is equivalent to `<...> IS NULL`
+        self.validate_all(
+            "x IS NULL",
+            read={
+                "": "x IS UNKNOWN",
+                "bigquery": "x IS UNKNOWN",
+                "mysql": "x IS UNKNOWN",
+                "postgres": "x IS UNKNOWN",
+                "redshift": "x IS UNKNOWN",
+                "duckdb": "x IS UNKNOWN",
+                "spark": "x IS UNKNOWN",
+                "databricks": "x IS UNKNOWN",
+            },
+        )
+
+        self.validate_all(
+            "NOT x IS NULL",
+            read={
+                "": "x IS NOT UNKNOWN",
+                "bigquery": "x IS NOT UNKNOWN",
+                "mysql": "x IS NOT UNKNOWN",
+                "postgres": "x IS NOT UNKNOWN",
+                "redshift": "x IS NOT UNKNOWN",
+                "duckdb": "x IS NOT UNKNOWN",
+                "spark": "x IS NOT UNKNOWN",
+                "databricks": "x IS NOT UNKNOWN",
+            },
+        )
+
+    def test_is_with_dcolon(self):
+        self.validate_all(
+            "SELECT CAST(col IS NULL AS BOOLEAN) FROM (SELECT 1 AS col) AS t",
+            read={
+                "": "SELECT col IS NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
+                "duckdb": "SELECT col IS NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
+                "redshift": "SELECT col IS NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
+                "postgres": "SELECT col IS NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
+            },
+        )
+        self.validate_all(
+            "SELECT CAST(NOT col IS NULL AS BOOLEAN) FROM (SELECT 1 AS col) AS t",
+            read={
+                "": "SELECT col IS NOT NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
+                "duckdb": "SELECT col IS NOT NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
+                "redshift": "SELECT col IS NOT NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
+                "postgres": "SELECT col IS NOT NULL::BOOLEAN FROM (SELECT 1 AS col) AS t",
+            },
+        )
+
+    def test_regexp_replace(self):
+        for target_dialect in ("postgres", "duckdb"):
+            # Transpilations from other dialects to Postgres or DuckDB should append 'g'
+            # since their semantics is to replace all occurrences of the pattern.
+            for read_dialect in ("", "bigquery", "presto", "trino", "spark", "databricks"):
+                with self.subTest(
+                    f"Testing REGEXP_REPLACE appending 'g' flag from {read_dialect} to {target_dialect}"
+                ):
+                    sql = parse_one("REGEXP_REPLACE('aaa', 'a', 'b')", read=read_dialect).sql(
+                        target_dialect
+                    )
+                    self.assertEqual(sql, "REGEXP_REPLACE('aaa', 'a', 'b', 'g')")
+
+    def test_subquery_unwrap(self):
+        self.validate_identity(
+            "WITH sub_query AS (SELECT a FROM table) (SELECT a FROM sub_query)",
+            "WITH sub_query AS (SELECT a FROM table) SELECT a FROM sub_query",
+        )
+
+        self.validate_identity(
+            "WITH sub_query AS (SELECT a FROM table) ((((SELECT a FROM sub_query))))",
+            "WITH sub_query AS (SELECT a FROM table) SELECT a FROM sub_query",
+        )
+
+    def test_initcap(self):
+        delimiter_chars = {
+            "": Dialect.INITCAP_DEFAULT_DELIMITER_CHARS,
+            "bigquery": BigQuery.INITCAP_DEFAULT_DELIMITER_CHARS,
+            "snowflake": Snowflake.INITCAP_DEFAULT_DELIMITER_CHARS,
+            "spark": Spark2.INITCAP_DEFAULT_DELIMITER_CHARS,
+        }
+
+        with self.subTest("INITCAP without explicit delimiters"):
+            self.assertEqual(exp.Initcap(this=exp.Literal.string("col")).sql(), "INITCAP('col')")
+            self.assertEqual(exp.Initcap(this=exp.column("col")).sql(), "INITCAP(col)")
+
+        for dialect in delimiter_chars:
+            with self.subTest(f"Round-tripping default delimiters for {dialect or 'default'}"):
+                self.assertEqual(
+                    parse_one("INITCAP(col)", read=dialect).sql(dialect), "INITCAP(col)"
+                )
+
+        for read_dialect in ("", "spark"):
+            for write_dialect in ("bigquery", "snowflake"):
+                with self.subTest(
+                    f"Default delimiters emitted from {read_dialect or 'default'} to {write_dialect}"
+                ):
+                    escaped_delimiters = exp.Literal.string(delimiter_chars[read_dialect]).sql(
+                        write_dialect
+                    )
+                    self.assertEqual(
+                        parse_one("INITCAP(col)", read=read_dialect).sql(write_dialect),
+                        f"INITCAP(col, {escaped_delimiters})",
+                    )
+
+        def assert_default_duckdb_sql(read_dialect: str, default_chars: str) -> None:
+            chr_chars = [char for char in WS_CONTROL_CHARS_TO_DUCK if char in default_chars]
+            expression = parse_one("INITCAP(col)", read=read_dialect)
+            self.assert_duckdb_sql(
+                expression,
+                includes=("ARRAY_TO_STRING(", "REGEXP_MATCHES(", "LIST_TRANSFORM("),
+                chr_chars=chr_chars,
+            )
+
+        for dialect, default_chars in delimiter_chars.items():
+            with self.subTest(f"DuckDB rewrite for {dialect or 'default'} default delimiters"):
+                assert_default_duckdb_sql(dialect, default_chars)
+
+        def assert_custom_duckdb_sql(
+            query: str,
+            *,
+            includes: t.Optional[t.Iterable[str]] = None,
+            excludes: t.Optional[t.Iterable[str]] = None,
+            chr_chars: t.Optional[t.Iterable[str]] = None,
+        ) -> None:
+            for dialect in ("bigquery", "snowflake"):
+                with self.subTest(f"DuckDB generation for {query} from {dialect}"):
+                    expression = parse_one(query, read=dialect)
+                    self.assert_duckdb_sql(
+                        expression, includes=includes, excludes=excludes, chr_chars=chr_chars
+                    )
+
+        assert_custom_duckdb_sql(
+            "INITCAP(col, '')", includes=("UPPER(LEFT(",), excludes=("REGEXP_MATCHES(",)
+        )
+        assert_custom_duckdb_sql("INITCAP(col, NULL)", includes=("REGEXP_MATCHES(", "REPLACE("))
+        assert_custom_duckdb_sql("INITCAP(col, ' ')", includes=("' '",))
+        assert_custom_duckdb_sql("INITCAP(col, '@')", includes=("'@'",), excludes=("CHR(",))
+        assert_custom_duckdb_sql("INITCAP(col, '_@')", includes=("'_@'",))
+        assert_custom_duckdb_sql(r"INITCAP(col, '\\\\')", includes=("\\\\",))
+        assert_custom_duckdb_sql(
+            "INITCAP(col, '\u000b')",
+            chr_chars=("\u000b",),
+        )
+        assert_custom_duckdb_sql(
+            "INITCAP(col, (SELECT delimiter FROM settings LIMIT 1))",
+            includes=("SELECT delimiter FROM settings", "REPLACE("),
+        )
+
+    def test_initcap_custom_delimiter_warning(self):
+        expression = parse_one("INITCAP(col, '_')", read="bigquery")
+        for dialect in ("postgres", "presto"):
+            with self.subTest(f"INITCAP unsupported custom delimiters warning for {dialect}"):
+                with self.assertLogs(generator_logger, level="WARNING") as cm:
+                    expression.sql(dialect)
+                self.assertIn("INITCAP does not support custom delimiters", cm.output[0])

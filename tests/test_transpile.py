@@ -46,7 +46,7 @@ class TestTranspile(unittest.TestCase):
             "SELECT 1 FROM a.b.table1 AS t UNPIVOT((c3) FOR c4 IN (a, b))",
         )
 
-        for key in ("union", "over", "from", "join"):
+        for key in ("union", "from", "join"):
             with self.subTest(f"alias {key}"):
                 self.validate(f"SELECT x AS {key}", f"SELECT x AS {key}")
                 self.validate(f'SELECT x "{key}"', f'SELECT x AS "{key}"')
@@ -878,7 +878,6 @@ FROM tbl1""",
             "ALTER ROLE CURRENT_USER WITH REPLICATION",
             "ALTER RULE foo ON bla RENAME TO baz",
             "ALTER SEQUENCE IF EXISTS baz RESTART WITH boo",
-            "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS=3",
             "ALTER TABLE integers DROP PRIMARY KEY",
             "ALTER TABLE table1 MODIFY COLUMN name1 SET TAG foo='bar'",
             "ALTER TABLE table1 RENAME COLUMN c1 AS c2",

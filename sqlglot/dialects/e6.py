@@ -1390,7 +1390,9 @@ class E6(Dialect):
             "ARBITRARY": exp.AnyValue.from_arg_list,
             "ARRAY_AGG": exp.ArrayAgg.from_arg_list,
             "ARRAY_CONCAT": exp.ArrayConcat.from_arg_list,
-            "ARRAY_CONTAINS": exp.ArrayContains.from_arg_list,
+            "ARRAY_CONTAINS": lambda args: exp.ArrayContains(
+                expression=seq_get(args, 1), this=seq_get(args, 0), ensure_variant=False
+            ),
             "ARRAY_JOIN": exp.ArrayToString.from_arg_list,
             "ARRAY_TO_STRING": exp.ArrayToString.from_arg_list,
             "ARRAY_SLICE": lambda args: exp.ArraySlice(
@@ -1468,7 +1470,13 @@ class E6(Dialect):
             "REGEXP_COUNT": _build_regexp_count,
             "REGEXP_EXTRACT": exp.RegexpExtract.from_arg_list,
             "REGEXP_LIKE": exp.RegexpLike.from_arg_list,
-            "REGEXP_REPLACE": exp.RegexpReplace.from_arg_list,
+            "REGEXP_REPLACE": lambda args: exp.RegexpReplace(
+                this=seq_get(args, 0),
+                expression=seq_get(args, 1),
+                replacement=seq_get(args, 2),
+                modifiers=seq_get(args, 3),
+                single_replace=True,
+            ),
             "REPLACE": exp.RegexpReplace.from_arg_list,
             "ROUND": exp.Round.from_arg_list,
             "RIGHT": _build_with_arg_as_text(exp.Right),
@@ -1485,6 +1493,8 @@ class E6(Dialect):
             "STDDEV": exp.Stddev.from_arg_list,
             "STDDEV_POP": exp.StddevPop.from_arg_list,
             "STRING_AGG": exp.GroupConcat.from_arg_list,
+            "VAR_SAMP": exp.Variance.from_arg_list,
+            "VARIANCE_SAMP": exp.Variance.from_arg_list,
             "STRPOS": exp.StrPosition.from_arg_list,
             "SUBSTR": exp.Substring.from_arg_list,
             "TIMESTAMP": _build_timestamp,
@@ -2412,7 +2422,9 @@ class E6(Dialect):
             exp.Contains: rename_func("CONTAINS_SUBSTR"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
-            exp.Coalesce: coalesce_sql,
+            exp.Coalesce: lambda self, e: self.func("NVL", e.this, *e.expressions)
+            if len(e.expressions) >= 2
+            else self.coalesce_sql(e),
             exp.Date: lambda self, e: self.func("DATE", e.this),
             exp.DateAdd: lambda self, e: self.func(
                 "DATE_ADD",
@@ -2446,6 +2458,9 @@ class E6(Dialect):
             ),
             exp.FromISO8601Timestamp: from_iso8601_timestamp_sql,
             exp.GenerateSeries: generateseries_sql,
+            exp.GetExtract: lambda self, e: self.func(
+                "ELEMENT_AT", e.this, str(int(e.expression.this) + 1)
+            ),
             exp.GroupConcat: string_agg_sql,
             exp.Hex: rename_func("TO_HEX"),
             exp.Interval: interval_sql,
@@ -2506,11 +2521,17 @@ class E6(Dialect):
             exp.TryCast: lambda self, e: self.func(
                 "TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"
             ),
-            exp.TsOrDsAdd: lambda self, e: self.func(
-                "DATE_ADD",
-                unit_to_str(e),
-                _to_int(e.expression),
-                e.this,
+            exp.TsOrDsAdd: lambda self, e: (
+                self.func("DATE_SUB", e.this, e.expression.this.this)
+                if isinstance(e.expression, exp.Mul)
+                and isinstance(e.expression.expression, exp.Literal)
+                and str(e.expression.expression.this) == "-1"
+                else self.func(
+                    "DATE_ADD",
+                    unit_to_str(e),
+                    _to_int(e.expression),
+                    e.this,
+                )
             ),
             exp.TsOrDsDiff: lambda self, e: self.func(
                 "DATE_DIFF",
@@ -2521,6 +2542,8 @@ class E6(Dialect):
             exp.TsOrDsToDate: TsOrDsToDate_sql,
             exp.UnixToTime: from_unixtime_sql,
             exp.UnixToStr: from_unixtime_sql,
+            exp.VarianceSamp: rename_func("VARIANCE_SAMP"),
+            exp.Variance: rename_func("VAR_SAMP"),
             exp.VarMap: map_sql,
             exp.Upper: rename_func("UPPER"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),

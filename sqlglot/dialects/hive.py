@@ -46,6 +46,7 @@ from sqlglot.helper import seq_get
 from sqlglot.tokens import TokenType
 from sqlglot.generator import unsupported_args
 from sqlglot.optimizer.annotate_types import TypeAnnotator
+from sqlglot.typing.hive import EXPRESSION_METADATA
 
 # (FuncType, Multiplier)
 DATE_DELTA_INTERVAL = {
@@ -204,6 +205,16 @@ def _jsonextract_sql(
     return self.func("GET_JSON_OBJECT", this, expr)
 
 
+def _build_date_add(args: t.List) -> exp.TsOrDsAdd:
+    expression = seq_get(args, 1)
+    if expression:
+        expression = expression * -1
+
+    return exp.TsOrDsAdd(
+        this=seq_get(args, 0), expression=expression, unit=exp.Literal.string("DAY")
+    )
+
+
 class Hive(Dialect):
     ALIAS_POST_TABLESAMPLE = True
     IDENTIFIERS_CAN_START_WITH_DIGIT = True
@@ -212,17 +223,16 @@ class Hive(Dialect):
     ARRAY_AGG_INCLUDES_NULLS = None
     REGEXP_EXTRACT_DEFAULT_GROUP = 1
     PRESERVE_ORIGINAL_NAMES = True
+    ALTER_TABLE_SUPPORTS_CASCADE = True
 
     # https://spark.apache.org/docs/latest/sql-ref-identifier.html#description
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
 
-    ANNOTATORS = {
-        **Dialect.ANNOTATORS,
-        exp.If: lambda self, e: self._annotate_by_args(e, "true", "false", promote=True),
-        exp.Coalesce: lambda self, e: self._annotate_by_args(
-            e, "this", "expressions", promote=True
-        ),
-    }
+    EXPRESSION_METADATA = EXPRESSION_METADATA.copy()
+
+    # https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=27362046#LanguageManualUDF-StringFunctions
+    # https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/exec/Utilities.java#L266-L269
+    INITCAP_DEFAULT_DELIMITER_CHARS = " \t\n\r\f\u000b\u001c\u001d\u001e\u001f"
 
     # Support only the non-ANSI mode (default for Hive, Spark2, Spark)
     COERCES_TO = defaultdict(set, deepcopy(TypeAnnotator.COERCES_TO))
@@ -311,6 +321,11 @@ class Hive(Dialect):
         STRICT_CAST = False
         VALUES_FOLLOWED_BY_PAREN = False
         JOINS_HAVE_EQUAL_PRECEDENCE = True
+        ADD_JOIN_ON_TRUE = True
+        ALTER_TABLE_PARTITIONS = True
+
+        CHANGE_COLUMN_ALTER_SYNTAX = False
+        # Whether the dialect supports using ALTER COLUMN syntax with CHANGE COLUMN.
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
@@ -328,7 +343,7 @@ class Hive(Dialect):
                     seq_get(args, 1),
                 ]
             ),
-            "DATE_SUB": exp.DateSub.from_arg_list,
+            "DATE_SUB": _build_date_add,
             "DATEDIFF": lambda args: exp.DateDiff(
                 this=exp.TsOrDsToDate(this=seq_get(args, 0)),
                 expression=exp.TsOrDsToDate(this=seq_get(args, 1)),
@@ -351,6 +366,7 @@ class Hive(Dialect):
             "SEQUENCE": exp.GenerateSeries.from_arg_list,
             "SIZE": exp.ArraySize.from_arg_list,
             "SPLIT": exp.RegexpSplit.from_arg_list,
+            "SPACE": exp.Space.from_arg_list,
             "STR_TO_MAP": lambda args: exp.StrToMap(
                 this=seq_get(args, 0),
                 pair_delim=seq_get(args, 1) or exp.Literal.string(","),
@@ -380,6 +396,11 @@ class Hive(Dialect):
             "SERDEPROPERTIES": lambda self: exp.SerdeProperties(
                 expressions=self._parse_wrapped_csv(self._parse_property)
             ),
+        }
+
+        ALTER_PARSERS = {
+            **parser.Parser.ALTER_PARSERS,
+            "CHANGE": lambda self: self._parse_alter_table_change(),
         }
 
         def _parse_transform(self) -> t.Optional[exp.Transform | exp.QueryTransform]:
@@ -460,6 +481,35 @@ class Hive(Dialect):
 
             return this
 
+        def _parse_alter_table_change(self) -> t.Optional[exp.Expression]:
+            self._match(TokenType.COLUMN)
+            this = self._parse_field(any_token=True)
+
+            if self.CHANGE_COLUMN_ALTER_SYNTAX and self._match_text_seq("TYPE"):
+                return self.expression(
+                    exp.AlterColumn,
+                    this=this,
+                    dtype=self._parse_types(schema=True),
+                )
+
+            column_new = self._parse_field(any_token=True)
+            dtype = self._parse_types(schema=True)
+
+            comment = self._match(TokenType.COMMENT) and self._parse_string()
+
+            if not this or not column_new or not dtype:
+                self.raise_error(
+                    "Expected 'CHANGE COLUMN' to be followed by 'column_name' 'column_name' 'data_type'"
+                )
+
+            return self.expression(
+                exp.AlterColumn,
+                this=this,
+                rename_to=column_new,
+                dtype=dtype,
+                comment=comment,
+            )
+
         def _parse_partition_and_order(
             self,
         ) -> t.Tuple[t.List[exp.Expression], t.Optional[exp.Expression]]:
@@ -509,6 +559,7 @@ class Hive(Dialect):
         PAD_FILL_PATTERN_IS_REQUIRED = True
         SUPPORTS_MEDIAN = False
         ARRAY_SIZE_NAME = "SIZE"
+        ALTER_SET_TYPE = ""
 
         EXPRESSIONS_WITHOUT_NESTED_CTES = {
             exp.Insert,
@@ -540,13 +591,13 @@ class Hive(Dialect):
 
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
-            exp.Group: transforms.preprocess([transforms.unalias_group]),
             exp.Property: property_sql,
             exp.AnyValue: rename_func("FIRST"),
             exp.ApproxDistinct: approx_count_distinct_sql,
             exp.ArgMax: arg_max_or_min_no_count("MAX_BY"),
             exp.ArgMin: arg_max_or_min_no_count("MIN_BY"),
             exp.ArrayFilter: rename_func("FILTER"),
+            exp.Array: transforms.preprocess([transforms.inherit_struct_field_names]),
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayToString: lambda self, e: self.func("CONCAT_WS", e.expression, e.this),
             exp.ArraySort: _array_sort_sql,
@@ -656,6 +707,7 @@ class Hive(Dialect):
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
             exp.DayOfMonth: rename_func("DAYOFMONTH"),
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
+            exp.Space: rename_func("SPACE"),
             exp.Levenshtein: unsupported_args("ins_cost", "del_cost", "sub_cost", "max_dist")(
                 rename_func("LEVENSHTEIN")
             ),
@@ -771,6 +823,32 @@ class Hive(Dialect):
                 ),
             )
 
+        def altercolumn_sql(self, expression: exp.AlterColumn) -> str:
+            this = self.sql(expression, "this")
+            new_name = self.sql(expression, "rename_to") or this
+            dtype = self.sql(expression, "dtype")
+            comment = (
+                f" COMMENT {self.sql(expression, 'comment')}"
+                if self.sql(expression, "comment")
+                else ""
+            )
+            default = self.sql(expression, "default")
+            visible = expression.args.get("visible")
+            allow_null = expression.args.get("allow_null")
+            drop = expression.args.get("drop")
+
+            if any([default, drop, visible, allow_null, drop]):
+                self.unsupported("Unsupported CHANGE COLUMN syntax")
+
+            if not dtype:
+                self.unsupported("CHANGE COLUMN without a type is not supported")
+
+            return f"CHANGE COLUMN {this} {new_name} {dtype}{comment}"
+
+        def renamecolumn_sql(self, expression: exp.RenameColumn) -> str:
+            self.unsupported("Cannot rename columns without data type defined in Hive")
+            return ""
+
         def alterset_sql(self, expression: exp.AlterSet) -> str:
             exprs = self.expressions(expression, flat=True)
             exprs = f" {exprs}" if exprs else ""
@@ -786,7 +864,7 @@ class Hive(Dialect):
             return f"SET{serde}{exprs}{location}{file_format}{tags}"
 
         def serdeproperties_sql(self, expression: exp.SerdeProperties) -> str:
-            prefix = "WITH " if expression.args.get("with") else ""
+            prefix = "WITH " if expression.args.get("with_") else ""
             exprs = self.expressions(expression, flat=True)
 
             return f"{prefix}SERDEPROPERTIES ({exprs})"

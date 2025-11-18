@@ -334,7 +334,7 @@ SELECT x.a AS a, x.b AS b, ROW_NUMBER() OVER (PARTITION BY x.a ORDER BY x.a) AS 
 WITH t AS (SELECT t1.x AS x, t1.y AS y, t2.a AS a, t2.b AS b FROM t1 AS t1(x, y) CROSS JOIN t2 AS t2(a, b) ORDER BY t2.a) SELECT t.x AS x, t.y AS y, t.a AS a, t.b AS b FROM t AS t;
 SELECT t1.x AS x, t1.y AS y, t2.a AS a, t2.b AS b FROM t1 AS t1(x, y) CROSS JOIN t2 AS t2(a, b) ORDER BY t2.a;
 
-# title: Don't merge window functions, inner table is aliased in outer query
+# title: Do not merge window functions, inner table is aliased in outer query
 with t1 as (
   SELECT
     ROW_NUMBER() OVER (PARTITION BY x.a ORDER BY x.a) as row_num
@@ -504,3 +504,38 @@ FROM i
 LEFT JOIN j AS conflict
   ON i.a = conflict.a;
 WITH j AS (SELECT 1 AS a) SELECT conflict_2.a AS a, conflict.a AS a FROM (SELECT 1 AS a) AS conflict_2 LEFT JOIN j AS conflict ON conflict_2.a = conflict.a;
+
+# title: column name is not lost
+with cte as (
+    select x.a * x.b as mult from x
+)
+select cte.mult from cte;
+SELECT x.a * x.b AS mult FROM x AS x;
+
+# title: avoid merging subquery with JOIN
+WITH t0 AS (
+  SELECT
+    5 AS id
+), t1 AS (
+  SELECT
+    1 AS id,
+    'US' AS cid
+), t2 AS (
+  SELECT
+    1 AS id,
+    'US' AS cid
+)
+SELECT
+  t0.id,
+  t3.cid AS cid
+FROM t0
+INNER JOIN (
+  SELECT
+    t1.id,
+    t2.cid
+  FROM t1
+  RIGHT JOIN t2
+    ON t1.cid = t2.cid
+) AS t3
+  ON t0.id = t3.id;
+WITH t0 AS (SELECT 5 AS id), t1 AS (SELECT 1 AS id, 'US' AS cid), t2 AS (SELECT 1 AS id, 'US' AS cid) SELECT t0.id AS id, t3.cid AS cid FROM t0 AS t0 INNER JOIN (SELECT t1.id AS id, t2.cid AS cid FROM t1 AS t1 RIGHT JOIN t2 AS t2 ON t1.cid = t2.cid) AS t3 ON t0.id = t3.id;

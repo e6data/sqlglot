@@ -1,4 +1,4 @@
-from sqlglot import exp, parse_one, transpile
+from sqlglot import exp, ParseError, parse_one, transpile
 from tests.dialects.test_dialect import Validator
 
 
@@ -6,6 +6,10 @@ class TestRedshift(Validator):
     dialect = "redshift"
 
     def test_redshift(self):
+        self.validate_identity("SELECT COSH(1.5)")
+        self.validate_identity(
+            "ROUND(CAST(a AS DOUBLE PRECISION) / CAST(b AS DOUBLE PRECISION), 2)"
+        )
         self.validate_all(
             "SELECT SPLIT_TO_ARRAY('12,345,6789')",
             write={
@@ -326,6 +330,7 @@ class TestRedshift(Validator):
         )
 
     def test_identity(self):
+        self.validate_identity("SELECT EXP(1)")
         self.validate_identity("ALTER TABLE table_name ALTER COLUMN bla TYPE VARCHAR")
         self.validate_identity("SELECT CAST(value AS FLOAT(8))")
         self.validate_identity("1 div", "1 AS div")
@@ -608,12 +613,12 @@ FROM (
         )
 
         ast = parse_one("SELECT * FROM t.t JOIN t.c1 ON c1.c2 = t.c3", read="redshift")
-        ast.args["from"].this.assert_is(exp.Table)
+        ast.args["from_"].this.assert_is(exp.Table)
         ast.args["joins"][0].this.assert_is(exp.Table)
         self.assertEqual(ast.sql("redshift"), "SELECT * FROM t.t JOIN t.c1 ON c1.c2 = t.c3")
 
         ast = parse_one("SELECT * FROM t AS t CROSS JOIN t.c1", read="redshift")
-        ast.args["from"].this.assert_is(exp.Table)
+        ast.args["from_"].this.assert_is(exp.Table)
         ast.args["joins"][0].this.assert_is(exp.Unnest)
         self.assertEqual(ast.sql("redshift"), "SELECT * FROM t AS t CROSS JOIN t.c1")
 
@@ -622,7 +627,7 @@ FROM (
             read="redshift",
         )
         joins = ast.args["joins"]
-        ast.args["from"].this.assert_is(exp.Table)
+        ast.args["from_"].this.assert_is(exp.Table)
         joins[0].this.assert_is(exp.Unnest)
         joins[1].this.assert_is(exp.Unnest)
         joins[2].this.assert_is(exp.Unnest).expressions[0].assert_is(exp.Dot)
@@ -676,8 +681,42 @@ FROM (
         self.validate_identity("GRANT USAGE ON SCHEMA sales_schema TO ROLE Analyst_role")
         self.validate_identity("GRANT SELECT ON sales_db.sales_schema.tickit_sales_redshift TO Bob")
 
+    def test_revoke(self):
+        revoke_cmds = [
+            "REVOKE SELECT ON ALL TABLES IN SCHEMA qa_tickit FROM fred",
+            "REVOKE USAGE ON DATASHARE salesshare FROM NAMESPACE '13b8833d-17c6-4f16-8fe4-1a018f5ed00d'",
+            "REVOKE USAGE FOR SCHEMAS IN DATABASE Sales_db FROM ROLE Sales",
+            "REVOKE EXECUTE FOR FUNCTIONS IN SCHEMA Sales_schema FROM bob",
+            "REVOKE SELECT FOR TABLES IN DATABASE Sales_db FROM alice",
+            "REVOKE ROLE sample_role1 FROM ROLE sample_role2",
+        ]
+
+        for sql in revoke_cmds:
+            with self.subTest(f"Testing Redshift's REVOKE command statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
+        self.validate_identity("REVOKE SELECT ON TABLE sales FROM fred")
+        self.validate_identity("REVOKE ALL ON SCHEMA qa_tickit FROM GROUP qa_users")
+        self.validate_identity("REVOKE USAGE ON DATABASE sales_db FROM Bob")
+        self.validate_identity("REVOKE USAGE ON SCHEMA sales_schema FROM ROLE Analyst_role")
+
     def test_analyze(self):
         self.validate_identity("ANALYZE TBL(col1, col2)")
         self.validate_identity("ANALYZE VERBOSE TBL")
         self.validate_identity("ANALYZE TBL PREDICATE COLUMNS")
         self.validate_identity("ANALYZE TBL ALL COLUMNS")
+
+    def test_cast(self):
+        self.validate_identity('1::"int"', "CAST(1 AS INTEGER)").to.is_type(exp.DataType.Type.INT)
+
+        with self.assertRaises(ParseError):
+            parse_one('1::"udt"', read="redshift")
+
+    def test_fetch_to_limit(self):
+        self.validate_all(
+            "SELECT * FROM t FETCH FIRST 1 ROWS ONLY",
+            write={
+                "redshift": "SELECT * FROM t LIMIT 1",
+                "postgres": "SELECT * FROM t FETCH FIRST 1 ROWS ONLY",
+            },
+        )

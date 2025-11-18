@@ -178,11 +178,18 @@ class Databricks(Spark):
             exp.JSONExtract: _jsonextract_sql,
             exp.JSONExtractScalar: _jsonextract_sql,
             exp.JSONPathRoot: lambda *_: "",
-            exp.ToChar: lambda self, e: self.function_fallback_sql(e),
+            exp.ToChar: lambda self, e: (
+                self.cast_sql(exp.Cast(this=e.this, to=exp.DataType(this="STRING")))
+                if e.args.get("is_numeric")
+                else self.function_fallback_sql(e)
+            ),
             exp.SplitPart: rename_func("SPLIT_PART"),
             exp.Trim: _trim_sql,
         }
 
+        TRANSFORMS.pop(
+            exp.RegexpLike
+        )  # They have added this flag such that databricks can use this as is but we have test cases for that
         TRANSFORMS.pop(exp.TryCast)
 
         TYPE_MAPPING = {

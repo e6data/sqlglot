@@ -7,10 +7,10 @@ from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
     build_timetostr_or_tochar,
+    build_like,
     binary_from_function,
     build_default_decimal_type,
     build_replace_with_optional_replacement,
-    build_timestamp_from_parts,
     date_delta_sql,
     date_trunc_to_time,
     datestrtodate_sql,
@@ -22,6 +22,7 @@ from sqlglot.dialects.dialect import (
     rename_func,
     timestamptrunc_sql,
     timestrtotime_sql,
+    unit_to_str,
     var_map_sql,
     map_date_part,
     no_timestamp_sql,
@@ -34,13 +35,24 @@ from sqlglot.generator import unsupported_args
 from sqlglot.helper import find_new_name, flatten, is_float, is_int, seq_get
 from sqlglot.optimizer.scope import build_scope, find_all_in_scope
 from sqlglot.tokens import TokenType
-from sqlglot.parser import build_coalesce
+from sqlglot.typing.snowflake import EXPRESSION_METADATA
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E, B
 
 
-# from https://docs.snowflake.com/en/sql-reference/functions/to_timestamp.html
+def _build_strtok(args: t.List) -> exp.SplitPart:
+    # Add default delimiter (space) if missing - per Snowflake docs
+    if len(args) == 1:
+        args.append(exp.Literal.string(" "))
+
+    # Add default part_index (1) if missing
+    if len(args) == 2:
+        args.append(exp.Literal.number(1))
+
+    return exp.SplitPart.from_arg_list(args)
+
+
 def _build_datetime(
     name: str, kind: exp.DataType.Type, safe: bool = False
 ) -> t.Callable[[t.List], exp.Func]:
@@ -98,9 +110,7 @@ def _build_object_construct(args: t.List) -> t.Union[exp.StarMap, exp.Struct]:
 
 def _build_datediff(args: t.List) -> exp.DateDiff:
     return exp.DateDiff(
-        this=seq_get(args, 2),
-        expression=seq_get(args, 1),
-        unit=map_date_part(seq_get(args, 0)),
+        this=seq_get(args, 2), expression=seq_get(args, 1), unit=map_date_part(seq_get(args, 0))
     )
 
 
@@ -138,10 +148,33 @@ def _build_if_from_div0(args: t.List) -> exp.If:
     return exp.If(this=cond, true=true, false=false)
 
 
+# https://docs.snowflake.com/en/sql-reference/functions/div0null
+def _build_if_from_div0null(args: t.List) -> exp.If:
+    lhs = exp._wrap(seq_get(args, 0), exp.Binary)
+    rhs = exp._wrap(seq_get(args, 1), exp.Binary)
+
+    # Returns 0 when divisor is 0 OR NULL
+    cond = exp.EQ(this=rhs, expression=exp.Literal.number(0)).or_(
+        exp.Is(this=rhs, expression=exp.null())
+    )
+    true = exp.Literal.number(0)
+    false = exp.Div(this=lhs, expression=rhs)
+    return exp.If(this=cond, true=true, false=false)
+
+
 # https://docs.snowflake.com/en/sql-reference/functions/zeroifnull
 def _build_if_from_zeroifnull(args: t.List) -> exp.If:
     cond = exp.Is(this=seq_get(args, 0), expression=exp.Null())
     return exp.If(this=cond, true=exp.Literal.number(0), false=seq_get(args, 0))
+
+
+def _build_search(args: t.List) -> exp.Search:
+    kwargs = {
+        "this": seq_get(args, 0),
+        "expression": seq_get(args, 1),
+        **{arg.name.lower(): arg for arg in args[2:] if isinstance(arg, exp.Kwarg)},
+    }
+    return exp.Search(**kwargs)
 
 
 # https://docs.snowflake.com/en/sql-reference/functions/zeroifnull
@@ -208,9 +241,7 @@ def _unqualify_pivot_columns(expression: exp.Expression) -> exp.Expression:
     return expression
 
 
-def _flatten_structured_types_unless_iceberg(
-    expression: exp.Expression,
-) -> exp.Expression:
+def _flatten_structured_types_unless_iceberg(expression: exp.Expression) -> exp.Expression:
     assert isinstance(expression, exp.Create)
 
     def _flatten_structured_type(expression: exp.DataType) -> exp.DataType:
@@ -381,6 +412,7 @@ def _qualify_unnested_columns(expression: exp.Expression) -> exp.Expression:
 
         taken_source_names = set(scope.sources)
         column_source: t.Dict[str, exp.Identifier] = {}
+        unnest_to_identifier: t.Dict[exp.Unnest, exp.Identifier] = {}
 
         unnest_identifier: t.Optional[exp.Identifier] = None
         orig_expression = expression.copy()
@@ -433,6 +465,7 @@ def _qualify_unnested_columns(expression: exp.Expression) -> exp.Expression:
             if not isinstance(unnest_identifier, exp.Identifier):
                 return orig_expression
 
+            unnest_to_identifier[unnest] = unnest_identifier
             column_source.update({c.lower(): unnest_identifier for c in unnest_columns})
 
         for column in scope.columns:
@@ -446,6 +479,15 @@ def _qualify_unnested_columns(expression: exp.Expression) -> exp.Expression:
                 and len(scope.sources) == 1
                 and column.name.lower() != unnest_identifier.name.lower()
             ):
+                unnest_ancestor = column.find_ancestor(exp.Unnest, exp.Select)
+                ancestor_identifier = unnest_to_identifier.get(unnest_ancestor)
+                if (
+                    isinstance(unnest_ancestor, exp.Unnest)
+                    and ancestor_identifier
+                    and ancestor_identifier.name.lower() == unnest_identifier.name.lower()
+                ):
+                    continue
+
                 table = unnest_identifier
 
             column.set("table", table and table.copy())
@@ -466,7 +508,7 @@ def _eliminate_dot_variant_lookup(expression: exp.Expression) -> exp.Expression:
             unnest_alias = unnest.args.get("alias")
             if (
                 isinstance(unnest_alias, exp.TableAlias)
-                and (unnest_alias.args.get("column_only") or not unnest_alias.this)
+                and not unnest_alias.this
                 and len(unnest_alias.columns) == 1
             ):
                 unnest_aliases.add(unnest_alias.columns[0].name)
@@ -487,6 +529,17 @@ def _eliminate_dot_variant_lookup(expression: exp.Expression) -> exp.Expression:
     return expression
 
 
+def _build_timestamp_from_parts(args: t.List) -> exp.Func:
+    """Build TimestampFromParts with support for both syntaxes:
+    1. TIMESTAMP_FROM_PARTS(year, month, day, hour, minute, second [, nanosecond] [, time_zone])
+    2. TIMESTAMP_FROM_PARTS(date_expr, time_expr) - Snowflake specific
+    """
+    if len(args) == 2:
+        return exp.TimestampFromParts(this=seq_get(args, 0), expression=seq_get(args, 1))
+
+    return exp.TimestampFromParts.from_arg_list(args)
+
+
 class Snowflake(Dialect):
     # https://docs.snowflake.com/en/sql-reference/identifiers-syntax
     NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
@@ -501,7 +554,12 @@ class Snowflake(Dialect):
     ARRAY_AGG_INCLUDES_NULLS = None
     ALTER_TABLE_ADD_REQUIRED_FOR_EACH_COLUMN = False
     TRY_CAST_REQUIRES_STRING = True
-    PRESERVE_ORIGINAL_NAMES = True
+    # PRESERVE_ORIGINAL_NAMES = True
+
+    EXPRESSION_METADATA = EXPRESSION_METADATA.copy()
+
+    # https://docs.snowflake.com/en/en/sql-reference/functions/initcap
+    INITCAP_DEFAULT_DELIMITER_CHARS = ' \t\n\r\f\v!?@"^#$&~_,.:;+\\-*%/|\\[\\](){}<>'
 
     TIME_MAPPING = {
         "YYYY": "%Y",
@@ -535,6 +593,8 @@ class Snowflake(Dialect):
         "ISOWEEK": "WEEKISO",
     }
 
+    PSEUDOCOLUMNS = {"LEVEL"}
+
     def quote_identifier(self, expression: E, identify: bool = True) -> E:
         # This disables quoting DUAL in SELECT ... FROM DUAL, because Snowflake treats an
         # unquoted DUAL keyword in a special way and does not map it to a user-defined table
@@ -559,6 +619,7 @@ class Snowflake(Dialect):
 
         ID_VAR_TOKENS = {
             *parser.Parser.ID_VAR_TOKENS,
+            TokenType.EXCEPT,
             TokenType.MATCH_CONDITION,
         }
 
@@ -570,10 +631,9 @@ class Snowflake(Dialect):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
             "APPROX_PERCENTILE": exp.ApproxQuantile.from_arg_list,
-            "ARRAY_CAT": exp.ArrayConcat.from_arg_list,
             "ARRAY_CONSTRUCT": lambda args: exp.Array(expressions=args),
             "ARRAY_CONTAINS": lambda args: exp.ArrayContains(
-                this=seq_get(args, 1), expression=seq_get(args, 0)
+                this=seq_get(args, 1), expression=seq_get(args, 0), ensure_variant=False
             ),
             "ARRAY_GENERATE_RANGE": lambda args: exp.GenerateSeries(
                 # ARRAY_GENERATE_RANGE has an exlusive end; we normalize it to be inclusive
@@ -581,6 +641,7 @@ class Snowflake(Dialect):
                 end=exp.Sub(this=seq_get(args, 1), expression=exp.Literal.number(1)),
                 step=seq_get(args, 2),
             ),
+            "ARRAY_SORT": exp.SortArray.from_arg_list,
             "ARRAY_POSITION": lambda args: exp.ArrayPosition(
                 this=seq_get(args, 1), expression=seq_get(args, 0)
             ),
@@ -599,24 +660,32 @@ class Snowflake(Dialect):
             "BIT_SHIFTLEFT": _build_bitwise(exp.BitwiseLeftShift, "BIT_SHIFTLEFT"),
             "BITSHIFTRIGHT": _build_bitwise(exp.BitwiseRightShift, "BITSHIFTRIGHT"),
             "BIT_SHIFTRIGHT": _build_bitwise(exp.BitwiseRightShift, "BIT_SHIFTRIGHT"),
+            "BITANDAGG": exp.BitwiseAndAgg.from_arg_list,
+            "BITAND_AGG": exp.BitwiseAndAgg.from_arg_list,
+            "BIT_AND_AGG": exp.BitwiseAndAgg.from_arg_list,
+            "BIT_ANDAGG": exp.BitwiseAndAgg.from_arg_list,
+            "BITORAGG": exp.BitwiseOrAgg.from_arg_list,
+            "BITOR_AGG": exp.BitwiseOrAgg.from_arg_list,
+            "BIT_OR_AGG": exp.BitwiseOrAgg.from_arg_list,
+            "BIT_ORAGG": exp.BitwiseOrAgg.from_arg_list,
+            "BITXORAGG": exp.BitwiseXorAgg.from_arg_list,
+            "BITXOR_AGG": exp.BitwiseXorAgg.from_arg_list,
+            "BIT_XOR_AGG": exp.BitwiseXorAgg.from_arg_list,
+            "BIT_XORAGG": exp.BitwiseXorAgg.from_arg_list,
+            "BITMAP_OR_AGG": exp.BitmapOrAgg.from_arg_list,
             "BOOLXOR": _build_bitwise(exp.Xor, "BOOLXOR"),
             "DATE": _build_datetime("DATE", exp.DataType.Type.DATE),
             "DATE_TRUNC": _date_trunc_to_time,
             "DATEADD": _build_date_time_add(exp.DateAdd),
             "DATEDIFF": _build_datediff,
+            "DAYOFWEEKISO": exp.DayOfWeekIso.from_arg_list,
             "DIV0": _build_if_from_div0,
+            "DIV0NULL": _build_if_from_div0null,
             "EDITDISTANCE": lambda args: exp.Levenshtein(
-                this=seq_get(args, 0),
-                expression=seq_get(args, 1),
-                max_dist=seq_get(args, 2),
+                this=seq_get(args, 0), expression=seq_get(args, 1), max_dist=seq_get(args, 2)
             ),
             "FLATTEN": exp.Explode.from_arg_list,
-            "GET": lambda args: exp.Bracket(
-                this=seq_get(args, 0),
-                expressions=[seq_get(args, 1)],
-                offset=0,
-                safe=True,
-            ),
+            "GET": exp.GetExtract.from_arg_list,
             "GET_PATH": lambda args, dialect: exp.JSONExtract(
                 this=seq_get(args, 0),
                 expression=dialect.to_json_path(seq_get(args, 1)),
@@ -624,16 +693,21 @@ class Snowflake(Dialect):
             ),
             "HEX_DECODE_BINARY": exp.Unhex.from_arg_list,
             "IFF": exp.If.from_arg_list,
+            "MD5_HEX": exp.MD5.from_arg_list,
+            "MD5_BINARY": exp.MD5Digest.from_arg_list,
+            "MD5_NUMBER_LOWER64": exp.MD5NumberLower64.from_arg_list,
+            "MD5_NUMBER_UPPER64": exp.MD5NumberUpper64.from_arg_list,
             "LAST_DAY": lambda args: exp.LastDay(
                 this=seq_get(args, 0), unit=map_date_part(seq_get(args, 1))
             ),
             "LEN": lambda args: exp.Length(this=seq_get(args, 0), binary=True),
             "LENGTH": lambda args: exp.Length(this=seq_get(args, 0), binary=True),
-            "MD5_HEX": exp.MD5Digest.from_arg_list,
             "NULLIFZERO": _build_if_from_nullifzero,
-            "NVL": lambda args: build_coalesce(args, is_nvl=True),
-            # object_construct is mapped to starmap/varmap but should be mapped to JsonObject
             "OBJECT_CONSTRUCT": _build_object_construct,
+            "OCTET_LENGTH": exp.ByteLength.from_arg_list,
+            "PARSE_URL": lambda args: exp.ParseUrl(
+                this=seq_get(args, 0), permissive=seq_get(args, 1)
+            ),
             "REGEXP_EXTRACT_ALL": _build_regexp_extract(exp.RegexpExtractAll),
             "REGEXP_REPLACE": _build_regexp_replace,
             "REGEXP_SUBSTR": _build_regexp_extract(exp.RegexpExtract),
@@ -641,17 +715,22 @@ class Snowflake(Dialect):
             "REPLACE": build_replace_with_optional_replacement,
             "RLIKE": exp.RegexpLike.from_arg_list,
             "ARRAY_SLICE": exp.ArraySlice.from_arg_list,
+            "SHA1_BINARY": exp.SHA1Digest.from_arg_list,
+            "SHA1_HEX": exp.SHA.from_arg_list,
+            "SHA2_BINARY": exp.SHA2Digest.from_arg_list,
+            "SHA2_HEX": exp.SHA2.from_arg_list,
             "SQUARE": lambda args: exp.Pow(this=seq_get(args, 0), expression=exp.Literal.number(2)),
+            "STRTOK": _build_strtok,
             "TABLE": lambda args: exp.TableFromRows(this=seq_get(args, 0)),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
             "TIMEADD": _build_date_time_add(exp.TimeAdd),
             "TIMEDIFF": _build_datediff,
             "TIMESTAMPADD": _build_date_time_add(exp.DateAdd),
             "TIMESTAMPDIFF": _build_datediff,
-            "TIMESTAMPFROMPARTS": build_timestamp_from_parts,
-            "TIMESTAMP_FROM_PARTS": build_timestamp_from_parts,
-            "TIMESTAMPNTZFROMPARTS": build_timestamp_from_parts,
-            "TIMESTAMP_NTZ_FROM_PARTS": build_timestamp_from_parts,
+            "TIMESTAMPFROMPARTS": _build_timestamp_from_parts,
+            "TIMESTAMP_FROM_PARTS": _build_timestamp_from_parts,
+            "TIMESTAMPNTZFROMPARTS": _build_timestamp_from_parts,
+            "TIMESTAMP_NTZ_FROM_PARTS": _build_timestamp_from_parts,
             "TRY_PARSE_JSON": lambda args: exp.ParseJSON(this=seq_get(args, 0), safe=True),
             "TRY_TO_DATE": _build_datetime("TRY_TO_DATE", exp.DataType.Type.DATE, safe=True),
             "TRY_TO_TIME": _build_datetime("TRY_TO_TIME", exp.DataType.Type.TIME, safe=True),
@@ -671,18 +750,28 @@ class Snowflake(Dialect):
             "TO_TIMESTAMP_LTZ": _build_datetime("TO_TIMESTAMP_LTZ", exp.DataType.Type.TIMESTAMPLTZ),
             "TO_TIMESTAMP_NTZ": _build_datetime("TO_TIMESTAMP_NTZ", exp.DataType.Type.TIMESTAMP),
             "TO_TIMESTAMP_TZ": _build_datetime("TO_TIMESTAMP_TZ", exp.DataType.Type.TIMESTAMPTZ),
-            # "TO_CHAR": exp.TimeToStr.from_arg_list,
-            "TO_VARCHAR": exp.ToChar.from_arg_list,
+            "TO_VARCHAR": build_timetostr_or_tochar,
+            "TO_JSON": exp.JSONFormat.from_arg_list,
+            "VARIANCE_SAMP": exp.VarianceSamp.from_arg_list,
+            "VAR_SAMP": exp.VarSamp.from_arg_list,
+            "VECTOR_L2_DISTANCE": exp.EuclideanDistance.from_arg_list,
             "ZEROIFNULL": _build_if_from_zeroifnull,
+            "LIKE": build_like(exp.Like),
+            "ILIKE": build_like(exp.ILike),
+            "SEARCH": _build_search,
+            "SKEW": exp.Skewness.from_arg_list,
+            "WEEKISO": exp.WeekOfYear.from_arg_list,
+            "WEEKOFYEAR": exp.Week.from_arg_list,
         }
+        FUNCTIONS.pop("PREDICT")
 
         FUNCTION_PARSERS = {
             **parser.Parser.FUNCTION_PARSERS,
             "DATE_PART": lambda self: self._parse_date_part(),
+            "DIRECTORY": lambda self: self._parse_directory(),
             "OBJECT_CONSTRUCT_KEEP_NULL": lambda self: self._parse_json_object(),
             "LISTAGG": lambda self: self._parse_string_agg(),
             "SEMANTIC_VIEW": lambda self: self._parse_semantic_view(),
-            # "OBJECT_CONSTRUCT": lambda self: self._parse_json_object(),
         }
         FUNCTION_PARSERS.pop("TRIM")
 
@@ -690,6 +779,7 @@ class Snowflake(Dialect):
 
         ALTER_PARSERS = {
             **parser.Parser.ALTER_PARSERS,
+            "SESSION": lambda self: self._parse_alter_session(),
             "UNSET": lambda self: self.expression(
                 exp.Set,
                 tag=self._match_text_seq("TAG"),
@@ -765,14 +855,7 @@ class Snowflake(Dialect):
 
         FLATTEN_COLUMNS = ["SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS"]
 
-        SCHEMA_KINDS = {
-            "OBJECTS",
-            "TABLES",
-            "VIEWS",
-            "SEQUENCES",
-            "UNIQUE KEYS",
-            "IMPORTED KEYS",
-        }
+        SCHEMA_KINDS = {"OBJECTS", "TABLES", "VIEWS", "SEQUENCES", "UNIQUE KEYS", "IMPORTED KEYS"}
 
         NON_TABLE_CREATABLES = {"STORAGE INTEGRATION", "TAG", "WAREHOUSE", "STREAMLIT"}
 
@@ -787,6 +870,21 @@ class Snowflake(Dialect):
                 expressions=[e.this if isinstance(e, exp.Cast) else e for e in expressions],
             ),
         }
+
+        COLUMN_OPERATORS = {
+            **parser.Parser.COLUMN_OPERATORS,
+            TokenType.EXCLAMATION: lambda self, this, attr: self.expression(
+                exp.ModelAttribute, this=this, expression=attr
+            ),
+        }
+
+        def _parse_directory(self) -> exp.DirectoryStage:
+            table = self._parse_table_parts()
+
+            if isinstance(table, exp.Table):
+                table = table.this
+
+            return self.expression(exp.DirectoryStage, this=table)
 
         def _parse_use(self) -> exp.Use:
             if self._match_text_seq("SECONDARY", "ROLES"):
@@ -847,9 +945,7 @@ class Snowflake(Dialect):
 
             return None
 
-        def _parse_with_property(
-            self,
-        ) -> t.Optional[exp.Expression] | t.List[exp.Expression]:
+        def _parse_with_property(self) -> t.Optional[exp.Expression] | t.List[exp.Expression]:
             if self._match(TokenType.TAG):
                 return self._parse_tag()
 
@@ -871,8 +967,11 @@ class Snowflake(Dialect):
             if not this:
                 return None
 
-            self._match(TokenType.COMMA)
-            expression = self._parse_bitwise()
+            # Handle both syntaxes: DATE_PART(part, expr) and DATE_PART(part FROM expr)
+            expression = (
+                self._match_set((TokenType.FROM, TokenType.COMMA)) and self._parse_bitwise()
+            )
+
             this = map_date_part(this)
             name = this.name.upper()
 
@@ -901,7 +1000,7 @@ class Snowflake(Dialect):
                 # Keys are strings in Snowflake's objects, see also:
                 # - https://docs.snowflake.com/en/sql-reference/data-types-semistructured
                 # - https://docs.snowflake.com/en/sql-reference/functions/object_construct
-                return self._parse_slice(self._parse_string())
+                return self._parse_slice(self._parse_string()) or self._parse_assignment()
 
             return self._parse_slice(self._parse_alias(self._parse_assignment(), explicit=True))
 
@@ -921,10 +1020,7 @@ class Snowflake(Dialect):
             return lateral
 
         def _parse_table_parts(
-            self,
-            schema: bool = False,
-            is_db_reference: bool = False,
-            wildcard: bool = False,
+            self, schema: bool = False, is_db_reference: bool = False, wildcard: bool = False
         ) -> exp.Table:
             # https://docs.snowflake.com/en/user-guide/querying-stage
             if self._match(TokenType.STRING, advance=False):
@@ -1033,19 +1129,17 @@ class Snowflake(Dialect):
 
             return self.expression(
                 exp.Show,
-                **{
-                    "terse": terse,
-                    "this": this,
-                    "history": history,
-                    "like": like,
-                    "scope": scope,
-                    "scope_kind": scope_kind,
-                    "starts_with": self._match_text_seq("STARTS", "WITH") and self._parse_string(),
-                    "limit": self._parse_limit(),
-                    "from": self._parse_string() if self._match(TokenType.FROM) else None,
-                    "privileges": self._match_text_seq("WITH", "PRIVILEGES")
-                    and self._parse_csv(lambda: self._parse_var(any_token=True, upper=True)),
-                },
+                terse=terse,
+                this=this,
+                history=history,
+                like=like,
+                scope=scope,
+                scope_kind=scope_kind,
+                starts_with=self._match_text_seq("STARTS", "WITH") and self._parse_string(),
+                limit=self._parse_limit(),
+                from_=self._parse_string() if self._match(TokenType.FROM) else None,
+                privileges=self._match_text_seq("WITH", "PRIVILEGES")
+                and self._parse_csv(lambda: self._parse_var(any_token=True, upper=True)),
             )
 
         def _parse_put(self) -> exp.Put | exp.Command:
@@ -1149,14 +1243,25 @@ class Snowflake(Dialect):
             kwargs: t.Dict[str, t.Any] = {"this": self._parse_table_parts()}
 
             while self._curr and not self._match(TokenType.R_PAREN, advance=False):
-                if self._match_text_seq("DIMENSIONS"):
-                    kwargs["dimensions"] = self._parse_csv(self._parse_disjunction)
-                if self._match_text_seq("METRICS"):
-                    kwargs["metrics"] = self._parse_csv(self._parse_disjunction)
-                if self._match_text_seq("WHERE"):
+                if self._match_texts(("DIMENSIONS", "METRICS", "FACTS")):
+                    keyword = self._prev.text.lower()
+                    kwargs[keyword] = self._parse_csv(self._parse_disjunction)
+                elif self._match_text_seq("WHERE"):
                     kwargs["where"] = self._parse_expression()
+                else:
+                    self.raise_error("Expecting ) or encountered unexpected keyword")
+                    break
 
             return self.expression(exp.SemanticView, **kwargs)
+
+        def _parse_set(self, unset: bool = False, tag: bool = False) -> exp.Set | exp.Command:
+            set = super()._parse_set(unset=unset, tag=tag)
+
+            if isinstance(set, exp.Set):
+                for expr in set.expressions:
+                    if isinstance(expr, exp.SetItem):
+                        expr.set("kind", "VARIABLE")
+            return set
 
     class Tokenizer(tokens.Tokenizer):
         STRING_ESCAPES = ["\\", "'"]
@@ -1167,9 +1272,8 @@ class Snowflake(Dialect):
 
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
-            "FILE://": TokenType.URI_START,
             "BYTEINT": TokenType.INT,
-            "EXCLUDE": TokenType.EXCEPT,
+            "FILE://": TokenType.URI_START,
             "FILE FORMAT": TokenType.FILE_FORMAT,
             "GET": TokenType.GET,
             "MATCH_CONDITION": TokenType.MATCH_CONDITION,
@@ -1183,19 +1287,20 @@ class Snowflake(Dialect):
             "SEMANTIC VIEW": TokenType.SEMANTIC_VIEW,
             "SQL_DOUBLE": TokenType.DOUBLE,
             "SQL_VARCHAR": TokenType.VARCHAR,
+            "STAGE": TokenType.STAGE,
             "STORAGE INTEGRATION": TokenType.STORAGE_INTEGRATION,
+            "STREAMLIT": TokenType.STREAMLIT,
             "TAG": TokenType.TAG,
             "TIMESTAMP_TZ": TokenType.TIMESTAMPTZ,
             "TOP": TokenType.TOP,
             "WAREHOUSE": TokenType.WAREHOUSE,
-            "STAGE": TokenType.STAGE,
-            "STREAMLIT": TokenType.STREAMLIT,
         }
         KEYWORDS.pop("/*+")
 
         SINGLE_TOKENS = {
             **tokens.Tokenizer.SINGLE_TOKENS,
             "$": TokenType.PARAMETER,
+            "!": TokenType.EXCLAMATION,
         }
 
         VAR_SINGLE_TOKENS = {"$"}
@@ -1237,8 +1342,15 @@ class Snowflake(Dialect):
             exp.ApproxDistinct: rename_func("APPROX_COUNT_DISTINCT"),
             exp.ArgMax: rename_func("MAX_BY"),
             exp.ArgMin: rename_func("MIN_BY"),
+            exp.Array: transforms.preprocess([transforms.inherit_struct_field_names]),
             exp.ArrayConcat: lambda self, e: self.arrayconcat_sql(e, name="ARRAY_CAT"),
-            exp.ArrayContains: lambda self, e: self.func("ARRAY_CONTAINS", e.expression, e.this),
+            exp.ArrayContains: lambda self, e: self.func(
+                "ARRAY_CONTAINS",
+                e.expression
+                if e.args.get("ensure_variant") is False
+                else exp.cast(e.expression, exp.DataType.Type.VARIANT, copy=False),
+                e.this,
+            ),
             exp.ArrayIntersect: rename_func("ARRAY_INTERSECTION"),
             exp.ArrayFilter: rename_func("FILTER"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
@@ -1248,17 +1360,15 @@ class Snowflake(Dialect):
             exp.AtTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), e.this
             ),
-            exp.BitwiseNot: lambda self, e: self.func("BITNOT", e.this),
-            exp.BitwiseAnd: rename_func("BITAND"),
             exp.BitwiseOr: rename_func("BITOR"),
             exp.BitwiseXor: rename_func("BITXOR"),
+            exp.BitwiseAnd: rename_func("BITAND"),
+            exp.BitwiseAndAgg: rename_func("BITANDAGG"),
+            exp.BitwiseOrAgg: rename_func("BITORAGG"),
+            exp.BitwiseXorAgg: rename_func("BITXORAGG"),
+            exp.BitwiseNot: rename_func("BITNOT"),
             exp.BitwiseLeftShift: rename_func("BITSHIFTLEFT"),
             exp.BitwiseRightShift: rename_func("BITSHIFTRIGHT"),
-            exp.Bracket: lambda self, e: (
-                self.func("GET", e.this, seq_get(e.expressions, 0))
-                if e.args.get("safe") and e.args.get("offset") == 0
-                else self.bracket_sql(e)
-            ),
             exp.Create: transforms.preprocess([_flatten_structured_types_unless_iceberg]),
             exp.Coalesce: coalesce_sql,
             exp.Contains: rename_func("CONTAINS"),
@@ -1276,17 +1386,16 @@ class Snowflake(Dialect):
             exp.Extract: lambda self, e: self.func(
                 "DATE_PART", map_date_part(e.this, self.dialect), e.expression
             ),
+            exp.EuclideanDistance: rename_func("VECTOR_L2_DISTANCE"),
             exp.FileFormatProperty: lambda self,
             e: f"FILE_FORMAT=({self.expressions(e, 'expressions', sep=' ')})",
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
             exp.GenerateSeries: lambda self, e: self.func(
-                "ARRAY_GENERATE_RANGE",
-                e.args["start"],
-                e.args["end"] + 1,
-                e.args.get("step"),
+                "ARRAY_GENERATE_RANGE", e.args["start"], e.args["end"] + 1, e.args.get("step")
             ),
+            exp.GetExtract: rename_func("GET"),
             exp.GroupConcat: lambda self, e: groupconcat_sql(self, e, sep=""),
             exp.If: if_sql(name="IFF", false_value="NULL"),
             exp.JSONExtractArray: _json_extract_value_array_sql,
@@ -1303,13 +1412,13 @@ class Snowflake(Dialect):
             exp.LogicalAnd: rename_func("BOOLAND_AGG"),
             exp.LogicalOr: rename_func("BOOLOR_AGG"),
             exp.Map: lambda self, e: var_map_sql(self, e, "OBJECT_CONSTRUCT"),
-            exp.MD5Digest: rename_func("MD5"),
             exp.MakeInterval: no_make_interval_sql,
             exp.Max: max_or_greatest,
             exp.Min: min_or_least,
             exp.ParseJSON: lambda self, e: self.func(
                 "TRY_PARSE_JSON" if e.args.get("safe") else "PARSE_JSON", e.this
             ),
+            exp.JSONFormat: rename_func("TO_JSON"),
             exp.PartitionedByProperty: lambda self, e: f"PARTITION BY {self.sql(e, 'this')}",
             exp.PercentileCont: transforms.preprocess(
                 [transforms.add_within_group_for_percentiles]
@@ -1338,6 +1447,12 @@ class Snowflake(Dialect):
             exp.SHA: rename_func("SHA1"),
             exp.SHA2: rename_func("SHA2"),
             exp.SplitPart: rename_func("SPLIT_PART"),
+            exp.MD5Digest: rename_func("MD5_BINARY"),
+            exp.MD5NumberLower64: rename_func("MD5_NUMBER_LOWER64"),
+            exp.MD5NumberUpper64: rename_func("MD5_NUMBER_UPPER64"),
+            exp.LowerHex: rename_func("TO_CHAR"),
+            exp.SortArray: rename_func("ARRAY_SORT"),
+            exp.Skewness: rename_func("SKEW"),
             exp.StarMap: rename_func("OBJECT_CONSTRUCT"),
             exp.StartsWith: rename_func("STARTSWITH"),
             exp.EndsWith: rename_func("ENDSWITH"),
@@ -1349,7 +1464,13 @@ class Snowflake(Dialect):
             exp.Stuff: rename_func("INSERT"),
             exp.StPoint: rename_func("ST_MAKEPOINT"),
             exp.TimeAdd: date_delta_sql("TIMEADD"),
-            exp.TimeFromParts: rename_func("TIME_FROM_PARTS"),
+            exp.TimeSlice: lambda self, e: self.func(
+                "TIME_SLICE",
+                e.this,
+                e.expression,
+                unit_to_str(e),
+                e.args.get("kind"),
+            ),
             exp.Timestamp: no_timestamp_sql,
             exp.TimestampAdd: date_delta_sql("TIMESTAMPADD"),
             exp.TimestampDiff: lambda self, e: self.func(
@@ -1364,9 +1485,7 @@ class Snowflake(Dialect):
             exp.TsOrDsAdd: date_delta_sql("DATEADD", cast=True),
             exp.TsOrDsDiff: date_delta_sql("DATEDIFF"),
             exp.TsOrDsToDate: lambda self, e: self.func(
-                "TRY_TO_DATE" if e.args.get("safe") else "TO_DATE",
-                e.this,
-                self.format_time(e),
+                "TRY_TO_DATE" if e.args.get("safe") else "TO_DATE", e.this, self.format_time(e)
             ),
             exp.TsOrDsToTime: lambda self, e: self.func(
                 "TRY_TO_TIME" if e.args.get("safe") else "TO_TIME", e.this, self.format_time(e)
@@ -1375,8 +1494,16 @@ class Snowflake(Dialect):
             exp.UnixToTime: rename_func("TO_TIMESTAMP"),
             exp.Uuid: rename_func("UUID_STRING"),
             exp.VarMap: lambda self, e: var_map_sql(self, e, "OBJECT_CONSTRUCT"),
-            exp.WeekOfYear: rename_func("WEEKOFYEAR"),
+            exp.Booland: rename_func("BOOLAND"),
+            exp.Boolor: rename_func("BOOLOR"),
+            exp.WeekOfYear: rename_func("WEEKISO"),
+            exp.YearOfWeek: rename_func("YEAROFWEEK"),
+            exp.YearOfWeekIso: rename_func("YEAROFWEEKISO"),
             exp.Xor: rename_func("BOOLXOR"),
+            exp.ByteLength: rename_func("OCTET_LENGTH"),
+            exp.ArrayConcatAgg: lambda self, e: self.func(
+                "ARRAY_FLATTEN", exp.ArrayAgg(this=e.this)
+            ),
         }
 
         SUPPORTED_JSON_PATH_PARTS = {
@@ -1387,9 +1514,10 @@ class Snowflake(Dialect):
 
         TYPE_MAPPING = {
             **generator.Generator.TYPE_MAPPING,
+            exp.DataType.Type.BIGDECIMAL: "DOUBLE",
             exp.DataType.Type.NESTED: "OBJECT",
             exp.DataType.Type.STRUCT: "OBJECT",
-            exp.DataType.Type.BIGDECIMAL: "DOUBLE",
+            exp.DataType.Type.TEXT: "VARCHAR",
         }
 
         TOKEN_MAPPING = {
@@ -1425,13 +1553,23 @@ class Snowflake(Dialect):
 
         def datatype_sql(self, expression: exp.DataType) -> str:
             expressions = expression.expressions
-            if (
-                expressions
-                and expression.is_type(*exp.DataType.STRUCT_TYPES)
-                and any(isinstance(field_type, exp.DataType) for field_type in expressions)
-            ):
-                # The correct syntax is OBJECT [ (<key> <value_type [NOT NULL] [, ...]) ]
-                return "OBJECT"
+            if expressions and expression.is_type(*exp.DataType.STRUCT_TYPES):
+                for field_type in expressions:
+                    # The correct syntax is OBJECT [ (<key> <value_type [NOT NULL] [, ...]) ]
+                    if isinstance(field_type, exp.DataType):
+                        return "OBJECT"
+                    if (
+                        isinstance(field_type, exp.ColumnDef)
+                        and field_type.this
+                        and field_type.this.is_string
+                    ):
+                        # Doing OBJECT('foo' VARCHAR) is invalid snowflake Syntax. Moreover, besides
+                        # converting 'foo' into an identifier, we also need to quote it because these
+                        # keys are case-sensitive. For example:
+                        #
+                        # WITH t AS (SELECT OBJECT_CONSTRUCT('x', 'y') AS c) SELECT c:x FROM t -- correct
+                        # WITH t AS (SELECT OBJECT_CONSTRUCT('x', 'y') AS c) SELECT c:X FROM t -- incorrect, returns NULL
+                        field_type.this.replace(exp.to_identifier(field_type.name, quoted=True))
 
             return super().datatype_sql(expression)
 
@@ -1543,7 +1681,7 @@ class Snowflake(Dialect):
 
             limit = self.sql(expression, "limit")
 
-            from_ = self.sql(expression, "from")
+            from_ = self.sql(expression, "from_")
             if from_:
                 from_ = f" FROM {from_}"
 
@@ -1581,6 +1719,12 @@ class Snowflake(Dialect):
             return f"CLUSTER BY ({self.expressions(expression, flat=True)})"
 
         def struct_sql(self, expression: exp.Struct) -> str:
+            if len(expression.expressions) == 1:
+                arg = expression.expressions[0]
+                if arg.is_star or (isinstance(arg, exp.ILike) and arg.left.is_star):
+                    # Wildcard syntax: https://docs.snowflake.com/en/sql-reference/data-types-semistructured#object
+                    return f"{{{self.sql(expression.expressions[0])}}}"
+
             keys = []
             values = []
 
@@ -1615,9 +1759,7 @@ class Snowflake(Dialect):
         def strtotime_sql(self, expression: exp.StrToTime):
             safe_prefix = "TRY_" if expression.args.get("safe") else ""
             return self.func(
-                f"{safe_prefix}TO_TIMESTAMP",
-                expression.this,
-                self.format_time(expression),
+                f"{safe_prefix}TO_TIMESTAMP", expression.this, self.format_time(expression)
             )
 
         def timestampsub_sql(self, expression: exp.TimestampSub):
@@ -1756,3 +1898,22 @@ class Snowflake(Dialect):
                 return f"{self.sql(this)}:{self.sql(expression, 'expression')}"
 
             return super().dot_sql(expression)
+
+        def modelattribute_sql(self, expression: exp.ModelAttribute) -> str:
+            return f"{self.sql(expression, 'this')}!{self.sql(expression, 'expression')}"
+
+        def format_sql(self, expression: exp.Format) -> str:
+            if expression.name.lower() == "%s" and len(expression.expressions) == 1:
+                return self.func("TO_CHAR", expression.expressions[0])
+
+            return self.function_fallback_sql(expression)
+
+        def splitpart_sql(self, expression: exp.SplitPart) -> str:
+            # Set part_index to 1 if missing
+            if not expression.args.get("delimiter"):
+                expression.set("delimiter", exp.Literal.string(" "))
+
+            if not expression.args.get("part_index"):
+                expression.set("part_index", exp.Literal.number(1))
+
+            return rename_func("SPLIT_PART")(self, expression)

@@ -8,16 +8,20 @@ class TestTSQL(Validator):
     dialect = "tsql"
 
     def test_tsql(self):
-        self.validate_identity(
-            "with x as (select 1) select * from x union select * from x order by 1 limit 0",
+        self.validate_all(
             "WITH x AS (SELECT 1 AS [1]) SELECT TOP 0 * FROM (SELECT * FROM x UNION SELECT * FROM x) AS _l_0 ORDER BY 1",
+            read={
+                "": "WITH x AS (SELECT 1) SELECT * FROM x UNION SELECT * FROM x ORDER BY 1 LIMIT 0",
+            },
         )
 
         # https://learn.microsoft.com/en-us/previous-versions/sql/sql-server-2008-r2/ms187879(v=sql.105)?redirectedfrom=MSDN
         # tsql allows .. which means use the default schema
         self.validate_identity("SELECT * FROM a..b")
 
+        self.validate_identity("SELECT EXP(1)")
         self.validate_identity("SELECT SYSDATETIMEOFFSET()")
+        self.validate_identity("SELECT COMPRESS('Hello World')")
         self.validate_identity("GO").assert_is(exp.Command)
         self.validate_identity("SELECT go").selects[0].assert_is(exp.Column)
         self.validate_identity("CREATE view a.b.c", "CREATE VIEW b.c")
@@ -40,6 +44,9 @@ class TestTSQL(Validator):
         self.validate_identity("CAST(x AS int) OR y", "CAST(x AS INTEGER) <> 0 OR y <> 0")
         self.validate_identity("TRUNCATE TABLE t1 WITH (PARTITIONS(1, 2 TO 5, 10 TO 20, 84))")
         self.validate_identity(
+            "WITH t1 AS (SELECT 1 AS a), t2 AS (SELECT 1 AS a) SELECT TOP 10 a FROM t1 UNION ALL SELECT TOP 10 a FROM t2"
+        )
+        self.validate_identity(
             "SELECT TOP 10 s.RECORDID, n.c.VALUE('(/*:FORM_ROOT/*:SOME_TAG)[1]', 'float') AS SOME_TAG_VALUE FROM source_table.dbo.source_data AS s(nolock) CROSS APPLY FormContent.nodes('/*:FORM_ROOT') AS N(C)"
         )
         self.validate_identity(
@@ -55,6 +62,12 @@ class TestTSQL(Validator):
             "COPY INTO test_1 FROM 'path' WITH (FORMAT_NAME = test, FILE_TYPE = 'CSV', CREDENTIAL = (IDENTITY='Shared Access Signature', SECRET='token'), FIELDTERMINATOR = ';', ROWTERMINATOR = '0X0A', ENCODING = 'UTF8', DATEFORMAT = 'ymd', MAXERRORS = 10, ERRORFILE = 'errorsfolder', IDENTITY_INSERT = 'ON')"
         )
         self.validate_identity(
+            "WITH t1 AS (SELECT 1 AS a), t2 AS (SELECT 1 AS a) SELECT TOP 10 a FROM t1 UNION ALL SELECT TOP 10 a FROM t2 ORDER BY a DESC"
+        )
+        self.validate_identity(
+            "WITH t1 AS (SELECT 1 AS a), t2 AS (SELECT 1 AS a) SELECT COUNT(*) FROM (SELECT TOP 10 a FROM t1 UNION ALL SELECT TOP 10 a FROM t2 ORDER BY a DESC) AS t"
+        )
+        self.validate_identity(
             'SELECT 1 AS "[x]"',
             "SELECT 1 AS [[x]]]",
         )
@@ -68,6 +81,13 @@ class TestTSQL(Validator):
             "SELECT 1 WHERE EXISTS(SELECT 1)",
         )
 
+        self.validate_all(
+            "CREATE TABLE test_table([ID] [BIGINT] NOT NULL,[EffectiveFrom] [DATETIME2] (3) NOT NULL)",
+            write={
+                "spark": "CREATE TABLE test_table (`ID` BIGINT NOT NULL, `EffectiveFrom` TIMESTAMP NOT NULL)",
+                "tsql": "CREATE TABLE test_table ([ID] BIGINT NOT NULL, [EffectiveFrom] DATETIME2(3) NOT NULL)",
+            },
+        )
         self.validate_all(
             "SELECT CONVERT(DATETIME, '2006-04-25T15:50:59.997', 126)",
             write={
@@ -505,6 +525,19 @@ class TestTSQL(Validator):
             "CREATE PROCEDURE test(@v1 INTEGER = 1, @v2 CHAR(1) = 'c')",
         )
 
+        for order_by in ("", " ORDER BY c"):
+            for json_clause in ("", " NULL ON NULL", " ABSENT ON NULL"):
+                with self.subTest(f"Testing JSON_ARRAYAGG with options: {order_by}, {json_clause}"):
+                    self.validate_identity(f"JSON_ARRAYAGG(c{order_by}{json_clause})")
+
+        self.validate_all(
+            "JSON_ARRAYAGG(c1 ORDER BY c1)",
+            write={
+                "tsql": "JSON_ARRAYAGG(c1 ORDER BY c1)",
+                "postgres": "JSON_AGG(c1 ORDER BY c1 NULLS FIRST)",
+            },
+        )
+
     def test_option(self):
         possible_options = [
             "HASH GROUP",
@@ -548,6 +581,7 @@ class TestTSQL(Validator):
             # "UPDATE Customers SET ContactName = 'Alfred Schmidt', City = 'Frankfurt' WHERE CustomerID = 1",
             "SELECT * FROM Table1",
             "SELECT * FROM Table1 WHERE id = 2",
+            "UPDATE t1 SET k = t2.k FROM t2",
         ]
 
         for statement in possible_statements:
@@ -997,6 +1031,9 @@ FOR XML
         self.validate_identity("ALTER TABLE tbl SET (FILESTREAM_ON = 'test')")
         self.validate_identity("ALTER TABLE tbl SET (DATA_DELETION=ON)")
         self.validate_identity("ALTER TABLE tbl SET (DATA_DELETION=OFF)")
+        self.validate_identity(
+            "ALTER TABLE t1 WITH CHECK ADD CONSTRAINT ctr FOREIGN KEY (c1) REFERENCES t2 (c2)"
+        )
         self.validate_identity(
             "ALTER TABLE tbl SET (SYSTEM_VERSIONING=ON(HISTORY_TABLE=db.tbl, DATA_CONSISTENCY_CHECK=OFF, HISTORY_RETENTION_PERIOD=5 DAYS))"
         )
@@ -1528,6 +1565,12 @@ WHERE
                 "SELECT DATEPART(WK, CAST('2024-11-21' AS DATETIME2))",
             )
 
+        for fmt in ("ISOWK", "ISOWW", "ISO_WEEK"):
+            self.validate_identity(
+                f"SELECT DATEPART({fmt}, '2024-11-21')",
+                "SELECT DATEPART(ISO_WEEK, CAST('2024-11-21' AS DATETIME2))",
+            )
+
     def test_convert(self):
         self.validate_all(
             "CONVERT(NVARCHAR(200), x)",
@@ -1746,62 +1789,65 @@ WHERE
 
     def test_date_diff(self):
         self.validate_identity("SELECT DATEDIFF(HOUR, 1.5, '2021-01-01')")
+        self.validate_identity("SELECT DATEDIFF_BIG(HOUR, 1.5, '2021-01-01')")
 
-        self.validate_all(
-            "SELECT DATEDIFF(quarter, 0, '2021-01-01')",
-            write={
-                "tsql": "SELECT DATEDIFF(QUARTER, CAST('1900-01-01' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
-                "spark": "SELECT DATEDIFF(QUARTER, CAST('1900-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-                "duckdb": "SELECT DATE_DIFF('QUARTER', CAST('1900-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-            },
-        )
-        self.validate_all(
-            "SELECT DATEDIFF(day, 1, '2021-01-01')",
-            write={
-                "tsql": "SELECT DATEDIFF(DAY, CAST('1900-01-02' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
-                "spark": "SELECT DATEDIFF(DAY, CAST('1900-01-02' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-                "duckdb": "SELECT DATE_DIFF('DAY', CAST('1900-01-02' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-            },
-        )
-        self.validate_all(
-            "SELECT DATEDIFF(year, '2020-01-01', '2021-01-01')",
-            write={
-                "tsql": "SELECT DATEDIFF(YEAR, CAST('2020-01-01' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
-                "spark": "SELECT DATEDIFF(YEAR, CAST('2020-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-                "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('2021-01-01' AS TIMESTAMP), CAST('2020-01-01' AS TIMESTAMP)) / 12 AS INT)",
-            },
-        )
-        self.validate_all(
-            "SELECT DATEDIFF(mm, 'start', 'end')",
-            write={
-                "databricks": "SELECT DATEDIFF(MONTH, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
-                "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) AS INT)",
-                "tsql": "SELECT DATEDIFF(MONTH, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
-            },
-        )
-        self.validate_all(
-            "SELECT DATEDIFF(quarter, 'start', 'end')",
-            write={
-                "databricks": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
-                "spark": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
-                "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) / 3 AS INT)",
-                "tsql": "SELECT DATEDIFF(QUARTER, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
-            },
-        )
+        for fnc in ["DATEDIFF", "DATEDIFF_BIG"]:
+            with self.subTest(f"Transpiling T-SQL's {fnc}"):
+                self.validate_all(
+                    f"SELECT {fnc}(quarter, 0, '2021-01-01')",
+                    write={
+                        "tsql": f"SELECT {fnc}(QUARTER, CAST('1900-01-01' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
+                        "spark": "SELECT DATEDIFF(QUARTER, CAST('1900-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                        "duckdb": "SELECT DATE_DIFF('QUARTER', CAST('1900-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT {fnc}(day, 1, '2021-01-01')",
+                    write={
+                        "tsql": f"SELECT {fnc}(DAY, CAST('1900-01-02' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
+                        "spark": "SELECT DATEDIFF(DAY, CAST('1900-01-02' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                        "duckdb": "SELECT DATE_DIFF('DAY', CAST('1900-01-02' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT {fnc}(year, '2020-01-01', '2021-01-01')",
+                    write={
+                        "tsql": f"SELECT {fnc}(YEAR, CAST('2020-01-01' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
+                        "spark": "SELECT DATEDIFF(YEAR, CAST('2020-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                        "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('2021-01-01' AS TIMESTAMP), CAST('2020-01-01' AS TIMESTAMP)) / 12 AS INT)",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT {fnc}(mm, 'start', 'end')",
+                    write={
+                        "databricks": "SELECT DATEDIFF(MONTH, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
+                        "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) AS INT)",
+                        "tsql": f"SELECT {fnc}(MONTH, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT {fnc}(quarter, 'start', 'end')",
+                    write={
+                        "databricks": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
+                        "spark": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
+                        "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) / 3 AS INT)",
+                        "tsql": f"SELECT {fnc}(QUARTER, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
+                    },
+                )
 
-        # Check superfluous casts arent added. ref: https://github.com/TobikoData/sqlmesh/issues/2672
-        self.validate_all(
-            "SELECT DATEDIFF(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
-            write={
-                "tsql": "SELECT DATEDIFF(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
-                "clickhouse": "SELECT DATE_DIFF(DAY, CAST(CAST(a AS Nullable(DateTime)) AS DateTime64(6)), CAST(CAST(b AS Nullable(DateTime)) AS DateTime64(6))) AS x FROM foo",
-            },
-        )
+                # Check superfluous casts arent added. ref: https://github.com/TobikoData/sqlmesh/issues/2672
+                self.validate_all(
+                    f"SELECT {fnc}(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
+                    write={
+                        "tsql": f"SELECT {fnc}(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
+                        "clickhouse": "SELECT DATE_DIFF(DAY, CAST(CAST(a AS Nullable(DateTime)) AS DateTime64(6)), CAST(CAST(b AS Nullable(DateTime)) AS DateTime64(6))) AS x FROM foo",
+                    },
+                )
 
-        self.validate_identity(
-            "SELECT DATEADD(DAY, DATEDIFF(DAY, -3, GETDATE()), '08:00:00')",
-            "SELECT DATEADD(DAY, DATEDIFF(DAY, CAST('1899-12-29' AS DATETIME2), CAST(GETDATE() AS DATETIME2)), '08:00:00')",
-        )
+                self.validate_identity(
+                    f"SELECT DATEADD(DAY, {fnc}(DAY, -3, GETDATE()), '08:00:00')",
+                    f"SELECT DATEADD(DAY, {fnc}(DAY, CAST('1899-12-29' AS DATETIME2), CAST(GETDATE() AS DATETIME2)), '08:00:00')",
+                )
 
     def test_lateral_subquery(self):
         self.validate_all(
@@ -1984,11 +2030,11 @@ WHERE
             self.validate_identity("##x")
             .assert_is(exp.Column)
             .this.assert_is(exp.Identifier)
-            .args.get("global")
+            .args.get("global_")
         )
 
         self.validate_identity("@x").assert_is(exp.Parameter).this.assert_is(exp.Var)
-        self.validate_identity("SELECT * FROM @x").args["from"].this.assert_is(
+        self.validate_identity("SELECT * FROM @x").args["from_"].this.assert_is(
             exp.Table
         ).this.assert_is(exp.Parameter).this.assert_is(exp.Var)
 
@@ -2266,6 +2312,10 @@ FROM OPENJSON(@json) WITH (
             check_command_warning=True,
         )
 
+    def test_revoke(self):
+        self.validate_identity("REVOKE EXECUTE ON TestProc FROM User2")
+        self.validate_identity("REVOKE EXECUTE ON TestProc FROM TesterRole")
+
     def test_parsename(self):
         for i in range(4):
             with self.subTest("Testing PARSENAME <-> SPLIT_PART"):
@@ -2345,3 +2395,15 @@ FROM OPENJSON(@json) WITH (
         self.validate_identity("ALTER TABLE a ALTER COLUMN b CHAR(10) COLLATE abc").assert_is(
             exp.Alter
         ).args.get("actions")[0].args.get("collate").this.assert_is(exp.Var)
+
+    def test_odbc_date_literals(self):
+        for value, cls in [
+            ("{d'2024-01-01'}", exp.Date),
+            ("{t'12:00:00'}", exp.Time),
+            ("{ts'2024-01-01 12:00:00'}", exp.Timestamp),
+        ]:
+            with self.subTest(f"Testing ODBC date literal: {value}"):
+                sql = f"INSERT INTO tab(ds) VALUES ({value})"
+                expr = self.parse_one(sql)
+                self.assertIsInstance(expr, exp.Insert)
+                self.assertIsInstance(expr.expression.expressions[0].expressions[0], cls)

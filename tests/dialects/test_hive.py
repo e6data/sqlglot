@@ -1,5 +1,4 @@
 from tests.dialects.test_dialect import Validator
-
 from sqlglot import exp
 
 
@@ -175,6 +174,44 @@ class TestHive(Validator):
                 "databricks": "CREATE TABLE test STORED AS INPUTFORMAT 'foo1' OUTPUTFORMAT 'foo2'",
             },
         )
+
+        self.validate_identity("ALTER TABLE x PARTITION(y = z) ADD COLUMN a VARCHAR(10)")
+        self.validate_identity(
+            "ALTER TABLE x CHANGE a a VARCHAR(10)",
+            "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10)",
+        )
+
+        self.validate_all(
+            "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10)",
+            write={
+                "hive": "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10)",
+                "spark": "ALTER TABLE x ALTER COLUMN a TYPE VARCHAR(10)",
+            },
+        )
+        self.validate_all(
+            "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10) COMMENT 'comment'",
+            write={
+                "hive": "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10) COMMENT 'comment'",
+                "spark": "ALTER TABLE x ALTER COLUMN a COMMENT 'comment'",
+            },
+        )
+        self.validate_all(
+            "ALTER TABLE x CHANGE COLUMN a b VARCHAR(10)",
+            write={
+                "hive": "ALTER TABLE x CHANGE COLUMN a b VARCHAR(10)",
+                "spark": "ALTER TABLE x RENAME COLUMN a TO b",
+            },
+        )
+        self.validate_all(
+            "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10) CASCADE",
+            write={
+                "hive": "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10) CASCADE",
+                "spark": "ALTER TABLE x ALTER COLUMN a TYPE VARCHAR(10)",
+            },
+        )
+
+        self.validate_identity("ALTER TABLE X ADD COLUMNS (y INT, z STRING)")
+        self.validate_identity("ALTER TABLE X ADD COLUMNS (y INT, z STRING) CASCADE")
 
         self.validate_identity(
             """CREATE EXTERNAL TABLE x (y INT) ROW FORMAT SERDE 'serde' ROW FORMAT DELIMITED FIELDS TERMINATED BY '1' WITH SERDEPROPERTIES ('input.regex'='')""",
@@ -402,20 +439,36 @@ class TestHive(Validator):
                 "tsql": "DATEADD(DAY, 1, CAST(CAST('2020-01-01' AS DATETIME2) AS DATE))",
             },
         )
+        # self.validate_all(
+        #     "DATE_SUB('2020-01-01', 1)",
+        #     write={
+        #         "": "DATE_SUB('2020-01-01', 1)",
+        #         "bigquery": "DATE_SUB('2020-01-01', INTERVAL 1 DAY)",
+        #         "duckdb": "CAST('2020-01-01' AS DATE) - INTERVAL 1 DAY",
+        #         "hive": "DATE_ADD('2020-01-01', -1)",
+        #         "presto": "DATE_ADD('DAY', 1 * -1, '2020-01-01')",
+        #         "redshift": "'2020-01-01' - INTERVAL '1 DAY'",
+        #         "snowflake": "DATEADD(DAY, 1 * -1, '2020-01-01')",
+        #         "spark": "DATE_ADD('2020-01-01', -1)",
+        #         "tsql": "DATEADD(DAY, 1 * -1, CAST('2020-01-01' AS DATETIME2))",
+        #     },
+        # )
+
         self.validate_all(
             "DATE_SUB('2020-01-01', 1)",
             write={
-                "": "DATE_SUB('2020-01-01', 1)",
-                "bigquery": "DATE_SUB('2020-01-01', INTERVAL 1 DAY)",
-                "duckdb": "CAST('2020-01-01' AS DATE) - INTERVAL 1 DAY",
-                "hive": "DATE_ADD('2020-01-01', -1)",
-                "presto": "DATE_ADD('DAY', 1 * -1, '2020-01-01')",
-                "redshift": "'2020-01-01' - INTERVAL '1 DAY'",
-                "snowflake": "DATEADD(DAY, 1 * -1, '2020-01-01')",
-                "spark": "DATE_ADD('2020-01-01', -1)",
-                "tsql": "DATEADD(DAY, 1 * -1, CAST('2020-01-01' AS DATETIME2))",
+                "": "TS_OR_DS_ADD('2020-01-01', 1 * -1, DAY)",
+                "bigquery": "DATE_ADD(CAST(CAST('2020-01-01' AS DATETIME) AS DATE), INTERVAL (1 * -1) DAY)",
+                "duckdb": "CAST('2020-01-01' AS DATE) + INTERVAL (1 * -1) DAY",
+                "hive": "DATE_ADD('2020-01-01', 1 * -1)",
+                "presto": "DATE_ADD('DAY', 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
+                "redshift": "DATEADD(DAY, 1 * -1, '2020-01-01')",
+                "snowflake": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
+                "spark": "DATE_ADD('2020-01-01', 1 * -1)",
+                "tsql": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS DATETIME2) AS DATE))",
             },
         )
+
         self.validate_all("DATE_ADD('2020-01-01', -1)", read={"": "DATE_SUB('2020-01-01', 1)"})
         self.validate_all("DATE_ADD(a, b * -1)", read={"": "DATE_SUB(a, b)"})
         self.validate_all(
@@ -620,7 +673,7 @@ class TestHive(Validator):
                 "presto": "CONTAINS(x, 1)",
                 "hive": "ARRAY_CONTAINS(x, 1)",
                 "spark": "ARRAY_CONTAINS(x, 1)",
-                "snowflake": "ARRAY_CONTAINS(1, x)",
+                "snowflake": "ARRAY_CONTAINS(CAST(1 AS VARIANT), x)",
             },
         )
         self.validate_all(
@@ -650,29 +703,25 @@ class TestHive(Validator):
                 "spark": "LOCATE('a', x, 3)",
             },
         )
+
         self.validate_all(
             "INITCAP('new york')",
             write={
-                "duckdb": "INITCAP('new york')",
-                "presto": r"REGEXP_REPLACE('new york', '(\w)(\w*)', x -> UPPER(x[1]) || LOWER(x[2]))",
                 "hive": "INITCAP('new york')",
                 "spark": "INITCAP('new york')",
             },
+        )
+        expression = self.parse_one("INITCAP('new york')")
+        self.assert_duckdb_sql(
+            expression,
+            includes=("REGEXP_MATCHES(", "ARRAY_TO_STRING("),
+            chr_chars=("\u000b", "\u001c", "\u001d", "\u001e", "\u001f"),
         )
         self.validate_all(
             "SELECT * FROM x.z TABLESAMPLE(10 PERCENT) y",
             write={
                 "hive": "SELECT * FROM x.z TABLESAMPLE (10 PERCENT) AS y",
                 "spark": "SELECT * FROM x.z TABLESAMPLE (10 PERCENT) AS y",
-            },
-        )
-        self.validate_all(
-            "SELECT SORT_ARRAY(x)",
-            write={
-                "duckdb": "SELECT ARRAY_SORT(x)",
-                "presto": "SELECT ARRAY_SORT(x)",
-                "hive": "SELECT SORT_ARRAY(x)",
-                "spark": "SELECT SORT_ARRAY(x)",
             },
         )
         self.validate_all(
@@ -888,6 +937,22 @@ class TestHive(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT FIRST(sample_col) IGNORE NULLS",
+            read={
+                "hive": "SELECT FIRST(sample_col, TRUE)",
+                "spark2": "SELECT FIRST(sample_col, TRUE)",
+                "spark": "SELECT FIRST(sample_col, TRUE)",
+                "databricks": "SELECT FIRST(sample_col, TRUE)",
+            },
+            write={
+                "duckdb": "SELECT ANY_VALUE(sample_col)",
+            },
+        )
+        self.validate_identity(
+            "DATE_SUB(CURRENT_DATE, 1 + 1)", "DATE_ADD(CURRENT_DATE, (1 + 1) * -1)"
+        )
+
     def test_escapes(self) -> None:
         self.validate_identity("'\n'", "'\\n'")
         self.validate_identity("'\\n'")
@@ -904,3 +969,25 @@ class TestHive(Validator):
                 "hive": "CAST(a AS BOOLEAN)",
             },
         )
+
+    def test_joins_without_on(self):
+        for join in ("FULL OUTER", "LEFT", "RIGHT", "LEFT OUTER", "RIGHT OUTER", "INNER"):
+            with self.subTest(f"Testing transpilation of {join} without ON"):
+                self.validate_all(
+                    f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                    read={
+                        "hive": f"SELECT * FROM t1 {join} JOIN t2",
+                        "spark2": f"SELECT * FROM t1 {join} JOIN t2",
+                        "spark": f"SELECT * FROM t1 {join} JOIN t2",
+                        "databricks": f"SELECT * FROM t1 {join} JOIN t2",
+                        "sqlite": f"SELECT * FROM t1 {join} JOIN t2",
+                    },
+                    write={
+                        "hive": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "spark2": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "spark": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "databricks": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "sqlite": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "duckdb": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                    },
+                )

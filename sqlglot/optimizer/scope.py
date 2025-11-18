@@ -143,7 +143,7 @@ class Scope:
 
             if isinstance(node, exp.Dot) and node.is_star:
                 self._stars.append(node)
-            elif isinstance(node, exp.Column):
+            elif isinstance(node, exp.Column) and not isinstance(node, exp.Pseudocolumn):
                 if isinstance(node.this, exp.Star):
                     self._stars.append(node)
                 else:
@@ -310,10 +310,11 @@ class Scope:
                         isinstance(ancestor, (exp.Order, exp.Distinct))
                         and (
                             isinstance(ancestor.parent, (exp.Window, exp.WithinGroup))
+                            or not isinstance(ancestor.parent, exp.Select)
                             or column.name not in named_selects
                         )
                     )
-                    or (isinstance(ancestor, exp.Star) and not column.arg_key == "except")
+                    or (isinstance(ancestor, exp.Star) and not column.arg_key == "except_")
                 ):
                     self._columns.append(column)
 
@@ -529,6 +530,12 @@ class Scope:
             for _, source in scope.selected_sources.values():
                 scope_ref_count[id(source)] += 1
 
+            for name in scope._semi_anti_join_tables:
+                # semi/anti join sources are not actually selected but we still need to
+                # increment their ref count to avoid them being optimized away
+                if name in scope.sources:
+                    scope_ref_count[id(scope.sources[name])] += 1
+
         return scope_ref_count
 
 
@@ -662,7 +669,7 @@ def _traverse_ctes(scope):
 
         # if the scope is a recursive cte, it must be in the form of base_case UNION recursive.
         # thus the recursive scope is the first section of the union.
-        with_ = scope.expression.args.get("with")
+        with_ = scope.expression.args.get("with_")
         if with_ and with_.recursive:
             union = cte.this
 
@@ -719,7 +726,7 @@ def _traverse_tables(scope):
 
     # Traverse FROMs, JOINs, and LATERALs in the order they are defined
     expressions = []
-    from_ = scope.expression.args.get("from")
+    from_ = scope.expression.args.get("from_")
     if from_:
         expressions.append(from_.this)
 

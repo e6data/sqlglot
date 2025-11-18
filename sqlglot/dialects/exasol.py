@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import typing as t
 
-from sqlglot import exp, generator, parser, tokens
-from sqlglot.dialects.clickhouse import timestamptrunc_sql
+from sqlglot import exp, generator, parser, tokens, transforms
 from sqlglot.dialects.dialect import (
     Dialect,
+    NormalizationStrategy,
     binary_from_function,
     build_formatted_time,
+    groupconcat_sql,
     rename_func,
     strposition_sql,
     timestrtotime_sql,
-    unit_to_str,
+    timestamptrunc_sql,
+    build_date_delta,
 )
 from sqlglot.generator import unsupported_args
 from sqlglot.helper import seq_get
@@ -25,6 +27,16 @@ def _sha2_sql(self: Exasol.Generator, expression: exp.SHA2) -> str:
     length = expression.text("length")
     func_name = "HASH_SHA256" if length == "256" else "HASH_SHA512"
     return self.func(func_name, expression.this)
+
+
+def _date_diff_sql(self: Exasol.Generator, expression: exp.DateDiff | exp.TsOrDsDiff) -> str:
+    unit = expression.text("unit").upper() or "DAY"
+
+    if unit not in DATE_UNITS:
+        self.unsupported(f"'{unit}' is not supported in Exasol.")
+        return self.function_fallback_sql(expression)
+
+    return self.func(f"{unit}S_BETWEEN", expression.this, expression.expression)
 
 
 # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/trunc%5Bate%5D%20(datetime).htm
@@ -46,7 +58,90 @@ def _build_trunc(args: t.List[exp.Expression], dialect: DialectType) -> exp.Expr
     return exp.Anonymous(this="TRUNC", expressions=args)
 
 
+# https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/zeroifnull.htm
+def _build_zeroifnull(args: t.List) -> exp.If:
+    cond = exp.Is(this=seq_get(args, 0), expression=exp.Null())
+    return exp.If(this=cond, true=exp.Literal.number(0), false=seq_get(args, 0))
+
+
+# https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/nullifzero.htm
+def _build_nullifzero(args: t.List) -> exp.If:
+    cond = exp.EQ(this=seq_get(args, 0), expression=exp.Literal.number(0))
+    return exp.If(this=cond, true=exp.Null(), false=seq_get(args, 0))
+
+
+# https://docs.exasol.com/db/latest/sql/select.htm#:~:text=If%20you%20have,local.x%3E10
+def _add_local_prefix_for_aliases(expression: exp.Expression) -> exp.Expression:
+    if isinstance(expression, exp.Select):
+        aliases: dict[str, bool] = {}
+        for sel in expression.selects:
+            alias = sel.args.get("alias")
+
+            if isinstance(sel, exp.Alias) and alias:
+                aliases[alias.name] = bool(alias.args.get("quoted"))
+
+        table = expression.find(exp.Table)
+        table_ident = table.this if table else None
+
+        if (
+            table_ident
+            and table_ident.name.upper() == "LOCAL"
+            and not bool(table_ident.args.get("quoted"))
+        ):
+            table_ident.replace(exp.to_identifier(table_ident.name.upper(), quoted=True))
+
+        def prefix_local(node):
+            if isinstance(node, exp.Column) and not node.table:
+                if node.name in aliases:
+                    return exp.Column(
+                        this=exp.to_identifier(node.name, quoted=aliases[node.name]),
+                        table=exp.to_identifier("LOCAL", quoted=False),
+                    )
+            return node
+
+        for key in ("where", "group", "having"):
+            if arg := expression.args.get(key):
+                expression.set(key, arg.transform(prefix_local))
+
+    return expression
+
+
+def _trunc_sql(self: Exasol.Generator, kind: str, expression: exp.DateTrunc) -> str:
+    unit = expression.text("unit")
+    node = expression.this.this if isinstance(expression.this, exp.Cast) else expression.this
+    expr_sql = self.sql(node)
+    if isinstance(node, exp.Literal) and node.is_string:
+        expr_sql = (
+            f"{kind} '{node.this.replace('T', ' ')}'"
+            if kind == "TIMESTAMP"
+            else f"DATE '{node.this}'"
+        )
+    return f"DATE_TRUNC('{unit}', {expr_sql})"
+
+
+def _date_trunc_sql(self: Exasol.Generator, expression: exp.DateTrunc) -> str:
+    return _trunc_sql(self, "DATE", expression)
+
+
+def _timestamp_trunc_sql(self: Exasol.Generator, expression: exp.DateTrunc) -> str:
+    return _trunc_sql(self, "TIMESTAMP", expression)
+
+
+DATE_UNITS = {"DAY", "WEEK", "MONTH", "YEAR", "HOUR", "MINUTE", "SECOND"}
+
+
 class Exasol(Dialect):
+    # https://docs.exasol.com/db/latest/sql_references/basiclanguageelements.htm#SQLidentifier
+    NORMALIZATION_STRATEGY = NormalizationStrategy.UPPERCASE
+    # https://docs.exasol.com/db/latest/sql_references/data_types/datatypesoverview.htm
+    SUPPORTS_USER_DEFINED_TYPES = False
+    # https://docs.exasol.com/db/latest/sql/select.htm
+    SUPPORTS_SEMI_ANTI_JOIN = False
+    SUPPORTS_COLUMN_JOIN_MARKS = True
+    NULL_ORDERING = "nulls_are_last"
+    # https://docs.exasol.com/db/latest/sql_references/literals.htm#StringLiterals
+    CONCAT_COALESCE = True
+
     TIME_MAPPING = {
         "yyyy": "%Y",
         "YYYY": "%Y",
@@ -76,14 +171,28 @@ class Exasol(Dialect):
     }
 
     class Tokenizer(tokens.Tokenizer):
+        IDENTIFIERS = ['"', ("[", "]")]
         KEYWORDS = {
             **tokens.Tokenizer.KEYWORDS,
             "USER": TokenType.CURRENT_USER,
+            # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/if.htm
+            "ENDIF": TokenType.END,
+            "LONG VARCHAR": TokenType.TEXT,
+            "SEPARATOR": TokenType.SEPARATOR,
         }
+        KEYWORDS.pop("DIV")
 
     class Parser(parser.Parser):
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            **{
+                f"ADD_{unit}S": build_date_delta(exp.DateAdd, default_unit=unit)
+                for unit in DATE_UNITS
+            },
+            **{
+                f"{unit}S_BETWEEN": build_date_delta(exp.DateDiff, default_unit=unit)
+                for unit in DATE_UNITS
+            },
             "BIT_AND": binary_from_function(exp.BitwiseAnd),
             "BIT_OR": binary_from_function(exp.BitwiseOr),
             "BIT_XOR": binary_from_function(exp.BitwiseXor),
@@ -94,6 +203,7 @@ class Exasol(Dialect):
             "DATE_TRUNC": lambda args: exp.TimestampTrunc(
                 this=seq_get(args, 1), unit=seq_get(args, 0)
             ),
+            "DIV": binary_from_function(exp.IntDiv),
             "EVERY": lambda args: exp.All(this=seq_get(args, 0)),
             "EDIT_DISTANCE": exp.Levenshtein.from_arg_list,
             "HASH_SHA": exp.SHA.from_arg_list,
@@ -127,6 +237,8 @@ class Exasol(Dialect):
                 timestamp=seq_get(args, 0),
                 options=seq_get(args, 3),
             ),
+            "NULLIFZERO": _build_nullifzero,
+            "ZEROIFNULL": _build_zeroifnull,
         }
         CONSTRAINT_PARSERS = {
             **parser.Parser.CONSTRAINT_PARSERS,
@@ -134,6 +246,30 @@ class Exasol(Dialect):
                 exp.CommentColumnConstraint,
                 this=self._match(TokenType.IS) and self._parse_string(),
             ),
+        }
+        FUNCTION_PARSERS = {
+            **parser.Parser.FUNCTION_PARSERS,
+            # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/listagg.htm
+            # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/group_concat.htm
+            **dict.fromkeys(("GROUP_CONCAT", "LISTAGG"), lambda self: self._parse_group_concat()),
+        }
+
+        def _parse_column(self) -> t.Optional[exp.Expression]:
+            column = super()._parse_column()
+            if not isinstance(column, exp.Column):
+                return column
+            table_ident = column.args.get("table")
+            if (
+                isinstance(table_ident, exp.Identifier)
+                and table_ident.name.upper() == "LOCAL"
+                and not bool(table_ident.args.get("quoted"))
+            ):
+                column.set("table", None)
+            return column
+
+        ODBC_DATETIME_LITERALS = {
+            "d": exp.Date,
+            "ts": exp.Timestamp,
         }
 
     class Generator(generator.Generator):
@@ -146,7 +282,8 @@ class Exasol(Dialect):
             exp.DataType.Type.MEDIUMTEXT: "VARCHAR",
             exp.DataType.Type.TINYBLOB: "VARCHAR",
             exp.DataType.Type.TINYTEXT: "VARCHAR",
-            exp.DataType.Type.TEXT: "VARCHAR",
+            # https://docs.exasol.com/db/latest/sql_references/data_types/datatypealiases.htm
+            exp.DataType.Type.TEXT: "LONG VARCHAR",
             exp.DataType.Type.VARBINARY: "VARCHAR",
         }
 
@@ -187,10 +324,16 @@ class Exasol(Dialect):
             exp.BitwiseRightShift: rename_func("BIT_RSHIFT"),
             # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/bit_xor.htm
             exp.BitwiseXor: rename_func("BIT_XOR"),
-            # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/every.htm
-            exp.All: rename_func("EVERY"),
-            exp.DateTrunc: lambda self, e: self.func("TRUNC", e.this, unit_to_str(e)),
+            exp.DateDiff: _date_diff_sql,
+            # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/div.htm#DIV
+            exp.IntDiv: rename_func("DIV"),
+            exp.TsOrDsDiff: _date_diff_sql,
+            exp.DateTrunc: _date_trunc_sql,
+            exp.DayOfWeek: lambda self, e: f"CAST(TO_CHAR({self.sql(e, 'this')}, 'D') AS INTEGER)",
             exp.DatetimeTrunc: timestamptrunc_sql(),
+            exp.GroupConcat: lambda self, e: groupconcat_sql(
+                self, e, func_name="LISTAGG", within_group=True
+            ),
             # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/edit_distance.htm#EDIT_DISTANCE
             exp.Levenshtein: unsupported_args("ins_cost", "del_cost", "sub_cost", "max_dist")(
                 rename_func("EDIT_DISTANCE")
@@ -215,7 +358,7 @@ class Exasol(Dialect):
             exp.TsOrDsToDate: lambda self, e: self.func("TO_DATE", e.this, self.format_time(e)),
             exp.TimeToStr: lambda self, e: self.func("TO_CHAR", e.this, self.format_time(e)),
             exp.TimeStrToTime: timestrtotime_sql,
-            exp.TimestampTrunc: timestamptrunc_sql(),
+            exp.TimestampTrunc: _timestamp_trunc_sql,
             exp.StrToTime: lambda self, e: self.func("TO_DATE", e.this, self.format_time(e)),
             exp.CurrentUser: lambda *_: "CURRENT_USER",
             exp.AtTimeZone: lambda self, e: self.func(
@@ -240,6 +383,17 @@ class Exasol(Dialect):
             exp.MD5Digest: rename_func("HASHTYPE_MD5"),
             # https://docs.exasol.com/db/latest/sql/create_view.htm
             exp.CommentColumnConstraint: lambda self, e: f"COMMENT IS {self.sql(e, 'this')}",
+            exp.Select: transforms.preprocess(
+                [
+                    _add_local_prefix_for_aliases,
+                ]
+            ),
+            exp.WeekOfYear: rename_func("WEEK"),
+            # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_date.htm
+            exp.Date: rename_func("TO_DATE"),
+            # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/to_timestamp.htm
+            exp.Timestamp: rename_func("TO_TIMESTAMP"),
+            exp.Quarter: lambda self, e: f"CEIL(MONTH(TO_DATE({self.sql(e, 'this')}))/3)",
         }
 
         def converttimezone_sql(self, expression: exp.ConvertTimezone) -> str:
@@ -249,3 +403,17 @@ class Exasol(Dialect):
             options = expression.args.get("options")
 
             return self.func("CONVERT_TZ", datetime, from_tz, to_tz, options)
+
+        def if_sql(self, expression: exp.If) -> str:
+            this = self.sql(expression, "this")
+            true = self.sql(expression, "true")
+            false = self.sql(expression, "false")
+            return f"IF {this} THEN {true} ELSE {false} ENDIF"
+
+        def dateadd_sql(self, expression: exp.DateAdd) -> str:
+            unit = expression.text("unit").upper() or "DAY"
+            if unit not in DATE_UNITS:
+                self.unsupported(f"'{unit}' is not supported in Exasol.")
+                return self.function_fallback_sql(expression)
+
+            return self.func(f"ADD_{unit}S", expression.this, expression.expression)

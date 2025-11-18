@@ -1,4 +1,4 @@
-from sqlglot import exp, transpile
+from sqlglot import exp, transpile, parse_one
 from sqlglot.errors import ParseError
 from tests.dialects.test_dialect import Validator
 
@@ -7,13 +7,20 @@ class TestDatabricks(Validator):
     dialect = "databricks"
 
     def test_databricks(self):
+        self.validate_identity("SELECT COSH(1.5)")
         null_type = exp.DataType.build("VOID", dialect="databricks")
         self.assertEqual(null_type.sql(), "NULL")
         self.assertEqual(null_type.sql("databricks"), "VOID")
 
+        self.validate_identity("SELECT BITMAP_BIT_POSITION(10)")
+        self.validate_identity("SELECT BITMAP_BUCKET_NUMBER(32769)")
+        self.validate_identity("SELECT BITMAP_CONSTRUCT_AGG(value)")
+        self.validate_identity("SELECT EXP(1)")
+        self.validate_identity("REGEXP_LIKE(x, y)")
         self.validate_identity("SELECT CAST(NULL AS VOID)")
         self.validate_identity("SELECT void FROM t")
         self.validate_identity("SELECT * FROM stream")
+        self.validate_identity("SELECT * FROM STREAM t")
         self.validate_identity("SELECT t.current_time FROM t")
         self.validate_identity("ALTER TABLE labels ADD COLUMN label_score FLOAT")
         self.validate_identity("DESCRIBE HISTORY a.b")
@@ -36,6 +43,10 @@ class TestDatabricks(Validator):
         self.validate_identity("CREATE TABLE foo (x DATE GENERATED ALWAYS AS (CAST(y AS DATE)))")
         self.validate_identity("TRUNCATE TABLE t1 PARTITION(age = 10, name = 'test', address)")
         self.validate_identity("SELECT PARSE_JSON('{}')")
+
+        self.validate_identity("PARSE_URL('https://example.com/path')")
+        self.validate_identity("PARSE_URL('https://example.com/path', 'HOST')")
+        self.validate_identity("PARSE_URL('https://example.com/path', 'QUERY', 'param')")
         self.validate_identity(
             "CREATE TABLE IF NOT EXISTS db.table (a TIMESTAMP, b BOOLEAN GENERATED ALWAYS AS (NOT a IS NULL)) USING DELTA"
         )
@@ -83,6 +94,7 @@ class TestDatabricks(Validator):
         )
 
         self.validate_identity("SELECT SUBSTRING_INDEX(str, delim, count)")
+        self.validate_identity("BITMAP_OR_AGG(x)")
 
         self.validate_all(
             "SELECT SUBSTRING_INDEX('a.b.c.d', '.', 2)",
@@ -220,6 +232,7 @@ class TestDatabricks(Validator):
             "WITH t AS (VALUES ('foo_val') AS t(foo1)) SELECT foo1 FROM t",
             "WITH t AS (SELECT * FROM VALUES ('foo_val') AS t(foo1)) SELECT foo1 FROM t",
         )
+        self.validate_identity("NTILE() OVER (ORDER BY 1)")
 
     # https://docs.databricks.com/sql/language-manual/functions/colonsign.html
     def test_json(self):
@@ -386,6 +399,14 @@ class TestDatabricks(Validator):
         self.validate_identity("GRANT ALL PRIVILEGES ON TABLE forecasts TO finance")
         self.validate_identity("GRANT SELECT ON TABLE t TO `fab9e00e-ca35-11ec-9d64-0242ac120002`")
 
+    def test_revoke(self):
+        self.validate_identity("REVOKE CREATE ON SCHEMA my_schema FROM `alf@melmak.et`")
+        self.validate_identity("REVOKE SELECT ON TABLE sample_data FROM `alf@melmak.et`")
+        self.validate_identity("REVOKE ALL PRIVILEGES ON TABLE forecasts FROM finance")
+        self.validate_identity(
+            "REVOKE SELECT ON TABLE t FROM `fab9e00e-ca35-11ec-9d64-0242ac120002`"
+        )
+
     def test_analyze(self):
         self.validate_identity("ANALYZE TABLE tbl COMPUTE DELTA STATISTICS NOSCAN")
         self.validate_identity("ANALYZE TABLE tbl COMPUTE DELTA STATISTICS FOR ALL COLUMNS")
@@ -504,3 +525,15 @@ class TestDatabricks(Validator):
                 "e6": "REGEXP_EXTRACT(subject, pattern)",
             },
         )
+
+    def test_to_char_is_numeric_transpile_to_cast(self):
+        # The input SQL simulates a TO_CHAR with is_numeric flag set (from dremio dialect)
+        sql = "SELECT TO_CHAR(12345, '#')"
+        expression = parse_one(sql, read="dremio")
+
+        to_char_exp = expression.find(exp.ToChar)
+        assert to_char_exp is not None
+        assert to_char_exp.args.get("is_numeric") is True
+
+        result = transpile(sql, read="dremio", write="databricks")[0]
+        assert "CAST(12345 AS STRING)" in result

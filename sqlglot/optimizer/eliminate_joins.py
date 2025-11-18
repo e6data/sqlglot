@@ -32,6 +32,9 @@ def eliminate_joins(expression):
 
         # Reverse the joins so we can remove chains of unused joins
         for join in reversed(joins):
+            if join.is_semi_or_anti_join:
+                continue
+
             alias = join.alias_or_name
             if _should_eliminate_join(scope, join, alias):
                 join.pop()
@@ -107,7 +110,7 @@ def _has_single_output_row(scope):
     return isinstance(scope.expression, exp.Select) and (
         all(isinstance(e.unalias(), exp.AggFunc) for e in scope.expression.selects)
         or _is_limit_1(scope)
-        or not scope.expression.args.get("from")
+        or not scope.expression.args.get("from_")
     )
 
 

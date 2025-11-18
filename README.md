@@ -1,6 +1,6 @@
 ![SQLGlot logo](sqlglot.png)
 
-SQLGlot is a no-dependency SQL parser, transpiler, optimizer, and engine. It can be used to format SQL or translate between [30 different dialects](https://github.com/tobymao/sqlglot/blob/main/sqlglot/dialects/__init__.py) like [DuckDB](https://duckdb.org/), [Presto](https://prestodb.io/) / [Trino](https://trino.io/), [Spark](https://spark.apache.org/) / [Databricks](https://www.databricks.com/), [Snowflake](https://www.snowflake.com/en/), and [BigQuery](https://cloud.google.com/bigquery/). It aims to read a wide variety of SQL inputs and output syntactically and semantically correct SQL in the targeted dialects.
+SQLGlot is a no-dependency SQL parser, transpiler, optimizer, and engine. It can be used to format SQL or translate between [31 different dialects](https://github.com/tobymao/sqlglot/blob/main/sqlglot/dialects/__init__.py) like [DuckDB](https://duckdb.org/), [Presto](https://prestodb.io/) / [Trino](https://trino.io/), [Spark](https://spark.apache.org/) / [Databricks](https://www.databricks.com/), [Snowflake](https://www.snowflake.com/en/), and [BigQuery](https://cloud.google.com/bigquery/). It aims to read a wide variety of SQL inputs and output syntactically and semantically correct SQL in the targeted dialects.
 
 It is a very comprehensive generic SQL parser with a robust [test suite](https://github.com/tobymao/sqlglot/blob/main/tests/). It is also quite [performant](#benchmarks), while being written purely in Python.
 
@@ -34,6 +34,7 @@ Contributions are very welcome in SQLGlot; read the [contribution guide](https:/
 * [Run Tests and Lint](#run-tests-and-lint)
 * [Benchmarks](#benchmarks)
 * [Optional Dependencies](#optional-dependencies)
+* [Supported Dialects](#supported-dialects)
 
 ## Install
 
@@ -49,12 +50,14 @@ pip3 install "sqlglot[rs]"
 Or with a local checkout:
 
 ```
+# Optionally prefix with UV=1 to use uv for the installation
 make install
 ```
 
 Requirements for development (optional):
 
 ```
+# Optionally prefix with UV=1 to use uv for the installation
 make install-dev
 ```
 
@@ -218,7 +221,7 @@ sqlglot.errors.ParseError: Expecting ). Line 1, Col: 34.
 Structured syntax errors are accessible for programmatic use:
 
 ```python
-import sqlglot
+import sqlglot.errors
 try:
     sqlglot.transpile("SELECT foo FROM (SELECT baz FROM t")
 except sqlglot.errors.ParseError as e:
@@ -546,3 +549,42 @@ SQLGlot uses [dateutil](https://github.com/dateutil/dateutil) to simplify litera
 ```sql
 x + interval '1' month
 ```
+
+## Supported Dialects
+
+| Dialect | Support Level |
+|---------|---------------|
+| Athena | Official |
+| BigQuery | Official |
+| ClickHouse | Official |
+| Databricks | Official |
+| Doris | Community |
+| Dremio | Community |
+| Drill | Community |
+| Druid | Community |
+| DuckDB | Official |
+| Exasol | Community |
+| Fabric | Community |
+| Hive | Official |
+| Materialize | Community |
+| MySQL | Official |
+| Oracle | Official |
+| Postgres | Official |
+| Presto | Official |
+| PRQL | Community |
+| Redshift | Official |
+| RisingWave | Community |
+| SingleStore | Community |
+| Snowflake | Official |
+| Solr | Community |
+| Spark | Official |
+| SQLite | Official |
+| StarRocks | Official |
+| Tableau | Official |
+| Teradata | Community |
+| Trino | Official |
+| TSQL | Official |
+
+**Official Dialects** are maintained by the core SQLGlot team with higher priority for bug fixes and feature additions.
+
+**Community Dialects** are developed and maintained primarily through community contributions. These are fully functional but may receive lower priority for issue resolution compared to officially supported dialects. We welcome and encourage community contributions to improve these dialects.

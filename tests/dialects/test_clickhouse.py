@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from sqlglot import exp, parse_one
 from sqlglot.dialects import ClickHouse
 from sqlglot.expressions import convert
+from sqlglot.helper import logger as helper_logger
 from sqlglot.optimizer import traverse_scope
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from tests.dialects.test_dialect import Validator
@@ -122,6 +123,9 @@ class TestClickhouse(Validator):
         self.validate_identity("EXCHANGE TABLES x.a AND y.b", check_command_warning=True)
         self.validate_identity("CREATE TABLE test (id UInt8) ENGINE=Null()")
         self.validate_identity(
+            "SELECT * FROM foo ORDER BY bar OFFSET 0 ROWS FETCH NEXT 10 ROWS WITH TIES"
+        )
+        self.validate_identity(
             "SELECT DATE_BIN(toDateTime('2023-01-01 14:45:00'), INTERVAL '1' MINUTE, toDateTime('2023-01-01 14:35:30'), 'UTC')",
         )
         self.validate_identity(
@@ -192,6 +196,10 @@ class TestClickhouse(Validator):
         )
         self.validate_identity(
             "SELECT generate_series FROM generate_series(0, 10) AS g(x)",
+        )
+        self.validate_identity(
+            "SELECT t.c FROM (SELECT arrayJoin([1,2,3,4,5]) AS c) AS t WHERE (t.c + 0) NOT IN (1,2)",
+            "SELECT t.c FROM (SELECT arrayJoin([1, 2, 3, 4, 5]) AS c) AS t WHERE NOT ((t.c + 0) IN (1, 2))",
         )
         self.validate_identity(
             "SELECT * FROM t1, t2",
@@ -334,6 +342,18 @@ class TestClickhouse(Validator):
             },
         )
         self.validate_all(
+            "has([1], x)",
+            read={
+                "clickhouse": "has([1], x)",
+                "presto": "CONTAINS(ARRAY[1], x)",
+                "spark": "ARRAY_CONTAINS(ARRAY(1), x)",
+            },
+            write={
+                "presto": "CONTAINS(ARRAY[1], x)",
+                "spark": "ARRAY_CONTAINS(ARRAY(1), x)",
+            },
+        )
+        self.validate_all(
             "SELECT CAST('2020-01-01' AS Nullable(DateTime)) + INTERVAL '500' MICROSECOND",
             read={
                 "duckdb": "SELECT TIMESTAMP '2020-01-01' + INTERVAL '500 us'",
@@ -441,7 +461,7 @@ class TestClickhouse(Validator):
             },
             write={
                 "mysql": "CONCAT(a, b)",
-                "postgres": "CONCAT(a, b)",
+                "postgres": "a || b",
             },
         )
         self.validate_all(
@@ -644,6 +664,21 @@ class TestClickhouse(Validator):
         )
         self.validate_identity("SELECT arrayConcat([1, 2], [3, 4])")
 
+        self.validate_identity("SELECT parseDateTime('2021-01-04+23:00:00', '%Y-%m-%d+%H:%i:%s')")
+        self.validate_identity(
+            "SELECT parseDateTime('2021-01-04+23:00:00', '%Y-%m-%d+%H:%i:%s', 'Asia/Istanbul')"
+        )
+
+        self.validate_identity("farmFingerprint64(x1, x2, x3)")
+
+        self.validate_identity("cosineDistance(x, y)")
+        self.validate_identity("L2Distance(x, y)")
+        self.validate_identity("tuple(1 = 1, 'foo' = 'foo')")
+
+        self.validate_identity("SELECT LIKE(a, b)", "SELECT a LIKE b")
+        self.validate_identity("SELECT notLike(a, b)", "SELECT NOT a LIKE b")
+        self.validate_identity("SELECT ilike(a, b)", "SELECT a ILIKE b")
+
     def test_clickhouse_values(self):
         ast = self.parse_one("SELECT * FROM VALUES (1, 2, 3)")
         self.assertEqual(len(list(ast.find_all(exp.Tuple))), 4)
@@ -691,8 +726,8 @@ class TestClickhouse(Validator):
         self.validate_identity("WITH test1 AS (SELECT i + 1, j + 1 FROM test1) SELECT * FROM test1")
 
         query = parse_one("""WITH (SELECT 1) AS y SELECT * FROM y""", read="clickhouse")
-        self.assertIsInstance(query.args["with"].expressions[0].this, exp.Subquery)
-        self.assertEqual(query.args["with"].expressions[0].alias, "y")
+        self.assertIsInstance(query.args["with_"].expressions[0].this, exp.Subquery)
+        self.assertEqual(query.args["with_"].expressions[0].alias, "y")
 
         query = "WITH 1 AS var SELECT var"
         for error_level in [ErrorLevel.IGNORE, ErrorLevel.RAISE, ErrorLevel.IMMEDIATE]:
@@ -772,7 +807,7 @@ class TestClickhouse(Validator):
         for data_type in data_types:
             self.validate_all(
                 f"pow(2, 32)::{data_type}",
-                write={"clickhouse": f"CAST(POWER(2, 32) AS {data_type})"},
+                write={"clickhouse": f"CAST(pow(2, 32) AS {data_type})"},
             )
 
     def test_geom_types(self):
@@ -963,12 +998,12 @@ ORDER BY tuple()""",
   sum_hits UInt64
 )
 ENGINE=MergeTree
-PRIMARY KEY (id, toStartOfDay(timestamp), timestamp)
+PRIMARY KEY (id, dateTrunc('DAY', timestamp), timestamp)
 TTL
   timestamp + INTERVAL '1' DAY
 GROUP BY
   id,
-  toStartOfDay(timestamp)
+  dateTrunc('DAY', timestamp)
 SET
   max_hits = max(max_hits),
   sum_hits = sum(sum_hits)""",
@@ -1231,6 +1266,35 @@ LIFETIME(MIN 0 MAX 0)""",
             )
         )
 
+        self.validate_all(
+            """
+            CREATE TABLE session_log
+            (
+                UserID UInt64,
+                SessionID UUID
+            )
+            ENGINE = MergeTree
+            PARTITION BY sipHash64(UserID) % 16
+            ORDER BY tuple();
+            """,
+            pretty=True,
+        )
+
+        self.validate_all(
+            """
+            CREATE TABLE visits
+            (
+                VisitDate Date,
+                Hour UInt8,
+                ClientID UUID
+            )
+            ENGINE = MergeTree()
+            PARTITION BY (toYYYYMM(VisitDate), Hour)
+            ORDER BY Hour;
+            """,
+            pretty=True,
+        )
+
     def test_agg_functions(self):
         def extract_agg_func(query):
             return parse_one(query, read="clickhouse").selects[0].this
@@ -1257,6 +1321,16 @@ LIFETIME(MIN 0 MAX 0)""",
         )
 
         parse_one("foobar(x)").assert_is(exp.Anonymous)
+
+        self.validate_identity("SELECT approx_top_sum(column, weight) FROM t").selects[0].assert_is(
+            exp.AnonymousAggFunc
+        )
+        self.validate_identity("SELECT approx_top_sum(N)(column, weight) FROM t").selects[
+            0
+        ].assert_is(exp.ParameterizedAgg)
+        self.validate_identity("SELECT approx_top_sum(N, reserved)(column, weight) FROM t").selects[
+            0
+        ].assert_is(exp.ParameterizedAgg)
 
     def test_drop_on_cluster(self):
         for creatable in ("DATABASE", "TABLE", "VIEW", "DICTIONARY", "FUNCTION"):
@@ -1395,6 +1469,10 @@ LIFETIME(MIN 0 MAX 0)""",
         self.validate_identity("GRANT SELECT(x, y) ON db.table TO john WITH GRANT OPTION")
         self.validate_identity("GRANT INSERT(x, y) ON db.table TO john")
 
+    def test_revoke(self):
+        self.validate_identity("REVOKE SELECT(x, y) ON db.table FROM john")
+        self.validate_identity("REVOKE INSERT(x, y) ON db.table FROM john")
+
     def test_array_join(self):
         expr = self.validate_identity(
             "SELECT * FROM arrays_test ARRAY JOIN arr1, arrays_test.arr2 AS foo, ['a', 'b', 'c'] AS elem"
@@ -1441,3 +1519,78 @@ LIFETIME(MIN 0 MAX 0)""",
         self.validate_identity(
             "SELECT TRANSFORM(foo, [1, 2], ['first', 'second'], 'default') FROM table"
         )
+
+    def test_array_offset(self):
+        with self.assertLogs(helper_logger) as cm:
+            self.validate_all(
+                "SELECT col[1]",
+                write={
+                    "bigquery": "SELECT col[0]",
+                    "duckdb": "SELECT col[1]",
+                    "hive": "SELECT col[0]",
+                    "clickhouse": "SELECT col[1]",
+                    "presto": "SELECT col[1]",
+                },
+            )
+
+            self.assertEqual(
+                cm.output,
+                [
+                    "INFO:sqlglot:Applying array index offset (-1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
+                    "INFO:sqlglot:Applying array index offset (1)",
+                ],
+            )
+
+    def test_to_start_of(self):
+        for unit in ("SECOND", "DAY", "YEAR"):
+            self.validate_all(
+                f"toStartOf{unit}(x)",
+                write={
+                    "databricks": f"DATE_TRUNC('{unit}', x)",
+                    "duckdb": f"DATE_TRUNC('{unit}', x)",
+                    "doris": f"DATE_TRUNC(x, '{unit}')",
+                    "presto": f"DATE_TRUNC('{unit}', x)",
+                    "spark": f"DATE_TRUNC('{unit}', x)",
+                },
+            )
+
+        self.validate_all(
+            "toMonday(x)",
+            write={
+                "databricks": "DATE_TRUNC('WEEK', x)",
+                "duckdb": "DATE_TRUNC('WEEK', x)",
+                "doris": "DATE_TRUNC(x, 'WEEK')",
+                "presto": "DATE_TRUNC('WEEK', x)",
+                "spark": "DATE_TRUNC('WEEK', x)",
+            },
+        )
+
+    def test_string_split(self):
+        self.validate_all(
+            "splitByString('s', x)",
+            read={
+                "bigquery": "SPLIT(x, 's')",
+                "duckdb": "STRING_SPLIT(x, 's')",
+            },
+            write={
+                "clickhouse": "splitByString('s', x)",
+                "doris": "SPLIT_BY_STRING(x, 's')",
+                "duckdb": "STR_SPLIT(x, 's')",
+                "hive": r"SPLIT(x, CONCAT('\\Q', 's', '\\E'))",
+            },
+        )
+        self.validate_all(
+            r"splitByRegexp('\\d+', x)",
+            read={
+                "duckdb": r"STRING_SPLIT_REGEX(x, '\d+')",
+                "hive": r"SPLIT(x, '\\d+')",
+            },
+            write={
+                "clickhouse": r"splitByRegexp('\\d+', x)",
+                "duckdb": r"STR_SPLIT_REGEX(x, '\d+')",
+                "hive": r"SPLIT(x, '\\d+')",
+            },
+        )
+        self.validate_identity("splitByChar('', x)")

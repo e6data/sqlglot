@@ -1,5 +1,6 @@
 from sqlglot import exp, UnsupportedError, ParseError, parse_one
 from tests.dialects.test_dialect import Validator
+from sqlglot.optimizer.qualify import qualify
 
 
 class TestOracle(Validator):
@@ -16,6 +17,8 @@ class TestOracle(Validator):
         )
         self.parse_one("ALTER TABLE tbl_name DROP FOREIGN KEY fk_symbol").assert_is(exp.Alter)
 
+        self.validate_identity("SELECT BITMAP_BUCKET_NUMBER(32769)")
+        self.validate_identity("SELECT BITMAP_CONSTRUCT_AGG(value)")
         self.validate_identity("DBMS_RANDOM.NORMAL")
         self.validate_identity("DBMS_RANDOM.VALUE(low, high)").assert_is(exp.Rand)
         self.validate_identity("DBMS_RANDOM.VALUE()").assert_is(exp.Rand)
@@ -350,6 +353,18 @@ class TestOracle(Validator):
         self.validate_identity(
             "SELECT TO_TIMESTAMP('05 Dec 2000 10:00 P.M.', 'DD Mon YYYY HH12:MI P.M.')"
         )
+        self.validate_identity(
+            "SELECT CUME_DIST(15, 0.05) WITHIN GROUP (ORDER BY col1, col2) FROM t"
+        )
+        self.validate_identity(
+            "SELECT DENSE_RANK(15, 0.05) WITHIN GROUP (ORDER BY col1, col2) FROM t"
+        )
+        self.validate_identity("SELECT RANK(15, 0.05) WITHIN GROUP (ORDER BY col1, col2) FROM t")
+        self.validate_identity(
+            "SELECT PERCENT_RANK(15, 0.05) WITHIN GROUP (ORDER BY col1, col2) FROM t"
+        )
+        self.validate_identity("L2_DISTANCE(x, y)")
+        self.validate_identity("BITMAP_OR_AGG(x)")
 
     def test_join_marker(self):
         self.validate_identity("SELECT e1.x, e2.x FROM e e1, e e2 WHERE e1.y (+) = e2.y")
@@ -697,6 +712,24 @@ CONNECT BY PRIOR employee_id = manager_id AND LEVEL <= 4"""
         self.validate_identity("GRANT EXECUTE ON PROCEDURE p TO george")
         self.validate_identity("GRANT USAGE ON SEQUENCE order_id TO sales_role")
 
+    def test_revoke(self):
+        revoke_cmds = [
+            "REVOKE purchases_reader_role FROM george, maria",
+            "REVOKE USAGE ON TYPE price FROM finance_role",
+            "REVOKE USAGE ON DERBY AGGREGATE types.maxPrice FROM sales_role",
+        ]
+
+        for sql in revoke_cmds:
+            with self.subTest(f"Testing Oracle's REVOKE command statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
+        self.validate_identity("REVOKE SELECT ON TABLE t FROM maria, harry")
+        self.validate_identity("REVOKE SELECT ON TABLE s.v FROM PUBLIC")
+        self.validate_identity("REVOKE SELECT ON TABLE t FROM purchases_reader_role")
+        self.validate_identity("REVOKE UPDATE, TRIGGER ON TABLE t FROM anita, zhi")
+        self.validate_identity("REVOKE EXECUTE ON PROCEDURE p FROM george")
+        self.validate_identity("REVOKE USAGE ON SEQUENCE order_id FROM sales_role")
+
     def test_datetrunc(self):
         self.validate_all(
             "TRUNC(SYSDATE, 'YEAR')",
@@ -745,3 +778,37 @@ CONNECT BY PRIOR employee_id = manager_id AND LEVEL <= 4"""
 
         with self.assertRaises(ParseError):
             parse_one("PRIOR as foo", read="oracle")
+
+    def test_utc_time(self):
+        self.validate_identity("UTC_TIME()").assert_is(exp.UtcTime)
+        self.validate_identity("UTC_TIME(6)").assert_is(exp.UtcTime)
+        self.validate_identity("UTC_TIMESTAMP()").assert_is(exp.UtcTimestamp)
+        self.validate_identity("UTC_TIMESTAMP(6)").assert_is(exp.UtcTimestamp)
+
+    def test_merge_builder_alias(self):
+        merge_stmt = exp.merge(
+            "WHEN MATCHED THEN UPDATE SET my_table.col1 = source_table.col1",
+            "WHEN NOT MATCHED THEN INSERT (my_table.id, my_table.col1) VALUES (source_table.id, source_table.col1)",
+            into="my_table",
+            using="(SELECT * FROM something) source_table",
+            on="my_table.id = source_table.id",
+            dialect="oracle",
+        )
+        self.assertEqual(
+            merge_stmt.sql("oracle"),
+            "MERGE INTO my_table USING (SELECT * FROM something) source_table ON my_table.id = source_table.id WHEN MATCHED THEN UPDATE SET my_table.col1 = source_table.col1 WHEN NOT MATCHED THEN INSERT (my_table.id, my_table.col1) VALUES (source_table.id, source_table.col1)",
+        )
+
+    def test_pseudocolumns(self):
+        ast = self.validate_identity(
+            "WITH t AS (SELECT 1 AS COL) SELECT col, ROWID FROM t WHERE ROWNUM = 1"
+        )
+        self.assertIsNone(ast.find(exp.Pseudocolumn))
+
+        qualified = qualify(ast, dialect="oracle")
+        self.assertIsNotNone(qualified.find(exp.Pseudocolumn))
+
+        self.assertEqual(
+            qualified.sql(dialect="oracle"),
+            'WITH "T" AS (SELECT 1 AS "COL") SELECT "T"."COL" AS "COL", ROWID AS "ROWID" FROM "T" "T" WHERE ROWNUM = 1',
+        )
