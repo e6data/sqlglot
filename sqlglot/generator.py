@@ -198,8 +198,7 @@ class Generator(metaclass=_Generator):
         exp.SettingsProperty: lambda self, e: f"SETTINGS{self.seg('')}{(self.expressions(e))}",
         exp.SharingProperty: lambda self, e: f"SHARING={self.sql(e, 'this')}",
         exp.SqlReadWriteProperty: lambda _, e: e.name,
-        exp.SqlSecurityProperty: lambda _,
-        e: f"SQL SECURITY {'DEFINER' if e.args.get('definer') else 'INVOKER'}",
+        exp.SqlSecurityProperty: lambda self, e: f"SQL SECURITY {self.sql(e, 'this')}",
         exp.StabilityProperty: lambda _, e: e.name,
         exp.Stream: lambda self, e: f"STREAM {self.sql(e, 'this')}",
         exp.StreamingTableProperty: lambda *_: "STREAMING",
@@ -217,7 +216,6 @@ class Generator(metaclass=_Generator):
         exp.UnloggedProperty: lambda *_: "UNLOGGED",
         exp.UsingTemplateProperty: lambda self, e: f"USING TEMPLATE {self.sql(e, 'this')}",
         exp.UsingData: lambda self, e: f"USING DATA {self.sql(e, 'this')}",
-        exp.Uuid: lambda *_: "UUID()",
         exp.UppercaseColumnConstraint: lambda *_: "UPPERCASE",
         exp.UtcDate: lambda self, e: self.sql(exp.CurrentDate(this=exp.Literal.string("UTC"))),
         exp.UtcTime: lambda self, e: self.sql(exp.CurrentTime(this=exp.Literal.string("UTC"))),
@@ -1037,6 +1035,9 @@ class Generator(metaclass=_Generator):
 
         return f"{self.column_parts(expression)}{join_mark}"
 
+    def pseudocolumn_sql(self, expression: exp.Pseudocolumn) -> str:
+        return self.column_sql(expression)
+
     def columnposition_sql(self, expression: exp.ColumnPosition) -> str:
         this = self.sql(expression, "this")
         this = f" {this}" if this else ""
@@ -1311,7 +1312,7 @@ class Generator(metaclass=_Generator):
         return f"${tag}${self.sql(expression, 'this')}${tag}$"
 
     def prepend_ctes(self, expression: exp.Expression, sql: str) -> str:
-        with_ = self.sql(expression, "with")
+        with_ = self.sql(expression, "with_")
         if with_:
             sql = f"{with_}{self.sep()}{sql}"
         return sql
@@ -1400,7 +1401,20 @@ class Generator(metaclass=_Generator):
                 delimiter=self.dialect.BYTE_END,
                 escaped_delimiter=self._escaped_byte_quote_end,
             )
-            return f"{self.dialect.BYTE_START}{escaped_byte_string}{self.dialect.BYTE_END}"
+            is_bytes = expression.args.get("is_bytes", False)
+            delimited_byte_string = (
+                f"{self.dialect.BYTE_START}{escaped_byte_string}{self.dialect.BYTE_END}"
+            )
+            if is_bytes and not self.dialect.BYTE_STRING_IS_BYTES_TYPE:
+                return self.sql(
+                    exp.cast(delimited_byte_string, exp.DataType.Type.BINARY, dialect=self.dialect)
+                )
+            if not is_bytes and self.dialect.BYTE_STRING_IS_BYTES_TYPE:
+                return self.sql(
+                    exp.cast(delimited_byte_string, exp.DataType.Type.VARCHAR, dialect=self.dialect)
+                )
+
+            return delimited_byte_string
         return this
 
     def unicodestring_sql(self, expression: exp.UnicodeString) -> str:
@@ -1939,7 +1953,7 @@ class Generator(metaclass=_Generator):
 
         sql = f"SYSTEM_VERSIONING={on_sql}"
 
-        return f"WITH({sql})" if expression.args.get("with") else sql
+        return f"WITH({sql})" if expression.args.get("with_") else sql
 
     def insert_sql(self, expression: exp.Insert) -> str:
         hint = self.sql(expression, "hint")
@@ -2113,7 +2127,13 @@ class Generator(metaclass=_Generator):
         if rows_from:
             table = f"ROWS FROM {self.wrap(rows_from)}"
 
-        return f"{only}{table}{changes}{partition}{version}{file_format}{sample_pre_alias}{alias}{hints}{pivots}{sample_post_alias}{joins}{laterals}{ordinality}"
+        indexed = expression.args.get("indexed")
+        if indexed is not None:
+            indexed = f" INDEXED BY {self.sql(indexed)}" if indexed else " NOT INDEXED"
+        else:
+            indexed = ""
+
+        return f"{only}{table}{changes}{partition}{version}{file_format}{sample_pre_alias}{alias}{indexed}{hints}{pivots}{sample_post_alias}{joins}{laterals}{ordinality}"
 
     def tablefromrows_sql(self, expression: exp.TableFromRows) -> str:
         table = self.func("TABLE", expression.this)
@@ -2208,7 +2228,7 @@ class Generator(metaclass=_Generator):
     def update_sql(self, expression: exp.Update) -> str:
         this = self.sql(expression, "this")
         set_sql = self.expressions(expression, flat=True)
-        from_sql = self.sql(expression, "from")
+        from_sql = self.sql(expression, "from_")
         where_sql = self.sql(expression, "where")
         returning = self.sql(expression, "returning")
         order = self.sql(expression, "order")
@@ -2347,7 +2367,7 @@ class Generator(metaclass=_Generator):
             op
             for op in (
                 expression.method,
-                "GLOBAL" if expression.args.get("global") else None,
+                "GLOBAL" if expression.args.get("global_") else None,
                 side,
                 expression.kind,
                 expression.hint if self.JOIN_HINTS else None,
@@ -2462,7 +2482,7 @@ class Generator(metaclass=_Generator):
         expressions = self.expressions(expression)
         collate = self.sql(expression, "collate")
         collate = f" COLLATE {collate}" if collate else ""
-        global_ = "GLOBAL " if expression.args.get("global") else ""
+        global_ = "GLOBAL " if expression.args.get("global_") else ""
         return f"{global_}{kind}{this}{expressions}{collate}"
 
     def set_sql(self, expression: exp.Set) -> str:
@@ -2560,7 +2580,7 @@ class Generator(metaclass=_Generator):
         return self.op_expressions(f"{this}ORDER {siblings}BY", expression, flat=this or flat)  # type: ignore
 
     def withfill_sql(self, expression: exp.WithFill) -> str:
-        from_sql = self.sql(expression, "from")
+        from_sql = self.sql(expression, "from_")
         from_sql = f" FROM {from_sql}" if from_sql else ""
         to_sql = self.sql(expression, "to")
         to_sql = f" TO {to_sql}" if to_sql else ""
@@ -2721,7 +2741,7 @@ class Generator(metaclass=_Generator):
         return f" {options}" if options else ""
 
     def for_modifiers(self, expression: exp.Expression) -> str:
-        for_modifiers = self.expressions(expression, key="for")
+        for_modifiers = self.expressions(expression, key="for_")
         return f"{self.sep()}FOR XML{self.seg(for_modifiers)}" if for_modifiers else ""
 
     def queryoption_sql(self, expression: exp.QueryOption) -> str:
@@ -2795,11 +2815,11 @@ class Generator(metaclass=_Generator):
             expression,
             f"SELECT{top_distinct}{operation_modifiers}{kind}{expressions}",
             self.sql(expression, "into", comment=False),
-            self.sql(expression, "from", comment=False),
+            self.sql(expression, "from_", comment=False),
         )
 
         # If both the CTE and SELECT clauses have comments, generate the latter earlier
-        if expression.args.get("with"):
+        if expression.args.get("with_"):
             sql = self.maybe_comment(sql, expression)
             expression.pop_comments()
 
@@ -2827,7 +2847,7 @@ class Generator(metaclass=_Generator):
         return ""
 
     def star_sql(self, expression: exp.Star) -> str:
-        except_ = self.expressions(expression, key="except", flat=True)
+        except_ = self.expressions(expression, key="except_", flat=True)
         except_ = f"{self.seg(self.STAR_EXCEPT)} ({except_})" if except_ else ""
         replace = self.expressions(expression, key="replace", flat=True)
         replace = f"{self.seg('REPLACE')} ({replace})" if replace else ""
@@ -3087,6 +3107,14 @@ class Generator(metaclass=_Generator):
         return args
 
     def concat_sql(self, expression: exp.Concat) -> str:
+        if self.dialect.CONCAT_COALESCE and not expression.args.get("coalesce"):
+            # Dialect's CONCAT function coalesces NULLs to empty strings, but the expression does not.
+            # Transpile to double pipe operators, which typically returns NULL if any args are NULL
+            # instead of coalescing them to empty string.
+            from sqlglot.dialects.dialect import concat_to_dpipe_sql
+
+            return concat_to_dpipe_sql(self, expression)
+
         expressions = self.convert_concat_args(expression)
 
         # Some dialects don't allow a single-argument CONCAT call
@@ -3842,6 +3870,9 @@ class Generator(metaclass=_Generator):
 
     def ilike_sql(self, expression: exp.ILike) -> str:
         return self._like_sql(expression)
+
+    def match_sql(self, expression: exp.Match) -> str:
+        return self.binary(expression, "MATCH")
 
     def similarto_sql(self, expression: exp.SimilarTo) -> str:
         return self.binary(expression, "SIMILAR TO")
@@ -4832,7 +4863,7 @@ class Generator(metaclass=_Generator):
         this = self.sql(expression, "this")
         this = f" {this}" if this else ""
 
-        _with = expression.args.get("with")
+        _with = expression.args.get("with_")
 
         if _with is None:
             with_sql = ""
@@ -5016,8 +5047,8 @@ class Generator(metaclass=_Generator):
     def overlay_sql(self, expression: exp.Overlay):
         this = self.sql(expression, "this")
         expr = self.sql(expression, "expression")
-        from_sql = self.sql(expression, "from")
-        for_sql = self.sql(expression, "for")
+        from_sql = self.sql(expression, "from_")
+        for_sql = self.sql(expression, "for_")
         for_sql = f" FOR {for_sql}" if for_sql else ""
 
         return f"OVERLAY({this} PLACING {expr} FROM {from_sql}{for_sql})"
@@ -5349,9 +5380,11 @@ class Generator(metaclass=_Generator):
             expression, "metrics", dynamic=True, skip_first=True, skip_last=True
         )
         metrics = self.seg(f"METRICS {metrics}") if metrics else ""
+        facts = self.expressions(expression, "facts", dynamic=True, skip_first=True, skip_last=True)
+        facts = self.seg(f"FACTS {facts}") if facts else ""
         where = self.sql(expression, "where")
         where = self.seg(f"WHERE {where}") if where else ""
-        body = self.indent(this + metrics + dimensions + where, skip_first=True)
+        body = self.indent(this + metrics + dimensions + facts + where, skip_first=True)
         return f"SEMANTIC_VIEW({body}{self.seg(')', sep='')}"
 
     def getextract_sql(self, expression: exp.GetExtract) -> str:
@@ -5403,3 +5436,30 @@ class Generator(metaclass=_Generator):
 
     def directorystage_sql(self, expression: exp.DirectoryStage) -> str:
         return self.func("DIRECTORY", expression.this)
+
+    def uuid_sql(self, expression: exp.Uuid) -> str:
+        is_string = expression.args.get("is_string", False)
+        uuid_func_sql = self.func("UUID")
+
+        if is_string and not self.dialect.UUID_IS_STRING_TYPE:
+            return self.sql(
+                exp.cast(uuid_func_sql, exp.DataType.Type.VARCHAR, dialect=self.dialect)
+            )
+
+        return uuid_func_sql
+
+    def initcap_sql(self, expression: exp.Initcap) -> str:
+        delimiters = expression.expression
+
+        if delimiters:
+            # do not generate delimiters arg if we are round-tripping from default delimiters
+            if (
+                delimiters.is_string
+                and delimiters.this == self.dialect.INITCAP_DEFAULT_DELIMITER_CHARS
+            ):
+                delimiters = None
+            elif not self.dialect.INITCAP_SUPPORTS_CUSTOM_DELIMITERS:
+                self.unsupported("INITCAP does not support custom delimiters")
+                delimiters = None
+
+        return self.func("INITCAP", expression.this, delimiters)

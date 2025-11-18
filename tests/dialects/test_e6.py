@@ -1025,7 +1025,7 @@ class TestE6(Validator):
         self.validate_all(
             """SELECT JSON_EXTRACT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$farm.barn.color')""",
             write={
-                "bigquery": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm.barn.color')""",
+                "bigquery": """SELECT JSON_EXTRACT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm.barn.color')""",
                 "databricks": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}':farm.barn.color""",
                 "duckdb": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm.barn.color'""",
                 "postgres": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm', 'barn', 'color')""",
@@ -1046,7 +1046,7 @@ class TestE6(Validator):
         self.validate_all(
             """SELECT JSON_VALUE('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",
             write={
-                "bigquery": """SELECT JSON_EXTRACT_SCALAR('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
+                "bigquery": """SELECT JSON_VALUE('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', '$.farm')""",
                 "databricks": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}':farm""",
                 "duckdb": """SELECT '{ "farm": {"barn": { "color": "red", "feed stocked": true }}}' ->> '$.farm'""",
                 "postgres": """SELECT JSON_EXTRACT_PATH_TEXT('{ "farm": {"barn": { "color": "red", "feed stocked": true }}}', 'farm')""",

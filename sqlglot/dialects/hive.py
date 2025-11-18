@@ -46,6 +46,7 @@ from sqlglot.helper import seq_get
 from sqlglot.tokens import TokenType
 from sqlglot.generator import unsupported_args
 from sqlglot.optimizer.annotate_types import TypeAnnotator
+from sqlglot.typing.hive import EXPRESSION_METADATA
 
 # (FuncType, Multiplier)
 DATE_DELTA_INTERVAL = {
@@ -227,13 +228,11 @@ class Hive(Dialect):
     # https://spark.apache.org/docs/latest/sql-ref-identifier.html#description
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE
 
-    ANNOTATORS = {
-        **Dialect.ANNOTATORS,
-        exp.If: lambda self, e: self._annotate_by_args(e, "true", "false", promote=True),
-        exp.Coalesce: lambda self, e: self._annotate_by_args(
-            e, "this", "expressions", promote=True
-        ),
-    }
+    EXPRESSION_METADATA = EXPRESSION_METADATA.copy()
+
+    # https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=27362046#LanguageManualUDF-StringFunctions
+    # https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/exec/Utilities.java#L266-L269
+    INITCAP_DEFAULT_DELIMITER_CHARS = " \t\n\r\f\u000b\u001c\u001d\u001e\u001f"
 
     # Support only the non-ANSI mode (default for Hive, Spark2, Spark)
     COERCES_TO = defaultdict(set, deepcopy(TypeAnnotator.COERCES_TO))
@@ -598,6 +597,7 @@ class Hive(Dialect):
             exp.ArgMax: arg_max_or_min_no_count("MAX_BY"),
             exp.ArgMin: arg_max_or_min_no_count("MIN_BY"),
             exp.ArrayFilter: rename_func("FILTER"),
+            exp.Array: transforms.preprocess([transforms.inherit_struct_field_names]),
             exp.ArrayConcat: rename_func("CONCAT"),
             exp.ArrayToString: lambda self, e: self.func("CONCAT_WS", e.expression, e.this),
             exp.ArraySort: _array_sort_sql,
@@ -864,7 +864,7 @@ class Hive(Dialect):
             return f"SET{serde}{exprs}{location}{file_format}{tags}"
 
         def serdeproperties_sql(self, expression: exp.SerdeProperties) -> str:
-            prefix = "WITH " if expression.args.get("with") else ""
+            prefix = "WITH " if expression.args.get("with_") else ""
             exprs = self.expressions(expression, flat=True)
 
             return f"{prefix}SERDEPROPERTIES ({exprs})"

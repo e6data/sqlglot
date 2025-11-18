@@ -212,11 +212,11 @@ class TestExpressions(unittest.TestCase):
         )
 
         self.assertEqual(
-            [e.alias_or_name for e in expression.args["with"].expressions],
+            [e.alias_or_name for e in expression.args["with_"].expressions],
             ["first", "second"],
         )
 
-        self.assertEqual("first", expression.args["from"].alias_or_name)
+        self.assertEqual("first", expression.args["from_"].alias_or_name)
         self.assertEqual(
             [e.alias_or_name for e in expression.args["joins"]],
             ["second", "third"],
@@ -381,7 +381,9 @@ class TestExpressions(unittest.TestCase):
         self.assertEqual(exp.func("bla", 1, "foo").sql(), "BLA(1, foo)")
         self.assertEqual(exp.func("COUNT", exp.Star()).sql(), "COUNT(*)")
         self.assertEqual(exp.func("bloo").sql(), "BLOO()")
-        self.assertEqual(exp.func("concat", exp.convert("a")).sql("duckdb"), "CONCAT('a')")
+        self.assertEqual(
+            exp.func("concat", exp.convert("a"), dialect="duckdb").sql("duckdb"), "CONCAT('a')"
+        )
         self.assertEqual(
             exp.func("locate", "'x'", "'xo'", dialect="hive").sql("hive"),
             "LOCATE('x', 'xo')",
@@ -1190,10 +1192,10 @@ FROM foo""",
         self.assertIs(ast.selects[0].unnest(), ast.find(exp.Literal))
 
         ast = parse_one("SELECT * FROM (((SELECT * FROM t)))")
-        self.assertIs(ast.args["from"].this.unnest(), list(ast.find_all(exp.Select))[1])
+        self.assertIs(ast.args["from_"].this.unnest(), list(ast.find_all(exp.Select))[1])
 
         ast = parse_one("SELECT * FROM ((((SELECT * FROM t))) AS foo)")
-        second_subquery = ast.args["from"].this.this
+        second_subquery = ast.args["from_"].this.this
         innermost_subquery = list(ast.find_all(exp.Select))[1].parent
         self.assertIs(second_subquery, innermost_subquery.unwrap())
 

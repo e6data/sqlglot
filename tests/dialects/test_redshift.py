@@ -7,6 +7,9 @@ class TestRedshift(Validator):
 
     def test_redshift(self):
         self.validate_identity("SELECT COSH(1.5)")
+        self.validate_identity(
+            "ROUND(CAST(a AS DOUBLE PRECISION) / CAST(b AS DOUBLE PRECISION), 2)"
+        )
         self.validate_all(
             "SELECT SPLIT_TO_ARRAY('12,345,6789')",
             write={
@@ -610,12 +613,12 @@ FROM (
         )
 
         ast = parse_one("SELECT * FROM t.t JOIN t.c1 ON c1.c2 = t.c3", read="redshift")
-        ast.args["from"].this.assert_is(exp.Table)
+        ast.args["from_"].this.assert_is(exp.Table)
         ast.args["joins"][0].this.assert_is(exp.Table)
         self.assertEqual(ast.sql("redshift"), "SELECT * FROM t.t JOIN t.c1 ON c1.c2 = t.c3")
 
         ast = parse_one("SELECT * FROM t AS t CROSS JOIN t.c1", read="redshift")
-        ast.args["from"].this.assert_is(exp.Table)
+        ast.args["from_"].this.assert_is(exp.Table)
         ast.args["joins"][0].this.assert_is(exp.Unnest)
         self.assertEqual(ast.sql("redshift"), "SELECT * FROM t AS t CROSS JOIN t.c1")
 
@@ -624,7 +627,7 @@ FROM (
             read="redshift",
         )
         joins = ast.args["joins"]
-        ast.args["from"].this.assert_is(exp.Table)
+        ast.args["from_"].this.assert_is(exp.Table)
         joins[0].this.assert_is(exp.Unnest)
         joins[1].this.assert_is(exp.Unnest)
         joins[2].this.assert_is(exp.Unnest).expressions[0].assert_is(exp.Dot)

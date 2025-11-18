@@ -5,6 +5,12 @@ class TestExasol(Validator):
     dialect = "exasol"
     maxDiff = None
 
+    def test_exasol(self):
+        self.validate_identity(
+            "SELECT 1 AS [x]",
+            'SELECT 1 AS "x"',
+        )
+
     def test_type_mappings(self):
         self.validate_identity("CAST(x AS BLOB)", "CAST(x AS VARCHAR)")
         self.validate_identity("CAST(x AS LONGBLOB)", "CAST(x AS VARCHAR)")
@@ -401,23 +407,34 @@ class TestExasol(Validator):
             "SELECT CAST(CAST(CURRENT_TIMESTAMP() AS TIMESTAMP) AT TIME ZONE 'CET' AS DATE) - 1",
             "SELECT CAST(CONVERT_TZ(CAST(CURRENT_TIMESTAMP() AS TIMESTAMP), 'UTC', 'CET') AS DATE) - 1",
         )
+        units = ["MM", "QUARTER", "WEEK", "MINUTE", "YEAR"]
+        for unit in units:
+            with self.subTest(f"Testing TO_CHAR with format '{unit}'"):
+                self.validate_all(
+                    f"SELECT TRUNC(CAST('2006-12-31' AS DATE), '{unit}') AS TRUNC",
+                    write={
+                        "exasol": f"SELECT DATE_TRUNC('{unit}', DATE '2006-12-31') AS TRUNC",
+                        "presto": f"SELECT DATE_TRUNC('{unit}', CAST('2006-12-31' AS DATE)) AS TRUNC",
+                        "databricks": f"SELECT TRUNC(CAST('2006-12-31' AS DATE), '{unit}') AS TRUNC",
+                    },
+                )
 
-        self.validate_all(
-            "SELECT TRUNC(CAST('2006-12-31' AS DATE), 'MM') AS TRUNC",
-            write={
-                "exasol": "SELECT TRUNC(CAST('2006-12-31' AS DATE), 'MM') AS TRUNC",
-                "presto": "SELECT DATE_TRUNC('MM', CAST('2006-12-31' AS DATE)) AS TRUNC",
-                "databricks": "SELECT TRUNC(CAST('2006-12-31' AS DATE), 'MM') AS TRUNC",
-            },
-        )
-        self.validate_all(
-            "SELECT DATE_TRUNC('minute', TIMESTAMP '2006-12-31 23:59:59') DATE_TRUNC",
-            write={
-                "exasol": "SELECT DATE_TRUNC('MINUTE', CAST('2006-12-31 23:59:59' AS TIMESTAMP)) AS DATE_TRUNC",
-                "presto": "SELECT DATE_TRUNC('MINUTE', CAST('2006-12-31 23:59:59' AS TIMESTAMP)) AS DATE_TRUNC",
-                "databricks": "SELECT DATE_TRUNC('MINUTE', CAST('2006-12-31 23:59:59' AS TIMESTAMP)) AS DATE_TRUNC",
-            },
-        )
+                self.validate_all(
+                    f"SELECT DATE_TRUNC('{unit}', TIMESTAMP '2006-12-31T23:59:59') DATE_TRUNC",
+                    write={
+                        "exasol": f"SELECT DATE_TRUNC('{unit}', TIMESTAMP '2006-12-31 23:59:59') AS DATE_TRUNC",
+                        "presto": f"SELECT DATE_TRUNC('{unit}', CAST('2006-12-31T23:59:59' AS TIMESTAMP)) AS DATE_TRUNC",
+                        "databricks": f"SELECT DATE_TRUNC('{unit}', CAST('2006-12-31T23:59:59' AS TIMESTAMP)) AS DATE_TRUNC",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT DATE_TRUNC('{unit}', CURRENT_TIMESTAMP) DATE_TRUNC",
+                    write={
+                        "exasol": f"SELECT DATE_TRUNC('{unit}', CURRENT_TIMESTAMP()) AS DATE_TRUNC",
+                        "presto": f"SELECT DATE_TRUNC('{unit}', CURRENT_TIMESTAMP) AS DATE_TRUNC",
+                        "databricks": f"SELECT DATE_TRUNC('{unit}', CURRENT_TIMESTAMP()) AS DATE_TRUNC",
+                    },
+                )
 
         from sqlglot.dialects.exasol import DATE_UNITS
 
@@ -586,3 +603,48 @@ class TestExasol(Validator):
         self.validate_identity(
             "SELECT name, age, IF age < 18 THEN 'underaged' ELSE 'adult' ENDIF AS LEGALITY FROM persons"
         )
+
+    def test_odbc_date_literals(self):
+        self.validate_identity("SELECT {d'2024-01-01'}", "SELECT TO_DATE('2024-01-01')")
+        self.validate_identity(
+            "SELECT {ts'2024-01-01 12:00:00'}", "SELECT TO_TIMESTAMP('2024-01-01 12:00:00')"
+        )
+
+    def test_local_prefix_for_alias(self):
+        self.validate_identity(
+            'SELECT ID FROM local WHERE "LOCAL".ID IS NULL',
+            'SELECT ID FROM "LOCAL" WHERE "LOCAL".ID IS NULL',
+        )
+        self.validate_identity(
+            'SELECT YEAR(a_date) AS "a_year" FROM MY_SUMMARY_TABLE GROUP BY LOCAL."a_year"',
+        )
+        self.validate_identity('SELECT a_year AS a_year FROM "LOCAL" GROUP BY "LOCAL".a_year')
+
+        test_cases = [
+            (
+                "GROUP BY alias",
+                "SELECT YEAR(a_date) AS a_year FROM my_table GROUP BY LOCAL.a_year",
+                "SELECT YEAR(a_date) AS a_year FROM my_table GROUP BY a_year",
+            ),
+            (
+                "HAVING alias",
+                "SELECT SUM(amount) AS total FROM my_table HAVING LOCAL.total > 10000",
+                "SELECT SUM(amount) AS total FROM my_table HAVING total > 10000",
+            ),
+            (
+                "WHERE alias",
+                "SELECT YEAR(a_date) AS a_year FROM my_table WHERE LOCAL.a_year > 2020",
+                "SELECT YEAR(a_date) AS a_year FROM my_table WHERE a_year > 2020",
+            ),
+            (
+                "Multiple aliases",
+                "SELECT YEAR(a_date) AS a_year, MONTH(a_date) AS a_month FROM my_table WHERE LOCAL.a_year > 2020 AND LOCAL.a_month < 6",
+                "SELECT YEAR(a_date) AS a_year, MONTH(a_date) AS a_month FROM my_table WHERE a_year > 2020 AND a_month < 6",
+            ),
+        ]
+        for title, exasol_sql, dbx_sql in test_cases:
+            with self.subTest(clause=title):
+                self.validate_all(
+                    exasol_sql,
+                    write={"exasol": exasol_sql, "databricks": dbx_sql},
+                )

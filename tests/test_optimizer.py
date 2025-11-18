@@ -46,7 +46,10 @@ def pushdown_projections(expression, **kwargs):
 
 
 def normalize(expression, **kwargs):
+    schema = kwargs.get("schema")
+
     expression = optimizer.normalize.normalize(expression, dnf=False)
+    expression = annotate_types(expression, schema=schema)
     return optimizer.simplify.simplify(expression)
 
 
@@ -58,6 +61,11 @@ def simplify(expression, **kwargs):
     return optimizer.simplify.simplify(
         expression, constant_propagation=True, coalesce_simplification=True, dialect=dialect
     )
+
+
+def pushdown_ctes(expression, **kwargs):
+    optimizer.qualify_columns.pushdown_cte_alias_columns(build_scope(expression))
+    return expression
 
 
 def annotate_functions(expression, **kwargs):
@@ -300,7 +308,7 @@ class TestOptimizer(unittest.TestCase):
             "x AND (y OR z)",
         )
 
-        self.check_file("normalize", normalize)
+        self.check_file("normalize", normalize, schema=self.schema)
 
     @patch("sqlglot.generator.logger")
     def test_qualify_columns(self, logger):
@@ -416,10 +424,10 @@ class TestOptimizer(unittest.TestCase):
         qualified = optimizer.qualify.qualify(
             parse_one("WITH t AS (SELECT 1 AS c) (SELECT c FROM t)")
         )
-        self.assertIs(qualified.selects[0].parent, qualified.this)
+        self.assertIs(qualified.selects[0].parent, qualified)
         self.assertEqual(
             qualified.sql(),
-            'WITH "t" AS (SELECT 1 AS "c") (SELECT "t"."c" AS "c" FROM "t" AS "t")',
+            'WITH "t" AS (SELECT 1 AS "c") SELECT "t"."c" AS "c" FROM "t" AS "t"',
         )
 
         # can't coalesce USING columns because they don't exist in every already-joined table
@@ -519,7 +527,7 @@ class TestOptimizer(unittest.TestCase):
     def test_pushdown_cte_alias_columns(self):
         self.check_file(
             "pushdown_cte_alias_columns",
-            optimizer.qualify_columns.pushdown_cte_alias_columns,
+            pushdown_ctes,
         )
 
     def test_qualify_columns__invalid(self):
@@ -566,7 +574,6 @@ class TestOptimizer(unittest.TestCase):
 
         expression = parse_one("TRUE AND TRUE AND TRUE")
         self.assertEqual(exp.true(), optimizer.simplify.simplify(expression))
-        self.assertEqual(exp.true(), optimizer.simplify.simplify(expression.this))
 
         # CONCAT in (e.g.) Presto is parsed as Concat instead of SafeConcat which is the default type
         # This test checks that simplify_concat preserves the corresponding expression types.
@@ -624,7 +631,7 @@ class TestOptimizer(unittest.TestCase):
         self.assertEqual(
             optimizer.simplify.gen(sql),
             """
-SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expression,SELECT :expressions,2,:distinct,True,:alias, AS cte,CTE :this,SELECT :expressions,WINDOW :this,ROW(),:partition_by,y,:over,OVER,:from,FROM ((SELECT :expressions,1):limit,LIMIT :expression,10),:alias, AS cte2,:expressions,STAR,a + 1,a DIV 1,FILTER("B",LAMBDA :this,x + y,:expressions,x,y),:from,FROM (z AS z:joins,JOIN :this,z,:kind,CROSS) AS f(a),:joins,JOIN :this,a.b.c.d.e.f.g,:side,LEFT,:using,n,:order,ORDER :expressions,ORDERED :this,1,:nulls_first,True
+SELECT :with_,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expression,SELECT :expressions,2,:distinct,True,:alias, AS cte,CTE :this,SELECT :expressions,WINDOW :this,ROW(),:partition_by,y,:over,OVER,:from_,FROM ((SELECT :expressions,1):limit,LIMIT :expression,10),:alias, AS cte2,:expressions,STAR,a + 1,a DIV 1,FILTER("B",LAMBDA :this,x + y,:expressions,x,y),:from_,FROM (z AS z:joins,JOIN :this,z,:kind,CROSS) AS f(a),:joins,JOIN :this,a.b.c.d.e.f.g,:side,LEFT,:using,n,:order,ORDER :expressions,ORDERED :this,1,:nulls_first,True
 """.strip(),
         )
         self.assertEqual(
@@ -746,6 +753,14 @@ SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expr
             ],
         )
         self.check_file("canonicalize", optimize, schema=self.schema)
+
+        # In T-SQL and Redshift, SELECT a + b can produce a NULL, so we can't transpile it
+        # into a CONCAT in Postgres, because that coalesces NULL values with empty strings
+        ast = optimize("SELECT CAST(a AS TEXT) + CAST(b AS TEXT) FROM t", dialect="tsql")
+        self.assertEqual(
+            ast.sql("postgres"),
+            'SELECT CAST("t"."a" AS TEXT) || CAST("t"."b" AS TEXT) AS "_col_0" FROM "t" AS "t"',
+        )
 
     def test_tpch(self):
         self.check_file("tpc-h/tpc-h", optimizer.optimize, schema=TPCH_SCHEMA, pretty=True)
@@ -912,6 +927,7 @@ SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expr
                 "timestamp_col": "TIMESTAMP",
                 "double_col": "DOUBLE",
                 "bigint_col": "BIGINT",
+                "int_col": "INT",
                 "bool_col": "BOOLEAN",
                 "bytes_col": "BYTES",
                 "interval_col": "INTERVAL",
@@ -927,15 +943,11 @@ SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expr
             sql = f"SELECT {sql} FROM tbl"
 
             for dialect in dialect.split(", "):
-                result = parse_and_optimize(
-                    annotate_functions,
-                    sql,
-                    dialect,
-                    schema=test_schema,
-                    dialect=dialect,
-                )
-
                 with self.subTest(title):
+                    result = parse_and_optimize(
+                        annotate_functions, sql, dialect, schema=test_schema, dialect=dialect
+                    )
+
                     self.assertEqual(
                         result.type.sql(dialect),
                         exp.DataType.build(expected, dialect=dialect).sql(dialect),
@@ -1124,7 +1136,7 @@ SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expr
             expression.expressions[0].type.this, exp.DataType.Type.FLOAT
         )  # a.cola AS cola
 
-        addition_alias = expression.args["from"].this.this.expressions[0]
+        addition_alias = expression.args["from_"].this.this.expressions[0]
         self.assertEqual(
             addition_alias.type.this, exp.DataType.Type.FLOAT
         )  # x.cola + y.cola AS cola
@@ -1170,7 +1182,7 @@ SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expr
         # WHERE tbl.colc = True
         self.assertEqual(expression.args["where"].this.type.this, exp.DataType.Type.BOOLEAN)
 
-        cte_select = expression.args["with"].expressions[0].this
+        cte_select = expression.args["with_"].expressions[0].this
         self.assertEqual(
             cte_select.expressions[0].type.this, exp.DataType.Type.VARCHAR
         )  # x.cola + 'bla' AS cola
@@ -1694,4 +1706,120 @@ SELECT :with,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:expr
 
         self.assertEqual(
             annotated.selects[0].type.sql("snowflake"), 'OBJECT("foo" VARCHAR, "a b" VARCHAR)'
+        )
+
+    def test_nonnull_annotation(self):
+        for literal_sql in ("1", "'foo'", "2.5"):
+            with self.subTest(f"Test NULL annotation for literal: {literal_sql}"):
+                sql = f"SELECT {literal_sql}"
+                query = parse_one(sql)
+                annotated = annotate_types(query)
+                assert annotated.selects[0].meta.get("nonnull") is True
+
+        schema = {"foo": {"id": "INT"}}
+
+        operand_pairs = (
+            ("1", "1", True),
+            ("foo.id", "foo.id", None),
+            ("1", "foo.id", None),
+            ("foo.id", "1", None),
+        )
+
+        for predicate in (">", "<", ">=", "<=", "=", "!=", "<>", "LIKE", "NOT LIKE"):
+            for operand1, operand2, nonnull in operand_pairs:
+                sql_predicate = f"{operand1} {predicate} {operand2}"
+                with self.subTest(f"Test NULL propagation for predicate: {predicate}"):
+                    sql = f"SELECT {sql_predicate} FROM foo"
+                    query = parse_one(sql)
+                    annotated = annotate_types(query, schema=schema)
+                    assert annotated.selects[0].meta.get("nonnull") is nonnull
+
+        for predicate in ("IS NULL", "IS NOT NULL"):
+            sql_predicate = f"foo.id {predicate}"
+            with self.subTest(f"Test NULL propagation for predicate: {predicate}"):
+                sql = f"SELECT {sql_predicate} FROM foo"
+                query = parse_one(sql)
+                annotated = annotate_types(query, schema=schema)
+                assert annotated.selects[0].meta.get("nonnull") is True
+
+        for connector in ("AND", "OR"):
+            for predicate in (">", "<", ">=", "<=", "=", "!=", "<>", "LIKE", "NOT LIKE"):
+                for operand1, operand2, nonnull in operand_pairs:
+                    sql_predicate = f"({operand1} {predicate} {operand2})"
+                    sql_connector = f"{sql_predicate} {connector} {sql_predicate}"
+                    with self.subTest(
+                        f"Test NULL propagation for connector: {connector} with predicates: {predicate}"
+                    ):
+                        sql = f"SELECT {sql_connector} FROM foo"
+                        query = parse_one(sql)
+                        annotated = annotate_types(query, schema=schema)
+                        assert annotated.selects[0].meta.get("nonnull") is nonnull
+
+        for unary in ("NOT", "-"):
+            for value, nonnull in (("1", True), ("foo.id", None)):
+                with self.subTest(f"Test NULL propagation for unary: {unary} with value: {value}"):
+                    sql = f"SELECT {unary} {value} FROM foo"
+                    query = parse_one(sql)
+                    annotated = annotate_types(query, schema=schema)
+                    assert annotated.selects[0].meta.get("nonnull") is nonnull
+
+        ch_query = parse_one("select c1, c2 from t")
+        ch_schema = {"t": {"c1": "Int32", "c2": "Nullable(Int32)"}}
+        qualified_query = qualify_columns(ch_query, schema=ch_schema, dialect="clickhouse")
+        annotated = annotate_types(qualified_query, schema=ch_schema, dialect="clickhouse")
+        assert annotated.selects[0].meta.get("nonnull") is True
+        assert annotated.selects[1].meta.get("nonnull") is None
+
+    def test_case_sensitive_json_dot_access(self):
+        schema = {
+            "t": {
+                "col": "JSON",
+                "struct_col": "STRUCT<STRUCT<STRUCT<VARCHAR>>>",
+            }
+        }
+
+        def _parse_and_optimize(query: str, dialect: str) -> exp.Expression:
+            query = parse_one(query, dialect=dialect)
+            optimized = optimizer.optimize(query, schema=schema, dialect=dialect)
+            return optimized.sql(dialect=dialect)
+
+        # BigQuery
+        for dot_access in ("col.fOo.BaR.BaZ", "t.col.fOo.BaR.BaZ"):
+            with self.subTest(f"Test case sensitive JSON dot access for BigQuery: {dot_access}"):
+                dot_access_normalized = "`t`.`col`.`fOo`.`BaR`.`BaZ`"
+
+                sql = _parse_and_optimize(
+                    f"SELECT JSON_VALUE({dot_access}, '$') AS col FROM t", dialect="bigquery"
+                )
+                assert (
+                    sql
+                    == f"SELECT JSON_VALUE({dot_access_normalized}, '$') AS `col` FROM `t` AS `t`"
+                )
+
+                sql = _parse_and_optimize(f"SELECT {dot_access} AS col FROM t", dialect="bigquery")
+                assert sql == f"SELECT {dot_access_normalized} AS `col` FROM `t` AS `t`"
+
+        # BigQuery: STRUCT field accesses are still normalized
+        sql = _parse_and_optimize(
+            "SELECT struct_col.FlD1.flD2.FLD3 AS col FROM t", dialect="bigquery"
+        )
+        assert sql == "SELECT `t`.`struct_col`.`fld1`.`fld2`.`fld3` AS `col` FROM `t` AS `t`"
+
+        # Databricks
+        sql = _parse_and_optimize("SELECT col:A.a, col:a.A FROM t", dialect="databricks")
+        assert sql == "SELECT `t`.`col`:A.a AS `a`, `t`.`col`:a.A AS `A` FROM `t` AS `t`"
+
+        # Clickhouse
+        sql = _parse_and_optimize("SELECT col.A.a, col.a.A FROM t", dialect="clickhouse")
+        assert sql == 'SELECT "t"."col"."A"."a" AS "a", "t"."col"."a"."A" AS "A" FROM "t" AS "t"'
+
+        # DuckDB
+        sql = _parse_and_optimize("SELECT col.A.a, col.a.A FROM t", dialect="duckdb")
+        assert sql == 'SELECT "t"."col"."A"."a" AS "a", "t"."col"."a"."A" AS "a" FROM "t" AS "t"'
+
+        # Snowflake
+        sql = _parse_and_optimize("SELECT col:A.a, col:a.A FROM t", dialect="snowflake")
+        assert (
+            sql
+            == '''SELECT GET_PATH("T"."COL", 'A.a') AS "a", GET_PATH("T"."COL", 'a.A') AS "A" FROM "T" AS "T"'''
         )
