@@ -2167,14 +2167,18 @@ class E6(Dialect):
                         self.sql(time_expr),
                     ),
                 )
-            else:
-                unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))
+                return f"{unix_timestamp_expr}/1000"
+
+            # Build expression tree for TO_UNIX_TIMESTAMP(...) / 1000
+            to_unix_expr = exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=[time_expr])
+            div_expr = exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000"))
 
             if isinstance(expression.parent, (exp.UnixToTime, exp.UnixToStr)):
-                return f"{unix_timestamp_expr}"
+                return self.sql(div_expr)
 
-            # For direct column/expression without format, wrap in FLOOR
-            return f"FLOOR({unix_timestamp_expr}/1000)"
+            # For direct column/expression without format, wrap in FLOOR using exp.Floor
+            floor_expr = exp.Floor(this=div_expr)
+            return self.sql(floor_expr)
 
         def lateral_sql(self, expression: exp.Lateral) -> str:
             expression.set("view", True)
