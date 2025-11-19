@@ -1276,6 +1276,7 @@ class Snowflake(Dialect):
             exp.Extract: lambda self, e: self.func(
                 "DATE_PART", map_date_part(e.this, self.dialect), e.expression
             ),
+            exp.Floor: lambda self, e: self.floor_sql_snowflake(e),
             exp.FileFormatProperty: lambda self,
             e: f"FILE_FORMAT=({self.expressions(e, 'expressions', sep=' ')})",
             exp.FromTimeZone: lambda self, e: self.func(
@@ -1413,6 +1414,43 @@ class Snowflake(Dialect):
         }
 
         RESPECT_IGNORE_NULLS_UNSUPPORTED_EXPRESSIONS = (exp.ArrayAgg,)
+
+        def floor_sql_snowflake(self, expression: exp.Floor) -> str:
+            """
+            Custom handler for FLOOR in Snowflake.
+            If FLOOR wraps EXTRACT(epoch_second FROM ...)/1000 or TimeToUnix(...)/1000, unwrap it.
+            """
+
+            if self.from_dialect == "e6":
+                inner_expr = expression.this
+
+                # Case 1: FLOOR(TimeToUnix(...)/1000) -> TimeToUnix(...)/1000
+                if isinstance(inner_expr, exp.Div):
+                    left = inner_expr.this
+                    right = inner_expr.expression
+
+                    # Check if right side is 1000
+                    if isinstance(right, exp.Literal) and right.this == "1000":
+                        # Check for TimeToUnix (from E6's TO_UNIX_TIMESTAMP)
+                        if isinstance(left, exp.TimeToUnix):
+                            # Return the division without FLOOR wrapper
+                            return self.sql(inner_expr)
+
+                        # Check for Extract with EPOCH_SECOND
+                        if isinstance(left, exp.Extract):
+                            extract_part = left.this
+                            if (
+                                isinstance(extract_part, exp.Var)
+                                and extract_part.this.upper() == "EPOCH_SECOND"
+                            ):
+                                # Return the division without FLOOR wrapper
+                                return self.sql(inner_expr)
+
+                # Default FLOOR behavior for other cases
+                return self.func("FLOOR", expression.this)
+
+            else:
+                return super().ceil_floor(expression)
 
         def with_properties(self, properties: exp.Properties) -> str:
             return self.properties(properties, wrapped=False, prefix=self.sep(""), sep=" ")

@@ -167,6 +167,7 @@ class Databricks(Spark):
                 e.this,
             ),
             exp.DatetimeTrunc: timestamptrunc_sql(),
+            exp.Floor: lambda self, e: self.floor_sql(e),
             exp.GroupConcat: groupconcat_sql,
             exp.Select: transforms.preprocess(
                 [
@@ -208,6 +209,53 @@ class Databricks(Spark):
         ) -> str:
             expression.set("this", True)  # trigger ALWAYS in super class
             return super().generatedasidentitycolumnconstraint_sql(expression)
+
+        def floor_sql(self, expression: exp.Floor) -> str:
+            """
+            Custom handler for FLOOR in Databricks.
+            If FLOOR wraps TO_UNIX_TIMESTAMP(...)/1000 or UNIX_TIMESTAMP(...), unwrap it.
+            """
+            if self.from_dialect == "e6":
+                inner_expr = expression.this
+                # Case 1: FLOOR(TO_UNIX_TIMESTAMP(...)/1000) -> TO_UNIX_TIMESTAMP(...)/1000
+                if isinstance(inner_expr, exp.Div):
+                    left = inner_expr.this
+                    right = inner_expr.expression
+
+                    # Check if left side is TimeToUnix/StrToUnix and right side is 1000
+                    if (
+                        isinstance(left, (exp.TimeToUnix, exp.StrToUnix))
+                        and isinstance(right, exp.Literal)
+                        and right.this == "1000"
+                    ):
+                        # Return the division without FLOOR wrapper
+                        return self.sql(inner_expr)
+
+                    # Also check for Anonymous TO_UNIX_TIMESTAMP for backwards compatibility
+                    if (
+                        isinstance(left, exp.Anonymous)
+                        and left.this == "TO_UNIX_TIMESTAMP"
+                        and isinstance(right, exp.Literal)
+                        and right.this == "1000"
+                    ):
+                        # Return the division without FLOOR wrapper
+                        return self.sql(inner_expr)
+
+                # Case 2: FLOOR(TimeToUnix/StrToUnix(...)) -> UNIX_TIMESTAMP(...)
+                if isinstance(inner_expr, (exp.TimeToUnix, exp.StrToUnix)):
+                    # Return without FLOOR wrapper, explicitly as UNIX_TIMESTAMP
+                    return self.func("UNIX_TIMESTAMP", inner_expr.this)
+
+                # Case 3: FLOOR(UNIX_TIMESTAMP(...)) -> UNIX_TIMESTAMP(...)
+                if isinstance(inner_expr, exp.Anonymous) and inner_expr.this == "UNIX_TIMESTAMP":
+                    # Return just the UNIX_TIMESTAMP without FLOOR wrapper
+                    return self.func("UNIX_TIMESTAMP", *inner_expr.expressions)
+
+                # Default FLOOR behavior for other cases
+                return self.func("FLOOR", expression.this)
+
+            else:
+                return super().ceil_floor(expression)
 
         def jsonpath_sql(self, expression: exp.JSONPath) -> str:
             expression.set("escape", None)

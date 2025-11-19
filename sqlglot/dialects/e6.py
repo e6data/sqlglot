@@ -2159,20 +2159,32 @@ class E6(Dialect):
 
             # Generate final function with or without format argument
             if format_str:
-                unix_timestamp_expr = self.func(
-                    "TO_UNIX_TIMESTAMP",
-                    self.func(
-                        "PARSE_DATETIME",
-                        add_single_quotes(self.sql(format_str)),
-                        self.sql(time_expr),
-                    ),
+                # Build expression tree for TO_UNIX_TIMESTAMP(PARSE_DATETIME(...)) / 1000
+                parse_datetime_expr = exp.Anonymous(
+                    this="PARSE_DATETIME", expressions=[exp.Literal.string(format_str), time_expr]
                 )
-            else:
-                unix_timestamp_expr = self.func("TO_UNIX_TIMESTAMP", self.sql(time_expr))
+                to_unix_expr = exp.Anonymous(
+                    this="TO_UNIX_TIMESTAMP", expressions=[parse_datetime_expr]
+                )
+                div_expr = exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000"))
+
+                if isinstance(expression.parent, (exp.UnixToTime, exp.UnixToStr)):
+                    return self.sql(div_expr)
+
+                # Wrap in FLOOR using exp.Floor
+                floor_expr = exp.Floor(this=div_expr)
+                return self.sql(floor_expr)
+
+            # Build expression tree for TO_UNIX_TIMESTAMP(...) / 1000
+            to_unix_expr = exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=[time_expr])
+            div_expr = exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000"))
 
             if isinstance(expression.parent, (exp.UnixToTime, exp.UnixToStr)):
-                return f"{unix_timestamp_expr}"
-            return f"{unix_timestamp_expr}/1000"
+                return self.sql(div_expr)
+
+            # For direct column/expression without format, wrap in FLOOR using exp.Floor
+            floor_expr = exp.Floor(this=div_expr)
+            return self.sql(floor_expr)
 
         def lateral_sql(self, expression: exp.Lateral) -> str:
             expression.set("view", True)
