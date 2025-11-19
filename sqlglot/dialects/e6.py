@@ -2172,7 +2172,9 @@ class E6(Dialect):
 
             if isinstance(expression.parent, (exp.UnixToTime, exp.UnixToStr)):
                 return f"{unix_timestamp_expr}"
-            return f"{unix_timestamp_expr}/1000"
+
+            # For direct column/expression without format, wrap in FLOOR
+            return f"FLOOR({unix_timestamp_expr}/1000)"
 
         def lateral_sql(self, expression: exp.Lateral) -> str:
             expression.set("view", True)
