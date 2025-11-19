@@ -243,8 +243,8 @@ class Databricks(Spark):
 
                 # Case 2: FLOOR(TimeToUnix/StrToUnix(...)) -> UNIX_TIMESTAMP(...)
                 if isinstance(inner_expr, (exp.TimeToUnix, exp.StrToUnix)):
-                    # Return without FLOOR wrapper
-                    return self.sql(inner_expr)
+                    # Return without FLOOR wrapper, explicitly as UNIX_TIMESTAMP
+                    return self.func("UNIX_TIMESTAMP", inner_expr.this)
 
                 # Case 3: FLOOR(UNIX_TIMESTAMP(...)) -> UNIX_TIMESTAMP(...)
                 if isinstance(inner_expr, exp.Anonymous) and inner_expr.this == "UNIX_TIMESTAMP":

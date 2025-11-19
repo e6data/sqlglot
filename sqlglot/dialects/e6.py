@@ -2167,7 +2167,11 @@ class E6(Dialect):
                         self.sql(time_expr),
                     ),
                 )
-                return f"{unix_timestamp_expr}/1000"
+
+                if isinstance(expression.parent, (exp.UnixToTime, exp.UnixToStr)):
+                    return f"{unix_timestamp_expr} / 1000"
+
+                return f"FLOOR({unix_timestamp_expr} / 1000)"
 
             # Build expression tree for TO_UNIX_TIMESTAMP(...) / 1000
             to_unix_expr = exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=[time_expr])
