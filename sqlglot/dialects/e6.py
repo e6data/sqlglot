@@ -2456,6 +2456,7 @@ class E6(Dialect):
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
+            exp.ConvertTimezone: rename_func("CONVERT_TIMEZONE"),
             exp.FromISO8601Timestamp: from_iso8601_timestamp_sql,
             exp.GenerateSeries: generateseries_sql,
             exp.GroupConcat: string_agg_sql,
