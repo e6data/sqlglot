@@ -786,8 +786,7 @@ def transpile_with_transforms(
     query: str,
     from_sql: str,
     to_sql: str,
-    flags_dict: dict,
-    apply_two_phase: bool = False
+    flags_dict: dict
 ) -> str:
     """
     Complete transpilation pipeline with all transformations.
@@ -811,9 +810,6 @@ def transpile_with_transforms(
         str: Transpiled SQL string
     """
     tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-
-    if apply_two_phase:
-        tree = transform_table_part(tree)
 
     tree2 = quote_identifiers(tree, dialect=to_sql)
     values_ensured_ast = ensure_select_from_values(tree2)
