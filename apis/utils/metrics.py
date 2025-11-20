@@ -22,9 +22,11 @@ try:
         multiprocess,
         generate_latest,
         CONTENT_TYPE_LATEST,
+        REGISTRY,
     )
 except ImportError:
     PROMETHEUS_AVAILABLE = False
+    REGISTRY = None
     logger.warning("prometheus_client not installed. Metrics will be disabled.")
 
 # ==================== Prometheus Setup ====================
@@ -34,8 +36,9 @@ if PROMETHEUS_AVAILABLE:
         if not os.path.exists(PROMETHEUS_MULTIPROC_DIR):
             os.makedirs(PROMETHEUS_MULTIPROC_DIR, exist_ok=True)
 
-        # Create a custom registry for multiprocess mode
-        registry = CollectorRegistry()
+        # Use the default registry for recording metrics in multiprocess mode
+        # Metrics will be written to PROMETHEUS_MULTIPROC_DIR automatically
+        registry = REGISTRY
     except Exception as e:
         logger.error(f"Failed to initialize Prometheus registry: {e}")
         PROMETHEUS_AVAILABLE = False

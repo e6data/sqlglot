@@ -142,6 +142,10 @@ async def convert_query(
                 logger.info("Used TWO_PHASE_QUALIFICATION_SCHEME and Skipped e6 Transpilation")
                 transformed_query = transform_catalog_schema_only(query, from_sql)
                 result_query = postprocess_query(transformed_query, comment)
+                total_time = time.perf_counter() - start_time_total
+                end_timestamp = datetime.now().isoformat()
+                logger.info("%s — TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
+                logger.info("%s — Query left at: %s", query_id, end_timestamp)
                 logger.info(
                     "%s AT %s FROM %s — Catalog.Schema Transformed Query:\n%s",
                     query_id,
@@ -149,6 +153,7 @@ async def convert_query(
                     from_sql.upper(),
                     result_query,
                 )
+                record_query_duration(from_sql_upper, to_sql_lower, total_time)
                 record_query_success(from_sql_upper, to_sql_lower)
                 return {"converted_query": result_query}
 
