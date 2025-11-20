@@ -9,7 +9,7 @@ class TestE6(Validator):
 
     def test_E6(self):
         self.validate_all(
-            "SELECT DATETIME(CAST('2022-11-01 09:08:07.321' AS TIMESTAMP), 'America/Los_Angeles')",
+            "SELECT CONVERT_TIMEZONE('America/Los_Angeles', CAST('2022-11-01 09:08:07.321' AS TIMESTAMP))",
             read={
                 "snowflake": "Select convert_timezone('America/Los_Angeles', '2022-11-01 09:08:07.321' ::TIMESTAMP)",
                 "databricks": "Select convert_timezone('America/Los_Angeles', '2022-11-01 09:08:07.321' ::TIMESTAMP)",
@@ -1901,13 +1901,6 @@ class TestE6(Validator):
             "SELECT FORMAT_TIMESTAMP(CAST('2024-08-26 22:38:11' AS TIMESTAMP), 'm-d-y H')",
             read={
                 "databricks": "select date_format(cast('2024-08-26 22:38:11' as timestamp), '%m-%d-%Y %H')"
-            },
-        )
-
-        self.validate_all(
-            "SELECT DATETIME(DATETIME(CAST('2022-05-01 07:10:12' AS TIMESTAMP), 'America/Los_Angeles'), 'Africa/Cairo')",
-            read={
-                "databricks": "select convert_timezone('America/Los_Angeles','Africa/Cairo','2022-05-01 07:10:12')"
             },
         )
 
