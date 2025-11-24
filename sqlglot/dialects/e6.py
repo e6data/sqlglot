@@ -1582,6 +1582,56 @@ class E6(Dialect):
             comment = comment + " " if comment[-1].strip() else comment
             return comment
 
+        def indent(
+            self,
+            sql: str,
+            level: int = 0,
+            pad: t.Optional[int] = None,
+            skip_first: bool = False,
+            skip_last: bool = False,
+        ) -> str:
+            """
+            Override indent to not add indentation inside quoted identifiers.
+            This ensures multi-line aliases remain consistent between definitions and references.
+            Handles both backtick (`) and double-quote (") quoted identifiers.
+            """
+            if not self.pretty or not sql:
+                return sql
+
+            pad = self.pad if pad is None else pad
+            indent_str = " " * (level * self._indent + pad)
+
+            result = []
+            in_quote = False
+            lines = sql.split("\n")
+
+            for i, line in enumerate(lines):
+                # Determine if we should add indentation to this line.
+                # Don't add if we're inside a quoted identifier.
+                should_indent = not in_quote
+
+                # Respect skip_first and skip_last.
+                if (skip_first and i == 0) or (skip_last and i == len(lines) - 1):
+                    should_indent = False
+
+                # Add line with or without indentation.
+                if should_indent:
+                    result.append(indent_str + line)
+                else:
+                    result.append(line)
+
+                # Update quote state: count quotes (backticks and double-quotes) in this line.
+                # We need to track them separately since they're different quote types.
+                # For simplicity, we count unescaped quotes that could contain identifiers.
+                backticks_in_line = line.count("`")
+                double_quotes_in_line = line.count('"')
+
+                # Odd number of either quote type toggles the state.
+                if backticks_in_line % 2 == 1 or double_quotes_in_line % 2 == 1:
+                    in_quote = not in_quote
+
+            return "\n".join(result)
+
         def alias_sql(self, expression: exp.Alias) -> str:
             """
             Override to handle reserved keyword aliases specially.
