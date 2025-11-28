@@ -2130,59 +2130,59 @@ class E6(Dialect):
             # Generate SQL using STRING_AGG/LISTAGG, with separator or default ''
             return self.func("LISTAGG", expr_1, separator or exp.Literal.string(""))
 
-        def concat_ws_sql(self: E6.Generator, expression: exp.ConcatWs) -> str:
-            """
-            Generate the SQL for the CONCAT_WS function in E6.
-
-            Implements Databricks CONCAT_WS behavior:
-            - If sep is NULL the result is NULL (handled by e6 engine)
-            - exprN that are NULL are ignored
-            - If only separator provided or all exprN are NULL, returns empty string
-            - Each exprN can be STRING or ARRAY of STRING
-            - NULLs within arrays are filtered out
-            - Arrays are flattened and individual elements joined with separator
-            """
-            if not expression.expressions:
-                return "''"
-
-            # Extract separator and arguments
-            separator = expression.expressions[0]
-            args = expression.expressions[1:] if len(expression.expressions) > 1 else []
-
-            # If no arguments provided (only separator), return empty string
-            if not args:
-                return "''"
-
-            # Collect all non-NULL expression nodes (flattening arrays)
-            array_expressions = []
-
-            for arg in args:
-                if isinstance(arg, exp.Array):
-                    # For array arguments: add non-NULL elements
-                    for element in arg.expressions:
-                        if not isinstance(element, exp.Null):
-                            array_expressions.append(element)
-                else:
-                    # For string arguments: add if not NULL
-                    if not isinstance(arg, exp.Null):
-                        array_expressions.append(arg)
-
-            # If no elements after filtering, return empty string
-            if not array_expressions:
-                return "''"
-
-            # Single element case - just return the element
-            if len(array_expressions) == 1:
-                return self.sql(array_expressions[0])
-
-            # Multiple elements: create array and join with separator
-            # Build: ARRAY_TO_STRING(ARRAY[element1, element2, ...], separator)
-            # Create Array expression with the actual expression nodes
-            array_expr = exp.Array(expressions=array_expressions)
-
-            # Use ARRAY_TO_STRING function directly instead of exp.ArrayToString
-            # to avoid the ARRAY_JOIN mapping in TRANSFORMS
-            return self.func("ARRAY_TO_STRING", array_expr, separator)
+        # def concat_ws_sql(self: E6.Generator, expression: exp.ConcatWs) -> str:
+        #     """
+        #     Generate the SQL for the CONCAT_WS function in E6.
+        #
+        #     Implements Databricks CONCAT_WS behavior:
+        #     - If sep is NULL the result is NULL (handled by e6 engine)
+        #     - exprN that are NULL are ignored
+        #     - If only separator provided or all exprN are NULL, returns empty string
+        #     - Each exprN can be STRING or ARRAY of STRING
+        #     - NULLs within arrays are filtered out
+        #     - Arrays are flattened and individual elements joined with separator
+        #     """
+        #     if not expression.expressions:
+        #         return "''"
+        #
+        #     # Extract separator and arguments
+        #     separator = expression.expressions[0]
+        #     args = expression.expressions[1:] if len(expression.expressions) > 1 else []
+        #
+        #     # If no arguments provided (only separator), return empty string
+        #     if not args:
+        #         return "''"
+        #
+        #     # Collect all non-NULL expression nodes (flattening arrays)
+        #     array_expressions = []
+        #
+        #     for arg in args:
+        #         if isinstance(arg, exp.Array):
+        #             # For array arguments: add non-NULL elements
+        #             for element in arg.expressions:
+        #                 if not isinstance(element, exp.Null):
+        #                     array_expressions.append(element)
+        #         else:
+        #             # For string arguments: add if not NULL
+        #             if not isinstance(arg, exp.Null):
+        #                 array_expressions.append(arg)
+        #
+        #     # If no elements after filtering, return empty string
+        #     if not array_expressions:
+        #         return "''"
+        #
+        #     # Single element case - just return the element
+        #     if len(array_expressions) == 1:
+        #         return self.sql(array_expressions[0])
+        #
+        #     # Multiple elements: create array and join with separator
+        #     # Build: ARRAY_TO_STRING(ARRAY[element1, element2, ...], separator)
+        #     # Create Array expression with the actual expression nodes
+        #     array_expr = exp.Array(expressions=array_expressions)
+        #
+        #     # Use ARRAY_TO_STRING function directly instead of exp.ArrayToString
+        #     # to avoid the ARRAY_JOIN mapping in TRANSFORMS
+        #     return self.func("ARRAY_TO_STRING", array_expr, separator)
 
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
@@ -2470,7 +2470,7 @@ class E6(Dialect):
             # We mapped this believing that for most of the cases,
             # CONCAT function in other dialects would mostly use for ARRAY concatenation
             exp.Concat: rename_func("CONCAT"),
-            exp.ConcatWs: concat_ws_sql,
+            # exp.ConcatWs: concat_ws_sql,
             exp.Contains: rename_func("CONTAINS_SUBSTR"),
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
