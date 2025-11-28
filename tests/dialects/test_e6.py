@@ -1611,6 +1611,19 @@ class TestE6(Validator):
             read={"databricks": "SELECT to_varchar(x'537061726b2053514c', 'hex')"},
         )
 
+        # CONCAT_WS tests - e6 natively supports CONCAT_WS
+        # concat_ws(' ', 'Spark', 'SQL') -> 'Spark SQL'
+        self.validate_all(
+            "SELECT CONCAT_WS(' ', 'Spark', 'SQL')",
+            read={"databricks": "SELECT concat_ws(' ', 'Spark', 'SQL')"},
+        )
+
+        # concat_ws(',', 'Spark', array('S', 'Q', NULL, 'L'), NULL) -> 'Spark,S,Q,L'
+        self.validate_all(
+            "SELECT CONCAT_WS(',', 'Spark', ARRAY['S', 'Q', NULL, 'L'], NULL)",
+            read={"databricks": "SELECT concat_ws(',', 'Spark', array('S', 'Q', NULL, 'L'), NULL)"},
+        )
+
     def test_to_utf(self):
         self.validate_all(
             "TO_UTF8(x)",
