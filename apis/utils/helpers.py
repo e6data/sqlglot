@@ -15,6 +15,49 @@ from curses.ascii import isascii
 FUNCTIONS_FILE = "./apis/utils/supported_functions_in_all_dialects.json"
 logger = logging.getLogger(__name__)
 
+# Functions treated as keywords (no parentheses required)
+FUNCTIONS_AS_KEYWORDS = [
+    "LIKE",
+    "ILIKE",
+    "RLIKE",
+    "AT TIME ZONE",
+    "||",
+    "DISTINCT",
+    "QUALIFY",
+]
+
+# Exclusion list for words that are followed by '(' but are not functions
+EXCLUSION_LIST = [
+    "AS",
+    "AND",
+    "THEN",
+    "OR",
+    "ELSE",
+    "WHEN",
+    "WHERE",
+    "FROM",
+    "JOIN",
+    "OVER",
+    "ON",
+    "ALL",
+    "NOT",
+    "BETWEEN",
+    "UNION",
+    "SELECT",
+    "BY",
+    "GROUP",
+    "EXCEPT",
+    "SETS",
+]
+
+# Regex pattern to match function calls
+FUNCTION_PATTERN = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
+
+
+def get_keyword_pattern() -> str:
+    """Generate regex pattern for keyword functions."""
+    return r"\b(?:" + "|".join([re.escape(func) for func in FUNCTIONS_AS_KEYWORDS]) + r")\b"
+
 
 def transpile_query(query: str, from_sql: str, to_sql: str) -> str:
     """
@@ -135,7 +178,7 @@ def extract_functions_from_query(
     """
     Extract function names from the sanitized query.
     """
-    logger.info("Extracting functions from query")
+    # logger.info("Extracting functions from query")
     sanitized_query = processing_comments(query)
 
     try:
@@ -168,15 +211,13 @@ def extract_functions_from_query(
     if pipe_matches:
         all_functions.add("||")
 
-    logger.info(f"All Functions: {all_functions}")
-
     return all_functions
 
 
 def unsupported_functionality_identifiers(
     expression, unsupported_list: t.List, supported_list: t.List
 ):
-    logger.info("Identifying unsupported functionality.....")
+    # logger.info("Identifying unsupported functionality.....")
     try:
         for cte in expression.find_all(exp.CTE, exp.Subquery):
             cte_name = cte.alias.upper()
@@ -246,7 +287,7 @@ def categorize_functions(extracted_functions, supported_functions_in_e6, functio
     """
     Categorize functions into supported and unsupported.
     """
-    logger.info("Categorizing extracted functions into supported and unsupported.....")
+    # logger.info("Categorizing extracted functions into supported and unsupported.....")
     supported_functions = set()
     unsupported_functions = set()
 
@@ -302,7 +343,7 @@ def strip_comment(query: str, item: str) -> tuple:
         tuple: (stripped_query, extracted_comment)
     """
     # Use a regex pattern to find comments like /* item::UUID */
-    logger.info("Stripping Comments!")
+    # logger.info("Stripping Comments!")
     try:
         comment_pattern = rf"/\*\s*{item}::[a-zA-Z0-9]+\s*\*/"
 
@@ -328,7 +369,7 @@ def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
     """
     Ensures that any CTE using VALUES directly is modified to SELECT * FROM VALUES(...).
     """
-    logger.info("Ensuring select from values.....")
+    # logger.info("Ensuring select from values.....")
     for cte in expression.find_all(exp.CTE):
         cte_query = cte.this
         # Check if the CTE contains only a VALUES clause
@@ -345,7 +386,7 @@ def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
 
 
 def extract_udfs(unsupported_list, from_dialect_func_list):
-    logger.info("Extracting UDFs from unsupported functions list.....")
+    # logger.info("Extracting UDFs from unsupported functions list.....")
     udf_list = set()
     remaining_unsupported = []
     for unsupported_function in unsupported_list:
@@ -396,7 +437,7 @@ def load_supported_functions(dialect: str):
 
 
 def extract_db_and_Table_names(sql_query_ast):
-    logger.info("Extracting database and table names....")
+    # logger.info("Extracting database and table names....")
     tables_list = []
     if sql_query_ast:
         for table in sql_query_ast.find_all(exp.Table):
@@ -425,7 +466,7 @@ def extract_joins_from_query(sql_query_ast):
                 ...
             ]
     """
-    logger.info("Extracting joins from query.....")
+    # logger.info("Extracting joins from query.....")
 
     join_info_list = []
     joins_list = []
@@ -509,7 +550,7 @@ def set_cte_names_case_sensitively(sql_query_ast):
 
 
 def extract_cte_n_subquery_list(sql_query_ast):
-    logger.info("Extracting cte, subqueries and values....")
+    # logger.info("Extracting cte, subqueries and values....")
     cte_list = []
     subquery_list = []
     values_list = []
@@ -656,3 +697,146 @@ def transform_catalog_schema_only(query: str, from_sql: str) -> str:
     except Exception as e:
         logger.error(f"Error in transform_catalog_schema_only: {e}")
         raise
+
+
+def parse_feature_flags_safe(feature_flags: Optional[str]) -> dict:
+    """
+    Parse JSON feature flags, return empty dict on error.
+
+    Args:
+        feature_flags: JSON string containing feature flags
+
+    Returns:
+        dict: Parsed feature flags or empty dict if None or parse error
+    """
+    if not feature_flags:
+        return {}
+    try:
+        return json.loads(feature_flags)
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse feature flags, using empty dict")
+        return {}
+
+
+def extract_and_categorize_functions(
+    query: str,
+    from_sql: str,
+    to_sql: str
+) -> tuple:
+    """
+    Extract and categorize functions from query.
+
+    This is a convenience function that combines the common pattern of:
+    - Loading supported functions for target dialect
+    - Extracting functions from query using regex
+    - Categorizing functions as supported/unsupported
+    - Extracting UDFs by comparing with source dialect functions
+
+    Args:
+        query: SQL query string
+        from_sql: Source SQL dialect
+        to_sql: Target SQL dialect
+
+    Returns:
+        tuple: (supported, unsupported, udf_list, supported_functions_in_to_dialect)
+            - supported: list of supported function names
+            - unsupported: list of unsupported function names
+            - udf_list: list of user-defined functions
+            - supported_functions_in_to_dialect: dict of supported functions in target dialect
+    """
+
+    # Load supported functions for target dialect
+    supported_functions_in_to_dialect = load_supported_functions(to_sql)
+    keyword_pattern = get_keyword_pattern()
+
+    # Extract all functions from query
+    all_functions = extract_functions_from_query(
+        query, FUNCTION_PATTERN, keyword_pattern, EXCLUSION_LIST
+    )
+
+    # Categorize as supported/unsupported
+    supported, unsupported = categorize_functions(
+        all_functions, supported_functions_in_to_dialect, FUNCTIONS_AS_KEYWORDS
+    )
+
+    # Extract UDFs by comparing with source dialect
+    from_dialect_function_list = load_supported_functions(from_sql)
+    udf_list, unsupported = extract_udfs(unsupported, from_dialect_function_list)
+
+    return supported, unsupported, udf_list, supported_functions_in_to_dialect
+
+
+def preprocess_query(query: str, item: str = "condenast") -> tuple:
+    """
+    Preprocess query: normalize unicode spaces and strip comments.
+
+    Args:
+        query: SQL query string
+        item: Item identifier for comment stripping
+
+    Returns:
+        tuple: (processed_query, comment)
+    """
+    query = normalize_unicode_spaces(query)
+    query, comment = strip_comment(query, item)
+    return query, comment
+
+
+def transpile_with_transforms(
+    query: str,
+    from_sql: str,
+    to_sql: str,
+    flags_dict: dict
+) -> str:
+    """
+    Complete transpilation pipeline with all transformations.
+
+    This function encapsulates the core transpilation logic:
+    - Parse query
+    - Apply two-phase qualification (if enabled)
+    - Quote identifiers
+    - Ensure SELECT FROM VALUES
+    - Set CTE names case-sensitively
+    - Generate SQL
+
+    Args:
+        query: SQL query string
+        from_sql: Source SQL dialect
+        to_sql: Target SQL dialect
+        flags_dict: Feature flags dictionary
+        apply_two_phase: Whether to apply two-phase qualification
+
+    Returns:
+        str: Transpiled SQL string
+    """
+    tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+
+    tree2 = quote_identifiers(tree, dialect=to_sql)
+    values_ensured_ast = ensure_select_from_values(tree2)
+    cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
+
+    return cte_names_equivalence_checked_ast.sql(
+        dialect=to_sql,
+        from_dialect=from_sql,
+        pretty=flags_dict.get("PRETTY_PRINT", True)
+    )
+
+
+def postprocess_query(query: str, comment: str = "") -> str:
+    """
+    Post-process transpiled query.
+
+    Applies final transformations:
+    - Replace STRUCT patterns
+    - Add comment back
+
+    Args:
+        query: Transpiled SQL query string
+        comment: Comment to add back to query
+
+    Returns:
+        str: Post-processed query
+    """
+    query = replace_struct_in_query(query)
+    query = add_comment_to_query(query, comment)
+    return query
