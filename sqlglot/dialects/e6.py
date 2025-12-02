@@ -646,6 +646,7 @@ class E6(Dialect):
             "COMMITTED",
             "CONDITION",
             "CONDITIONAL",
+            "COMMENT",
             "CONDITION_NUMBER",
             "CONNECT",
             "CONNECTION",
