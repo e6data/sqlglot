@@ -2267,6 +2267,24 @@ class E6(Dialect):
             else:
                 return super().not_sql(expression)
 
+        def column_sql(self, expression: exp.Column) -> str:
+            """
+            Override to skip table identifier when Star has an EXCEPT clause.
+
+            For E6 dialect, `table.* EXCEPT(col)` should become `* EXCEPT(col)`
+            without the table prefix.
+            """
+            this = expression.args.get("this")
+
+            # Check if this column is inside a Star's except clause - skip table identifier
+            parent = expression.parent
+            if isinstance(parent, exp.Star) and parent.args.get("except"):
+                # Return only the column name without table prefix
+                return self.sql(this)
+
+            # Default behavior for all other cases
+            return super().column_sql(expression)
+
         def median_sql(self, expression: exp.Median):
             if not self.SUPPORTS_MEDIAN:
                 this = expression.this
@@ -2358,7 +2376,10 @@ class E6(Dialect):
                         and isinstance(path_expressions[0], exp.JSONPathRoot)
                         and isinstance(path_expressions[1], exp.JSONPathKey)
                     ):
-                        return f"{self.sql(e.this)}:{path_expressions[1].this}"
+                        path_key = path_expressions[1].this
+                        if e.expression.args.get("escape"):
+                            return f'{self.sql(e.this)}:"{path_key}"'
+                        return f"{self.sql(e.this)}:{path_key}"
                 # Fallback if not JSONPath format
                 elif isinstance(e.expression, exp.Literal):
                     return f"{self.sql(e.this)}:{e.expression.this}"
