@@ -36,6 +36,11 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT r.* EXCEPT (_____dp_update_ts) FROM gold.ops.slp_fcc_gains_and_reasons AS r",
+            read={"databricks":"select r.* except (r._____dp_update_ts) from gold.ops.slp_fcc_gains_and_reasons as r"}
+        )
+
+        self.validate_all(
             "SELECT REDUCE(ARRAY[1, 2, 3], 0, (acc, x) -> acc + x)",
             read={
                 "databricks": "SELECT REDUCE(ARRAY(1, 2, 3), 0, (acc, x) -> acc + x)",
@@ -570,6 +575,16 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT meta:bincounttaskmeta FROM silver_mongo.tms.tasks",
             read={"databricks": "SELECT meta:bincounttaskmeta FROM silver_mongo.tms.tasks "},
+        )
+
+        self.validate_all(
+            "SELECT meta:\"bincounttaskmeta\" FROM silver_mongo.tms.tasks",
+            read={"databricks": "SELECT meta:`bincounttaskmeta` FROM silver_mongo.tms.tasks "},
+        )
+
+        self.validate_all(
+            "SELECT associate:\"Leg 2 Status\" AS leg_2_status FROM silver_pii.kapture.rider_chat_ticket",
+            read={"databricks":"select associate :`Leg 2 Status` as leg_2_status from silver_pii.kapture.rider_chat_ticket;"}
         )
 
         self.validate_all(
