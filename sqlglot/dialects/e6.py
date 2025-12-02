@@ -2376,7 +2376,10 @@ class E6(Dialect):
                         and isinstance(path_expressions[0], exp.JSONPathRoot)
                         and isinstance(path_expressions[1], exp.JSONPathKey)
                     ):
-                        return f"{self.sql(e.this)}:{path_expressions[1].this}"
+                        path_key = path_expressions[1].this
+                        if e.expression.args.get("escape"):
+                            return f'{self.sql(e.this)}:"{path_key}"'
+                        return f"{self.sql(e.this)}:{path_key}"
                 # Fallback if not JSONPath format
                 elif isinstance(e.expression, exp.Literal):
                     return f"{self.sql(e.this)}:{e.expression.this}"
