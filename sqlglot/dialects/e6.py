@@ -2267,6 +2267,24 @@ class E6(Dialect):
             else:
                 return super().not_sql(expression)
 
+        def column_sql(self, expression: exp.Column) -> str:
+            """
+            Override to skip table identifier when Star has an EXCEPT clause.
+
+            For E6 dialect, `table.* EXCEPT(col)` should become `* EXCEPT(col)`
+            without the table prefix.
+            """
+            this = expression.args.get("this")
+
+            # Check if this column is inside a Star's except clause - skip table identifier
+            parent = expression.parent
+            if isinstance(parent, exp.Star) and parent.args.get("except"):
+                # Return only the column name without table prefix
+                return self.sql(this)
+
+            # Default behavior for all other cases
+            return super().column_sql(expression)
+
         def median_sql(self, expression: exp.Median):
             if not self.SUPPORTS_MEDIAN:
                 this = expression.this
