@@ -9,6 +9,18 @@ class TestE6(Validator):
 
     def test_E6(self):
         self.validate_all(
+            "SELECT FIRST_VALUE(zone) AS zone FROM filtered_zones",
+            read={"databricks": "SELECT FIRST(zone) AS zone FROM filtered_zones"},
+        )
+
+        self.validate_all(
+            "SELECT store_name, sku_id, TRIM(ELEMENT_AT(SPLIT(cause, ':'), 1)) AS dispersion_cause FROM gold.control_tower.inventory_dispersion_loss_tree LATERAL VIEW EXPLODE(SPLIT(dispersion_cause_txn, ',')) AS cause WHERE dispersion_cause_txn IS NOT NULL",
+            read={
+                "databricks": "SELECT store_name, sku_id, TRIM(SPLIT(cause, ':') [0]) AS dispersion_cause FROM gold.control_tower.inventory_dispersion_loss_tree LATERAL VIEW explode(SPLIT(dispersion_cause_txn, ',')) AS cause WHERE dispersion_cause_txn IS NOT NULL"
+            },
+        )
+
+        self.validate_all(
             "SELECT CONVERT_TIMEZONE('America/Los_Angeles', CAST('2022-11-01 09:08:07.321' AS TIMESTAMP))",
             read={
                 "snowflake": "Select convert_timezone('America/Los_Angeles', '2022-11-01 09:08:07.321' ::TIMESTAMP)",
@@ -37,7 +49,9 @@ class TestE6(Validator):
 
         self.validate_all(
             "SELECT r.* EXCEPT (_____dp_update_ts) FROM gold.ops.slp_fcc_gains_and_reasons AS r",
-            read={"databricks":"select r.* except (r._____dp_update_ts) from gold.ops.slp_fcc_gains_and_reasons as r"}
+            read={
+                "databricks": "select r.* except (r._____dp_update_ts) from gold.ops.slp_fcc_gains_and_reasons as r"
+            },
         )
 
         self.validate_all(
@@ -578,13 +592,15 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT meta:\"bincounttaskmeta\" FROM silver_mongo.tms.tasks",
+            'SELECT meta:"bincounttaskmeta" FROM silver_mongo.tms.tasks',
             read={"databricks": "SELECT meta:`bincounttaskmeta` FROM silver_mongo.tms.tasks "},
         )
 
         self.validate_all(
-            "SELECT associate:\"Leg 2 Status\" AS leg_2_status FROM silver_pii.kapture.rider_chat_ticket",
-            read={"databricks":"select associate :`Leg 2 Status` as leg_2_status from silver_pii.kapture.rider_chat_ticket;"}
+            'SELECT associate:"Leg 2 Status" AS leg_2_status FROM silver_pii.kapture.rider_chat_ticket',
+            read={
+                "databricks": "select associate :`Leg 2 Status` as leg_2_status from silver_pii.kapture.rider_chat_ticket;"
+            },
         )
 
         self.validate_all(

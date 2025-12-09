@@ -2260,6 +2260,8 @@ class E6(Dialect):
                 return f"{op_sql}{self.sep()}{this} {table} AS {columns}"
             elif table:
                 return f"{op_sql}{self.sep()}{this} AS {table}"
+            elif columns:
+                return f"{op_sql}{self.sep()}{this} AS {columns}"
             else:
                 return f"{op_sql}{self.sep()}{this}"
 
@@ -2525,6 +2527,7 @@ class E6(Dialect):
             exp.Explode: explode_sql,
             exp.Extract: extract,
             exp.FirstValue: rename_func("FIRST_VALUE"),
+            exp.First: rename_func("FIRST_VALUE"),
             exp.Format: rename_func("FORMAT"),
             exp.FormatDatetime: rename_func("FORMAT_DATETIME"),
             exp.FromTimeZone: lambda self, e: self.func(
