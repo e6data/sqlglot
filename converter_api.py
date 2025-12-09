@@ -16,6 +16,7 @@ from sqlglot import parse_one
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
+
 from apis.utils.helpers import (
     strip_comment,
     unsupported_functionality_identifiers,
@@ -50,6 +51,17 @@ app = FastAPI()
 
 logger = logging.getLogger(__name__)
 
+# Check if Rust tokenizer is available
+try:
+    import sqlglotrs
+    # SQLGLOTRS_TOKENIZER should be set via environment if you want to use Rust
+    if os.environ.get("SQLGLOTRS_TOKENIZER") == "1":
+        logger.info("✅ Rust tokenizer enabled via environment")
+    else:
+        logger.info("ℹ️ Rust tokenizer available but not enabled (set SQLGLOTRS_TOKENIZER=1 to enable)")
+except ImportError as e:
+    logger.error("⚠️ Rust tokenizer module not available, using Python tokenizer: %s", str(e))
+
 
 if ENABLE_GUARDRAIL.lower() == "true":
     logger.info("Storage Engine URL: ", STORAGE_ENGINE_URL)
@@ -63,7 +75,7 @@ logger.info("Storage Service Client is created")
 def escape_unicode(s: str) -> str:
     """
     Turn every non-ASCII (including all Unicode spaces) into \\uXXXX,
-    so even “invisible” characters become visible in logs.
+    so even "invisible" characters become visible in logs.
     """
     return s.encode("unicode_escape").decode("ascii")
 
@@ -104,14 +116,22 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        query = normalize_unicode_spaces(query)
-        logger.info(
-            "%s AT %s FROM %s — Normalized (escaped):\n%s",
-            query_id,
-            timestamp,
-            from_sql.upper(),
-            escape_unicode(query),
-        )
+        # Check feature flag for Unicode normalization
+        if flags_dict.get("ENABLE_UNICODE_NORMALIZATION", True):  # Default to True for backward compatibility
+            query = normalize_unicode_spaces(query)
+            logger.info(
+                "%s AT %s FROM %s — Normalized (escaped):\n%s",
+                query_id,
+                timestamp,
+                from_sql.upper(),
+                escape_unicode(query),
+            )
+        else:
+            logger.info(
+                "%s AT %s — Unicode normalization DISABLED via feature flag",
+                query_id,
+                timestamp,
+            )
 
         item = "condenast"
         query, comment = strip_comment(query, item)
