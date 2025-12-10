@@ -7,6 +7,7 @@ import os
 import json
 import sqlglot
 import logging
+import time
 from datetime import datetime
 from log_collector import setup_logger, log_records
 import pyarrow.parquet as pq
@@ -24,15 +25,38 @@ from apis.utils.helpers import (
     add_comment_to_query,
     replace_struct_in_query,
     ensure_select_from_values,
-    extract_udfs,
-    load_supported_functions,
     extract_db_and_Table_names,
     extract_joins_from_query,
     extract_cte_n_subquery_list,
-    normalize_unicode_spaces,
-    transform_table_part,
+    EXCLUSION_LIST,
+    FUNCTIONS_AS_KEYWORDS,
+    FUNCTION_PATTERN,
+    get_keyword_pattern,
     transform_catalog_schema_only,
     set_cte_names_case_sensitively,
+    parse_feature_flags_safe,
+    extract_and_categorize_functions,
+    preprocess_query,
+    transpile_with_transforms,
+    postprocess_query,
+)
+
+# Prometheus metrics
+from apis.utils.metrics import (
+    record_query_size,
+    record_query_duration,
+    record_process_duration,
+    record_query_success,
+    record_query_error,
+    get_metrics_response,
+    # Stats API metrics
+    record_stats_request,
+    record_stats_duration,
+    record_stats_function_count,
+    record_stats_executable_status,
+    record_stats_error,
+    record_stats_step_duration,
+    record_stats_query_size,
 )
 
 if t.TYPE_CHECKING:
@@ -76,15 +100,20 @@ async def convert_query(
     to_sql: Optional[str] = Form("e6"),
     feature_flags: Optional[str] = Form(None),
 ):
+    # Start overall timing
+    start_time_total = time.perf_counter()
     timestamp = datetime.now().isoformat()
+    logger.info("%s — Query received at: %s", query_id, timestamp)
     to_sql = to_sql.lower()
+    from_sql_upper = from_sql.upper()
+    to_sql_lower = to_sql.lower()
 
-    flags_dict = {}
-    if feature_flags:
-        try:
-            flags_dict = json.loads(feature_flags)
-        except json.JSONDecodeError as je:
-            return HTTPException(status_code=500, detail=str(je))
+    # Record query size
+    query_size = len(query.encode("utf-8"))
+    record_query_size(from_sql_upper, to_sql_lower, query_size)
+
+    # Parse feature flags
+    flags_dict = parse_feature_flags_safe(feature_flags)
 
     if not query or not query.strip():
         logger.info(
@@ -104,63 +133,81 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        query = normalize_unicode_spaces(query)
-        logger.info(
-            "%s AT %s FROM %s — Normalized (escaped):\n%s",
-            query_id,
-            timestamp,
-            from_sql.upper(),
-            escape_unicode(query),
-        )
+        # Preprocess: normalize unicode and strip comments
+        query, comment = preprocess_query(query)
 
-        item = "condenast"
-        query, comment = strip_comment(query, item)
-
-        tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-
+        # Handle two-phase qualification special case
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
-            # Check if we should only transform catalog.schema without full transpilation
             if flags_dict.get("SKIP_E6_TRANSPILATION", False):
+                logger.info("Used TWO_PHASE_QUALIFICATION_SCHEME and Skipped e6 Transpilation")
                 transformed_query = transform_catalog_schema_only(query, from_sql)
-                transformed_query = add_comment_to_query(transformed_query, comment)
+                result_query = postprocess_query(transformed_query, comment)
+                total_time = time.perf_counter() - start_time_total
+                end_timestamp = datetime.now().isoformat()
+                logger.info("%s — TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
+                logger.info("%s — Query left at: %s", query_id, end_timestamp)
                 logger.info(
                     "%s AT %s FROM %s — Catalog.Schema Transformed Query:\n%s",
                     query_id,
                     timestamp,
                     from_sql.upper(),
-                    transformed_query,
+                    result_query,
                 )
-                return {"converted_query": transformed_query}
-            tree = transform_table_part(tree)
+                record_query_duration(from_sql_upper, to_sql_lower, total_time)
+                record_query_success(from_sql_upper, to_sql_lower)
+                return {"converted_query": result_query}
 
-        tree2 = quote_identifiers(tree, dialect=to_sql)
-
-        values_ensured_ast = ensure_select_from_values(tree2)
-
-        cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
-
-        double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
-            dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
+        # Transpile with timing
+        logger.info("%s — Started: SQL transpilation", query_id)
+        step_start = time.perf_counter()
+        transpiled_query = transpile_with_transforms(
+            query, from_sql, to_sql, flags_dict
+        )
+        record_process_duration("transpilation", from_sql_upper, to_sql_lower, time.perf_counter() - step_start)
+        logger.info(
+            "%s — Completed: SQL transpilation in %.4f ms",
+            query_id,
+            (time.perf_counter() - step_start) * 1000,
         )
 
-        double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+        # Post-process: replace STRUCT and add comment
+        result_query = postprocess_query(transpiled_query, comment)
 
-        double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
+        # Total timing
+        total_time = time.perf_counter() - start_time_total
+        end_timestamp = datetime.now().isoformat()
+
+        # Record total duration and success
+        record_query_duration(from_sql_upper, to_sql_lower, total_time)
+        record_query_success(from_sql_upper, to_sql_lower)
+
+        logger.info("%s — TOTAL /convert-query execution took %.4f ms", query_id, total_time * 1000)
+        logger.info("%s — Query left at: %s", query_id, end_timestamp)
 
         logger.info(
             "%s AT %s FROM %s — Transpiled Query:\n%s",
             query_id,
-            timestamp,
+            end_timestamp,
             from_sql.upper(),
-            double_quotes_added_query,
+            result_query,
         )
-        return {"converted_query": double_quotes_added_query}
+
+        return {"converted_query": result_query}
     except Exception as e:
+        total_time = time.perf_counter() - start_time_total
+
+        # Determine error type
+        error_type = type(e).__name__
+
+        # Record error metrics
+        record_query_error(from_sql_upper, to_sql_lower, error_type)
+
         logger.error(
-            "%s AT %s FROM %s — Error:\n%s",
+            "%s AT %s FROM %s — Error (after %.4f ms):\n%s",
             query_id,
             timestamp,
             from_sql.upper(),
+            total_time * 1000,
             str(e),
             exc_info=True,
         )
@@ -170,6 +217,13 @@ async def convert_query(
 @app.get("/health")
 def health_check():
     return Response(status_code=200)
+
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus metrics endpoint for multiprocess mode"""
+    content, media_type = get_metrics_response()
+    return Response(content=content, media_type=media_type)
 
 
 @app.post("/guardrail")
@@ -267,64 +321,30 @@ async def stats_api(
     """
     API endpoint to extract supported and unsupported SQL functions from a query.
     """
+    # Start overall timing
+    start_time_total = time.perf_counter()
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
+    from_sql_upper = from_sql.upper()
 
-    logger.info(f"{query_id} AT start time: {timestamp} FROM {from_sql.upper()}")
-    flags_dict = {}
+    # Record query size for stats metrics
+    record_stats_query_size(from_sql_upper, to_sql, len(query.encode('utf-8')))
 
-    if feature_flags:
-        try:
-            flags_dict = json.loads(feature_flags)
-        except json.JSONDecodeError as je:
-            return HTTPException(status_code=500, detail=str(je))
+    logger.info(f"{query_id} AT start time: {timestamp} FROM {from_sql_upper}")
+
+    # Timing: Feature flags parsing
+    t0 = time.perf_counter()
+    flags_dict = parse_feature_flags_safe(feature_flags)
+    t_flags = time.perf_counter() - t0
+    logger.info("%s — Timing: Feature flags parsing took %.4f ms", query_id, t_flags * 1000)
+    record_stats_step_duration("feature_flags_parsing", from_sql_upper, to_sql, t_flags)
 
     try:
-        supported_functions_in_e6 = load_supported_functions(to_sql)
-
-        # Functions treated as keywords (no parentheses required)
-        functions_as_keywords = [
-            "LIKE",
-            "ILIKE",
-            "RLIKE",
-            "AT TIME ZONE",
-            "||",
-            "DISTINCT",
-            "QUALIFY",
-        ]
-
-        # Exclusion list for words that are followed by '(' but are not functions
-        exclusion_list = [
-            "AS",
-            "AND",
-            "THEN",
-            "OR",
-            "ELSE",
-            "WHEN",
-            "WHERE",
-            "FROM",
-            "JOIN",
-            "OVER",
-            "ON",
-            "ALL",
-            "NOT",
-            "BETWEEN",
-            "UNION",
-            "SELECT",
-            "BY",
-            "GROUP",
-            "EXCEPT",
-            "SETS",
-        ]
-
-        # Regex patterns
-        function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
-        keyword_pattern = (
-            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
-        )
-
         if not query.strip():
-            logger.info("Query is empty or only contains comments!")
+            total_time = time.perf_counter() - start_time_total
+            logger.info(
+                "Query is empty or only contains comments! (after %.4f ms)", total_time * 1000
+            )
             return {
                 "supported_functions": [],
                 "unsupported_functions": [],
@@ -336,19 +356,25 @@ async def stats_api(
                 "log_records": log_records,
             }
 
-        item = "condenast"
-        query, comment = strip_comment(query, item)
+        # Timing: Preprocess (normalize unicode and strip comments)
+        t0 = time.perf_counter()
+        query, comment = preprocess_query(query)
+        t_strip = time.perf_counter() - t0
+        logger.info("%s — Timing: Preprocess (normalize unicode spaces and remove comments) query took %.4f ms", query_id, t_strip * 1000)
+        record_stats_step_duration("preprocess", from_sql_upper, to_sql, t_strip)
 
-        # Extract functions from the query
-        all_functions = extract_functions_from_query(
-            query, function_pattern, keyword_pattern, exclusion_list
+        # Timing: Extract and categorize functions from original query
+        t0 = time.perf_counter()
+        supported, unsupported, udf_list, supported_functions_in_e6 = extract_and_categorize_functions(
+            query, from_sql, to_sql
         )
-        supported, unsupported = categorize_functions(
-            all_functions, supported_functions_in_e6, functions_as_keywords
+        t_extract_funcs = time.perf_counter() - t0
+        logger.info(
+            "%s — Timing: Extract/categorize functions & UDFs (original) took %.4f ms",
+            query_id,
+            t_extract_funcs * 1000,
         )
-
-        from_dialect_function_list = load_supported_functions(from_sql)
-        udf_list, unsupported = extract_udfs(unsupported, from_dialect_function_list)
+        record_stats_step_duration("extract_functions_original", from_sql_upper, to_sql, t_extract_funcs)
 
         # --------------------------
         # HANDLING PARSING ERRORS
@@ -359,40 +385,85 @@ async def stats_api(
             # ------------------------------
             # Step 1: Parse the Original Query
             # ------------------------------
+            # Timing: Parse original query
+            t0 = time.perf_counter()
             original_ast = parse_one(query, read=from_sql)
+            t_parse_orig = time.perf_counter() - t0
+            logger.info(
+                "%s — Timing: Parse original query took %.4f ms", query_id, t_parse_orig * 1000
+            )
+            record_stats_step_duration("parse_original", from_sql_upper, to_sql, t_parse_orig)
+
+            # Timing: Extract tables/databases
+            t0 = time.perf_counter()
             tables_list = extract_db_and_Table_names(original_ast)
+            t_tables = time.perf_counter() - t0
+            logger.info(
+                "%s — Timing: Extract tables/databases took %.4f ms", query_id, t_tables * 1000
+            )
+            record_stats_step_duration("extract_tables", from_sql_upper, to_sql, t_tables)
+
+            # Timing: Identify unsupported functionality
+            t0 = time.perf_counter()
             supported, unsupported = unsupported_functionality_identifiers(
                 original_ast, unsupported, supported
             )
+            t_unsup_ident = time.perf_counter() - t0
+            logger.info(
+                "%s — Timing: Identify unsupported functionality took %.4f ms",
+                query_id,
+                t_unsup_ident * 1000,
+            )
+            record_stats_step_duration("identify_unsupported", from_sql_upper, to_sql, t_unsup_ident)
+
+            # Timing: Ensure values and CTE names
+            t0 = time.perf_counter()
             values_ensured_ast = ensure_select_from_values(original_ast)
             cte_names_equivalence_ast = set_cte_names_case_sensitively(values_ensured_ast)
             query = cte_names_equivalence_ast.sql(from_sql)
+            t_ensure = time.perf_counter() - t0
+            logger.info(
+                "%s — Timing: Ensure values & CTE names took %.4f ms", query_id, t_ensure * 1000
+            )
+            record_stats_step_duration("ensure_values_cte", from_sql_upper, to_sql, t_ensure)
 
             # ------------------------------
             # Step 2: Transpile the Query
             # ------------------------------
-            tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
-            tree2 = quote_identifiers(tree, dialect=to_sql)
-
-            double_quotes_added_query = tree2.sql(
-                dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
+            # Timing: Transpile and post-process
+            t0 = time.perf_counter()
+            transpiled_query = transpile_with_transforms(query, from_sql, to_sql, flags_dict)
+            double_quotes_added_query = postprocess_query(transpiled_query, comment)
+            t_transpile = time.perf_counter() - t0
+            logger.info(
+                "%s — Timing: Transpile & post-process (Replace Struct patterns and add comments back) query took %.4f ms", query_id, t_transpile * 1000
             )
-
-            double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
-
-            double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
+            record_stats_step_duration("transpile", from_sql_upper, to_sql, t_transpile)
 
             logger.info("Got the converted query!!!!")
 
+            # Timing: Extract functions from transpiled query
+            t0 = time.perf_counter()
+            keyword_pattern = get_keyword_pattern()
+
             all_functions_converted_query = extract_functions_from_query(
-                double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
+                double_quotes_added_query, FUNCTION_PATTERN, keyword_pattern, EXCLUSION_LIST
             )
             supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
                 categorize_functions(
-                    all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
+                    all_functions_converted_query, supported_functions_in_e6, FUNCTIONS_AS_KEYWORDS
                 )
             )
+            t_extract_conv = time.perf_counter() - t0
+            logger.info(
+                "%s — Timing: Extract/categorize functions (converted) took %.4f ms",
+                query_id,
+                t_extract_conv * 1000,
+            )
+            record_stats_step_duration("extract_functions_converted", from_sql_upper, to_sql, t_extract_conv)
 
+            # Timing: Identify unsupported in converted query
+            t0 = time.perf_counter()
             double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
             supported_in_converted, unsupported_in_converted = (
                 unsupported_functionality_identifiers(
@@ -401,12 +472,40 @@ async def stats_api(
                     supported_functions_in_converted_query,
                 )
             )
+            t_unsup_conv = time.perf_counter() - t0
+            logger.info(
+                "%s — Timing: Identify unsupported (converted) took %.4f ms",
+                query_id,
+                t_unsup_conv * 1000,
+            )
+            record_stats_step_duration("identify_unsupported_converted", from_sql_upper, to_sql, t_unsup_conv)
 
+            # Timing: Extract joins and CTEs
+            t0 = time.perf_counter()
             joins_list = extract_joins_from_query(original_ast)
             cte_values_subquery_list = extract_cte_n_subquery_list(original_ast)
+            t_joins_ctes = time.perf_counter() - t0
+            logger.info(
+                "%s — Timing: Extract joins & CTEs took %.4f ms", query_id, t_joins_ctes * 1000
+            )
+            record_stats_step_duration("extract_joins_ctes", from_sql_upper, to_sql, t_joins_ctes)
 
             if unsupported_in_converted:
                 executable = "NO"
+
+            # Total timing for successful execution
+            total_time = time.perf_counter() - start_time_total
+            logger.info(
+                "%s — Timing: TOTAL /statistics execution took %.4f ms", query_id, total_time * 1000
+            )
+
+            # Record stats metrics for successful execution
+            record_stats_duration(from_sql_upper, to_sql, total_time)
+            record_stats_function_count(from_sql_upper, to_sql, "supported", len(supported))
+            record_stats_function_count(from_sql_upper, to_sql, "unsupported", len(unsupported))
+            record_stats_function_count(from_sql_upper, to_sql, "udf", len(udf_list))
+            record_stats_executable_status(from_sql_upper, to_sql, executable)
+            record_stats_request(from_sql_upper, to_sql, "success")
 
             logger.info(
                 f"{query_id} executed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} seconds FROM {from_sql.upper()}\n"
@@ -421,8 +520,10 @@ async def stats_api(
             )
 
         except Exception as e:
+            # Total timing for error case
+            total_time = time.perf_counter() - start_time_total
             logger.info(
-                f"{query_id} executed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} seconds FROM {from_sql.upper()}\n"
+                f"{query_id} executed in {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} seconds FROM {from_sql_upper} (after %.4f ms error)\n"
                 "-----------------------\n"
                 "--- Original query ---\n"
                 "-----------------------\n"
@@ -430,7 +531,7 @@ async def stats_api(
                 "-----------------------\n"
                 "-------- Error --------\n"
                 "-----------------------\n"
-                f"{str(e)}"
+                f"{str(e)}" % (total_time * 1000,)
             )
             error_message = f"{str(e)}"
             error_flag = True
@@ -440,6 +541,18 @@ async def stats_api(
             cte_values_subquery_list = []
             unsupported_in_converted = []
             executable = "NO"
+
+            # Record stats metrics for inner error
+            error_type = type(e).__name__
+            record_stats_error(from_sql_upper, to_sql, error_type)
+            record_stats_request(from_sql_upper, to_sql, "error")
+            record_stats_duration(from_sql_upper, to_sql, total_time)
+
+        # Final return - add total timing
+        total_time_final = time.perf_counter() - start_time_total
+        logger.info(
+            "%s — Timing: FINAL /statistics return after %.4f ms", query_id, total_time_final * 1000
+        )
 
         return {
             "supported_functions": supported,
@@ -456,8 +569,10 @@ async def stats_api(
         }
 
     except Exception as e:
+        # Total timing for outer exception
+        total_time = time.perf_counter() - start_time_total
         logger.error(
-            f"{query_id} occurred at time {datetime.now().isoformat()} with processing time {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} FROM {from_sql.upper()}\n"
+            f"{query_id} occurred at time {datetime.now().isoformat()} with processing time {(datetime.now() - datetime.fromisoformat(timestamp)).total_seconds()} FROM {from_sql_upper} (after %.4f ms)\n"
             "-----------------------\n"
             "--- Original query ---\n"
             "-----------------------\n"
@@ -465,8 +580,15 @@ async def stats_api(
             "-----------------------\n"
             "-------- Error --------\n"
             "-----------------------\n"
-            f"{str(e)}"
+            f"{str(e)}" % (total_time * 1000,)
         )
+
+        # Record stats metrics for outer error
+        error_type = type(e).__name__
+        record_stats_error(from_sql_upper, to_sql, error_type)
+        record_stats_request(from_sql_upper, to_sql, "error")
+        record_stats_duration(from_sql_upper, to_sql, total_time)
+
         return {
             "supported_functions": [],
             "unsupported_functions": [],
@@ -492,57 +614,13 @@ async def guardstats(
 ):
     to_sql = to_sql.lower()
     try:
-        supported_functions_in_e6 = load_supported_functions(to_sql)
-
-        # Functions treated as keywords (no parentheses required)
-        functions_as_keywords = [
-            "LIKE",
-            "ILIKE",
-            "RLIKE",
-            "AT TIME ZONE",
-            "||",
-            "DISTINCT",
-            "QUALIFY",
-        ]
-
-        # Exclusion list for words that are followed by '(' but are not functions
-        exclusion_list = [
-            "AS",
-            "AND",
-            "THEN",
-            "OR",
-            "ELSE",
-            "WHEN",
-            "WHERE",
-            "FROM",
-            "JOIN",
-            "OVER",
-            "ON",
-            "ALL",
-            "NOT",
-            "BETWEEN",
-            "UNION",
-            "SELECT",
-            "BY",
-            "GROUP",
-            "EXCEPT",
-        ]
-
-        # Regex patterns
-        function_pattern = r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\("
-        keyword_pattern = (
-            r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
-        )
 
         item = "condenast"
         query, comment = strip_comment(query, item)
 
-        # Extract functions from the query
-        all_functions = extract_functions_from_query(
-            query, function_pattern, keyword_pattern, exclusion_list
-        )
-        supported, unsupported = categorize_functions(
-            all_functions, supported_functions_in_e6, functions_as_keywords
+        # Extract and categorize functions from the query
+        supported, unsupported, udf_list, supported_functions_in_e6 = extract_and_categorize_functions(
+            query, from_sql, to_sql
         )
         logger.info(f"supported: {supported}\n\nunsupported: {unsupported}")
 
@@ -564,12 +642,13 @@ async def guardstats(
 
         double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
+        keyword_pattern = get_keyword_pattern()
         all_functions_converted_query = extract_functions_from_query(
-            double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
+            double_quotes_added_query, FUNCTION_PATTERN, keyword_pattern, EXCLUSION_LIST
         )
         supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
             categorize_functions(
-                all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
+                all_functions_converted_query, supported_functions_in_e6, FUNCTIONS_AS_KEYWORDS
             )
         )
 
@@ -579,10 +658,6 @@ async def guardstats(
             unsupported_functions_in_converted_query,
             supported_functions_in_converted_query,
         )
-
-        from_dialect_func_list = load_supported_functions(from_sql)
-
-        udf_list, unsupported = extract_udfs(unsupported, from_dialect_func_list)
 
         executable = "NO" if unsupported_in_converted else "YES"
 
