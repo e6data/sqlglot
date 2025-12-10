@@ -2005,6 +2005,11 @@ class TestE6(Validator):
             read={"databricks": "SELECT (1, 2) IN ((1, 2), (2, 3))"},
         )
 
+        self.validate_all(
+            "SELECT * FROM table WHERE \"Date\" BETWEEN '2025-11-08' AND '2025-11-14'",
+            read={"databricks": "SELECT * FROM table WHERE `Date` IN ('2025-11-08 to 2025-11-14')"},
+        )
+
     def test_statistical_funcs(self):
         self.validate_all(
             "SELECT STDDEV(DISTINCT col) FROM (VALUES (1), (2), (3), (3)) AS tab(col)",

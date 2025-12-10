@@ -1755,6 +1755,33 @@ class E6(Dialect):
             func_name = "NVL" if expression.args.get("is_nvl") else "COALESCE"
             return rename_func(func_name)(self, expression)
 
+        def in_sql(self, expression: exp.In) -> str:
+            expressions = expression.expressions
+            if len(expressions) != 1:
+                return super().in_sql(expression)
+
+            # Check if the single expression contains a range pattern
+            expr_str = self.sql(expressions[0])
+
+            # Use case-insensitive matching with proper boundaries
+            import re
+
+            match = re.match(r"(.+?)\s+to\s+(.+)", expr_str, re.IGNORECASE)
+
+            if match:
+                date1 = match.group(1).strip().strip("'")
+                date2 = match.group(2).strip().strip("'")
+                # Use exp.Between to generate proper BETWEEN SQL
+                between_expr = exp.Between(
+                    this=expression.this,
+                    low=exp.Literal.string(date1),
+                    high=exp.Literal.string(date2),
+                )
+                return self.sql(between_expr)
+
+            # Fallback to standard IN behavior
+            return super().in_sql(expression)
+
         def interval_sql(self, expression: exp.Interval) -> str:
             """
             Generate an SQL INTERVAL expression from the given Interval object.
