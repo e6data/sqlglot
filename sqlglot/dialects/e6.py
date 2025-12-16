@@ -2031,17 +2031,28 @@ class E6(Dialect):
             return f"TO_CHAR({date_expr},'{format_expr}')"
 
         def bracket_sql(self, expression: exp.Bracket) -> str:
-            if (
-                expression.expressions.__len__() == 1
-                and expression.expressions[0].is_string
-                and not expression._meta
-            ):
-                text_expr = expression.expressions[0].this
-                return f'{self.sql(expression.this)}."{text_expr}"'
-            return self.func(
+            """
+            Convert bracket access to ELEMENT_AT function for E6 dialect.
+
+            In E6:
+            - Map access: map['key'] -> ELEMENT_AT(map, 'key')
+            - Array access: arr[0] -> ELEMENT_AT(arr, 1)  (1-indexed in E6)
+            """
+            func_name = (
                 "TRY_ELEMENT_AT"
                 if expression._meta and expression._meta.get("name", "").upper() == "TRY_ELEMENT_AT"
-                else "ELEMENT_AT",
+                else "ELEMENT_AT"
+            )
+
+            key_expr = seq_get(expression.expressions, 0)
+
+            # For string keys (map access), use the key directly without index offset
+            if key_expr and key_expr.is_string:
+                return self.func(func_name, expression.this, key_expr)
+
+            # For numeric keys (array access), apply index offset (E6 uses 1-based indexing)
+            return self.func(
+                func_name,
                 expression.this,
                 seq_get(
                     apply_index_offset(
