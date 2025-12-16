@@ -546,8 +546,21 @@ class TestE6(Validator):
             },
         )
 
+        # Old test case - dot notation no longer supported for bracket access
+        # self.validate_all(
+        #     'SELECT X."B"',
+        #     read={
+        #         "snowflake": "SELECT X['B']",
+        #         "trino": "SELECT X['B']",
+        #         "databricks": "SELECT X['B']",
+        #         "spark": "SELECT X['B']",
+        #         "duckdb": "SELECT X['B']",
+        #     },
+        # )
+
+        # New test case - bracket access now uses ELEMENT_AT for map access
         self.validate_all(
-            'SELECT X."B"',
+            "SELECT ELEMENT_AT(X, 'B')",
             read={
                 "snowflake": "SELECT X['B']",
                 "trino": "SELECT X['B']",
