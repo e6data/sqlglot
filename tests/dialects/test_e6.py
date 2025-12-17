@@ -9,6 +9,13 @@ class TestE6(Validator):
 
     def test_E6(self):
         self.validate_all(
+            'SELECT status_change_event:"location" FROM silver_postgres_v2.dms.delivery',
+            read={
+                "databricks": "select status_change_event:location from silver_postgres_v2.dms.delivery"
+            },
+        )
+
+        self.validate_all(
             "SELECT FIRST_VALUE(zone) AS zone FROM filtered_zones",
             read={"databricks": "SELECT FIRST(zone) AS zone FROM filtered_zones"},
         )

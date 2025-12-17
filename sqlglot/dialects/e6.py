@@ -2420,9 +2420,12 @@ class E6(Dialect):
                         and isinstance(path_expressions[1], exp.JSONPathKey)
                     ):
                         path_key = path_expressions[1].this
-                        if e.expression.args.get("escape"):
+                        if path_key in self.RESERVED_DATATYPE_KEYWORDS:
                             return f'{self.sql(e.this)}:"{path_key}"'
-                        return f"{self.sql(e.this)}:{path_key}"
+                        else:
+                            if e.expression.args.get("escape"):
+                                return f'{self.sql(e.this)}:"{path_key}"'
+                            return f"{self.sql(e.this)}:{path_key}"
                 # Fallback if not JSONPath format
                 elif isinstance(e.expression, exp.Literal):
                     return f"{self.sql(e.this)}:{e.expression.this}"
@@ -2679,6 +2682,7 @@ class E6(Dialect):
             "struct",
             "text",
             "tinyint",
+            "location",
         }
 
         RESERVED_KEYWORDS = {
