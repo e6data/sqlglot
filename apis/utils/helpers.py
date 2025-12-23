@@ -12,7 +12,7 @@ import typing as t
 from sqlglot.dialects.e6 import E6
 from curses.ascii import isascii
 
-FUNCTIONS_FILE = "./apis/utils/supported_functions_in_all_dialects.json"
+FUNCTIONS_FILE = os.path.join(os.path.dirname(__file__), "supported_functions_in_all_dialects.json")
 logger = logging.getLogger(__name__)
 
 
@@ -290,21 +290,21 @@ def add_comment_to_query(query: str, comment: str) -> str:
         return query
 
 
-def strip_comment(query: str, item: str) -> tuple:
+def strip_comment(query: str) -> tuple:
     """
-    Strip a comment pattern like `/* item::UUID */` from the query.
+    Strip the first block comment (`/* ... */`) from the query.
+    Handles multi-line comments.
 
     Args:
         query (str): The SQL query to process.
-        item (str): The dynamic keyword to search for (e.g., "condanest").
 
     Returns:
         tuple: (stripped_query, extracted_comment)
     """
-    # Use a regex pattern to find comments like /* item::UUID */
     logger.info("Stripping Comments!")
     try:
-        comment_pattern = rf"/\*\s*{item}::[a-zA-Z0-9]+\s*\*/"
+        # Match any block comment /* ... */ including multi-line
+        comment_pattern = r"/\*[\s\S]*?\*/"
 
         # Search for the comment in the query
         match = re.search(comment_pattern, query)
@@ -317,7 +317,7 @@ def strip_comment(query: str, item: str) -> tuple:
         return query, None
 
     except re.error as regex_err:
-        logger.error(f"Invalid regex pattern with item='{item}': {regex_err}")
+        logger.error(f"Invalid regex pattern: {regex_err}")
         return query, None
     except Exception as e:
         logger.error(f"Unexpected error during comment extraction: {e}")
@@ -371,6 +371,9 @@ def load_supported_functions(dialect: str):
     if not os.path.exists(FUNCTIONS_FILE):
         logger.warning(f"Warning: {FUNCTIONS_FILE} not found. Returning an empty list/set.")
         return set()  # Return an empty set for non-existent file.
+
+    # Normalize dialect to lowercase for case-insensitive lookup
+    dialect = dialect.lower()
 
     try:
         with open(FUNCTIONS_FILE, "r") as file:

@@ -113,8 +113,10 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        item = "condenast"
-        query, comment = strip_comment(query, item)
+        # Always strip comment from query, but only re-add if SKIP_COMMENT is false
+        query, comment = strip_comment(query)
+        if flags_dict.get("SKIP_COMMENT", False):
+            comment = None  # Don't re-add comment
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
@@ -336,8 +338,7 @@ async def stats_api(
                 "log_records": log_records,
             }
 
-        item = "condenast"
-        query, comment = strip_comment(query, item)
+        query, comment = strip_comment(query)
 
         # Extract functions from the query
         all_functions = extract_functions_from_query(
@@ -534,8 +535,7 @@ async def guardstats(
             r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
-        item = "condenast"
-        query, comment = strip_comment(query, item)
+        query, comment = strip_comment(query)
 
         # Extract functions from the query
         all_functions = extract_functions_from_query(
