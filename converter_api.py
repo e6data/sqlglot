@@ -43,6 +43,7 @@ setup_logger()
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
+SKIP_COMMENT = os.getenv("SKIP_COMMENT", "False")
 
 storage_service_client = None
 
@@ -113,8 +114,10 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        item = "condenast"
-        query, comment = strip_comment(query, item)
+        # Always strip comment from query, but only re-add if SKIP_COMMENT is false
+        query, comment = strip_comment(query)
+        if SKIP_COMMENT.lower() == "true":
+            comment = None  # Don't re-add comment
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
@@ -336,8 +339,7 @@ async def stats_api(
                 "log_records": log_records,
             }
 
-        item = "condenast"
-        query, comment = strip_comment(query, item)
+        query, comment = strip_comment(query)
 
         # Extract functions from the query
         all_functions = extract_functions_from_query(
@@ -534,8 +536,7 @@ async def guardstats(
             r"\b(?:" + "|".join([re.escape(func) for func in functions_as_keywords]) + r")\b"
         )
 
-        item = "condenast"
-        query, comment = strip_comment(query, item)
+        query, comment = strip_comment(query)
 
         # Extract functions from the query
         all_functions = extract_functions_from_query(
