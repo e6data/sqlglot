@@ -292,36 +292,18 @@ def add_comment_to_query(query: str, comment: str) -> str:
 
 def strip_comment(query: str) -> tuple:
     """
-    Strip the first block comment (`/* ... */`) from the query.
-    Handles multi-line comments.
-
-    Args:
-        query (str): The SQL query to process.
+    Strip ALL block comments (`/* ... */`) from the query.
 
     Returns:
-        tuple: (stripped_query, extracted_comment)
+        tuple: (stripped_query, list_of_comments)
     """
-    logger.info("Stripping Comments!")
-    try:
-        # Match any block comment /* ... */ including multi-line
-        comment_pattern = r"/\*[\s\S]*?\*/"
-
-        # Search for the comment in the query
-        match = re.search(comment_pattern, query)
-        if match:
-            extracted_comment = match.group(0)  # Capture the entire comment
-            stripped_query = query.replace(
-                extracted_comment, ""
-            ).strip()  # Remove it from the query
-            return stripped_query, extracted_comment
-        return query, None
-
-    except re.error as regex_err:
-        logger.error(f"Invalid regex pattern: {regex_err}")
-        return query, None
-    except Exception as e:
-        logger.error(f"Unexpected error during comment extraction: {e}")
-        return query, None
+    logger.info("Stripping All Comments!")
+    comment_pattern = r"/\*[\s\S]*?\*/"
+    comments = re.findall(comment_pattern, query)
+    if comments:
+        stripped_query = re.sub(comment_pattern, "", query).strip()
+        return stripped_query, None
+    return query, None
 
 
 def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:

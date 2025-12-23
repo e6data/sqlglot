@@ -115,17 +115,16 @@ async def convert_query(
         )
 
         # Always strip comment from query, but only re-add if SKIP_COMMENT is false
-        query, comment = strip_comment(query)
+        
         if SKIP_COMMENT.lower() == "true":
-            comment = None  # Don't re-add comment
-
+            query, comment = strip_comment(query)
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
             # Check if we should only transform catalog.schema without full transpilation
             if flags_dict.get("SKIP_E6_TRANSPILATION", False):
                 transformed_query = transform_catalog_schema_only(query, from_sql)
-                transformed_query = add_comment_to_query(transformed_query, comment)
+                # transformed_query = add_comment_to_query(transformed_query, comment)
                 logger.info(
                     "%s AT %s FROM %s — Catalog.Schema Transformed Query:\n%s",
                     query_id,
@@ -148,7 +147,7 @@ async def convert_query(
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
-        double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
+        # double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
         logger.info(
             "%s AT %s FROM %s — Transpiled Query:\n%s",
