@@ -298,12 +298,19 @@ def strip_comment(query: str) -> tuple:
         tuple: (stripped_query, list_of_comments)
     """
     logger.info("Stripping All Comments!")
-    comment_pattern = r"/\*[\s\S]*?\*/"
-    comments = re.findall(comment_pattern, query)
-    if comments:
-        stripped_query = re.sub(comment_pattern, "", query).strip()
-        return stripped_query, None
-    return query, None
+    try:
+        comment_pattern = r"/\*[\s\S]*?\*/"
+        comments = re.findall(comment_pattern, query)
+        if comments:
+            logger.info(f"Found {len(comments)} comment(s) to strip")
+            stripped_query = re.sub(comment_pattern, "", query).strip()
+            logger.info("Successfully stripped all comments")
+            return stripped_query, None
+        logger.info("No comments found in query")
+        return query, None
+    except Exception as e:
+        logger.error(f"Failed to strip comments: {e}")
+        return query, None
 
 
 def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:
