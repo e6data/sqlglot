@@ -2536,6 +2536,7 @@ class E6(Dialect):
             ),
             exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
+            exp.SortArray: rename_func("ARRAY_SORT"),
             exp.AtTimeZone: attimezone_sql,
             exp.BitwiseLeftShift: lambda self, e: self.func("SHIFTLEFT", e.this, e.expression),
             exp.BitwiseNot: lambda self, e: self.func("BITWISE_NOT", e.this),
