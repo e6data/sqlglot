@@ -9,8 +9,6 @@ import sqlglot
 import logging
 from datetime import datetime
 from log_collector import setup_logger, log_records
-import pyarrow.parquet as pq
-import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from guardrail.main import StorageServiceClient
@@ -118,7 +116,13 @@ async def convert_query(
         
         if SKIP_COMMENT.lower() == "true":
             query, comment = strip_comment(query)
-        tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+
+        try:
+            tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+        except sqlglot.errors.ParseError as e:
+            message = f"ParseError: {e} \nin {query_id} AT {timestamp} from {from_sql.upper()}"
+            logger.info(message)
+            return HTTPException(status_code=400, detail=message)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
             # Check if we should only transform catalog.schema without full transpilation
