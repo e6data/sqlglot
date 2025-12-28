@@ -812,6 +812,20 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT cc_rec_end_date \"date\" FROM tpcds_1000.call_center ORDER BY 1 ASC NULLS FIRST",
+            read={
+                "databricks": "select cc_rec_end_date as date from tpcds_1000.call_center order by 1 asc"
+            }
+        )
+
+        self.validate_all(
+            "SELECT cc_rec_end_date \"date\" FROM tpcds_1000.call_center ORDER BY 1 DESC NULLS LAST",
+            read={
+                "databricks": "select cc_rec_end_date as date from tpcds_1000.call_center order by 1 desc"
+            }
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",

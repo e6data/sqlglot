@@ -1557,7 +1557,7 @@ class E6(Dialect):
         NVL2_SUPPORTED = True
         LAST_DAY_SUPPORTS_DATE_PART = False
         INTERVAL_ALLOWS_PLURAL_FORM = False
-        NULL_ORDERING_SUPPORTED = None
+        NULL_ORDERING_SUPPORTED = True
         SUPPORTS_TABLE_ALIAS_COLUMNS = True
         SUPPORTS_MEDIAN = False
 
@@ -1677,8 +1677,9 @@ class E6(Dialect):
             Returns:
                 str: The SQL string representing the ORDER BY clause.
             """
+            is_desc = expression.args.get("desc")
             # Determine the sorting direction based on the 'desc' argument
-            sort_order = {True: " DESC", False: " ASC", None: ""}.get(expression.args.get("desc"))
+            sort_order = " DESC" if is_desc else " ASC"
 
             # Generate the SQL for the main expression to be ordered
             main_expression = self.sql(expression, "this")
@@ -1691,9 +1692,12 @@ class E6(Dialect):
             # Apply NULLS FIRST/LAST only if supported by the dialect
             if self.NULL_ORDERING_SUPPORTED:
                 nulls_first = expression.args.get("nulls_first")
-                nulls_sort_change = " NULLS FIRST" if nulls_first else " NULLS LAST"
+                if nulls_first is True:
+                    nulls_sort_change = " NULLS FIRST"
+                elif nulls_first is False:
+                    nulls_sort_change = " NULLS LAST"
+                # If nulls_first is None, we generate nothing, respecting the source.
 
-            # Construct and return the final ORDER BY clause
             return f"{main_expression}{sort_order}{nulls_sort_change}"
 
         def convert_format_time(self, expression, **kwargs):
