@@ -813,17 +813,17 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT cc_rec_end_date \"date\" FROM tpcds_1000.call_center ORDER BY 1 ASC NULLS FIRST",
+            'SELECT cc_rec_end_date "date" FROM tpcds_1000.call_center ORDER BY 1 ASC NULLS FIRST',
             read={
                 "databricks": "select cc_rec_end_date as date from tpcds_1000.call_center order by 1 asc"
-            }
+            },
         )
 
         self.validate_all(
-            "SELECT cc_rec_end_date \"date\" FROM tpcds_1000.call_center ORDER BY 1 DESC NULLS LAST",
+            'SELECT cc_rec_end_date "date" FROM tpcds_1000.call_center ORDER BY 1 DESC NULLS LAST',
             read={
                 "databricks": "select cc_rec_end_date as date from tpcds_1000.call_center order by 1 desc"
-            }
+            },
         )
 
     def test_regex(self):
@@ -1400,7 +1400,7 @@ class TestE6(Validator):
             "SUM(CASE WHEN payment_date < due_date THEN 1 ELSE 0 END) AS early_payments, ROUND(100.0 * SUM(CASE WHEN "
             "payment_date > due_date THEN 1 ELSE 0 END) / COUNT(*), 1) AS late_payment_rate FROM invoices WHERE "
             "payment_date IS NOT NULL AND YEAR(TO_DATE(TO_DATE(due_date))) = 2023 GROUP BY customer_id HAVING COUNT("
-            "*) > 5 ORDER BY avg_days_deviation DESC",
+            "*) > 5 ORDER BY avg_days_deviation DESC NULLS LAST",
             read={
                 "databricks": """SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF('DAY', 
                 payment_date, due_date))), 1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATE_DIFF('DAY', payment_date, 
@@ -1414,7 +1414,7 @@ class TestE6(Validator):
 
         self.validate_all(
             "CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - LAG(predicted_value) OVER ("
-            "PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END",
+            "PARTITION BY model_id ORDER BY forecast_date ASC NULLS FIRST)) THEN 1 ELSE 0 END",
             read={
                 "databricks": """ CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - 
                 LAG(predicted_value) OVER (PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END """
@@ -1987,14 +1987,14 @@ class TestE6(Validator):
 
     def test_window_funcs(self):
         self.validate_all(
-            "SELECT a, b, DENSE_RANK() OVER (PARTITION BY a ORDER BY b), RANK() OVER (PARTITION BY a ORDER BY b), ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1)) AS tab(a, b)",
+            "SELECT a, b, DENSE_RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST), RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST), ROW_NUMBER() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST) FROM (VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1)) AS tab(a, b)",
             read={
                 "databricks": "SELECT a, b, dense_rank() OVER(PARTITION BY a ORDER BY b), rank() OVER(PARTITION BY a ORDER BY b), row_number() OVER(PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b)"
             },
         )
 
         self.validate_all(
-            "SELECT a, b, NTILE(2) OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1))",
+            "SELECT a, b, NTILE(2) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST) FROM (VALUES ('A1', 2), ('A1', 1))",
             read={
                 "databricks": "SELECT a, b, ntile(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1)"
             },
@@ -2029,12 +2029,12 @@ class TestE6(Validator):
         # )
         #
         self.validate_all(
-            "SELECT a, b, LEAD(b) OVER (PARTITION BY a ORDER BY b)",
+            "SELECT a, b, LEAD(b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST)",
             read={"databricks": "SELECT a, b, lead(b) OVER (PARTITION BY a ORDER BY b)"},
         )
 
         self.validate_all(
-            "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b)",
+            "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST)",
             read={"databricks": "SELECT a, b, lag(b) OVER (PARTITION BY a ORDER BY b)"},
         )
 
@@ -2069,14 +2069,14 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT PERCENTILE_CONT(ARRAY[0.5, 0.4, 0.1]) WITHIN GROUP (ORDER BY col)",
+            "SELECT PERCENTILE_CONT(ARRAY[0.5, 0.4, 0.1]) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)",
             read={
                 "databricks": "SELECT percentile_cont(array(0.5, 0.4, 0.1)) WITHIN GROUP (ORDER BY col)"
             },
         )
 
         self.validate_all(
-            "SELECT PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY col) FROM (VALUES (0), (6), (6), (7), (9), (10)) AS tab(col)",
+            "SELECT PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY col ASC NULLS FIRST) FROM (VALUES (0), (6), (6), (7), (9), (10)) AS tab(col)",
             read={
                 "databricks": "SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (6), (6), (7), (9), (10) AS tab(col)"
             },
@@ -2484,7 +2484,7 @@ class TestE6(Validator):
 
         # GROUP BY ALL with ORDER BY
         self.validate_all(
-            "SELECT department, COUNT(*) AS employee_count FROM employees GROUP BY ALL ORDER BY employee_count DESC",
+            "SELECT department, COUNT(*) AS employee_count FROM employees GROUP BY ALL ORDER BY employee_count DESC NULLS LAST",
             read={
                 "databricks": "SELECT department, COUNT(*) AS employee_count FROM employees GROUP BY ALL ORDER BY employee_count DESC"
             },
