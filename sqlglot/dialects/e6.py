@@ -1979,8 +1979,30 @@ class E6(Dialect):
             # Construct the alias string
             alias_sql = f" AS {alias}{alias_columns}" if alias else ""
 
-            # Generate the final UNNEST SQL
+            # Generate the final SQL
             return f"EXPLODE({array_expr_sql}){alias_sql}"
+
+        def tablefromrows_sql(self, expression: exp.TableFromRows) -> str:
+            """
+            Handle Snowflake's TABLE(FLATTEN(...)) -> UNNEST(...) transformation.
+            When the inner expression is an Explode (from FLATTEN), convert to UNNEST.
+            """
+            inner = expression.this
+
+            # Check if inner expression is Explode (from Snowflake FLATTEN)
+            if self.from_dialect == "snowflake" and isinstance(inner, exp.Explode):
+                # Get the content inside EXPLODE/FLATTEN
+                content = inner.this
+                content_sql = self.sql(content)
+
+                # Handle alias using standard pattern
+                alias = self.sql(expression, "alias")
+                alias_sql = f" AS {alias}" if alias else ""
+
+                return f"UNNEST({content_sql}){alias_sql}"
+
+            # Default behavior for other cases
+            return super().tablefromrows_sql(expression)
 
         def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
             date_expr = expression.this
@@ -2541,6 +2563,7 @@ class E6(Dialect):
             exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
             exp.SortArray: rename_func("ARRAY_SORT"),
+            exp.TableFromRows: tablefromrows_sql,
             exp.AtTimeZone: attimezone_sql,
             exp.BitwiseLeftShift: lambda self, e: self.func("SHIFTLEFT", e.this, e.expression),
             exp.BitwiseNot: lambda self, e: self.func("BITWISE_NOT", e.this),
@@ -2707,6 +2730,7 @@ class E6(Dialect):
             "before",
             "between",
             "bigint",
+            "call",
             "case",
             "char",
             "character",
@@ -2747,6 +2771,7 @@ class E6(Dialect):
             "left",
             "like",
             "limit",
+            "location",
             "localtime",
             "localtimestamp",
             "mod",

@@ -2808,3 +2808,56 @@ class TestE6(Validator):
                 "databricks": "WITH cte AS (SELECT * FROM test) (SELECT col1 FROM (SELECT * FROM test)) UNION ALL (SELECT col1 FROM test)",
             },
         )
+
+    def test_snowflake_flatten_to_unnest(self):
+        """Test Snowflake TABLE(FLATTEN(...)) -> UNNEST(...) transformation."""
+        import sqlglot
+
+        # Basic FLATTEN with input parameter
+        result = sqlglot.transpile(
+            "SELECT * FROM TABLE(FLATTEN(input => my_array)) AS t",
+            read="snowflake",
+            write="e6",
+            from_dialect="snowflake",
+        )[0]
+        self.assertEqual(result, "SELECT * FROM UNNEST(input => my_array) AS t")
+
+        # FLATTEN with subquery
+        result = sqlglot.transpile(
+            "SELECT * FROM TABLE(FLATTEN(SELECT tenant_ids FROM session_tenant_mappings WHERE session_id = '158558983524602')) as test",
+            read="snowflake",
+            write="e6",
+            from_dialect="snowflake",
+        )[0]
+        self.assertEqual(
+            result,
+            "SELECT * FROM UNNEST(SELECT tenant_ids FROM session_tenant_mappings WHERE session_id = '158558983524602') AS test",
+        )
+
+        # FLATTEN with direct column reference
+        result = sqlglot.transpile(
+            "SELECT * FROM TABLE(FLATTEN(my_column))",
+            read="snowflake",
+            write="e6",
+            from_dialect="snowflake",
+        )[0]
+        self.assertEqual(result, "SELECT * FROM UNNEST(my_column)")
+
+    def test_reserved_keywords_quoted(self):
+        """Test that reserved keywords are properly quoted when used as table names."""
+
+        # 'call' should be quoted
+        self.validate_all(
+            'SELECT * FROM "call"',
+            read={
+                "snowflake": "SELECT * FROM call",
+            },
+        )
+
+        # 'location' should be quoted
+        self.validate_all(
+            'SELECT * FROM "location"',
+            read={
+                "snowflake": "SELECT * FROM location",
+            },
+        )
