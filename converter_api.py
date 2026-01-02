@@ -43,7 +43,7 @@ setup_logger()
 ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
-SKIP_COMMENT = os.getenv("SKIP_COMMENT", "False")
+SKIP_COMMENT = "True"  # Always strip multi-line comments
 
 storage_service_client = None
 
@@ -115,7 +115,7 @@ async def convert_query(
         )
 
         # Always strip comment from query, but only re-add if SKIP_COMMENT is false
-        
+
         if SKIP_COMMENT.lower() == "true":
             query, comment = strip_comment(query)
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
