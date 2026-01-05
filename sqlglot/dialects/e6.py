@@ -2269,16 +2269,16 @@ class E6(Dialect):
         def group_sql_modified(self, expression: exp.Group) -> str:
             if os.getenv("IGNORE_DECIMAL_GROUP_BY", False) or (
                 self.from_dialect
-                and self.from_dialect.lower()
-                in [
-                    "databricks",
-                    "dbr",
-                ]
+                and self.from_dialect.lower() == Dialect.get('databricks')
             ):
                 expr = []
                 for item in expression.expressions:
                     if isinstance(item, exp.Literal):
-                        if not item.is_string and not float(item.this).is_integer():
+                        if (
+                            not item.is_string
+                            and not float(item.this).is_integer()
+                            and float(item.this) < 1
+                        ):
                             continue
                     expr.append(item)
                 if (
