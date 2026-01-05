@@ -2529,6 +2529,18 @@ class E6(Dialect):
             # Not our target pattern - use normal cast
             return super().cast_sql(expression)
 
+        def date_diff_sql(self, expression: exp.DateDiff) -> str:
+            if self.from_dialect and self.from_dialect.lower() in ["databricks", "dbr"]:
+                return self.func(
+                    "DATE_DIFF", expression.this, expression.expression, unit_to_str(expression)
+                )
+            return self.func(
+                "DATE_DIFF",
+                unit_to_str(expression),
+                expression.expression,
+                expression.this,
+            )
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2588,9 +2600,7 @@ class E6(Dialect):
                 e.this,
             ),
             # follows signature DATE_DIFF([ <unit>,] <date_expr1>, <date_expr2>) of E6. => date_expr1 - date_expr2, so interchanging the second and third arg
-            exp.DateDiff: lambda self, e: self.func(
-                "DATEDIFF", e.this, e.expression, unit_to_str(e)
-            ),
+            exp.DateDiff: date_diff_sql,  # lambda self, e: self.func("DATEDIFF", e.this, e.expression, unit_to_str(e)),
             exp.DateSub: rename_func("DATE_SUB"),
             exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.Datetime: lambda self, e: self.func("DATETIME", e.this, e.expression),
