@@ -1679,7 +1679,12 @@ class E6(Dialect):
             """
             is_desc = expression.args.get("desc")
             # Determine the sorting direction based on the 'desc' argument
-            sort_order = " DESC" if is_desc else " ASC"
+            if is_desc is True:
+                sort_order = " DESC"
+            elif is_desc is False:
+                sort_order = " ASC"
+            else:
+                sort_order = ""
 
             # Generate the SQL for the main expression to be ordered
             main_expression = self.sql(expression, "this")
@@ -1690,7 +1695,7 @@ class E6(Dialect):
             nulls_sort_change = ""
 
             # Apply NULLS FIRST/LAST only if supported by the dialect
-            if self.NULL_ORDERING_SUPPORTED:
+            if self.NULL_ORDERING_SUPPORTED and is_desc is not None:
                 nulls_first = expression.args.get("nulls_first")
                 if nulls_first is True:
                     nulls_sort_change = " NULLS FIRST"
