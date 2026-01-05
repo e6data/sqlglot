@@ -403,20 +403,19 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT DATEDIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')",
+            "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             read={
                 "trino": "SELECT date_diff('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
                 "snowflake": "SELECT DATEDIFF(DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
                 "presto": "SELECT date_diff('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
-                "databricks": "SELECT DATEDIFF(DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             },
             write={
-                "e6": "SELECT DATEDIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')"
+                "e6": "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))"
             },
         )
 
         self.validate_all(
-            "SELECT DATEDIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')",
+            "SELECT DATE_DIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')",
             read={
                 "databricks": "SELECT DATEDIFF(SQL_TSI_DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             },
@@ -1394,8 +1393,8 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATEDIFF(due_date, payment_date, 'DAY'))), "
-            "1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATEDIFF(due_date, payment_date, 'DAY'))), "
+            "SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF(due_date, payment_date, 'DAY'))), "
+            "1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATE_DIFF(due_date, payment_date, 'DAY'))), "
             "1) AS stddev_days_deviation, SUM(CASE WHEN payment_date > due_date THEN 1 ELSE 0 END) AS late_payments, "
             "SUM(CASE WHEN payment_date < due_date THEN 1 ELSE 0 END) AS early_payments, ROUND(100.0 * SUM(CASE WHEN "
             "payment_date > due_date THEN 1 ELSE 0 END) / COUNT(*), 1) AS late_payment_rate FROM invoices WHERE "
@@ -1860,12 +1859,12 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT DATEDIFF('2022-03-28', '2021-01-01', 'YEAR')",
+            "SELECT DATE_DIFF('2022-03-28', '2021-01-01', 'YEAR')",
             read={"databricks": """SELECT date_diff("YEAR", '2021-01-01', '2022-03-28')"""},
         )
 
         self.validate_all(
-            "SELECT DATEDIFF('2009-07-31', '2009-07-30', 'DAY')",
+            "SELECT DATE_DIFF('2009-07-31', '2009-07-30', 'DAY')",
             read={"databricks": "SELECT datediff('2009-07-31', '2009-07-30')"},
         )
 
