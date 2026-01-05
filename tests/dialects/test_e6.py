@@ -1345,6 +1345,13 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT deal, channel_id, organic_rank, overall_rank, sponsored_rank, banner_position FROM sam.serp_data GROUP BY 1, 2",
+            read={
+                "databricks": "select deal, channel_id, organic_rank, overall_rank, sponsored_rank, banner_position from sam.serp_data group by 0.1, 1, 1.1, 2, 2.2"
+            },
+        )
+
     def test_math(self):
         self.validate_all("SELECT CEIL(5.4)", read={"databricks": "SELECT ceil(5.4)"})
 

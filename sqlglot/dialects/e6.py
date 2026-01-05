@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
@@ -2265,6 +2266,36 @@ class E6(Dialect):
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
 
+        def group_sql_modified(self, expression: exp.Group) -> str:
+            if os.getenv("IGNORE_DECIMAL_GROUP_BY", False) or (
+                self.from_dialect
+                and self.from_dialect.lower()
+                in [
+                    "databricks",
+                    "dbr",
+                ]
+            ):
+                expr = []
+                for item in expression.expressions:
+                    if isinstance(item, exp.Literal):
+                        if not item.is_string and not float(item.this).is_integer():
+                            continue
+                    expr.append(item)
+                if (
+                    not len(expr)
+                    and not expression.args.get("grouping_sets")
+                    and not expression.args.get("cube")
+                    and not expression.args.get("rollup")
+                    and not expression.args.get("totals")
+                    and not expression.args.get("all")
+                ):
+                    # This is to handle the case where group by only contains a decimal value. There is no need for group by in this case
+                    return ""
+                expression_copy = expression.copy()
+                expression_copy.set("expressions", expr)
+                return self.group_sql(expression_copy)
+            return self.group_sql(expression)
+
         def TsOrDsToDate_sql(self: E6.Generator, expression: exp.TsOrDsToDate) -> str:
             format_str = self.convert_format_time(expression)
             if format_str is None:
@@ -2612,6 +2643,7 @@ class E6(Dialect):
             exp.ConvertTimezone: rename_func("CONVERT_TIMEZONE"),
             exp.FromISO8601Timestamp: from_iso8601_timestamp_sql,
             exp.GenerateSeries: generateseries_sql,
+            exp.Group: group_sql_modified,
             exp.GroupConcat: string_agg_sql,
             exp.Hex: rename_func("TO_HEX"),
             exp.Interval: interval_sql,
