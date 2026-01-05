@@ -1414,7 +1414,7 @@ class TestE6(Validator):
 
         self.validate_all(
             "CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - LAG(predicted_value) OVER ("
-            "PARTITION BY model_id ORDER BY forecast_date ASC NULLS FIRST)) THEN 1 ELSE 0 END",
+            "PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END",
             read={
                 "databricks": """ CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - 
                 LAG(predicted_value) OVER (PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END """
@@ -1987,14 +1987,14 @@ class TestE6(Validator):
 
     def test_window_funcs(self):
         self.validate_all(
-            "SELECT a, b, DENSE_RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST), RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST), ROW_NUMBER() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST) FROM (VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1)) AS tab(a, b)",
+            "SELECT a, b, DENSE_RANK() OVER (PARTITION BY a ORDER BY b), RANK() OVER (PARTITION BY a ORDER BY b), ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1)) AS tab(a, b)",
             read={
                 "databricks": "SELECT a, b, dense_rank() OVER(PARTITION BY a ORDER BY b), rank() OVER(PARTITION BY a ORDER BY b), row_number() OVER(PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b)"
             },
         )
 
         self.validate_all(
-            "SELECT a, b, NTILE(2) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST) FROM (VALUES ('A1', 2), ('A1', 1))",
+            "SELECT a, b, NTILE(2) OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1))",
             read={
                 "databricks": "SELECT a, b, ntile(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1)"
             },
@@ -2029,12 +2029,12 @@ class TestE6(Validator):
         # )
         #
         self.validate_all(
-            "SELECT a, b, LEAD(b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST)",
+            "SELECT a, b, LEAD(b) OVER (PARTITION BY a ORDER BY b)",
             read={"databricks": "SELECT a, b, lead(b) OVER (PARTITION BY a ORDER BY b)"},
         )
 
         self.validate_all(
-            "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST)",
+            "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b)",
             read={"databricks": "SELECT a, b, lag(b) OVER (PARTITION BY a ORDER BY b)"},
         )
 
@@ -2069,14 +2069,14 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT PERCENTILE_CONT(ARRAY[0.5, 0.4, 0.1]) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)",
+            "SELECT PERCENTILE_CONT(ARRAY[0.5, 0.4, 0.1]) WITHIN GROUP (ORDER BY col)",
             read={
                 "databricks": "SELECT percentile_cont(array(0.5, 0.4, 0.1)) WITHIN GROUP (ORDER BY col)"
             },
         )
 
         self.validate_all(
-            "SELECT PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY col ASC NULLS FIRST) FROM (VALUES (0), (6), (6), (7), (9), (10)) AS tab(col)",
+            "SELECT PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY col) FROM (VALUES (0), (6), (6), (7), (9), (10)) AS tab(col)",
             read={
                 "databricks": "SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (6), (6), (7), (9), (10) AS tab(col)"
             },
