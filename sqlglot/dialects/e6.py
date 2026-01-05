@@ -2177,10 +2177,9 @@ class E6(Dialect):
             """
             Generate the SQL for the STRING_AGG or LISTAGG function in E6.
 
-            This method addresses an AST parsing issue where the separator for the STRING_AGG function
-            sometimes appears under the DISTINCT node due to parsing intricacies. Instead of modifying
-            expr_1 directly, this version clones expr_1 to retain DISTINCT while applying the separator
-            correctly.
+            This method handles differences between Snowflake and Databricks LISTAGG syntax:
+            - Snowflake: LISTAGG(expr ORDER BY col, separator)
+            - Databricks: LISTAGG(expr, separator) WITHIN GROUP (ORDER BY col)
 
             Args:
                 expression (exp.GroupConcat): The AST expression for GROUP_CONCAT
@@ -2188,10 +2187,46 @@ class E6(Dialect):
             Returns:
                 str: The SQL representation for STRING_AGG/LISTAGG with proper separator handling.
             """
+            # Check if this is wrapped in WithinGroup (Databricks style)
+            parent = expression.parent
+            if isinstance(parent, exp.WithinGroup):
+                # Handle Databricks-style: already has WITHIN GROUP structure
+                separator = expression.args.get("separator")
+                expr_1 = expression.this
+                
+                # Generate the LISTAGG part
+                return self.func("LISTAGG", expr_1, separator or exp.Literal.string(""))
+            
+            # Handle standalone GroupConcat
             separator = expression.args.get("separator")
             expr_1 = expression.this
+            
+            # Check if coming from Snowflake with ORDER inside GroupConcat
+            if self.from_dialect == "snowflake" and isinstance(expr_1, exp.Order):
+                # Extract components from Snowflake-style LISTAGG
+                column = expr_1.this
+                order_expressions = []
+                
+                # Process ORDER expressions, filtering out separator
+                for ordered in expr_1.expressions:
+                    if isinstance(ordered.this, exp.Literal) and ordered.this.is_string:
+                        # This is the separator, extract it if we don't have one
+                        if not separator:
+                            separator = ordered.this
+                    else:
+                        # This is an actual ORDER BY expression
+                        order_expressions.append(ordered)
 
-            # If no separator was found, check if it's embedded in DISTINCT
+                listagg_expr = self.func("LISTAGG", column, separator or exp.Literal.string(""))
+                
+                if order_expressions:
+                    # Create ORDER BY clause
+                    order_sql = self.sql(exp.Order(expressions=order_expressions))
+                    return f"{listagg_expr} WITHIN GROUP ({order_sql.lstrip()})"
+                else:
+                    return listagg_expr
+            
+            # Handle other cases (including DISTINCT)
             if separator is None and isinstance(expr_1, exp.Distinct):
                 # If DISTINCT has two expressions, the second may represent the separator
                 if len(expr_1.expressions) == 2 and isinstance(
