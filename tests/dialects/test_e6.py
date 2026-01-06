@@ -825,6 +825,11 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT trans_start, CONCAT(LPAD(HOUR(trans_start), 2, '0'), ':', LPAD(MINUTE(trans_start), 2, '0'), ':', LPAD(SECOND(trans_start), 2, '0')) AS formatted_time FROM t",
+            read={"snowflake": "select trans_start, TIME(trans_start)AS formatted_time FROM t"},
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",

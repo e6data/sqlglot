@@ -2199,20 +2199,20 @@ class E6(Dialect):
                 # Handle Databricks-style: already has WITHIN GROUP structure
                 separator = expression.args.get("separator")
                 expr_1 = expression.this
-                
+
                 # Generate the LISTAGG part
                 return self.func("LISTAGG", expr_1, separator or exp.Literal.string(""))
-            
+
             # Handle standalone GroupConcat
             separator = expression.args.get("separator")
             expr_1 = expression.this
-            
+
             # Check if coming from Snowflake with ORDER inside GroupConcat
             if self.from_dialect == "snowflake" and isinstance(expr_1, exp.Order):
                 # Extract components from Snowflake-style LISTAGG
                 column = expr_1.this
                 order_expressions = []
-                
+
                 # Process ORDER expressions, filtering out separator
                 for ordered in expr_1.expressions:
                     if isinstance(ordered.this, exp.Literal) and ordered.this.is_string:
@@ -2224,14 +2224,14 @@ class E6(Dialect):
                         order_expressions.append(ordered)
 
                 listagg_expr = self.func("LISTAGG", column, separator or exp.Literal.string(""))
-                
+
                 if order_expressions:
                     # Create ORDER BY clause
                     order_sql = self.sql(exp.Order(expressions=order_expressions))
                     return f"{listagg_expr} WITHIN GROUP ({order_sql.lstrip()})"
                 else:
                     return listagg_expr
-            
+
             # Handle other cases (including DISTINCT)
             if separator is None and isinstance(expr_1, exp.Distinct):
                 # If DISTINCT has two expressions, the second may represent the separator
@@ -2308,8 +2308,7 @@ class E6(Dialect):
 
         def group_sql_modified(self, expression: exp.Group) -> str:
             if os.getenv("IGNORE_DECIMAL_GROUP_BY", False) or (
-                self.from_dialect
-                and self.from_dialect.lower() == Dialect.get('databricks')
+                self.from_dialect and self.from_dialect.lower() == Dialect.get("databricks")
             ):
                 expr = []
                 for item in expression.expressions:
@@ -2612,6 +2611,42 @@ class E6(Dialect):
                 expression.this,
             )
 
+        def time_sql(self, expression: exp.Time) -> str:
+            """
+            Transform TIME(expression) to CONCAT format for E6.
+
+            Snowflake TIME(expr) -> E6 CONCAT(LPAD(HOUR(expr), 2, '0'), ':', ...)
+
+            Args:
+                expression: The TIME expression to transform
+
+            Returns:
+                SQL string in CONCAT format with zero-padded time components
+            """
+            if not self.from_dialect == Dialect.get("snowflake"):
+                return self.func("TIME", expression.this)
+            # Get the expression inside TIME()
+            time_expr = expression.this
+
+            # Helper to create LPAD(function(expr), 2, '0')
+            def create_lpad_component(func_name: str):
+                return self.func(
+                    "LPAD",
+                    self.func(func_name, time_expr),
+                    exp.Literal.number(2),
+                    exp.Literal.string("0"),
+                )
+
+            # Generate CONCAT directly with all arguments
+            return self.func(
+                "CONCAT",
+                create_lpad_component("HOUR"),
+                exp.Literal.string(":"),
+                create_lpad_component("MINUTE"),
+                exp.Literal.string(":"),
+                create_lpad_component("SECOND"),
+            )
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2738,6 +2773,7 @@ class E6(Dialect):
             exp.StrToUnix: to_unix_timestamp_sql,
             exp.StartsWith: rename_func("STARTS_WITH"),
             # exp.Struct: struct_sql,
+            exp.Time: time_sql,
             exp.TimeToStr: format_date_sql,
             exp.TimeStrToTime: timestrtotime_sql,
             exp.TimeStrToDate: datestrtodate_sql,
