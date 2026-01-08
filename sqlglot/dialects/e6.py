@@ -1546,6 +1546,12 @@ class E6(Dialect):
         NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_USER)
         NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_TIME)
 
+        def _parse_pivot_aggregation(self) -> t.Optional[exp.Expression]:
+            # Spark 3+ and Databricks support non aggregate functions in PIVOT too, e.g
+            # PIVOT (..., 'foo' AS bar FOR col_to_pivot IN (...))
+            aggregate_expr = self._parse_function() or self._parse_disjunction()
+            return self._parse_alias(aggregate_expr)
+
     class Generator(generator.Generator):
         """
         The Generator class is responsible for converting an abstract syntax tree (AST) back into a SQL string
