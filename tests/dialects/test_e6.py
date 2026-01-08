@@ -830,6 +830,13 @@ class TestE6(Validator):
             read={"snowflake": "select trans_start, TIME(trans_start)AS formatted_time FROM t"},
         )
 
+        self.validate_all(
+            "SELECT * FROM abc PIVOT(SUM(abc) AS DUS, 'dummy' AS dummy FOR breakdown_subtype_fullname IN ('Compact Disc', 'Digital Track'))",
+            read={
+                "databricks": "select * from abc PIVOT(SUM(abc) AS DUS, 'dummy' as dummy FOR breakdown_subtype_fullname IN ( 'Compact Disc', 'Digital Track',)) "
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
