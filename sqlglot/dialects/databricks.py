@@ -145,25 +145,6 @@ class Databricks(Spark):
             result = super()._parse_colon_as_variant_extract(this)
             return result
 
-        def _parse_pivot_aggregation(self) -> t.Optional[exp.Expression]:
-            """
-            Override to support Databricks-specific PIVOT syntax that allows
-            non-aggregate expressions like literals (e.g., 'dummy' as dummy).
-            """
-            # First try the standard parsing (aggregate functions)
-            func = self._parse_function()
-
-            if func:
-                return self._parse_alias(func)
-
-            # If not a function, try to parse as a regular expression
-            expr = self._parse_primary()
-
-            if not expr:
-                self.raise_error("Expecting an expression in PIVOT")
-
-            return self._parse_alias(expr)
-
     class Generator(Spark.Generator):
         TABLESAMPLE_SEED_KEYWORD = "REPEATABLE"
         COPY_PARAMS_ARE_WRAPPED = False

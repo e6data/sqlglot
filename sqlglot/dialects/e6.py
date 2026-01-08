@@ -1547,24 +1547,10 @@ class E6(Dialect):
         NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_TIME)
 
         def _parse_pivot_aggregation(self) -> t.Optional[exp.Expression]:
-            """
-            Override to support E6-specific PIVOT syntax that allows
-            non-aggregate expressions like literals (e.g., 'dummy' as dummy).
-            This matches Databricks behavior for PIVOT clauses.
-            """
-            # First try the standard parsing (aggregate functions)
-            func = self._parse_function()
-
-            if func:
-                return self._parse_alias(func)
-
-            # If not a function, try to parse as a regular expression (which includes literals)
-            expr = self._parse_primary()
-
-            if not expr:
-                self.raise_error("Expecting an expression in PIVOT")
-
-            return self._parse_alias(expr)
+            # Spark 3+ and Databricks support non aggregate functions in PIVOT too, e.g
+            # PIVOT (..., 'foo' AS bar FOR col_to_pivot IN (...))
+            aggregate_expr = self._parse_function() or self._parse_disjunction()
+            return self._parse_alias(aggregate_expr)
 
     class Generator(generator.Generator):
         """
