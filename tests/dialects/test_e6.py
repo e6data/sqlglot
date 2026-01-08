@@ -833,7 +833,7 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT * FROM abc PIVOT(SUM(abc) AS DUS, 'dummy' AS dummy FOR breakdown_subtype_fullname IN ('Compact Disc', 'Digital Track'))",
             read={
-                "databricks": "select * from abc PIVOT(SUM(abc) AS DUS, 'dummy' as dummy FOR breakdown_subtype_fullname IN ( 'Compact Disc', 'Digital Track',)) "
+                "databricks": "select * from abc PIVOT(SUM(abc) AS DUS, 'dummy' as dummy FOR breakdown_subtype_fullname IN ( 'Compact Disc', 'Digital Track')) "
             },
         )
 
