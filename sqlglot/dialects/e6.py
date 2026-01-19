@@ -2786,7 +2786,9 @@ class E6(Dialect):
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
             exp.Lower: rename_func("LOWER"),
             exp.LogicalOr: rename_func("BOOL_OR"),
-            exp.MakeInterval: make_interval_sql,
+            exp.MakeInterval: lambda self, e: make_interval_sql(self, e)
+            if self.from_dialect == "databricks"
+            else self.makeinterval_sql(e),
             databricks.DatabricksMakeInterval: make_interval_sql,
             exp.Map: map_sql,
             exp.Max: max_or_greatest,
