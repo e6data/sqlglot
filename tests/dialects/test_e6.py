@@ -2808,3 +2808,46 @@ class TestE6(Validator):
                 "databricks": "WITH cte AS (SELECT * FROM test) (SELECT col1 FROM (SELECT * FROM test)) UNION ALL (SELECT col1 FROM test)",
             },
         )
+
+    def test_make_interval(self):
+        """Test make_interval transpilation from Databricks to E6."""
+
+        # Basic: years and months only
+        self.validate_all(
+            "SELECT INTERVAL 100 YEAR + INTERVAL 11 MONTH",
+            read={
+                "databricks": "SELECT make_interval(100, 11)",
+            },
+        )
+
+        # NULL handling: any NULL arg returns NULL
+        self.validate_all(
+            "SELECT NULL",
+            read={
+                "databricks": "SELECT make_interval(100, null)",
+            },
+        )
+
+        # No arguments: returns INTERVAL 0 SECOND
+        self.validate_all(
+            "SELECT INTERVAL 0 SECOND",
+            read={
+                "databricks": "SELECT make_interval()",
+            },
+        )
+
+        # All 7 arguments including week
+        self.validate_all(
+            "SELECT INTERVAL 0 YEAR + INTERVAL 0 MONTH + INTERVAL 1 WEEK + INTERVAL 1 DAY + INTERVAL 12 HOUR + INTERVAL 30 MINUTE + INTERVAL 1.001001 SECOND",
+            read={
+                "databricks": "SELECT make_interval(0, 0, 1, 1, 12, 30, 1.001001)",
+            },
+        )
+
+        # Column references
+        self.validate_all(
+            "SELECT col + INTERVAL year YEAR + INTERVAL month MONTH + INTERVAL week WEEK + INTERVAL days DAY + INTERVAL hours HOUR + INTERVAL mins MINUTE + INTERVAL secs SECOND",
+            read={
+                "databricks": "SELECT col + make_interval(year, month, week, days, hours, mins, secs)",
+            },
+        )
