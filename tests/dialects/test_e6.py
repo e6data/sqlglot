@@ -2867,6 +2867,9 @@ class TestE6(Validator):
             "SELECT col + INTERVAL year YEAR + INTERVAL month MONTH + INTERVAL week WEEK + INTERVAL days DAY + INTERVAL hours HOUR + INTERVAL mins MINUTE + INTERVAL secs SECOND",
             read={
                 "databricks": "SELECT col + make_interval(year, month, week, days, hours, mins, secs)",
+            },
+        )
+
     def test_snowflake_flatten_to_unnest(self):
         """Test Snowflake TABLE(FLATTEN(...)) -> UNNEST(...) transformation."""
         import sqlglot
