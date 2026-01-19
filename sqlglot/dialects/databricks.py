@@ -37,6 +37,31 @@ def _jsonextract_sql(
     return f"{this}:{expr}"
 
 
+class DatabricksMakeInterval(exp.MakeInterval):
+    # Databricks order: years, months, weeks, days, hours, mins, secs
+    arg_types = {
+        "year": False,
+        "month": False,
+        "week": False,
+        "day": False,
+        "hour": False,
+        "minute": False,
+        "second": False,
+    }
+
+
+def _build_make_interval(args: t.List) -> DatabricksMakeInterval:
+    return DatabricksMakeInterval(
+        year=seq_get(args, 0),
+        month=seq_get(args, 1),
+        week=seq_get(args, 2),
+        day=seq_get(args, 3),
+        hour=seq_get(args, 4),
+        minute=seq_get(args, 5),
+        second=seq_get(args, 6),
+    )
+
+
 def build_trim(args: t.List, is_left: bool = True):
     if len(args) < 2:
         return exp.Trim(
@@ -108,6 +133,7 @@ class Databricks(Spark):
 
         FUNCTIONS = {
             **Spark.Parser.FUNCTIONS,
+            "MAKE_INTERVAL": _build_make_interval,
             "DATEADD": build_date_delta(exp.DateAdd),
             "DATE_ADD": build_date_delta(exp.DateAdd),
             "DATEDIFF": build_date_delta(exp.DateDiff),

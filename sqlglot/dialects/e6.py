@@ -4,6 +4,7 @@ import os
 import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
+from sqlglot.dialects import databricks
 from sqlglot.dialects.dialect import (
     Dialect,
     NormalizationStrategy,
@@ -370,6 +371,43 @@ def unit_to_str(expression: exp.Expression, default: str = "DAY") -> t.Optional[
         unit_name_new = unit.name.replace("SQL_TSI_", "")
         return exp.Literal.string(unit_name_new)
     return exp.Literal.string(default) if default else None
+
+
+def make_interval_sql(self: E6.Generator, expression: exp.MakeInterval) -> str:
+    """
+    Convert MakeInterval to E6 format: INTERVAL value UNIT + INTERVAL value UNIT + ...
+
+    Handles:
+    - make_interval(100, 11) -> INTERVAL 100 YEAR + INTERVAL 11 MONTH
+    - make_interval(100, null) -> NULL (any null arg returns NULL)
+    - make_interval() -> INTERVAL 0 SECOND
+    """
+    unit_order = [
+        ("year", "YEAR"),
+        ("month", "MONTH"),
+        ("week", "WEEK"),
+        ("day", "DAY"),
+        ("hour", "HOUR"),
+        ("minute", "MINUTE"),
+        ("second", "SECOND"),
+    ]
+
+    intervals = []
+    for arg_key, unit_name in unit_order:
+        value = expression.args.get(arg_key)
+        if value is None:
+            continue
+        if isinstance(value, exp.Null):
+            return self.sql(exp.Null())
+        if isinstance(value, exp.Kwarg):
+            value = value.expression
+        value_sql = self.sql(value)
+        intervals.append(f"INTERVAL {value_sql} {unit_name}")
+
+    if not intervals:
+        return "INTERVAL 0 SECOND"
+
+    return " + ".join(intervals)
 
 
 def _trim_sql(self: E6.Generator, expression: exp.Trim) -> str:
@@ -2748,6 +2786,10 @@ class E6(Dialect):
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
             exp.Lower: rename_func("LOWER"),
             exp.LogicalOr: rename_func("BOOL_OR"),
+            exp.MakeInterval: lambda self, e: make_interval_sql(self, e)
+            if self.from_dialect == "databricks"
+            else self.makeinterval_sql(e),
+            databricks.DatabricksMakeInterval: make_interval_sql,
             exp.Map: map_sql,
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
