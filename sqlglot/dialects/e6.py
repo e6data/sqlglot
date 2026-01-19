@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
@@ -1583,6 +1584,12 @@ class E6(Dialect):
         NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_USER)
         NO_PAREN_FUNCTIONS.pop(TokenType.CURRENT_TIME)
 
+        def _parse_pivot_aggregation(self) -> t.Optional[exp.Expression]:
+            # Spark 3+ and Databricks support non aggregate functions in PIVOT too, e.g
+            # PIVOT (..., 'foo' AS bar FOR col_to_pivot IN (...))
+            aggregate_expr = self._parse_function() or self._parse_disjunction()
+            return self._parse_alias(aggregate_expr)
+
     class Generator(generator.Generator):
         """
         The Generator class is responsible for converting an abstract syntax tree (AST) back into a SQL string
@@ -1717,7 +1724,12 @@ class E6(Dialect):
             """
             is_desc = expression.args.get("desc")
             # Determine the sorting direction based on the 'desc' argument
-            sort_order = " DESC" if is_desc else " ASC"
+            if is_desc is True:
+                sort_order = " DESC"
+            elif is_desc is False:
+                sort_order = " ASC"
+            else:
+                sort_order = ""
 
             # Generate the SQL for the main expression to be ordered
             main_expression = self.sql(expression, "this")
@@ -1728,7 +1740,7 @@ class E6(Dialect):
             nulls_sort_change = ""
 
             # Apply NULLS FIRST/LAST only if supported by the dialect
-            if self.NULL_ORDERING_SUPPORTED:
+            if self.NULL_ORDERING_SUPPORTED and is_desc is not None:
                 nulls_first = expression.args.get("nulls_first")
                 if nulls_first is True:
                     nulls_sort_change = " NULLS FIRST"
@@ -2017,8 +2029,30 @@ class E6(Dialect):
             # Construct the alias string
             alias_sql = f" AS {alias}{alias_columns}" if alias else ""
 
-            # Generate the final UNNEST SQL
+            # Generate the final SQL
             return f"EXPLODE({array_expr_sql}){alias_sql}"
+
+        def tablefromrows_sql(self, expression: exp.TableFromRows) -> str:
+            """
+            Handle Snowflake's TABLE(FLATTEN(...)) -> UNNEST(...) transformation.
+            When the inner expression is an Explode (from FLATTEN), convert to UNNEST.
+            """
+            inner = expression.this
+
+            # Check if inner expression is Explode (from Snowflake FLATTEN)
+            if self.from_dialect == "snowflake" and isinstance(inner, exp.Explode):
+                # Get the content inside EXPLODE/FLATTEN
+                content = inner.this
+                content_sql = self.sql(content)
+
+                # Handle alias using standard pattern
+                alias = self.sql(expression, "alias")
+                alias_sql = f" AS {alias}" if alias else ""
+
+                return f"UNNEST({content_sql}){alias_sql}"
+
+            # Default behavior for other cases
+            return super().tablefromrows_sql(expression)
 
         def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
             date_expr = expression.this
@@ -2193,10 +2227,9 @@ class E6(Dialect):
             """
             Generate the SQL for the STRING_AGG or LISTAGG function in E6.
 
-            This method addresses an AST parsing issue where the separator for the STRING_AGG function
-            sometimes appears under the DISTINCT node due to parsing intricacies. Instead of modifying
-            expr_1 directly, this version clones expr_1 to retain DISTINCT while applying the separator
-            correctly.
+            This method handles differences between Snowflake and Databricks LISTAGG syntax:
+            - Snowflake: LISTAGG(expr ORDER BY col, separator)
+            - Databricks: LISTAGG(expr, separator) WITHIN GROUP (ORDER BY col)
 
             Args:
                 expression (exp.GroupConcat): The AST expression for GROUP_CONCAT
@@ -2204,10 +2237,46 @@ class E6(Dialect):
             Returns:
                 str: The SQL representation for STRING_AGG/LISTAGG with proper separator handling.
             """
+            # Check if this is wrapped in WithinGroup (Databricks style)
+            parent = expression.parent
+            if isinstance(parent, exp.WithinGroup):
+                # Handle Databricks-style: already has WITHIN GROUP structure
+                separator = expression.args.get("separator")
+                expr_1 = expression.this
+
+                # Generate the LISTAGG part
+                return self.func("LISTAGG", expr_1, separator or exp.Literal.string(""))
+
+            # Handle standalone GroupConcat
             separator = expression.args.get("separator")
             expr_1 = expression.this
 
-            # If no separator was found, check if it's embedded in DISTINCT
+            # Check if coming from Snowflake with ORDER inside GroupConcat
+            if self.from_dialect == "snowflake" and isinstance(expr_1, exp.Order):
+                # Extract components from Snowflake-style LISTAGG
+                column = expr_1.this
+                order_expressions = []
+
+                # Process ORDER expressions, filtering out separator
+                for ordered in expr_1.expressions:
+                    if isinstance(ordered.this, exp.Literal) and ordered.this.is_string:
+                        # This is the separator, extract it if we don't have one
+                        if not separator:
+                            separator = ordered.this
+                    else:
+                        # This is an actual ORDER BY expression
+                        order_expressions.append(ordered)
+
+                listagg_expr = self.func("LISTAGG", column, separator or exp.Literal.string(""))
+
+                if order_expressions:
+                    # Create ORDER BY clause
+                    order_sql = self.sql(exp.Order(expressions=order_expressions))
+                    return f"{listagg_expr} WITHIN GROUP ({order_sql.lstrip()})"
+                else:
+                    return listagg_expr
+
+            # Handle other cases (including DISTINCT)
             if separator is None and isinstance(expr_1, exp.Distinct):
                 # If DISTINCT has two expressions, the second may represent the separator
                 if len(expr_1.expressions) == 2 and isinstance(
@@ -2280,6 +2349,35 @@ class E6(Dialect):
         # def struct_sql(self, expression: exp.Struct) -> str:
         #     struct_expr = expression.expressions
         #     return f"{struct_expr}"
+
+        def group_sql_modified(self, expression: exp.Group) -> str:
+            if os.getenv("IGNORE_DECIMAL_GROUP_BY", False) or (
+                self.from_dialect and self.from_dialect.lower() == Dialect.get("databricks")
+            ):
+                expr = []
+                for item in expression.expressions:
+                    if isinstance(item, exp.Literal):
+                        if (
+                            not item.is_string
+                            and not float(item.this).is_integer()
+                            and float(item.this) < 1
+                        ):
+                            continue
+                    expr.append(item)
+                if (
+                    not len(expr)
+                    and not expression.args.get("grouping_sets")
+                    and not expression.args.get("cube")
+                    and not expression.args.get("rollup")
+                    and not expression.args.get("totals")
+                    and not expression.args.get("all")
+                ):
+                    # This is to handle the case where group by only contains a decimal value. There is no need for group by in this case
+                    return ""
+                expression_copy = expression.copy()
+                expression_copy.set("expressions", expr)
+                return self.group_sql(expression_copy)
+            return self.group_sql(expression)
 
         def TsOrDsToDate_sql(self: E6.Generator, expression: exp.TsOrDsToDate) -> str:
             format_str = self.convert_format_time(expression)
@@ -2545,6 +2643,54 @@ class E6(Dialect):
             # Not our target pattern - use normal cast
             return super().cast_sql(expression)
 
+        def date_diff_sql(self, expression: exp.DateDiff) -> str:
+            if self.from_dialect and self.from_dialect.lower() in ["databricks", "dbr"]:
+                return self.func(
+                    "DATE_DIFF", expression.this, expression.expression, unit_to_str(expression)
+                )
+            return self.func(
+                "DATE_DIFF",
+                unit_to_str(expression),
+                expression.expression,
+                expression.this,
+            )
+
+        def time_sql(self, expression: exp.Time) -> str:
+            """
+            Transform TIME(expression) to CONCAT format for E6.
+
+            Snowflake TIME(expr) -> E6 CONCAT(LPAD(HOUR(expr), 2, '0'), ':', ...)
+
+            Args:
+                expression: The TIME expression to transform
+
+            Returns:
+                SQL string in CONCAT format with zero-padded time components
+            """
+            if not self.from_dialect == Dialect.get("snowflake"):
+                return self.func("TIME", expression.this)
+            # Get the expression inside TIME()
+            time_expr = expression.this
+
+            # Helper to create LPAD(function(expr), 2, '0')
+            def create_lpad_component(func_name: str):
+                return self.func(
+                    "LPAD",
+                    self.func(func_name, time_expr),
+                    exp.Literal.number(2),
+                    exp.Literal.string("0"),
+                )
+
+            # Generate CONCAT directly with all arguments
+            return self.func(
+                "CONCAT",
+                create_lpad_component("HOUR"),
+                exp.Literal.string(":"),
+                create_lpad_component("MINUTE"),
+                exp.Literal.string(":"),
+                create_lpad_component("SECOND"),
+            )
+
         # Define how specific expressions should be transformed into SQL strings
         TRANSFORMS = {
             **generator.Generator.TRANSFORMS,
@@ -2579,6 +2725,7 @@ class E6(Dialect):
             exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
             exp.SortArray: rename_func("ARRAY_SORT"),
+            exp.TableFromRows: tablefromrows_sql,
             exp.AtTimeZone: attimezone_sql,
             exp.BitwiseLeftShift: lambda self, e: self.func("SHIFTLEFT", e.this, e.expression),
             exp.BitwiseNot: lambda self, e: self.func("BITWISE_NOT", e.this),
@@ -2603,9 +2750,7 @@ class E6(Dialect):
                 e.this,
             ),
             # follows signature DATE_DIFF([ <unit>,] <date_expr1>, <date_expr2>) of E6. => date_expr1 - date_expr2, so interchanging the second and third arg
-            exp.DateDiff: lambda self, e: self.func(
-                "DATEDIFF", e.this, e.expression, unit_to_str(e)
-            ),
+            exp.DateDiff: date_diff_sql,  # lambda self, e: self.func("DATEDIFF", e.this, e.expression, unit_to_str(e)),
             exp.DateSub: rename_func("DATE_SUB"),
             exp.DateTrunc: lambda self, e: self.func("DATE_TRUNC", unit_to_str(e), e.this),
             exp.Datetime: lambda self, e: self.func("DATETIME", e.this, e.expression),
@@ -2627,6 +2772,7 @@ class E6(Dialect):
             exp.ConvertTimezone: rename_func("CONVERT_TIMEZONE"),
             exp.FromISO8601Timestamp: from_iso8601_timestamp_sql,
             exp.GenerateSeries: generateseries_sql,
+            exp.Group: group_sql_modified,
             exp.GroupConcat: string_agg_sql,
             exp.Hex: rename_func("TO_HEX"),
             exp.Interval: interval_sql,
@@ -2673,6 +2819,7 @@ class E6(Dialect):
             exp.StrToUnix: to_unix_timestamp_sql,
             exp.StartsWith: rename_func("STARTS_WITH"),
             # exp.Struct: struct_sql,
+            exp.Time: time_sql,
             exp.TimeToStr: format_date_sql,
             exp.TimeStrToTime: timestrtotime_sql,
             exp.TimeStrToDate: datestrtodate_sql,
@@ -2747,6 +2894,7 @@ class E6(Dialect):
             "before",
             "between",
             "bigint",
+            "call",
             "case",
             "char",
             "character",
@@ -2787,6 +2935,7 @@ class E6(Dialect):
             "left",
             "like",
             "limit",
+            "location",
             "localtime",
             "localtimestamp",
             "mod",

@@ -403,20 +403,19 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT DATEDIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')",
+            "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             read={
                 "trino": "SELECT date_diff('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
                 "snowflake": "SELECT DATEDIFF(DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
                 "presto": "SELECT date_diff('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
-                "databricks": "SELECT DATEDIFF(DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             },
             write={
-                "e6": "SELECT DATEDIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')"
+                "e6": "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))"
             },
         )
 
         self.validate_all(
-            "SELECT DATEDIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')",
+            "SELECT DATE_DIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')",
             read={
                 "databricks": "SELECT DATEDIFF(SQL_TSI_DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             },
@@ -823,6 +822,18 @@ class TestE6(Validator):
             'SELECT cc_rec_end_date "date" FROM tpcds_1000.call_center ORDER BY 1 DESC NULLS LAST',
             read={
                 "databricks": "select cc_rec_end_date as date from tpcds_1000.call_center order by 1 desc"
+            },
+        )
+
+        self.validate_all(
+            "SELECT trans_start, CONCAT(LPAD(HOUR(trans_start), 2, '0'), ':', LPAD(MINUTE(trans_start), 2, '0'), ':', LPAD(SECOND(trans_start), 2, '0')) AS formatted_time FROM t",
+            read={"snowflake": "select trans_start, TIME(trans_start)AS formatted_time FROM t"},
+        )
+
+        self.validate_all(
+            "SELECT * FROM abc PIVOT(SUM(abc) AS DUS, 'dummy' AS dummy FOR breakdown_subtype_fullname IN ('Compact Disc', 'Digital Track'))",
+            read={
+                "databricks": "select * from abc PIVOT(SUM(abc) AS DUS, 'dummy' as dummy FOR breakdown_subtype_fullname IN ( 'Compact Disc', 'Digital Track')) "
             },
         )
 
@@ -1345,6 +1356,13 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT deal, channel_id, organic_rank, overall_rank, sponsored_rank, banner_position FROM sam.serp_data GROUP BY 1, 1.1, 2, 2.2",
+            read={
+                "databricks": "select deal, channel_id, organic_rank, overall_rank, sponsored_rank, banner_position from sam.serp_data group by 0.1, 1, 1.1, 2, 2.2"
+            },
+        )
+
     def test_math(self):
         self.validate_all("SELECT CEIL(5.4)", read={"databricks": "SELECT ceil(5.4)"})
 
@@ -1394,8 +1412,8 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATEDIFF(due_date, payment_date, 'DAY'))), "
-            "1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATEDIFF(due_date, payment_date, 'DAY'))), "
+            "SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF(due_date, payment_date, 'DAY'))), "
+            "1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATE_DIFF(due_date, payment_date, 'DAY'))), "
             "1) AS stddev_days_deviation, SUM(CASE WHEN payment_date > due_date THEN 1 ELSE 0 END) AS late_payments, "
             "SUM(CASE WHEN payment_date < due_date THEN 1 ELSE 0 END) AS early_payments, ROUND(100.0 * SUM(CASE WHEN "
             "payment_date > due_date THEN 1 ELSE 0 END) / COUNT(*), 1) AS late_payment_rate FROM invoices WHERE "
@@ -1414,7 +1432,7 @@ class TestE6(Validator):
 
         self.validate_all(
             "CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - LAG(predicted_value) OVER ("
-            "PARTITION BY model_id ORDER BY forecast_date ASC NULLS FIRST)) THEN 1 ELSE 0 END",
+            "PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END",
             read={
                 "databricks": """ CASE WHEN SIGN(actual_value - predicted_value) = SIGN(actual_value - 
                 LAG(predicted_value) OVER (PARTITION BY model_id ORDER BY forecast_date)) THEN 1 ELSE 0 END """
@@ -1860,12 +1878,12 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT DATEDIFF('2022-03-28', '2021-01-01', 'YEAR')",
+            "SELECT DATE_DIFF('2022-03-28', '2021-01-01', 'YEAR')",
             read={"databricks": """SELECT date_diff("YEAR", '2021-01-01', '2022-03-28')"""},
         )
 
         self.validate_all(
-            "SELECT DATEDIFF('2009-07-31', '2009-07-30', 'DAY')",
+            "SELECT DATE_DIFF('2009-07-31', '2009-07-30', 'DAY')",
             read={"databricks": "SELECT datediff('2009-07-31', '2009-07-30')"},
         )
 
@@ -1987,14 +2005,14 @@ class TestE6(Validator):
 
     def test_window_funcs(self):
         self.validate_all(
-            "SELECT a, b, DENSE_RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST), RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST), ROW_NUMBER() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST) FROM (VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1)) AS tab(a, b)",
+            "SELECT a, b, DENSE_RANK() OVER (PARTITION BY a ORDER BY b), RANK() OVER (PARTITION BY a ORDER BY b), ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1)) AS tab(a, b)",
             read={
                 "databricks": "SELECT a, b, dense_rank() OVER(PARTITION BY a ORDER BY b), rank() OVER(PARTITION BY a ORDER BY b), row_number() OVER(PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b)"
             },
         )
 
         self.validate_all(
-            "SELECT a, b, NTILE(2) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST) FROM (VALUES ('A1', 2), ('A1', 1))",
+            "SELECT a, b, NTILE(2) OVER (PARTITION BY a ORDER BY b) FROM (VALUES ('A1', 2), ('A1', 1))",
             read={
                 "databricks": "SELECT a, b, ntile(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1)"
             },
@@ -2029,12 +2047,12 @@ class TestE6(Validator):
         # )
         #
         self.validate_all(
-            "SELECT a, b, LEAD(b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST)",
+            "SELECT a, b, LEAD(b) OVER (PARTITION BY a ORDER BY b)",
             read={"databricks": "SELECT a, b, lead(b) OVER (PARTITION BY a ORDER BY b)"},
         )
 
         self.validate_all(
-            "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST)",
+            "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b)",
             read={"databricks": "SELECT a, b, lag(b) OVER (PARTITION BY a ORDER BY b)"},
         )
 
@@ -2069,14 +2087,14 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT PERCENTILE_CONT(ARRAY[0.5, 0.4, 0.1]) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)",
+            "SELECT PERCENTILE_CONT(ARRAY[0.5, 0.4, 0.1]) WITHIN GROUP (ORDER BY col)",
             read={
                 "databricks": "SELECT percentile_cont(array(0.5, 0.4, 0.1)) WITHIN GROUP (ORDER BY col)"
             },
         )
 
         self.validate_all(
-            "SELECT PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY col ASC NULLS FIRST) FROM (VALUES (0), (6), (6), (7), (9), (10)) AS tab(col)",
+            "SELECT PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY col) FROM (VALUES (0), (6), (6), (7), (9), (10)) AS tab(col)",
             read={
                 "databricks": "SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (6), (6), (7), (9), (10) AS tab(col)"
             },
@@ -2849,5 +2867,55 @@ class TestE6(Validator):
             "SELECT col + INTERVAL year YEAR + INTERVAL month MONTH + INTERVAL week WEEK + INTERVAL days DAY + INTERVAL hours HOUR + INTERVAL mins MINUTE + INTERVAL secs SECOND",
             read={
                 "databricks": "SELECT col + make_interval(year, month, week, days, hours, mins, secs)",
+    def test_snowflake_flatten_to_unnest(self):
+        """Test Snowflake TABLE(FLATTEN(...)) -> UNNEST(...) transformation."""
+        import sqlglot
+
+        # Basic FLATTEN with input parameter
+        result = sqlglot.transpile(
+            "SELECT * FROM TABLE(FLATTEN(input => my_array)) AS t",
+            read="snowflake",
+            write="e6",
+            from_dialect="snowflake",
+        )[0]
+        self.assertEqual(result, "SELECT * FROM UNNEST(input => my_array) AS t")
+
+        # FLATTEN with subquery
+        result = sqlglot.transpile(
+            "SELECT * FROM TABLE(FLATTEN(SELECT tenant_ids FROM session_tenant_mappings WHERE session_id = '158558983524602')) as test",
+            read="snowflake",
+            write="e6",
+            from_dialect="snowflake",
+        )[0]
+        self.assertEqual(
+            result,
+            "SELECT * FROM UNNEST(SELECT tenant_ids FROM session_tenant_mappings WHERE session_id = '158558983524602') AS test",
+        )
+
+        # FLATTEN with direct column reference
+        result = sqlglot.transpile(
+            "SELECT * FROM TABLE(FLATTEN(my_column))",
+            read="snowflake",
+            write="e6",
+            from_dialect="snowflake",
+        )[0]
+        self.assertEqual(result, "SELECT * FROM UNNEST(my_column)")
+
+    def test_reserved_keywords_quoted(self):
+        """Test that reserved keywords are properly quoted when used as table names."""
+
+        # 'call' should be quoted
+        self.validate_all(
+            'SELECT * FROM "call"',
+            read={
+                "snowflake": "SELECT * FROM call",
+            },
+        )
+
+        # 'location' should be quoted
+        self.validate_all(
+            'SELECT * FROM "location"',
+            read={
+                "snowflake": "SELECT * FROM location",
             },
         )
