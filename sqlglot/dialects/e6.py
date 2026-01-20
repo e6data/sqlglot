@@ -1792,8 +1792,9 @@ class E6(Dialect):
             """
             Generates the SQL string for a CAST operation in the E6 dialect.
 
-            The method uses a custom type mapping (`CAST_SUPPORTED_TYPE_MAPPING`) to ensure that
-            the target type in the CAST operation aligns with the E6 dialect.
+            Delegates to the base generator's cast_sql which uses datatype_sql to properly
+            handle type mappings (via TYPE_MAPPING) and preserve precision/scale for types
+            like DECIMAL(10, 2), VARCHAR(255), etc.
 
             Args:
                 expression (exp.Cast): The CAST expression containing the value and target type.
@@ -1806,14 +1807,9 @@ class E6(Dialect):
             if expression.is_type(exp.DataType.Type.INTERVAL):
                 return self.double_colon_interval_sql(expression)
 
-            # Extract the target type from the CAST expression
-            target_type = expression.to.this
-
-            # Map the target type to the corresponding E6 type
-            e6_type = self.CAST_SUPPORTED_TYPE_MAPPING.get(target_type, target_type)
-
-            # Generate the SQL string for the CAST operation
-            return f"CAST({self.sql(expression.this)} AS {e6_type})"
+            # Delegate to base generator's cast_sql which properly uses datatype_sql
+            # to handle type mappings and preserve precision/scale
+            return super().cast_sql(expression, safe_prefix=safe_prefix)
 
         def coalesce_sql(self, expression: exp.Coalesce) -> str:
             func_name = "NVL" if expression.args.get("is_nvl") else "COALESCE"

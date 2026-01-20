@@ -2922,3 +2922,50 @@ class TestE6(Validator):
                 "snowflake": "SELECT * FROM location",
             },
         )
+
+    def test_cast_precision_preserved(self):
+        """Test that CAST preserves precision/scale for DECIMAL and other types.
+
+        This ensures that CAST(x AS DECIMAL(10, 2)) is not reduced to CAST(x AS DECIMAL).
+        """
+        # DECIMAL with precision and scale
+        self.validate_all(
+            "SELECT CAST(value / 100 AS DECIMAL(10, 2))",
+            read={
+                "databricks": "SELECT CAST(value / 100 AS DECIMAL(10, 2))",
+                "snowflake": "SELECT CAST(value / 100 AS DECIMAL(10, 2))",
+            },
+        )
+
+        # DECIMAL with only precision
+        self.validate_all(
+            "SELECT CAST(value AS DECIMAL(18))",
+            read={
+                "databricks": "SELECT CAST(value AS DECIMAL(18))",
+            },
+        )
+
+        # DECIMAL with large precision and scale
+        self.validate_all(
+            "SELECT CAST(amount AS DECIMAL(38, 10))",
+            read={
+                "databricks": "SELECT CAST(amount AS DECIMAL(38, 10))",
+                "snowflake": "SELECT CAST(amount AS DECIMAL(38, 10))",
+            },
+        )
+
+        # DECIMAL without precision (should remain as DECIMAL)
+        self.validate_all(
+            "SELECT CAST(value AS DECIMAL)",
+            read={
+                "databricks": "SELECT CAST(value AS DECIMAL)",
+            },
+        )
+
+        # Multiple CAST operations with different precisions
+        self.validate_all(
+            "SELECT CAST(a AS DECIMAL(10, 2)), CAST(b AS DECIMAL(5, 0)), CAST(c AS INT)",
+            read={
+                "databricks": "SELECT CAST(a AS DECIMAL(10, 2)), CAST(b AS DECIMAL(5, 0)), CAST(c AS INTEGER)",
+            },
+        )
