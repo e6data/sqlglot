@@ -2870,6 +2870,14 @@ class TestE6(Validator):
             },
         )
 
+        # INTERVAL with column reference in CTE
+        self.validate_all(
+            "WITH cte AS (SELECT id AS UTCOffsetMinutes FROM RANGE(-1440, 1440, 15)) SELECT CURRENT_TIMESTAMP + INTERVAL \"UTCOffsetMinutes\" 'WEEK' FROM cte",
+            read={
+                "databricks": "with cte as (SELECT id AS UTCOffsetMinutes FROM RANGE(-1440, 1440, 15)) select current_timestamp + interval UTCOffsetMinutes week from cte",
+            },
+        )
+
     def test_snowflake_flatten_to_unnest(self):
         """Test Snowflake TABLE(FLATTEN(...)) -> UNNEST(...) transformation."""
         import sqlglot
