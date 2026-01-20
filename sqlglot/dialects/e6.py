@@ -1871,16 +1871,28 @@ class E6(Dialect):
 
             # Check if both 'this' (value) and 'unit' are present in the expression
             if expression.this and expression.unit:
-                # Extract the name attributes of 'this' and 'unit'
-                value = expression.this.name
                 unit = expression.unit.name
 
                 # Convert plural forms to singular if not allowed
                 if not self.INTERVAL_ALLOWS_PLURAL_FORM:
                     unit = self.TIME_PART_SINGULARS.get(unit, unit)
 
-                # Format the INTERVAL string
-                interval_str = f"INTERVAL '{value} {unit}'"
+                # Check if 'this' is a Column (identifier) vs a Literal
+                if isinstance(expression.this, exp.Column):
+                    # For column references, format as: INTERVAL "column_name" 'UNIT'
+                    # Ensure the column identifier is quoted with double quotes
+                    col_name = expression.this.name
+                    value = f'"{col_name}"'
+                    interval_str = f"INTERVAL {value} '{unit.upper()}'"
+                elif isinstance(expression.this, exp.Literal):
+                    # For literals, format as: INTERVAL 'value UNIT'
+                    value = expression.this.name
+                    interval_str = f"INTERVAL '{value} {unit}'"
+                else:
+                    # For other expressions, generate SQL and use separate format
+                    value = self.sql(expression.this)
+                    interval_str = f"INTERVAL {value} '{unit.upper()}'"
+
                 return interval_str
             elif expression.this and not expression.unit:
                 # Handle compound intervals like '5 minutes 30 seconds'
