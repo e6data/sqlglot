@@ -375,12 +375,13 @@ def unit_to_str(expression: exp.Expression, default: str = "DAY") -> t.Optional[
 
 def make_interval_sql(self: E6.Generator, expression: exp.MakeInterval) -> str:
     """
-    Convert MakeInterval to E6 format: INTERVAL value UNIT + INTERVAL value UNIT + ...
+    Convert MakeInterval to E6 format using exp.Interval objects.
 
     Handles:
     - make_interval(100, 11) -> INTERVAL 100 YEAR + INTERVAL 11 MONTH
     - make_interval(100, null) -> NULL (any null arg returns NULL)
     - make_interval() -> INTERVAL 0 SECOND
+    - make_interval(1,2,3,4,col) -> INTERVAL 1 YEAR + ... + INTERVAL "col" 'HOUR'
     """
     unit_order = [
         ("year", "YEAR"),
@@ -401,8 +402,10 @@ def make_interval_sql(self: E6.Generator, expression: exp.MakeInterval) -> str:
             return self.sql(exp.Null())
         if isinstance(value, exp.Kwarg):
             value = value.expression
-        value_sql = self.sql(value)
-        intervals.append(f"INTERVAL {value_sql} {unit_name}")
+
+        # Build exp.Interval and use interval_sql to generate the SQL
+        interval_expr = exp.Interval(this=value, unit=exp.var(unit_name))
+        intervals.append(self.interval_sql(interval_expr))
 
     if not intervals:
         return "INTERVAL 0 SECOND"
@@ -1877,22 +1880,18 @@ class E6(Dialect):
                 if not self.INTERVAL_ALLOWS_PLURAL_FORM:
                     unit = self.TIME_PART_SINGULARS.get(unit, unit)
 
-                # Check if 'this' is a Column (identifier) vs a Literal
-                if isinstance(expression.this, exp.Column):
-                    # For column references, format as: INTERVAL "column_name" 'UNIT'
-                    # Ensure the column identifier is quoted with double quotes
-                    col_name = expression.this.name
-                    value = f'"{col_name}"'
-                    interval_str = f"INTERVAL {value} '{unit.upper()}'"
-                elif isinstance(expression.this, exp.Literal):
-                    # For literals, format as: INTERVAL 'value UNIT'
+                # For literal values, use INTERVAL value UNIT format
+                # For non-literals (columns, expressions), use INTERVAL expr 'UNIT' format
+                if isinstance(expression.this, exp.Literal):
                     value = expression.this.name
-                    interval_str = f"INTERVAL '{value} {unit}'"
+                    interval_str = f"INTERVAL {value} {unit}"
                 else:
-                    # For other expressions, generate SQL and use separate format
-                    value = self.sql(expression.this)
-                    interval_str = f"INTERVAL {value} '{unit.upper()}'"
-
+                    # For column references, ensure they are quoted
+                    value_expr = expression.this
+                    if isinstance(value_expr, exp.Column):
+                        value_expr.this.set("quoted", True)
+                    value_sql = self.sql(value_expr)
+                    interval_str = f"INTERVAL {value_sql} '{unit}'"
                 return interval_str
             elif expression.this and not expression.unit:
                 # Handle compound intervals like '5 minutes 30 seconds'

@@ -2869,9 +2869,9 @@ class TestE6(Validator):
             },
         )
 
-        # Column references
+        # Column references - columns are quoted, units in single quotes
         self.validate_all(
-            "SELECT col + INTERVAL year YEAR + INTERVAL month MONTH + INTERVAL week WEEK + INTERVAL days DAY + INTERVAL hours HOUR + INTERVAL mins MINUTE + INTERVAL secs SECOND",
+            """SELECT col + INTERVAL "year" 'YEAR' + INTERVAL "month" 'MONTH' + INTERVAL "week" 'WEEK' + INTERVAL "days" 'DAY' + INTERVAL "hours" 'HOUR' + INTERVAL "mins" 'MINUTE' + INTERVAL "secs" 'SECOND'""",
             read={
                 "databricks": "SELECT col + make_interval(year, month, week, days, hours, mins, secs)",
             },
@@ -2882,6 +2882,14 @@ class TestE6(Validator):
             "WITH cte AS (SELECT id AS UTCOffsetMinutes FROM RANGE(-1440, 1440, 15)) SELECT CURRENT_TIMESTAMP + INTERVAL \"UTCOffsetMinutes\" 'WEEK' FROM cte",
             read={
                 "databricks": "with cte as (SELECT id AS UTCOffsetMinutes FROM RANGE(-1440, 1440, 15)) select current_timestamp + interval UTCOffsetMinutes week from cte",
+            },
+        )
+
+        # Mixed literals and column reference - literals unquoted, column quoted
+        self.validate_all(
+            """SELECT col1 + INTERVAL 1 YEAR + INTERVAL 2 MONTH + INTERVAL 3 WEEK + INTERVAL 4 DAY + INTERVAL "col" 'HOUR'""",
+            read={
+                "databricks": "SELECT col1 + make_interval(1, 2, 3, 4, col)",
             },
         )
 
