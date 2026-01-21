@@ -837,6 +837,13 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT a.FirstName, a.LastName, \"EXISTS\"(ARRAY[1, 2, 3], x -> MOD(x, 2) = 0) FROM Person.Person AS a WHERE EXISTS (SELECT * FROM HumanResources.Employee AS b WHERE a.BusinessEntityID = b.BusinessEntityID AND a.LastName = 'Johnson')",
+            read={
+                "databricks": "SELECT a.FirstName, a.LastName, exists(array(1, 2, 3), x -> x % 2 == 0) FROM Person.Person AS a WHERE EXISTS (SELECT * FROM HumanResources.Employee AS b WHERE a.BusinessEntityID = b.BusinessEntityID AND a.LastName = 'Johnson')"
+            }
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
