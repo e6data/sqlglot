@@ -2040,6 +2040,25 @@ class E6(Dialect):
             # Generate the final SQL
             return f"EXPLODE({array_expr_sql}){alias_sql}"
 
+        def exists_sql(self, expression: exp.Exists) -> str:
+            """
+            Handle EXISTS expression for E6.
+
+            Databricks has two uses of EXISTS:
+            1. Higher-order function: exists(array, lambda) - checks if any element satisfies condition
+            2. Subquery predicate: EXISTS(SELECT ...) - tests for existence of rows
+
+            For E6:
+            - Function form (with lambda): Quote as "EXISTS"(array, lambda)
+            - Subquery form (no lambda): Keep as EXISTS(subquery)
+            """
+            # Check if this is the higher-order function form (has a lambda expression)
+            if expression.expression:
+                # Function form: exists(array, lambda) -> "EXISTS"(array, lambda)
+                return f'"EXISTS"({self.sql(expression.this)}, {self.sql(expression.expression)})'
+            # Subquery form: EXISTS(subquery) -> EXISTS(subquery)
+            return f"EXISTS {self.wrap(expression)}"
+
         def tablefromrows_sql(self, expression: exp.TableFromRows) -> str:
             """
             Handle Snowflake's TABLE(FLATTEN(...)) -> UNNEST(...) transformation.
@@ -2768,6 +2787,7 @@ class E6(Dialect):
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
             exp.DayOfYear: extract_sql,
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
+            exp.Exists: lambda self, e: self.exists_sql(e),
             exp.Explode: explode_sql,
             exp.Extract: extract,
             exp.FirstValue: rename_func("FIRST_VALUE"),
