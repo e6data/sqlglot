@@ -841,7 +841,7 @@ class TestE6(Validator):
             "SELECT a.FirstName, a.LastName, \"EXISTS\"(ARRAY[1, 2, 3], x -> MOD(x, 2) = 0) FROM Person.Person AS a WHERE EXISTS (SELECT * FROM HumanResources.Employee AS b WHERE a.BusinessEntityID = b.BusinessEntityID AND a.LastName = 'Johnson')",
             read={
                 "databricks": "SELECT a.FirstName, a.LastName, exists(array(1, 2, 3), x -> x % 2 == 0) FROM Person.Person AS a WHERE EXISTS (SELECT * FROM HumanResources.Employee AS b WHERE a.BusinessEntityID = b.BusinessEntityID AND a.LastName = 'Johnson')"
-            }
+            },
         )
 
     def test_regex(self):
@@ -2839,7 +2839,7 @@ class TestE6(Validator):
 
         # Basic: years and months only
         self.validate_all(
-            "SELECT INTERVAL 100 YEAR + INTERVAL 11 MONTH",
+            "SELECT INTERVAL '100 YEAR' + INTERVAL '11 MONTH'",
             read={
                 "databricks": "SELECT make_interval(100, 11)",
             },
@@ -2863,7 +2863,7 @@ class TestE6(Validator):
 
         # All 7 arguments including week
         self.validate_all(
-            "SELECT INTERVAL 0 YEAR + INTERVAL 0 MONTH + INTERVAL 1 WEEK + INTERVAL 1 DAY + INTERVAL 12 HOUR + INTERVAL 30 MINUTE + INTERVAL 1.001001 SECOND",
+            "SELECT INTERVAL '0 YEAR' + INTERVAL '0 MONTH' + INTERVAL '1 WEEK' + INTERVAL '1 DAY' + INTERVAL '12 HOUR' + INTERVAL '30 MINUTE' + INTERVAL '1.001001 SECOND'",
             read={
                 "databricks": "SELECT make_interval(0, 0, 1, 1, 12, 30, 1.001001)",
             },
@@ -2885,9 +2885,9 @@ class TestE6(Validator):
             },
         )
 
-        # Mixed literals and column reference - literals unquoted, column quoted
+        # Mixed literals and column reference - literals quoted, column with unit in quotes
         self.validate_all(
-            """SELECT col1 + INTERVAL 1 YEAR + INTERVAL 2 MONTH + INTERVAL 3 WEEK + INTERVAL 4 DAY + INTERVAL "col" 'HOUR'""",
+            """SELECT col1 + INTERVAL '1 YEAR' + INTERVAL '2 MONTH' + INTERVAL '3 WEEK' + INTERVAL '4 DAY' + INTERVAL "col" 'HOUR'""",
             read={
                 "databricks": "SELECT col1 + make_interval(1, 2, 3, 4, col)",
             },
