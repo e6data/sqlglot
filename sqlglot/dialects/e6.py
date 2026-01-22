@@ -1880,11 +1880,11 @@ class E6(Dialect):
                 if not self.INTERVAL_ALLOWS_PLURAL_FORM:
                     unit = self.TIME_PART_SINGULARS.get(unit, unit)
 
-                # For literal values, use INTERVAL value UNIT format
+                # For literal values, use INTERVAL 'value UNIT' format
                 # For non-literals (columns, expressions), use INTERVAL expr 'UNIT' format
                 if isinstance(expression.this, exp.Literal):
                     value = expression.this.name
-                    interval_str = f"INTERVAL {value} {unit}"
+                    interval_str = f"INTERVAL '{value} {unit}'"
                 else:
                     # For column references, ensure they are quoted
                     value_expr = expression.this
