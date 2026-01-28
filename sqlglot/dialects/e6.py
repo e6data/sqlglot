@@ -38,16 +38,6 @@ def epoch_cast_to_ts_e6(expression: exp.Expression) -> exp.Expression:
     return expression
 
 
-def unwrap_union_subqueries(node: exp.Expression) -> exp.Expression:
-    """Unwrap Subqueries in UNION to remove parentheses around SELECT statements."""
-    if isinstance(node, exp.Union):
-        if isinstance(node.this, exp.Subquery):
-            node.set("this", node.this.this)
-        if isinstance(node.expression, exp.Subquery):
-            node.set("expression", node.expression.this)
-    return node
-
-
 def _to_int(expression: exp.Expression) -> exp.Expression:
     if not expression.type:
         from sqlglot.optimizer.annotate_types import annotate_types
@@ -2883,7 +2873,6 @@ class E6(Dialect):
             exp.VarMap: map_sql,
             exp.Upper: rename_func("UPPER"),
             exp.WeekOfYear: rename_func("WEEKOFYEAR"),
-            exp.Union: lambda self, e: self.set_operations(unwrap_union_subqueries(e)),
         }
 
         RESERVED_DATATYPE_KEYWORDS = {
