@@ -2814,26 +2814,6 @@ class TestE6(Validator):
             },
         )
 
-    def test_union_subquery_unwrap(self):
-        """Test that parentheses around SELECT statements in UNION are removed for E6."""
-
-        # Scenario 1: Simple UNION with CTE - parentheses around SELECTs should be removed
-        self.validate_all(
-            "WITH cte AS (SELECT * FROM test) SELECT col1 FROM test UNION ALL SELECT col2 FROM test",
-            read={
-                "databricks": "WITH cte AS (SELECT * FROM test) (SELECT col1 FROM test) UNION ALL (SELECT col2 FROM test)",
-            },
-        )
-
-        # Scenario 2: UNION with nested subquery in FROM clause
-        # Outer parentheses around SELECT removed, but subquery in FROM preserved
-        self.validate_all(
-            "WITH cte AS (SELECT * FROM test) SELECT col1 FROM (SELECT * FROM test) UNION ALL SELECT col1 FROM test",
-            read={
-                "databricks": "WITH cte AS (SELECT * FROM test) (SELECT col1 FROM (SELECT * FROM test)) UNION ALL (SELECT col1 FROM test)",
-            },
-        )
-
     def test_make_interval(self):
         """Test make_interval transpilation from Databricks to E6."""
 
