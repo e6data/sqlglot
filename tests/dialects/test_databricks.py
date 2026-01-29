@@ -221,6 +221,14 @@ class TestDatabricks(Validator):
             "WITH t AS (SELECT * FROM VALUES ('foo_val') AS t(foo1)) SELECT foo1 FROM t",
         )
 
+        self.validate_all(
+            "WITH cte AS (SELECT ARRAY_AGG(1) AS values) SELECT MAP_FROM_ENTRIES(ARRAY_AGG(STRUCT(2, values))) FROM cte",
+            write={
+                "databricks": "WITH cte AS (SELECT COLLECT_LIST(1) AS values) SELECT MAP_FROM_ENTRIES(COLLECT_LIST(STRUCT(2 AS col1, values AS values))) FROM cte",
+                "snowflake": "WITH cte AS (SELECT ARRAY_AGG(1) AS values) SELECT MAP_FROM_ENTRIES(ARRAY_AGG(OBJECT_CONSTRUCT('col1', 2, 'values', values))) FROM cte",
+            },
+        )
+
     # https://docs.databricks.com/sql/language-manual/functions/colonsign.html
     def test_json(self):
         self.validate_identity("SELECT c1:price, c1:price.foo, c1:price.bar[1]")
