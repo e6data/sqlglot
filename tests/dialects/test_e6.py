@@ -844,13 +844,6 @@ class TestE6(Validator):
             },
         )
 
-        self.validate_all(
-            "WITH cte AS (SELECT ARRAY_AGG(1) AS \"values\") SELECT MAP_FROM_ENTRIES(ARRAY_AGG(NAMED_STRUCT('col1', 2, 'values', \"values\"))) FROM cte",
-            read={
-                "databricks": "with cte as (select array_agg(1) as values) SELECT map_from_entries(array_agg(struct(2, values))) from cte"
-            },
-        )
-
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",

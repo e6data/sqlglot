@@ -4279,20 +4279,13 @@ class Parser(metaclass=_Parser):
 
     def _parse_derived_table_values(self) -> t.Optional[exp.Values]:
         is_derived = self._match_pair(TokenType.L_PAREN, TokenType.VALUES)
-        if not is_derived:
-            index = self._index
-            if not (
-                # ClickHouse's `FORMAT Values` is equivalent to `VALUES`
-                self._match_text_seq("VALUES") or self._match_text_seq("FORMAT", "VALUES")
-            ):
-                return None
-
-        expressions = self._parse_csv(self._parse_value)
-
-        if not expressions and not is_derived:
-            self._retreat(index)
+        if not is_derived and not (
+            # ClickHouse's `FORMAT Values` is equivalent to `VALUES`
+            self._match_text_seq("VALUES") or self._match_text_seq("FORMAT", "VALUES")
+        ):
             return None
 
+        expressions = self._parse_csv(self._parse_value)
         alias = self._parse_table_alias()
 
         if is_derived:
