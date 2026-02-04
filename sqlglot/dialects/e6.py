@@ -2783,6 +2783,7 @@ class E6(Dialect):
             exp.First: rename_func("FIRST_VALUE"),
             exp.Format: rename_func("FORMAT"),
             exp.FormatDatetime: rename_func("FORMAT_DATETIME"),
+            exp.FromBase64: rename_func("unbase64_binary"),
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),

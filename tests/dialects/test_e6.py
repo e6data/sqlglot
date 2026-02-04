@@ -851,6 +851,11 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT CAST(UNBASE64_BINARY('U3BhcmsgU1FM') AS VARCHAR)",
+            read={"databricks": "SELECT cast(unbase64('U3BhcmsgU1FM') AS STRING)"},
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
