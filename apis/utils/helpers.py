@@ -220,7 +220,7 @@ def processing_comments(query: str) -> str:
     """
     # Remove block comments (multi-line `/* ... */`)
     try:
-        query = re.sub(r"/\*.*?\*/", "", query, flags=re.DOTALL)
+        query = re.sub(r"/\*.*?\*/", " ", query, flags=re.DOTALL)
     except TypeError as e:
         logging.error(f"[processing_comments] Invalid input type: {e}")
     except re.error as e:
@@ -303,7 +303,7 @@ def strip_comment(query: str) -> tuple:
         comments = re.findall(comment_pattern, query)
         if comments:
             logger.info(f"Found {len(comments)} comment(s) to strip")
-            stripped_query = re.sub(comment_pattern, "", query).strip()
+            stripped_query = re.sub(comment_pattern, " ", query).strip()
             logger.info("Successfully stripped all comments")
             return stripped_query, None
         logger.info("No comments found in query")
