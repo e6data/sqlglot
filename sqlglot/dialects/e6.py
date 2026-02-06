@@ -2775,6 +2775,11 @@ class E6(Dialect):
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
             exp.DayOfYear: extract_sql,
+            exp.Dot: lambda self, e: (
+                self.sql(e.expression)
+                if isinstance(e.expression, exp.Anonymous) and e.expression.this.upper() == "GETDEK"
+                else self.dot_sql(e)
+            ),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Exists: lambda self, e: self.exists_sql(e),
             exp.Explode: explode_sql,
