@@ -1380,6 +1380,7 @@ class E6(Dialect):
             "DECIMAL",
             "TIMESTAMP_TZ",
             "JSON",
+            "VARBINARY",
         }
 
         def _parse_cast(self, strict: bool, safe: t.Optional[bool] = None) -> exp.Expression:
@@ -1620,6 +1621,7 @@ class E6(Dialect):
             exp.DataType.Type.MEDIUMTEXT: "VARCHAR",
             exp.DataType.Type.DECIMAL: "DECIMAL",
             exp.DataType.Type.JSON: "JSON",
+            exp.DataType.Type.VARBINARY: "VARBINARY",
         }
 
         # TODO:: Adithya, why there was need to override this method.
@@ -2777,9 +2779,13 @@ class E6(Dialect):
             exp.DayOfYear: extract_sql,
             exp.Dot: lambda self, e: (
                 self.func("GETDEK")
-                if isinstance(e.expression, exp.Anonymous) and (
-                    (isinstance(e.expression.this, str) and e.expression.this.upper() == "GETDEK") or
-                    (isinstance(e.expression.this, exp.Identifier) and e.expression.this.this.upper() == "GETDEK")
+                if isinstance(e.expression, exp.Anonymous)
+                and (
+                    (isinstance(e.expression.this, str) and e.expression.this.upper() == "GETDEK")
+                    or (
+                        isinstance(e.expression.this, exp.Identifier)
+                        and e.expression.this.this.upper() == "GETDEK"
+                    )
                 )
                 else self.dot_sql(e)
             ),
@@ -3044,4 +3050,5 @@ class E6(Dialect):
             exp.DataType.Type.JSON: "JSON",
             exp.DataType.Type.STRUCT: "STRUCT",
             exp.DataType.Type.ARRAY: "ARRAY",
+            exp.DataType.Type.BINARY: "VARBINARY",
         }

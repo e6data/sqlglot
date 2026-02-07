@@ -861,6 +861,11 @@ class TestE6(Validator):
             read={"databricks": "select `perf_exp_qa_6zmhw2quv9uoavwzgpvjezzm`.getdek()"},
         )
 
+        self.validate_all(
+            "SELECT CAST(col1 AS VARBINARY) FROM tab1",
+            read={"databricks": "SELECT cast(col1 AS BINARY) FROM tab1"},
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
