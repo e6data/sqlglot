@@ -2575,27 +2575,29 @@ OPTIONS (
             dialect="bigquery",
         )
         for identifier in ast.find_all(exp.Identifier):
-            self.assertEqual(set(identifier.meta), {"line", "col", "start", "end"})
+            self.assertEqual(
+                set(identifier.meta), {"line", "col", "start", "end", "whitespace_before"}
+            )
 
         self.assertEqual(
             ast.this.args["from"].this.args["this"].meta,
-            {"line": 1, "col": 41, "start": 29, "end": 40},
+            {"line": 1, "col": 41, "start": 29, "end": 40, "whitespace_before": ""},
         )
         self.assertEqual(
             ast.this.args["from"].this.args["db"].meta,
-            {"line": 1, "col": 28, "start": 17, "end": 27},
+            {"line": 1, "col": 28, "start": 17, "end": 27, "whitespace_before": " "},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["this"].meta,
-            {"line": 1, "col": 106, "start": 94, "end": 105},
+            {"line": 1, "col": 106, "start": 94, "end": 105, "whitespace_before": ""},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["db"].meta,
-            {"line": 1, "col": 93, "start": 82, "end": 92},
+            {"line": 1, "col": 93, "start": 82, "end": 92, "whitespace_before": ""},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["catalog"].meta,
-            {"line": 1, "col": 81, "start": 69, "end": 80},
+            {"line": 1, "col": 81, "start": 69, "end": 80, "whitespace_before": " "},
         )
 
         information_schema_sql = "SELECT a, b FROM region.INFORMATION_SCHEMA.COLUMNS"

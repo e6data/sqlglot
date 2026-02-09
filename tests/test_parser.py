@@ -965,37 +965,48 @@ class TestParser(unittest.TestCase):
             "SELECT a, b FROM test_schema.test_table_a UNION ALL SELECT c, d FROM test_catalog.test_schema.test_table_b"
         )
         for identifier in ast.find_all(exp.Identifier):
-            self.assertEqual(set(identifier.meta), {"line", "col", "start", "end"})
+            self.assertEqual(
+                set(identifier.meta), {"line", "col", "start", "end", "whitespace_before"}
+            )
 
         self.assertEqual(
             ast.this.args["from"].this.args["this"].meta,
-            {"line": 1, "col": 41, "start": 29, "end": 40},
+            {"line": 1, "col": 41, "start": 29, "end": 40, "whitespace_before": ""},
         )
         self.assertEqual(
             ast.this.args["from"].this.args["db"].meta,
-            {"line": 1, "col": 28, "start": 17, "end": 27},
+            {"line": 1, "col": 28, "start": 17, "end": 27, "whitespace_before": " "},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["this"].meta,
-            {"line": 1, "col": 106, "start": 94, "end": 105},
+            {"line": 1, "col": 106, "start": 94, "end": 105, "whitespace_before": ""},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["db"].meta,
-            {"line": 1, "col": 93, "start": 82, "end": 92},
+            {"line": 1, "col": 93, "start": 82, "end": 92, "whitespace_before": ""},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["catalog"].meta,
-            {"line": 1, "col": 81, "start": 69, "end": 80},
+            {"line": 1, "col": 81, "start": 69, "end": 80, "whitespace_before": " "},
         )
 
         ast = parse_one("SELECT FOO()")
-        self.assertEqual(ast.find(exp.Anonymous).meta, {"line": 1, "col": 10, "start": 7, "end": 9})
+        self.assertEqual(
+            ast.find(exp.Anonymous).meta,
+            {"line": 1, "col": 10, "start": 7, "end": 9, "whitespace_before": " "},
+        )
 
         ast = parse_one("SELECT * FROM t")
-        self.assertEqual(ast.find(exp.Star).meta, {"line": 1, "col": 8, "start": 7, "end": 7})
+        self.assertEqual(
+            ast.find(exp.Star).meta,
+            {"line": 1, "col": 8, "start": 7, "end": 7, "whitespace_before": " "},
+        )
 
         ast = parse_one("SELECT t.* FROM t")
-        self.assertEqual(ast.find(exp.Star).meta, {"line": 1, "col": 10, "start": 9, "end": 9})
+        self.assertEqual(
+            ast.find(exp.Star).meta,
+            {"line": 1, "col": 10, "start": 9, "end": 9, "whitespace_before": ""},
+        )
 
     def test_quoted_identifier_meta(self):
         sql = 'SELECT "a" FROM "test_schema"."test_table_a"'

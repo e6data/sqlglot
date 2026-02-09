@@ -206,5 +206,5 @@ x"""
         # Ensures both the Python and the Rust tokenizer produce a human-friendly representation
         self.assertEqual(
             repr(Tokenizer().tokenize("foo")),
-            "[<Token token_type: TokenType.VAR, text: foo, line: 1, col: 3, start: 0, end: 2, comments: []>]",
+            "[<Token token_type: TokenType.VAR, text: foo, line: 1, col: 3, start: 0, end: 2, comments: [], whitespace_before: >]",
         )

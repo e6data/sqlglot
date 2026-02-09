@@ -440,7 +440,16 @@ _TOKEN_TYPE_TO_INDEX = {token_type: i for i, token_type in enumerate(_ALL_TOKEN_
 
 
 class Token:
-    __slots__ = ("token_type", "text", "line", "col", "start", "end", "comments")
+    __slots__ = (
+        "token_type",
+        "text",
+        "line",
+        "col",
+        "start",
+        "end",
+        "comments",
+        "whitespace_before",
+    )
 
     @classmethod
     def number(cls, number: int) -> Token:
@@ -471,6 +480,7 @@ class Token:
         start: int = 0,
         end: int = 0,
         comments: t.Optional[t.List[str]] = None,
+        whitespace_before: str = "",
     ) -> None:
         """Token initializer.
 
@@ -482,6 +492,7 @@ class Token:
             start: The start index of the token.
             end: The ending index of the token.
             comments: The comments to attach to the token.
+            whitespace_before: The whitespace preceding this token in the original SQL.
         """
         self.token_type = token_type
         self.text = text
@@ -490,6 +501,7 @@ class Token:
         self.start = start
         self.end = end
         self.comments = [] if comments is None else comments
+        self.whitespace_before = whitespace_before
 
     def __repr__(self) -> str:
         attributes = ", ".join(f"{k}: {getattr(self, k)}" for k in self.__slots__)
@@ -1022,6 +1034,7 @@ class Tokenizer(metaclass=_Tokenizer):
         "_end",
         "_peek",
         "_prev_token_line",
+        "_prev_token_end",
         "_rs_dialect_settings",
     )
 
@@ -1063,6 +1076,7 @@ class Tokenizer(metaclass=_Tokenizer):
         self._end = False
         self._peek = ""
         self._prev_token_line = -1
+        self._prev_token_end = -1  # Track end of previous token for whitespace calculation
 
     def tokenize(self, sql: str) -> t.List[Token]:
         """Returns a list of tokens corresponding to the SQL string `sql`."""
@@ -1168,6 +1182,14 @@ class Tokenizer(metaclass=_Tokenizer):
             self.tokens[-1].comments.extend(self._comments)
             self._comments = []
 
+        # Calculate whitespace before this token
+        if self._prev_token_end == -1:
+            # First token - whitespace from start of SQL
+            whitespace_before = self.sql[0 : self._start]
+        else:
+            # Whitespace between previous token end and this token start
+            whitespace_before = self.sql[self._prev_token_end + 1 : self._start]
+
         self.tokens.append(
             Token(
                 token_type,
@@ -1177,9 +1199,11 @@ class Tokenizer(metaclass=_Tokenizer):
                 start=self._start,
                 end=self._current - 1,
                 comments=self._comments,
+                whitespace_before=whitespace_before,
             )
         )
         self._comments = []
+        self._prev_token_end = self._current - 1  # Update for next token
 
         # If we have either a semicolon or a begin token before the command's token, we'll parse
         # whatever follows the command's token as a string
