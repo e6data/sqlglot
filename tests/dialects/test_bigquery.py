@@ -2570,40 +2570,58 @@ OPTIONS (
                 )
 
     def test_identifier_meta(self):
+        from sqlglot import tokenize
+
+        # Check if tokenizer provides accurate whitespace_before (Python tokenizer only)
+        # Note: Expression meta always includes whitespace_before (with "" fallback for Rust tokenizer)
+        tokens = list(tokenize("SELECT 1"))
+        has_accurate_whitespace = hasattr(tokens[0], "whitespace_before") if tokens else False
+
         ast = parse_one(
             "SELECT a, b FROM test_schema.test_table_a UNION ALL SELECT c, d FROM test_catalog.test_schema.test_table_b",
             dialect="bigquery",
         )
+
+        # Meta always includes whitespace_before (via getattr fallback in expressions.py)
+        expected_meta_keys = {"line", "col", "start", "end", "whitespace_before"}
+
         for identifier in ast.find_all(exp.Identifier):
-            self.assertEqual(
-                set(identifier.meta), {"line", "col", "start", "end", "whitespace_before"}
-            )
+            self.assertEqual(set(identifier.meta), expected_meta_keys)
+
+        # With Rust tokenizer, whitespace_before is always "" (fallback)
+        # With Python tokenizer, whitespace_before is accurate
+        ws_empty = ""
+        ws_space = " " if has_accurate_whitespace else ""
 
         self.assertEqual(
             ast.this.args["from"].this.args["this"].meta,
-            {"line": 1, "col": 41, "start": 29, "end": 40, "whitespace_before": ""},
+            {"line": 1, "col": 41, "start": 29, "end": 40, "whitespace_before": ws_empty},
         )
         self.assertEqual(
             ast.this.args["from"].this.args["db"].meta,
-            {"line": 1, "col": 28, "start": 17, "end": 27, "whitespace_before": " "},
+            {"line": 1, "col": 28, "start": 17, "end": 27, "whitespace_before": ws_space},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["this"].meta,
-            {"line": 1, "col": 106, "start": 94, "end": 105, "whitespace_before": ""},
+            {"line": 1, "col": 106, "start": 94, "end": 105, "whitespace_before": ws_empty},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["db"].meta,
-            {"line": 1, "col": 93, "start": 82, "end": 92, "whitespace_before": ""},
+            {"line": 1, "col": 93, "start": 82, "end": 92, "whitespace_before": ws_empty},
         )
         self.assertEqual(
             ast.expression.args["from"].this.args["catalog"].meta,
-            {"line": 1, "col": 81, "start": 69, "end": 80, "whitespace_before": " "},
+            {"line": 1, "col": 81, "start": 69, "end": 80, "whitespace_before": ws_space},
         )
 
         information_schema_sql = "SELECT a, b FROM region.INFORMATION_SCHEMA.COLUMNS"
         ast = parse_one(information_schema_sql, dialect="bigquery")
         meta = ast.args["from"].this.this.meta
-        self.assertEqual(meta, {"line": 1, "col": 50, "start": 24, "end": 49})
+        # Note: whitespace_before is always in meta, but value depends on tokenizer
+        self.assertEqual(meta["line"], 1)
+        self.assertEqual(meta["col"], 50)
+        self.assertEqual(meta["start"], 24)
+        self.assertEqual(meta["end"], 49)
         assert (
             information_schema_sql[meta["start"] : meta["end"] + 1] == "INFORMATION_SCHEMA.COLUMNS"
         )

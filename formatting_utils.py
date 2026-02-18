@@ -60,6 +60,11 @@ def preserve_formatting(
         # If tokenization fails, return transpiled as-is
         return transpiled_sql
 
+    # Check if whitespace_before is available (not available in Rust tokenizer)
+    if original_tokens and not hasattr(original_tokens[0], "whitespace_before"):
+        # Rust tokenizer doesn't support whitespace_before, return transpiled as-is
+        return transpiled_sql
+
     # Build alignment between transpiled and original tokens
     alignment = _align_tokens(original_tokens, transpiled_tokens)
 
