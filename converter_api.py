@@ -35,6 +35,8 @@ from apis.utils.helpers import (
     set_cte_names_case_sensitively,
 )
 from formatting_utils import preserve_formatting
+from error_handler import format_error_response, format_error_message, ErrorCategory
+from sqlglot.errors import ParseError, TokenError
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -116,45 +118,70 @@ async def convert_query(
         )
 
         # Always strip comment from query, but only re-add if SKIP_COMMENT is false
-
         if SKIP_COMMENT.lower() == "true":
             query, comment = strip_comment(query)
-        tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
-        if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
-            # Check if we should only transform catalog.schema without full transpilation
-            if flags_dict.get("SKIP_E6_TRANSPILATION", False):
-                transformed_query = transform_catalog_schema_only(query, from_sql)
-                # transformed_query = add_comment_to_query(transformed_query, comment)
-                logger.info(
-                    "%s AT %s FROM %s — Catalog.Schema Transformed Query:\n%s",
-                    query_id,
-                    timestamp,
-                    from_sql.upper(),
-                    transformed_query,
-                )
-                return {"converted_query": transformed_query}
-            tree = transform_table_part(tree)
+        # ==========================================
+        # STAGE 1: PARSING
+        # ==========================================
+        try:
+            tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+        except (ParseError, TokenError) as parse_err:
+            logger.error(
+                "%s AT %s FROM %s — Parsing Error:\n%s",
+                query_id, timestamp, from_sql.upper(), str(parse_err), exc_info=True,
+            )
+            error_info = format_error_response(parse_err, from_dialect=from_sql, stage="parsing")
+            raise HTTPException(status_code=400, detail=error_info)
 
-        tree2 = quote_identifiers(tree, dialect=to_sql)
+        # ==========================================
+        # STAGE 2: TRANSFORMATION
+        # ==========================================
+        try:
+            if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
+                # Check if we should only transform catalog.schema without full transpilation
+                if flags_dict.get("SKIP_E6_TRANSPILATION", False):
+                    transformed_query = transform_catalog_schema_only(query, from_sql)
+                    logger.info(
+                        "%s AT %s FROM %s — Catalog.Schema Transformed Query:\n%s",
+                        query_id, timestamp, from_sql.upper(), transformed_query,
+                    )
+                    return {"converted_query": transformed_query}
+                tree = transform_table_part(tree)
 
-        values_ensured_ast = ensure_select_from_values(tree2)
+            tree2 = quote_identifiers(tree, dialect=to_sql)
 
-        cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
+            values_ensured_ast = ensure_select_from_values(tree2)
 
-        double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
-            dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
-        )
+            cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
 
-        double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
-
-        # Preserve original formatting if enabled via feature flag
-        if flags_dict.get("PRESERVE_FORMATTING", False):
-            double_quotes_added_query = preserve_formatting(
-                query, double_quotes_added_query, from_sql, to_sql
+            double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
+                dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
             )
 
-        # double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
+            double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+            # Preserve original formatting if enabled via feature flag
+            if flags_dict.get("PRESERVE_FORMATTING", False):
+                double_quotes_added_query = preserve_formatting(
+                    query, double_quotes_added_query, from_sql, to_sql
+                )
+
+        except (ParseError, TokenError) as parse_err:
+            # Parsing error during transformation (e.g., re-parsing transformed query)
+            logger.error(
+                "%s AT %s FROM %s — Parsing Error during transformation:\n%s",
+                query_id, timestamp, from_sql.upper(), str(parse_err), exc_info=True,
+            )
+            error_info = format_error_response(parse_err, from_dialect=from_sql, stage="parsing")
+            raise HTTPException(status_code=400, detail=error_info)
+        except Exception as transform_err:
+            logger.error(
+                "%s AT %s FROM %s — Transformation Error:\n%s",
+                query_id, timestamp, from_sql.upper(), str(transform_err), exc_info=True,
+            )
+            error_info = format_error_response(transform_err, from_dialect=from_sql, stage="transformation")
+            raise HTTPException(status_code=400, detail=error_info)
 
         logger.info(
             "%s AT %s FROM %s — Transpiled Query:\n%s",
@@ -164,16 +191,18 @@ async def convert_query(
             double_quotes_added_query,
         )
         return {"converted_query": double_quotes_added_query}
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (already formatted)
+        raise
     except Exception as e:
+        # Catch-all for unexpected errors
         logger.error(
-            "%s AT %s FROM %s — Error:\n%s",
-            query_id,
-            timestamp,
-            from_sql.upper(),
-            str(e),
-            exc_info=True,
+            "%s AT %s FROM %s — Unexpected Error:\n%s",
+            query_id, timestamp, from_sql.upper(), str(e), exc_info=True,
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        error_info = format_error_response(e, from_dialect=from_sql, stage="unknown")
+        raise HTTPException(status_code=500, detail=error_info)
 
 
 @app.get("/health")
