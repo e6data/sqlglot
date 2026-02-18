@@ -65,7 +65,7 @@ SQLGLOT_META = "sqlglot.meta"
 SQLGLOT_ANONYMOUS = "sqlglot.anonymous"
 TABLE_PARTS = ("this", "db", "catalog")
 COLUMN_PARTS = ("this", "table", "db", "catalog")
-POSITION_META_KEYS = ("line", "col", "start", "end")
+POSITION_META_KEYS = ("line", "col", "start", "end", "whitespace_before")
 
 
 class Expression(metaclass=_Expression):
@@ -878,6 +878,7 @@ class Expression(metaclass=_Expression):
                     "col": other.col,
                     "start": other.start,
                     "end": other.end,
+                    "whitespace_before": getattr(other, "whitespace_before", ""),
                 }
             )
         self.meta.update({k: v for k, v in kwargs.items() if k in POSITION_META_KEYS})

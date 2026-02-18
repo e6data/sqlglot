@@ -34,6 +34,7 @@ from apis.utils.helpers import (
     transform_catalog_schema_only,
     set_cte_names_case_sensitively,
 )
+from formatting_utils import preserve_formatting
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
@@ -146,6 +147,12 @@ async def convert_query(
         )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+        # Preserve original formatting if enabled via feature flag
+        if flags_dict.get("PRESERVE_FORMATTING", False):
+            double_quotes_added_query = preserve_formatting(
+                query, double_quotes_added_query, from_sql, to_sql
+            )
 
         # double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
@@ -381,6 +388,12 @@ async def stats_api(
 
             double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
 
+            # Preserve original formatting if enabled via feature flag
+            if flags_dict.get("PRESERVE_FORMATTING", False):
+                double_quotes_added_query = preserve_formatting(
+                    query, double_quotes_added_query, from_sql, to_sql
+                )
+
             double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 
             logger.info("Got the converted query!!!!")
@@ -561,6 +574,9 @@ async def guardstats(
         double_quotes_added_query = tree2.sql(dialect=to_sql, from_dialect=from_sql)
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+        # Note: PRESERVE_FORMATTING not available here as no flags_dict
+        # Can be added if needed by adding feature_flags parameter to this endpoint
 
         double_quotes_added_query = add_comment_to_query(double_quotes_added_query, comment)
 

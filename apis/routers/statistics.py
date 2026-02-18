@@ -68,7 +68,7 @@ async def stats_api(
         )
 
         item = "condenast"
-        query, comment = strip_comment(query, item)
+        query, comment = strip_comment(query)
 
         # Extract functions from the query
         all_functions = extract_functions_from_query(

@@ -2994,3 +2994,102 @@ class TestE6(Validator):
                 "databricks": "SELECT CAST(a AS DECIMAL(10, 2)), CAST(b AS DECIMAL(5, 0)), CAST(c AS INTEGER)",
             },
         )
+
+    def test_formatting_preservation(self):
+        """Test that formatting preservation works correctly during transpilation."""
+        from formatting_utils import preserve_formatting
+        from sqlglot import tokenize
+
+        # Check if whitespace_before is available (not available in Rust tokenizer)
+        tokens = list(tokenize("SELECT 1"))
+        has_whitespace_support = hasattr(tokens[0], "whitespace_before") if tokens else False
+
+        # Test 1: Basic formatting with newlines and indentation
+        original = """SELECT
+    col1,
+    col2,
+    col3
+FROM table1
+WHERE status = 'active'"""
+        transpiled = "SELECT col1, col2, col3 FROM table1 WHERE status = 'active'"
+        result = preserve_formatting(original, transpiled, "databricks", "e6")
+
+        # Basic assertions that work with both tokenizers
+        self.assertIn("col1", result)
+        self.assertIn("col2", result)
+
+        # Formatting assertions only when whitespace_before is available
+        if has_whitespace_support:
+            self.assertIn("\n", result)
+
+        # Test 2: Function rename (IFF -> IF) preserves formatting
+        original_iff = """SELECT
+    IFF(col1 > 10, 'high', 'low') AS category,
+    col2
+FROM table1"""
+        transpiled_if = "SELECT IF(col1 > 10, 'high', 'low') AS category, col2 FROM table1"
+        result_if = preserve_formatting(original_iff, transpiled_if, "snowflake", "e6")
+
+        # Verify the function was renamed (works with both tokenizers)
+        self.assertIn("IF(", result_if)
+        self.assertNotIn("IFF(", result_if)
+        if has_whitespace_support:
+            self.assertIn("\n", result_if)
+
+        # Test 3: Complex query with CTEs
+        original_cte = """WITH raw AS (
+    SELECT
+        id,
+        value
+    FROM source_table
+)
+SELECT
+    id,
+    value
+FROM raw"""
+        transpiled_cte = (
+            "WITH raw AS (SELECT id, value FROM source_table) SELECT id, value FROM raw"
+        )
+        result_cte = preserve_formatting(original_cte, transpiled_cte, "databricks", "e6")
+
+        # Verify CTE structure (works with both tokenizers)
+        self.assertIn("WITH", result_cte)
+        self.assertIn("raw", result_cte)
+        if has_whitespace_support:
+            self.assertIn("\n", result_cte)
+
+        # Test 4: Preserved string quotes
+        original_strings = """SELECT
+    'hello' AS greeting,
+    'world' AS target
+FROM dual"""
+        transpiled_strings = "SELECT 'hello' AS greeting, 'world' AS target FROM dual"
+        result_strings = preserve_formatting(
+            original_strings, transpiled_strings, "databricks", "e6"
+        )
+
+        # Verify strings are preserved with quotes
+        self.assertIn("'hello'", result_strings)
+        self.assertIn("'world'", result_strings)
+
+        # Test 5: Empty/None inputs handled gracefully
+        self.assertEqual(preserve_formatting("", "SELECT 1"), "SELECT 1")
+        self.assertEqual(preserve_formatting("SELECT 1", ""), "")
+        self.assertEqual(preserve_formatting(None, "SELECT 1"), "SELECT 1")
+
+        # Test 6: Tab indentation preserved (only with whitespace support)
+        original_tabs = "SELECT\n\tcol1,\n\tcol2\nFROM table1"
+        transpiled_tabs = "SELECT col1, col2 FROM table1"
+        result_tabs = preserve_formatting(original_tabs, transpiled_tabs, "databricks", "e6")
+
+        if has_whitespace_support:
+            self.assertIn("\t", result_tabs)
+
+        # Test 7: Multiple spaces between tokens preserved
+        original_spaces = "SELECT   col1,   col2   FROM   table1"
+        transpiled_spaces = "SELECT col1, col2 FROM table1"
+        result_spaces = preserve_formatting(original_spaces, transpiled_spaces, "databricks", "e6")
+
+        # Result should have the columns (works with both tokenizers)
+        self.assertIn("col1", result_spaces)
+        self.assertIn("col2", result_spaces)

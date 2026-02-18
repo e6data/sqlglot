@@ -204,7 +204,19 @@ x"""
 
     def test_token_repr(self):
         # Ensures both the Python and the Rust tokenizer produce a human-friendly representation
-        self.assertEqual(
-            repr(Tokenizer().tokenize("foo")),
-            "[<Token token_type: TokenType.VAR, text: foo, line: 1, col: 3, start: 0, end: 2, comments: []>]",
-        )
+        tokens = Tokenizer().tokenize("foo")
+        token_repr = repr(tokens)
+
+        # Check if whitespace_before is available (Python tokenizer only)
+        has_whitespace_support = hasattr(tokens[0], "whitespace_before") if tokens else False
+
+        if has_whitespace_support:
+            self.assertEqual(
+                token_repr,
+                "[<Token token_type: TokenType.VAR, text: foo, line: 1, col: 3, start: 0, end: 2, comments: [], whitespace_before: >]",
+            )
+        else:
+            self.assertEqual(
+                token_repr,
+                "[<Token token_type: TokenType.VAR, text: foo, line: 1, col: 3, start: 0, end: 2, comments: []>]",
+            )
