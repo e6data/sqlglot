@@ -3038,7 +3038,9 @@ SELECT
     id,
     value
 FROM raw"""
-        transpiled_cte = "WITH raw AS (SELECT id, value FROM source_table) SELECT id, value FROM raw"
+        transpiled_cte = (
+            "WITH raw AS (SELECT id, value FROM source_table) SELECT id, value FROM raw"
+        )
         result_cte = preserve_formatting(original_cte, transpiled_cte, "databricks", "e6")
 
         # Verify CTE structure preserved
@@ -3052,7 +3054,9 @@ FROM raw"""
     'world' AS target
 FROM dual"""
         transpiled_strings = "SELECT 'hello' AS greeting, 'world' AS target FROM dual"
-        result_strings = preserve_formatting(original_strings, transpiled_strings, "databricks", "e6")
+        result_strings = preserve_formatting(
+            original_strings, transpiled_strings, "databricks", "e6"
+        )
 
         # Verify strings are preserved with quotes
         self.assertIn("'hello'", result_strings)
