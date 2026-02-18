@@ -16,10 +16,12 @@ FUNCTIONS_FILE = os.path.join(os.path.dirname(__file__), "supported_functions_in
 logger = logging.getLogger(__name__)
 
 
-def transpile_query(query: str, from_sql: str, to_sql: str) -> str:
+def transpile_query(query: str, from_sql: str, to_sql: Optional[str] = "E6") -> str:
     """
     Transpile a SQL query from one dialect to another.
     """
+    if to_sql is None:
+        to_sql = "E6"
     try:
         # original_ast = parse_one(query, read=from_sql)
         # values_ensured_ast = ensure_select_from_values(original_ast)

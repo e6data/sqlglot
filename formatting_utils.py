@@ -22,8 +22,8 @@ from sqlglot.tokens import Token
 def preserve_formatting(
     original_sql: str,
     transpiled_sql: str,
-    source_dialect: str = None,
-    target_dialect: str = None,
+    source_dialect: Optional[str] = None,
+    target_dialect: Optional[str] = None,
 ) -> str:
     """
     Preserve the original SQL formatting in the transpiled output.
@@ -215,8 +215,8 @@ def transpile_with_formatting(
     original_sql: str,
     transpiled_sql: str,
     preserve_format: bool = True,
-    source_dialect: str = None,
-    target_dialect: str = None,
+    source_dialect: Optional[str] = None,
+    target_dialect: Optional[str] = None,
 ) -> str:
     """
     Wrapper that conditionally preserves formatting based on a flag.
