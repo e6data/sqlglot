@@ -2042,11 +2042,27 @@ class E6(Dialect):
             For E6:
             - Function form (with lambda): Quote as "EXISTS"(array, lambda)
             - Subquery form (no lambda): Keep as EXISTS(subquery)
+            - Special case: EXISTS (SELECT 1 WHERE condition) without FROM -> simplify to just condition
             """
             # Check if this is the higher-order function form (has a lambda expression)
             if expression.expression:
                 # Function form: exists(array, lambda) -> "EXISTS"(array, lambda)
                 return f'"EXISTS"({self.sql(expression.this)}, {self.sql(expression.expression)})'
+
+            # Check if simplification is enabled via environment variable
+            simplify_exists = os.getenv("SIMPLIFY_EXISTS_WITHOUT_FROM", "false").lower() == "true"
+
+            if simplify_exists:
+                # Check for the pattern: EXISTS (SELECT ... WHERE condition) without FROM
+                subquery = expression.this
+                if isinstance(subquery, exp.Select):
+                    where = subquery.args.get("where")
+                    from_clause = subquery.args.get("from")
+
+                    # If SELECT ... WHERE condition (no FROM clause), simplify to just condition
+                    if where and not from_clause:
+                        return self.sql(where.this)
+
             # Subquery form: EXISTS(subquery) -> EXISTS(subquery)
             return f"EXISTS {self.wrap(expression)}"
 

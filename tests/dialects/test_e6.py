@@ -866,6 +866,40 @@ class TestE6(Validator):
             read={"databricks": "SELECT cast(col1 AS BINARY) FROM tab1"},
         )
 
+    def test_exists_simplification_with_env_flag(self):
+        """Test EXISTS simplification when SIMPLIFY_EXISTS_WITHOUT_FROM env flag is set"""
+
+        # Test simple EXISTS without FROM clause
+        os.environ["SIMPLIFY_EXISTS_WITHOUT_FROM"] = "true"
+        try:
+            # Simple case - EXISTS without FROM should be simplified
+            self.validate_all(
+                "SELECT abc.* FROM main.experiments_db.array_test AS abc WHERE abc.id = 103",
+                read={
+                    "databricks": "SELECT abc.* FROM main.experiments_db.array_test abc WHERE EXISTS (SELECT 1 WHERE abc.id = 103)"
+                },
+            )
+
+            # Complex case with multiple EXISTS clauses - EXISTS with FROM kept, EXISTS without FROM simplified
+            self.validate_all(
+                "SELECT * FROM \"entity_v\" AS ev1_0 LEFT JOIN EntityAttributeValue_v AS a1_0 ON ev1_0.entityID = a1_0.entityID JOIN OrgHierarchy AS oh1_0 ON oh1_0.orgID = ev1_0.orgID AND (oh1_0.isDeleted = FALSE) WHERE (ev1_0.UTCOffsetMinutes = 0) AND (EXISTS (SELECT \"1x\" FROM Issues_V_IssueManagementCurrentStageApprovers AS sa1_0 WHERE sa1_0.currentStageApproverId IN ('7a74d569-ec47-4634-a6c3-2efbb0c37c3d') AND ev1_0.entityID = sa1_0.issueId AND (sa1_0.UTCOffsetMinutes = 0)) OR EXISTS (SELECT 1 FROM EntityAttributeValue_v AS a2_0 WHERE a2_0.attributeName = 'Owners' AND a2_0.attributeValueID = '7a74d569-ec47-4634-a6c3-2efbb0c37c3d' AND ev1_0.entityID = a2_0.entityID) OR EXISTS (SELECT 1 FROM EntityAttributeValue_v AS a3_0 WHERE a3_0.attributeName = 'Approvers' AND a3_0.attributeValueID = '7a74d569-ec47-4634-a6c3-2efbb0c37c3d' AND ev1_0.entityID = a3_0.entityID) OR ev1_0.createdByUserEmail IN ('renato.chavez@zendesk.com') OR oh1_0.parentOrgID = '1c8870c0-5cdd-4838-9709-a7a5430471ab')",
+                read={
+                    "databricks": "SELECT * FROM `entity_v` ev1_0 LEFT JOIN EntityAttributeValue_v a1_0 ON ev1_0.entityID = a1_0.entityID JOIN OrgHierarchy oh1_0 ON oh1_0.orgID = ev1_0.orgID AND (oh1_0.isDeleted = false) WHERE (ev1_0.UTCOffsetMinutes = 0) AND (EXISTS(SELECT 1x FROM Issues_V_IssueManagementCurrentStageApprovers sa1_0 WHERE sa1_0.currentStageApproverId IN ('7a74d569-ec47-4634-a6c3-2efbb0c37c3d') AND ev1_0.entityID = sa1_0.issueId AND (sa1_0.UTCOffsetMinutes = 0)) OR EXISTS(SELECT 1 FROM EntityAttributeValue_v a2_0 WHERE a2_0.attributeName = 'Owners' AND a2_0.attributeValueID = '7a74d569-ec47-4634-a6c3-2efbb0c37c3d' AND ev1_0.entityID = a2_0.entityID) OR EXISTS(SELECT 1 FROM EntityAttributeValue_v a3_0 WHERE a3_0.attributeName = 'Approvers' AND a3_0.attributeValueID = '7a74d569-ec47-4634-a6c3-2efbb0c37c3d' AND ev1_0.entityID = a3_0.entityID) OR EXISTS(SELECT 1 WHERE ev1_0.createdByUserEmail IN ('renato.chavez@zendesk.com')) OR oh1_0.parentOrgID = '1c8870c0-5cdd-4838-9709-a7a5430471ab')"
+                },
+            )
+        finally:
+            # Clean up environment variable
+            if "SIMPLIFY_EXISTS_WITHOUT_FROM" in os.environ:
+                del os.environ["SIMPLIFY_EXISTS_WITHOUT_FROM"]
+
+        # Test that without the flag, EXISTS remains unchanged
+        self.validate_all(
+            "SELECT abc.* FROM main.experiments_db.array_test AS abc WHERE EXISTS (SELECT 1 WHERE abc.id = 103)",
+            read={
+                "databricks": "SELECT abc.* FROM main.experiments_db.array_test abc WHERE EXISTS (SELECT 1 WHERE abc.id = 103)"
+            },
+        )
+
     def test_regex(self):
         self.validate_all(
             "REGEXP_REPLACE('abcd', 'ab', '')",
