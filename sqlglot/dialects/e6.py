@@ -2139,9 +2139,24 @@ class E6(Dialect):
             Convert bracket access to ELEMENT_AT function for E6 dialect.
 
             In E6:
-            - Map access: map['key'] -> ELEMENT_AT(map, 'key')
-            - Array access: arr[0] -> ELEMENT_AT(arr, 1)  (1-indexed in E6)
+            - col['key'] -> ELEMENT_AT(col, 'key')
+            - arr[0] -> ELEMENT_AT(arr, 1)  (1-indexed in E6)
+            - Inside VALUES: map[...] preserved as-is (Databricks uses MAP() with
+              parens for constructors, so map[...] in INSERT VALUES is not ELEMENT_AT)
             """
+            # Inside a VALUES clause, map[...] bracket syntax should be preserved
+            # as-is. In Databricks MAP() with parens is the constructor; map[...]
+            # in VALUES is a literal value that must not be rewritten to ELEMENT_AT.
+            this = expression.this
+            col_name = this.name if isinstance(this, exp.Column) else ""
+            if col_name.upper() == "MAP" and len(expression.expressions) > 1:
+                parent = expression.parent
+                while parent:
+                    if isinstance(parent, exp.Values):
+                        expressions_sql = ", ".join(self.sql(e) for e in expression.expressions)
+                        return f"{self.sql(expression, 'this')}[{expressions_sql}]"
+                    parent = parent.parent
+
             func_name = (
                 "TRY_ELEMENT_AT"
                 if expression._meta and expression._meta.get("name", "").upper() == "TRY_ELEMENT_AT"
