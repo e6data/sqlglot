@@ -585,6 +585,31 @@ class TestE6(Validator):
             },
         )
 
+        # map[...] bracket syntax inside VALUES should be preserved as-is.
+        # Databricks uses MAP() with parens for map construction, so map[...]
+        # in INSERT VALUES is not an ELEMENT_AT operation.
+        self.validate_all(
+            "INSERT INTO t1 (selection) VALUES (map['report_id', '221be455', 'name', 'ED SHEERAN'])",
+            read={
+                "databricks": "INSERT INTO t1 (selection) VALUES (map['report_id', '221be455', 'name', 'ED SHEERAN'])",
+            },
+        )
+
+        self.validate_all(
+            "INSERT INTO t1 (selection, report_id) VALUES (map['k1', 'v1', 'k2', 'v2'], '123')",
+            read={
+                "databricks": "INSERT INTO t1 (selection, report_id) VALUES (map['k1', 'v1', 'k2', 'v2'], '123')",
+            },
+        )
+
+        # map['key'] in SELECT (not inside VALUES) should still convert to ELEMENT_AT
+        self.validate_all(
+            "SELECT ELEMENT_AT(map, 'key') FROM t1",
+            read={
+                "databricks": "SELECT map['key'] FROM t1",
+            },
+        )
+
         self.validate_all(
             "SELECT CONVERT_TIMEZONE('Asia/Seoul', 'UTC', CAST('2016-08-31' AS TIMESTAMP))",
             read={"databricks": "SELECT to_utc_timestamp('2016-08-31', 'Asia/Seoul')"},
