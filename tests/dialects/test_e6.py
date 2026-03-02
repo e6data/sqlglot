@@ -2054,6 +2054,20 @@ class TestE6(Validator):
             },
         )
 
+        # EEEE (full weekday name) should be preserved in transpilation
+        self.validate_all(
+            "SELECT FORMAT_DATE(CAST(CURRENT_TIMESTAMP AS TIMESTAMP), 'dd MMMM, EEEE') AS \"formatted_date\"",
+            read={
+                "databricks": "select DATE_FORMAT(current_timestamp, 'dd MMMM, EEEE') AS `formatted_date`"
+            },
+        )
+
+        # EEE (abbreviated weekday name) should be preserved
+        self.validate_all(
+            "SELECT FORMAT_DATE(CAST(CURRENT_TIMESTAMP AS TIMESTAMP), 'dd MMM, EEE')",
+            read={"databricks": "select DATE_FORMAT(current_timestamp, 'dd MMM, EEE')"},
+        )
+
     def test_conditional_expression(self):
         self.validate_all(
             "SELECT SUM(COALESCE(CASE WHEN performance_rating > 7 THEN 1 END, 0))",
