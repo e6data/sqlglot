@@ -6,7 +6,7 @@ pipeline {
         GCP_PROJECT_ID = credentials('GCP_PROJECT_ID')
         PROD_IMAGE = "us-docker.pkg.dev/${GCP_PROJECT_ID}/e6-engine/${RELEASE_NAME}"
 
-        TRIVY_VERSION = "v0.56.2"
+        TRIVY_VERSION = "v0.69.2"
         TRIVY_OPTIONS = "--db-repository public.ecr.aws/aquasecurity/trivy-db"
 
         ACR_TOKEN = credentials('ACR_TOKEN')
