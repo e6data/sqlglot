@@ -566,7 +566,11 @@ def normalize_unicode_spaces(sql: str) -> str:
                 # Normalize only Unicode whitespace/separators and U+FFFD,
                 # preserve all other non-ASCII chars (French, German, EU languages, etc.)
                 cat = unicodedata.category(ch)
-                if ch == "\uFFFD" or cat in ("Zs", "Zl", "Zp") or (ch.isspace() and ch not in "\r\n"):
+                if (
+                    ch == "\ufffd"
+                    or cat in ("Zs", "Zl", "Zp")
+                    or (ch.isspace() and ch not in "\r\n")
+                ):
                     out_chars.append(" ")
                 else:
                     out_chars.append(ch)
