@@ -10,7 +10,6 @@ from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import exp, parse_one
 import typing as t
 from sqlglot.dialects.e6 import E6
-from curses.ascii import isascii
 
 FUNCTIONS_FILE = os.path.join(os.path.dirname(__file__), "supported_functions_in_all_dialects.json")
 logger = logging.getLogger(__name__)
@@ -564,15 +563,13 @@ def normalize_unicode_spaces(sql: str) -> str:
                 in_quote = ch
                 out_chars.append(ch)
             else:
-                # Normalize replacement-char
-                if not isascii(ch):
+                # Normalize only Unicode whitespace/separators and U+FFFD,
+                # preserve all other non-ASCII chars (French, German, EU languages, etc.)
+                cat = unicodedata.category(ch)
+                if ch == "\uFFFD" or cat in ("Zs", "Zl", "Zp") or (ch.isspace() and ch not in "\r\n"):
                     out_chars.append(" ")
                 else:
-                    cat = unicodedata.category(ch)
-                    if (cat in ("Zs", "Zl", "Zp")) or (ch.isspace() and ch not in "\r\n"):
-                        out_chars.append(" ")
-                    else:
-                        out_chars.append(ch)
+                    out_chars.append(ch)
         i += 1
 
     return "".join(out_chars)
