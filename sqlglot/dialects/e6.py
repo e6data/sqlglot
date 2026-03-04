@@ -2520,14 +2520,20 @@ class E6(Dialect):
             without the table prefix.
             """
             this = expression.args.get("this")
+            parent = expression.parent
+            if isinstance(parent, exp.Star) and parent.args.get("except"):
+                table = expression.args.get("table")
+                if table:
+                    return f"{self.sql(table)}.{self.sql(this)}"
+                return self.sql(this)
 
             # Check if this column is inside a Star's except clause - skip table identifier
-            parent = expression.parent
+            """parent = expression.parent
             if isinstance(parent, exp.Star) and parent.args.get("except"):
                 # Return only the column name without table prefix
                 return self.sql(this)
 
-            # Default behavior for all other cases
+            # Default behavior for all other cases"""
             return super().column_sql(expression)
 
         def median_sql(self, expression: exp.Median):
