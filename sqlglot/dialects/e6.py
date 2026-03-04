@@ -2460,24 +2460,20 @@ class E6(Dialect):
                     this="TO_UNIX_TIMESTAMP", expressions=[parse_datetime_expr]
                 )
                 div_expr = exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000"))
-
-                if isinstance(expression.parent, (exp.UnixToTime, exp.UnixToStr)):
-                    return self.sql(div_expr)
-
-                # Wrap in FLOOR using exp.Floor
-                floor_expr = exp.Floor(this=div_expr)
-                return self.sql(floor_expr)
-
-            # Build expression tree for TO_UNIX_TIMESTAMP(...) / 1000
-            to_unix_expr = exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=[time_expr])
-            div_expr = exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000"))
-
-            if isinstance(expression.parent, (exp.UnixToTime, exp.UnixToStr)):
                 return self.sql(div_expr)
 
-            # For direct column/expression without format, wrap in FLOOR using exp.Floor
-            floor_expr = exp.Floor(this=div_expr)
-            return self.sql(floor_expr)
+            # Wrap argument in CAST(... AS TIMESTAMP) since E6's TO_UNIX_TIMESTAMP
+            # only accepts TIMESTAMP/DATE types, not integers or strings
+            if not (
+                isinstance(time_expr, exp.Cast)
+                and time_expr.to.is_type(exp.DataType.Type.TIMESTAMP)
+            ):
+                time_expr = exp.Cast(this=time_expr, to=exp.DataType.build("TIMESTAMP"))
+
+            # Build expression tree for TO_UNIX_TIMESTAMP(CAST(... AS TIMESTAMP)) / 1000
+            to_unix_expr = exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=[time_expr])
+            div_expr = exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000"))
+            return self.sql(div_expr)
 
         def lateral_sql(self, expression: exp.Lateral) -> str:
             expression.set("view", True)

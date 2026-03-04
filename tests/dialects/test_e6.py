@@ -2277,38 +2277,38 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT FLOOR(TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2016-04-08')) / 1000)",
+            "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2016-04-08')) / 1000",
             read={"databricks": "SELECT unix_timestamp('2016-04-08', 'yyyy-MM-dd')"},
         )
 
         self.validate_all(
-            "SELECT FLOOR(TO_UNIX_TIMESTAMP('2016-04-08') / 1000)",
+            "SELECT TO_UNIX_TIMESTAMP(CAST('2016-04-08' AS TIMESTAMP)) / 1000",
             read={"databricks": "SELECT to_unix_timestamp('2016-04-08')"},
         )
 
         self.validate_all(
-            "SELECT FLOOR(TO_UNIX_TIMESTAMP(A) / 1000)",
+            "SELECT TO_UNIX_TIMESTAMP(CAST(A AS TIMESTAMP)) / 1000",
             read={"databricks": "SELECT UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
             write={
-                "databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
-                "snowflake": "SELECT EXTRACT(epoch_second FROM A) / 1000",
+                "databricks": "SELECT TO_UNIX_TIMESTAMP(CAST(A AS TIMESTAMP)) / 1000",
+                "snowflake": "SELECT EXTRACT(epoch_second FROM CAST(A AS TIMESTAMP)) / 1000",
             },
         )
 
         self.validate_all(
-            "SELECT FLOOR(TO_UNIX_TIMESTAMP(CURRENT_TIMESTAMP) / 1000)",
+            "SELECT TO_UNIX_TIMESTAMP(CAST(CURRENT_TIMESTAMP AS TIMESTAMP)) / 1000",
             read={"databricks": "SELECT UNIX_TIMESTAMP()"},
         )
 
         self.validate_all(
-            "SELECT * FROM events WHERE event_time >= FLOOR(TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-01-01')) / 1000) AND event_time < FLOOR(TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-02-01')) / 1000)",
+            "SELECT * FROM events WHERE event_time >= TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-01-01')) / 1000 AND event_time < TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-02-01')) / 1000",
             read={
                 "databricks": "SELECT * FROM events WHERE event_time >= unix_timestamp('2023-01-01', 'yyyy-MM-dd') AND event_time < unix_timestamp('2023-02-01', 'yyyy-MM-dd')"
             },
         )
 
         self.validate_all(
-            "SELECT FLOOR(TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d %h:%i:%S', '2016-04-08 12:10:15')) / 1000)",
+            "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d %h:%i:%S', '2016-04-08 12:10:15')) / 1000",
             read={
                 "databricks": "SELECT to_unix_timestamp('2016-04-08 12:10:15', 'yyyy-LL-dd hh:mm:ss')"
             },
