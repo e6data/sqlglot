@@ -3166,3 +3166,52 @@ FROM dual"""
         # Result should have the columns (works with both tokenizers)
         self.assertIn("col1", result_spaces)
         self.assertIn("col2", result_spaces)
+
+    def test_split_sql(self):
+        # 1. split inside MAP, separator absent → SPLIT stripped, plain string returned
+        self.validate_all(
+            "SELECT MAP[ARRAY['test'],ARRAY['-18000']]",
+            read={
+                "databricks": "SELECT map(split('test',','), split('-18000',','))",
+            },
+        )
+
+        # 2. explode(split(...)), separator absent → SPLIT preserved
+        self.validate_all(
+            "SELECT EXPLODE(SPLIT('VZ_2469420', ','))",
+            read={
+                "spark": "SELECT explode(split('VZ_2469420', ','))",
+            },
+        )
+
+        # 3. explode(split(...)), separator present → SPLIT preserved
+        self.validate_all(
+            "SELECT EXPLODE(SPLIT('VZ_2469420,', ','))",
+            read={
+                "spark": "SELECT explode(split('VZ_2469420,', ','))",
+            },
+        )
+
+        # 4. split without explode or map, separator absent → SPLIT preserved (not inside VarMap)
+        self.validate_all(
+            "SELECT SPLIT('hello', ',')",
+            read={
+                "spark": "SELECT split('hello', ',')",
+            },
+        )
+
+        # 5. split with 3 arguments → SPLIT preserved
+        self.validate_all(
+            "SELECT SPLIT('a,b,c', ',', 2)",
+            read={
+                "spark": "SELECT split('a,b,c', ',', 2)",
+            },
+        )
+
+        # 6. regexp_split inside explode → SPLIT preserved
+        self.validate_all(
+            "SELECT SPLIT('hello world', '\\\\s+')",
+            read={
+                "postgres": "SELECT regexp_split('hello world', '\\s+')",
+            },
+        )
