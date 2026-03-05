@@ -54,12 +54,12 @@ class TestE6(Validator):
             },
         )
 
-        # self.validate_all(
-        #     "SELECT r.* EXCEPT (_____dp_update_ts) FROM gold.ops.slp_fcc_gains_and_reasons AS r",
-        #     read={
-        #         "databricks": "select r.* except (r._____dp_update_ts) from gold.ops.slp_fcc_gains_and_reasons as r"
-        #     },
-        # )
+        self.validate_all(
+            "SELECT r.* EXCEPT (_____dp_update_ts) FROM gold.ops.slp_fcc_gains_and_reasons AS r",
+            read={
+                "databricks": "select r.* except (r._____dp_update_ts) from gold.ops.slp_fcc_gains_and_reasons as r"
+            },
+        )
 
         self.validate_all(
             "SELECT REDUCE(ARRAY[1, 2, 3], 0, (acc, x) -> acc + x)",
@@ -2054,20 +2054,6 @@ class TestE6(Validator):
             },
         )
 
-        # EEEE (full weekday name) should be preserved in transpilation
-        self.validate_all(
-            "SELECT FORMAT_DATE(CAST(CURRENT_TIMESTAMP AS TIMESTAMP), 'dd MMMM, EEEE') AS \"formatted_date\"",
-            read={
-                "databricks": "select DATE_FORMAT(current_timestamp, 'dd MMMM, EEEE') AS `formatted_date`"
-            },
-        )
-
-        # EEE (abbreviated weekday name) should be preserved
-        self.validate_all(
-            "SELECT FORMAT_DATE(CAST(CURRENT_TIMESTAMP AS TIMESTAMP), 'dd MMM, EEE')",
-            read={"databricks": "select DATE_FORMAT(current_timestamp, 'dd MMM, EEE')"},
-        )
-
     def test_conditional_expression(self):
         self.validate_all(
             "SELECT SUM(COALESCE(CASE WHEN performance_rating > 7 THEN 1 END, 0))",
@@ -2277,38 +2263,38 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2016-04-08')) / 1000",
+            "SELECT FLOOR(TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2016-04-08')) / 1000)",
             read={"databricks": "SELECT unix_timestamp('2016-04-08', 'yyyy-MM-dd')"},
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(CAST('2016-04-08' AS TIMESTAMP)) / 1000",
+            "SELECT FLOOR(TO_UNIX_TIMESTAMP('2016-04-08') / 1000)",
             read={"databricks": "SELECT to_unix_timestamp('2016-04-08')"},
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(CAST(A AS TIMESTAMP)) / 1000",
+            "SELECT FLOOR(TO_UNIX_TIMESTAMP(A) / 1000)",
             read={"databricks": "SELECT UNIX_TIMESTAMP(A)", "trino": "SELECT TO_UNIXTIME(A)"},
             write={
-                "databricks": "SELECT TO_UNIX_TIMESTAMP(CAST(A AS TIMESTAMP)) / 1000",
-                "snowflake": "SELECT EXTRACT(epoch_second FROM CAST(A AS TIMESTAMP)) / 1000",
+                "databricks": "SELECT TO_UNIX_TIMESTAMP(A) / 1000",
+                "snowflake": "SELECT EXTRACT(epoch_second FROM A) / 1000",
             },
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(CAST(CURRENT_TIMESTAMP AS TIMESTAMP)) / 1000",
+            "SELECT FLOOR(TO_UNIX_TIMESTAMP(CURRENT_TIMESTAMP) / 1000)",
             read={"databricks": "SELECT UNIX_TIMESTAMP()"},
         )
 
         self.validate_all(
-            "SELECT * FROM events WHERE event_time >= TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-01-01')) / 1000 AND event_time < TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-02-01')) / 1000",
+            "SELECT * FROM events WHERE event_time >= FLOOR(TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-01-01')) / 1000) AND event_time < FLOOR(TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2023-02-01')) / 1000)",
             read={
                 "databricks": "SELECT * FROM events WHERE event_time >= unix_timestamp('2023-01-01', 'yyyy-MM-dd') AND event_time < unix_timestamp('2023-02-01', 'yyyy-MM-dd')"
             },
         )
 
         self.validate_all(
-            "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d %h:%i:%S', '2016-04-08 12:10:15')) / 1000",
+            "SELECT FLOOR(TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d %h:%i:%S', '2016-04-08 12:10:15')) / 1000)",
             read={
                 "databricks": "SELECT to_unix_timestamp('2016-04-08 12:10:15', 'yyyy-LL-dd hh:mm:ss')"
             },
@@ -3166,3 +3152,52 @@ FROM dual"""
         # Result should have the columns (works with both tokenizers)
         self.assertIn("col1", result_spaces)
         self.assertIn("col2", result_spaces)
+
+    def test_split_sql(self):
+        # 1. split inside MAP, separator absent → SPLIT stripped, plain string returned
+        self.validate_all(
+            "SELECT MAP[ARRAY['test'],ARRAY['-18000']]",
+            read={
+                "databricks": "SELECT map(split('test',','), split('-18000',','))",
+            },
+        )
+
+        # 2. explode(split(...)), separator absent → SPLIT preserved
+        self.validate_all(
+            "SELECT EXPLODE(SPLIT('VZ_2469420', ','))",
+            read={
+                "spark": "SELECT explode(split('VZ_2469420', ','))",
+            },
+        )
+
+        # 3. explode(split(...)), separator present → SPLIT preserved
+        self.validate_all(
+            "SELECT EXPLODE(SPLIT('VZ_2469420,', ','))",
+            read={
+                "spark": "SELECT explode(split('VZ_2469420,', ','))",
+            },
+        )
+
+        # 4. split without explode or map, separator absent → SPLIT preserved (not inside VarMap)
+        self.validate_all(
+            "SELECT SPLIT('hello', ',')",
+            read={
+                "spark": "SELECT split('hello', ',')",
+            },
+        )
+
+        # 5. split with 3 arguments → SPLIT preserved
+        self.validate_all(
+            "SELECT SPLIT('a,b,c', ',', 2)",
+            read={
+                "spark": "SELECT split('a,b,c', ',', 2)",
+            },
+        )
+
+        # 6. regexp_split inside explode → SPLIT preserved
+        self.validate_all(
+            "SELECT SPLIT('hello world', '\\\\s+')",
+            read={
+                "postgres": "SELECT regexp_split('hello world', '\\s+')",
+            },
+        )

@@ -2641,12 +2641,13 @@ class E6(Dialect):
             this = expression.this
             delimitter = expression.expression
             if (
-                this
+                expression.find_ancestor(exp.VarMap)
+                and this
                 and delimitter
                 and this.is_string
                 and delimitter.is_string
-                and delimitter.this not in this.this
-                and not len(expression.args) == 3
+                # and delimitter.this not in this.this
+                # and not len(expression.args) == 3
             ):
                 return f"{this}"
             return rename_func("SPLIT")(self, expression)
