@@ -6055,6 +6055,11 @@ class LastDay(Func, TimeUnit):
     arg_types = {"this": True, "unit": False}
 
 
+class NextDay(Func):
+    _sql_names = ["NEXT_DAY"]
+    arg_types = {"this": True, "expression": True}
+
+
 class Extract(Func):
     arg_types = {"this": True, "expression": True}
 
