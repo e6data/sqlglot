@@ -140,6 +140,7 @@ class Databricks(Spark):
             "DATEDIFF": build_date_delta(exp.DateDiff),
             "DATE_DIFF": build_date_delta(exp.DateDiff),
             "FIND_IN_SET": exp.FindInSet.from_arg_list,
+            "NEXT_DAY": exp.NextDay.from_arg_list,
             "GETDATE": exp.CurrentTimestamp.from_arg_list,
             "GET_JSON_OBJECT": _build_json_extract,
             "TO_DATE": build_formatted_time(exp.TsOrDsToDate, "databricks"),

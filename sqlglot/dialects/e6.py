@@ -1940,6 +1940,72 @@ class E6(Dialect):
                 return self.func("LAST_DAY", date_expr, unit)
             return self.func("LAST_DAY", date_expr)
 
+        # Mapping from day-of-week abbreviations/names to DAYOFWEEK index (1=Sunday .. 7=Saturday)
+        _DAY_OF_WEEK_INDEX: t.ClassVar[t.Dict[str, int]] = {
+            "SU": 1,
+            "SUN": 1,
+            "SUNDAY": 1,
+            "MO": 2,
+            "MON": 2,
+            "MONDAY": 2,
+            "TU": 3,
+            "TUE": 3,
+            "TUESDAY": 3,
+            "WE": 4,
+            "WED": 4,
+            "WEDNESDAY": 4,
+            "TH": 5,
+            "THU": 5,
+            "THURSDAY": 5,
+            "FR": 6,
+            "FRI": 6,
+            "FRIDAY": 6,
+            "SA": 7,
+            "SAT": 7,
+            "SATURDAY": 7,
+        }
+
+        def _next_day_sql(self: E6.Generator, expression: exp.NextDay) -> str:
+            date_expr = expression.this
+            day_expr = expression.expression
+
+            # If the day-of-week argument is a string literal, resolve it to an integer index
+            if isinstance(day_expr, exp.Literal) and day_expr.is_string:
+                day_name = day_expr.this.upper()
+                target_index = self._DAY_OF_WEEK_INDEX.get(day_name)
+                if target_index is not None:
+                    # CAST(DATE_ADD(expr, (target_day_index - DAYOFWEEK(expr) + 6) % 7 + 1) AS DATE)
+                    # The +6 (instead of +7) combined with +1 ensures that if expr
+                    # is already the target day, we skip to the next week (7 days).
+                    date_add = exp.Anonymous(
+                        this="DATE_ADD",
+                        expressions=[
+                            date_expr,
+                            exp.Add(
+                                this=exp.Mod(
+                                    this=exp.Paren(
+                                        this=exp.Add(
+                                            this=exp.Sub(
+                                                this=exp.Literal.number(target_index),
+                                                expression=exp.Anonymous(
+                                                    this="DAYOFWEEK", expressions=[date_expr.copy()]
+                                                ),
+                                            ),
+                                            expression=exp.Literal.number(6),
+                                        )
+                                    ),
+                                    expression=exp.Literal.number(7),
+                                ),
+                                expression=exp.Literal.number(1),
+                            ),
+                        ],
+                    )
+                    return self.sql(
+                        exp.Cast(this=date_add, to=exp.DataType(this=exp.DataType.Type.DATE))
+                    )
+
+            raise ValueError(f"NEXT_DAY: unsupported day-of-week: {self.sql(day_expr)}")
+
         def extract_sql(self: E6.Generator, expression: exp.Extract | exp.DayOfYear) -> str:
             unit = expression.this.name
             unit_mapped = E6.UNIT_PART_MAPPING.get(f"'{unit.lower()}'", unit)
@@ -2845,6 +2911,7 @@ class E6(Dialect):
             exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
+            exp.NextDay: _next_day_sql,
             exp.Length: length_sql,
             exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
             exp.Lower: rename_func("LOWER"),
