@@ -10,8 +10,6 @@ permissions:
 
 env:
   REVISION: gh-pr-3.0.${{github.run_number}}
-  IMAGE_TAG: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/transpiler:gh-pr-3.0.${{github.run_number}}
-  GCR_IMAGE_TAG: us-docker.pkg.dev/${{ vars.GCR_PROJECT_ID }}/e6-engine/transpiler:gh-pr-3.0.${{github.run_number}}
 
 jobs:
   build:
@@ -25,53 +23,43 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: docker build for image scan
-      run: docker buildx build -t $IMAGE_TAG --network host --load .
-
-    - name: Authenticate to Docker
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.SCOUT_USER }}
-        password: ${{ secrets.SCOUT_TOKEN }}
-
-    - name: Docker Scout
-      id: docker-scout
-      uses: docker/scout-action@v1
-      with:
-        image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/transpiler:gh-pr-3.0.${{github.run_number}}
-        command: cves
-        to-env: production
-        ignore-unchanged: true
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        only-fixed: true
-
     - name: Setup AWS Creds
+      if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
       uses: aws-actions/configure-aws-credentials@v2
       with:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GHActionsCodeartifactReadonly
         aws-region: us-east-1
 
     - name: Login to ECR
+      if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
       run: |
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
 
+    - name: Build and push to ECR
+      if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
+      run: |
+        docker buildx build --platform linux/amd64,linux/arm64 \
+          -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/transpiler:${{ env.REVISION }} \
+          --network host --push .
+
     - name: Authenticate to GCP
+      if: ${{ secrets.GCR_PUSH_SA != '' }}
       uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCR_PUSH_SA }}
 
-    - name: Login to GCR
+    - name: Login to GCR and push
+      if: ${{ secrets.GCR_PUSH_SA != '' && vars.GCR_PROJECT_ID != '' }}
       run: |
         echo '${{ secrets.GCR_PUSH_SA }}' | docker login -u _json_key --password-stdin us-docker.pkg.dev
-
-    - name: Build and push to ECR and GCR
-      run: |
-        docker buildx build --platform linux/amd64,linux/arm64 -t $IMAGE_TAG -t $GCR_IMAGE_TAG --network host --push .
+        docker buildx build --platform linux/amd64,linux/arm64 \
+          -t us-docker.pkg.dev/${{ vars.GCR_PROJECT_ID }}/e6-engine/transpiler:${{ env.REVISION }} \
+          --network host --push .
 
     - name: docker ACR login and push
       run: |
         echo ${{ secrets.ACR_TOKEN }} | docker login --username e6data-ci --password-stdin e6labs.azurecr.io
         docker buildx build --no-cache --platform linux/amd64,linux/arm64 \
-          -t e6labs.azurecr.io/transpiler:gh-pr-3.0.${{github.run_number}} \
-          -t e6labs.azurecr.io/transpiler-dev:gh-pr-3.0.${{github.run_number}} \
+          -t e6labs.azurecr.io/transpiler:${{ env.REVISION }} \
+          -t e6labs.azurecr.io/transpiler-dev:${{ env.REVISION }} \
           --network host --push .
