@@ -1239,6 +1239,16 @@ class TestE6(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT JSON_EXTRACT(attributesJSON, ?)",
+            read={"databricks": "SELECT GET_JSON_OBJECT(attributesJSON, ?)"},
+        )
+
+        self.validate_all(
+            "SELECT FROM_JSON(JSON_EXTRACT(ra1_0.attributesJSON, ?), ?)",
+            read={"databricks": "SELECT FROM_JSON(GET_JSON_OBJECT(ra1_0.attributesJSON, ?), ?)"},
+        )
+
     def test_array_slice(self):
         self.validate_all(
             "SELECT ARRAY_SLICE(A, B, C + B)",
