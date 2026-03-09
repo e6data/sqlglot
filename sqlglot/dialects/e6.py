@@ -2634,10 +2634,15 @@ class E6(Dialect):
 
             path = e.expression
             if self.from_dialect == "databricks":
-                if not self.sql(path).startswith("'$."):
-                    path = add_single_quotes("$." + self.sql(path))
-                else:
-                    path = self.sql(path)
+                # Check if path is a placeholder (either as expression or already converted to string)
+                path_sql = self.sql(path)
+                is_placeholder = isinstance(path, exp.Placeholder) or path_sql == "?"
+
+                if not is_placeholder:
+                    if not path_sql.startswith("'$."):
+                        path = add_single_quotes("$." + path_sql)
+                    else:
+                        path = path_sql
 
             return self.func("JSON_EXTRACT", e.this, path)
 
