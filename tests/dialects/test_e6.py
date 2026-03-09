@@ -2068,6 +2068,51 @@ class TestE6(Validator):
             read={"databricks": "select DATE_FORMAT(current_timestamp, 'dd MMM, EEE')"},
         )
 
+    def test_next_day(self):
+        """Test NEXT_DAY transpilation from Databricks to E6."""
+        import sqlglot
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="databricks", write="e6", from_dialect="databricks")[
+                0
+            ]
+
+        # 2-letter abbreviation
+        self.assertEqual(
+            transpile("SELECT NEXT_DAY('2015-01-14', 'TU')"),
+            "SELECT CAST(DATE_ADD('2015-01-14', MOD((3 - DAYOFWEEK('2015-01-14') + 6), 7) + 1) AS DATE)",
+        )
+
+        # Full day name
+        self.assertEqual(
+            transpile("SELECT NEXT_DAY('2023-12-25', 'MONDAY')"),
+            "SELECT CAST(DATE_ADD('2023-12-25', MOD((2 - DAYOFWEEK('2023-12-25') + 6), 7) + 1) AS DATE)",
+        )
+
+        # 3-letter abbreviation
+        self.assertEqual(
+            transpile("SELECT NEXT_DAY('2015-01-14', 'SAT')"),
+            "SELECT CAST(DATE_ADD('2015-01-14', MOD((7 - DAYOFWEEK('2015-01-14') + 6), 7) + 1) AS DATE)",
+        )
+
+        # Same day: should skip to next week (7 days)
+        self.assertEqual(
+            transpile("SELECT NEXT_DAY('2023-12-31', 'SUNDAY')"),
+            "SELECT CAST(DATE_ADD('2023-12-31', MOD((1 - DAYOFWEEK('2023-12-31') + 6), 7) + 1) AS DATE)",
+        )
+
+        # Column reference
+        self.assertEqual(
+            transpile("SELECT NEXT_DAY(date_col, 'FR')"),
+            "SELECT CAST(DATE_ADD(date_col, MOD((6 - DAYOFWEEK(date_col) + 6), 7) + 1) AS DATE)",
+        )
+
+        # Case insensitive
+        self.assertEqual(
+            transpile("SELECT NEXT_DAY('2023-12-31', 'wed')"),
+            "SELECT CAST(DATE_ADD('2023-12-31', MOD((4 - DAYOFWEEK('2023-12-31') + 6), 7) + 1) AS DATE)",
+        )
+
     def test_conditional_expression(self):
         self.validate_all(
             "SELECT SUM(COALESCE(CASE WHEN performance_rating > 7 THEN 1 END, 0))",
