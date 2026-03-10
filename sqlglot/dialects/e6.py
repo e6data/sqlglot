@@ -1873,20 +1873,18 @@ class E6(Dialect):
                 first_unit = expression.unit.this.name.upper()
                 second_unit = expression.unit.expression.name.upper()
 
-                for delim in ['-']:
+                for delim in ["-"]:
                     if delim in value:
                         parts = value.split(delim, 1)
                         break
                 else:
-                    parts = [value, '0']
+                    parts = [value, "0"]
                     
                 first_interval = exp.Interval(
-                    this=exp.Literal.string(parts[0].strip()),
-                    unit=exp.var(first_unit)
+                    this=exp.Literal.string(parts[0].strip()), unit=exp.var(first_unit)
                 )
                 second_interval = exp.Interval(
-                    this=exp.Literal.string(parts[1].strip()),
-                    unit=exp.var(second_unit)
+                    this=exp.Literal.string(parts[1].strip()), unit=exp.var(second_unit)
                 )
 
                 add_expr = exp.Add(this=first_interval, expression=second_interval)
