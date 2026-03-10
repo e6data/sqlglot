@@ -1879,7 +1879,7 @@ class E6(Dialect):
                         break
                 else:
                     parts = [value, "0"]
-                    
+
                 first_interval = exp.Interval(
                     this=exp.Literal.string(parts[0].strip()), unit=exp.var(first_unit)
                 )
