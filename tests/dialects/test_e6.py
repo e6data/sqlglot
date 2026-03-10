@@ -3298,7 +3298,6 @@ FROM dual"""
             },
         )
 
-
         # Single unit INTERVAL remains unchanged
         self.validate_all(
             "SELECT EXTRACT(DAY FROM INTERVAL '100 DAY')",
