@@ -2340,11 +2340,40 @@ class E6(Dialect):
             # Directly return the Length function call without considering binary behavior
             return f"LENGTH({length_expr})"
 
+        def window_sql(self, expression: exp.Window) -> str:
+            # Postgres/Tableau generates: COALESCE(col, 0) OVER (ORDER BY ... ROWS BETWEEN ...)
+            # This is a cumulative sum pattern but COALESCE is a scalar function.
+            # E6 requires OVER on aggregate functions only, so wrap COALESCE in SUM():
+            #   SUM(COALESCE(col, 0)) OVER (ORDER BY ... ROWS BETWEEN ...)
+            # Only triggers when all three conditions are met:
+            #   1. from_dialect is postgres
+            #   2. Window.this is specifically exp.Coalesce
+            #   3. Window frame uses ROWS (cumulative aggregation pattern)
+            if self.from_dialect == "postgres":
+                this = expression.this
+                spec = expression.args.get("spec")
+                if (
+                    isinstance(this, exp.Coalesce)
+                    and isinstance(spec, exp.WindowSpec)
+                    and spec.args.get("kind") == "ROWS"
+                ):
+                    expression.set("this", exp.Sum(this=this))
+            return super().window_sql(expression)
+
         def anonymous_sql(self, expression: exp.Anonymous) -> str:
             # Map the function names that need to be rewritten with same order of arguments
             function_mapping_normal = {"REGEXP_INSTR": "INSTR"}
             # Extract the function name from the expression
             function_name = self.sql(expression, "this")
+
+            # Postgres: TRUNC with 1 arg is a no-op on integers (e.g. EXTRACT(YEAR ...)).
+            # E6 expects TRUNC with 2 args, so strip it and return the inner expression.
+            if (
+                self.from_dialect == "postgres"
+                and function_name.upper() == "TRUNC"
+                and len(expression.expressions) == 1
+            ):
+                return self.sql(expression.expressions[0])
 
             if function_name in function_mapping_normal:
                 # Check if the function name needs to be mapped to a different one
