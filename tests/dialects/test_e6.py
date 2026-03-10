@@ -3270,3 +3270,38 @@ FROM dual"""
                 "postgres": "SELECT regexp_split('hello world', '\\s+')",
             },
         )
+
+    def test_interval_span_transpilation(self):
+        """Test INTERVAL with IntervalSpan (YEAR TO MONTH) transpilation."""
+
+        # Basic INTERVAL YEAR TO MONTH
+        self.validate_all(
+            "INTERVAL '2' YEAR + INTERVAL '11' MONTH",
+            read={
+                "databricks": "INTERVAL '2-11' YEAR TO MONTH",
+            },
+        )
+
+        # INTERVAL YEAR TO MONTH with zeros
+        self.validate_all(
+            "INTERVAL '0' YEAR + INTERVAL '0' MONTH",
+            read={
+                "databricks": "INTERVAL '0-0' YEAR TO MONTH",
+            },
+        )
+
+        # EXTRACT year from INTERVAL YEAR TO MONTH
+        self.validate_all(
+            "SELECT EXTRACT(YEAR FROM INTERVAL '2' YEAR + INTERVAL '11' MONTH)",
+            read={
+                "databricks": "SELECT EXTRACT(year FROM INTERVAL '2-11' year to month)",
+            },
+        )
+
+        # Single unit INTERVAL remains unchanged
+        self.validate_all(
+            "SELECT EXTRACT(DAY FROM INTERVAL '100 DAY')",
+            read={
+                "databricks": "SELECT EXTRACT(day FROM INTERVAL '100' day)",
+            },
+        )

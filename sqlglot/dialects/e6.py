@@ -1867,6 +1867,16 @@ class E6(Dialect):
             # While you debug anything, you can see the tree like structures there and see what are our candidates to fetch and do manipulations
             # You can use evaluate exression also there to verfy what we want
 
+            # Handle IntervalSpan (e.g. INTERVAL '2-11' YEAR TO MONTH)
+            if isinstance(expression.unit, exp.IntervalSpan):
+                value = expression.this.name
+                first_unit = expression.unit.this.name.upper()
+                second_unit = expression.unit.expression.name.upper()
+
+                parts = value.split("-", 1) if "-" in value else [value, "0"]
+
+                return f"INTERVAL '{parts[0].strip()}' {first_unit} + INTERVAL '{parts[1].strip()}' {second_unit}"
+
             # Check if both 'this' (value) and 'unit' are present in the expression
             if expression.this and expression.unit:
                 unit = expression.unit.name
