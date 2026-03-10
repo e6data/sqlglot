@@ -3270,3 +3270,38 @@ FROM dual"""
                 "postgres": "SELECT regexp_split('hello world', '\\s+')",
             },
         )
+
+    def test_interval_span_transpilation(self):
+        """Test INTERVAL with IntervalSpan (YEAR TO MONTH, DAY TO SECOND, etc.) transpilation."""
+
+        # Test 1 - Basic INTERVAL YEAR TO MONTH transpilation
+        self.validate_all(
+            "INTERVAL '2 YEAR' + INTERVAL '11 MONTH'",
+            read={
+                "databricks": "INTERVAL '2-11' YEAR TO MONTH",
+            },
+        )
+
+        # Test 2 - EXTRACT with INTERVAL YEAR TO MONTH
+        self.validate_all(
+            "SELECT EXTRACT(YEAR FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH') AS yr_2, EXTRACT(MONTH FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH') AS mon_11, EXTRACT(YEAR FROM INTERVAL '15 YEAR' + INTERVAL '6 MONTH') AS yr_15, EXTRACT(MONTH FROM INTERVAL '15 YEAR' + INTERVAL '6 MONTH') AS mon_6, EXTRACT(YEAR FROM INTERVAL '0 YEAR' + INTERVAL '0 MONTH') AS yr_0, EXTRACT(MONTH FROM INTERVAL '0 YEAR' + INTERVAL '0 MONTH') AS mon_0 ORDER BY 1",
+            read={
+                "databricks": "SELECT EXTRACT(year FROM INTERVAL '2-11' year to month) as yr_2, EXTRACT(month FROM INTERVAL '2-11' year to month) as mon_11, EXTRACT(year FROM INTERVAL '15-6' year to month) as yr_15, EXTRACT(month FROM INTERVAL '15-6' year to month) as mon_6, EXTRACT(year FROM INTERVAL '0-0' year to month) as yr_0, EXTRACT(month FROM INTERVAL '0-0' year to month) as mon_0 ORDER BY 1",
+            },
+        )
+
+        # Test 3 - date_part with INTERVAL YEAR TO MONTH (date_part gets transpiled to EXTRACT in E6)
+        self.validate_all(
+            "SELECT EXTRACT(MONTH FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH') AS dp_mon_11, EXTRACT(MONTH FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH') AS ext_mon_11, EXTRACT(YEAR FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH') AS dp_yr_2, EXTRACT(YEAR FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH') AS ext_yr_2 ORDER BY 1",
+            read={
+                "databricks": "SELECT date_part('MONTH', INTERVAL '2-11' year to month) as dp_mon_11, EXTRACT(month FROM INTERVAL '2-11' year to month) as ext_mon_11, date_part('YEAR', INTERVAL '2-11' year to month) as dp_yr_2, EXTRACT(year FROM INTERVAL '2-11' year to month) as ext_yr_2 ORDER BY 1",
+            },
+        )
+
+        # Test 4 - Single unit INTERVAL (should remain unchanged)
+        self.validate_all(
+            "SELECT EXTRACT(DAY FROM INTERVAL '100 DAY') AS day_100, EXTRACT(DAY FROM INTERVAL '0 DAY') AS day_0 ORDER BY 1",
+            read={
+                "databricks": "SELECT EXTRACT(day FROM INTERVAL '100' day) as day_100, EXTRACT(day FROM INTERVAL '0' day) as day_0 ORDER BY 1",
+            },
+        )
