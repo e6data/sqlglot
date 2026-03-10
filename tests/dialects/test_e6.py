@@ -3305,3 +3305,75 @@ FROM dual"""
                 "databricks": "SELECT EXTRACT(day FROM INTERVAL '100' day)",
             },
         )
+
+    def test_postgres_coalesce_over_window(self):
+        """Test Postgres/Tableau COALESCE(...) OVER (... ROWS ...) is wrapped in SUM()."""
+        import sqlglot
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="postgres", write="e6", from_dialect="postgres")[0]
+
+        # COALESCE with ROWS frame -> wrapped in SUM
+        self.assertEqual(
+            transpile(
+                "SELECT coalesce(cc_closed_date_sk, 0) OVER "
+                "(ORDER BY cc_call_center_sk ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t"
+            ),
+            "SELECT SUM(COALESCE(cc_closed_date_sk, 0)) OVER "
+            "(ORDER BY cc_call_center_sk ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t",
+        )
+
+        # SUM OVER should NOT be affected
+        self.assertEqual(
+            transpile(
+                "SELECT SUM(x) OVER (ORDER BY y ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t"
+            ),
+            "SELECT SUM(x) OVER (ORDER BY y ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t",
+        )
+
+        # COALESCE without OVER should NOT be affected
+        self.assertEqual(
+            transpile("SELECT COALESCE(x, 0) FROM t"),
+            "SELECT COALESCE(x, 0) FROM t",
+        )
+
+        # COALESCE OVER without ROWS frame should NOT be affected
+        self.assertEqual(
+            transpile("SELECT COALESCE(x, 0) OVER (PARTITION BY z) FROM t"),
+            "SELECT COALESCE(x, 0) OVER (PARTITION BY z) FROM t",
+        )
+
+    def test_postgres_trunc_single_arg(self):
+        """Test Postgres single-arg TRUNC is stripped in E6 (no-op on integers)."""
+        import sqlglot
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="postgres", write="e6", from_dialect="postgres")[0]
+
+        # TRUNC wrapping EXTRACT -> strip TRUNC
+        self.assertEqual(
+            transpile(
+                'SELECT CAST(TRUNC(EXTRACT(YEAR FROM "green_rides"."lpep_pickup_datetime")) AS INTEGER) '
+                'FROM "nyc_taxi_ride"."green_rides" "green_rides"'
+            ),
+            'SELECT CAST(EXTRACT(YEAR FROM "green_rides"."lpep_pickup_datetime") AS INT) '
+            'FROM "nyc_taxi_ride"."green_rides" AS "green_rides"',
+        )
+
+        # TRUNC with 2 args should NOT be affected
+        self.assertEqual(
+            transpile("SELECT TRUNC(3.14159, 2) FROM t"),
+            "SELECT TRUNC(3.14159, 2) FROM t",
+        )
+
+    def test_postgres_text_to_varchar(self):
+        """Test Postgres TEXT type is mapped to VARCHAR in E6."""
+        import sqlglot
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="postgres", write="e6", from_dialect="postgres")[0]
+
+        self.assertEqual(
+            transpile('SELECT CAST("col" AS TEXT) FROM t'),
+            'SELECT CAST("col" AS VARCHAR) FROM t',
+        )
