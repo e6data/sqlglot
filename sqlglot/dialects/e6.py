@@ -1873,22 +1873,9 @@ class E6(Dialect):
                 first_unit = expression.unit.this.name.upper()
                 second_unit = expression.unit.expression.name.upper()
 
-                for delim in ["-"]:
-                    if delim in value:
-                        parts = value.split(delim, 1)
-                        break
-                else:
-                    parts = [value, "0"]
+                parts = value.split("-", 1) if "-" in value else [value, "0"]
 
-                first_interval = exp.Interval(
-                    this=exp.Literal.string(parts[0].strip()), unit=exp.var(first_unit)
-                )
-                second_interval = exp.Interval(
-                    this=exp.Literal.string(parts[1].strip()), unit=exp.var(second_unit)
-                )
-
-                add_expr = exp.Add(this=first_interval, expression=second_interval)
-                return self.sql(add_expr)
+                return f"INTERVAL '{parts[0].strip()}' {first_unit} + INTERVAL '{parts[1].strip()}' {second_unit}"
 
             # Check if both 'this' (value) and 'unit' are present in the expression
             if expression.this and expression.unit:

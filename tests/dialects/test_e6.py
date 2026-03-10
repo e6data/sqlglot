@@ -3276,7 +3276,7 @@ FROM dual"""
 
         # Basic INTERVAL YEAR TO MONTH
         self.validate_all(
-            "INTERVAL '2 YEAR' + INTERVAL '11 MONTH'",
+            "INTERVAL '2' YEAR + INTERVAL '11' MONTH",
             read={
                 "databricks": "INTERVAL '2-11' YEAR TO MONTH",
             },
@@ -3284,7 +3284,7 @@ FROM dual"""
 
         # INTERVAL YEAR TO MONTH with zeros
         self.validate_all(
-            "INTERVAL '0 YEAR' + INTERVAL '0 MONTH'",
+            "INTERVAL '0' YEAR + INTERVAL '0' MONTH",
             read={
                 "databricks": "INTERVAL '0-0' YEAR TO MONTH",
             },
@@ -3292,7 +3292,7 @@ FROM dual"""
 
         # EXTRACT year from INTERVAL YEAR TO MONTH
         self.validate_all(
-            "SELECT EXTRACT(YEAR FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH')",
+            "SELECT EXTRACT(YEAR FROM INTERVAL '2' YEAR + INTERVAL '11' MONTH)",
             read={
                 "databricks": "SELECT EXTRACT(year FROM INTERVAL '2-11' year to month)",
             },
