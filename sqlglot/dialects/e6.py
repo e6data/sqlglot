@@ -1873,7 +1873,7 @@ class E6(Dialect):
                 first_unit = expression.unit.this.name.upper()
                 second_unit = expression.unit.expression.name.upper()
 
-                for delim in ['-', ':', ' ']:
+                for delim in ['-']:
                     if delim in value:
                         parts = value.split(delim, 1)
                         break
