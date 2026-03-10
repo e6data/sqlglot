@@ -1879,8 +1879,18 @@ class E6(Dialect):
                         break
                 else:
                     parts = [value, '0']
+                    
+                first_interval = exp.Interval(
+                    this=exp.Literal.string(parts[0].strip()),
+                    unit=exp.var(first_unit)
+                )
+                second_interval = exp.Interval(
+                    this=exp.Literal.string(parts[1].strip()),
+                    unit=exp.var(second_unit)
+                )
 
-                return f"INTERVAL '{parts[0].strip()} {first_unit}' + INTERVAL '{parts[1].strip()} {second_unit}'"
+                add_expr = exp.Add(this=first_interval, expression=second_interval)
+                return self.sql(add_expr)
 
             # Check if both 'this' (value) and 'unit' are present in the expression
             if expression.this and expression.unit:
