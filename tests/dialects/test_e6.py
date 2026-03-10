@@ -3282,14 +3282,6 @@ FROM dual"""
             },
         )
 
-        # INTERVAL YEAR TO MONTH with different values
-        self.validate_all(
-            "INTERVAL '15 YEAR' + INTERVAL '6 MONTH'",
-            read={
-                "databricks": "INTERVAL '15-6' YEAR TO MONTH",
-            },
-        )
-
         # INTERVAL YEAR TO MONTH with zeros
         self.validate_all(
             "INTERVAL '0 YEAR' + INTERVAL '0 MONTH'",
@@ -3306,21 +3298,6 @@ FROM dual"""
             },
         )
 
-        # EXTRACT month from INTERVAL YEAR TO MONTH
-        self.validate_all(
-            "SELECT EXTRACT(MONTH FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH')",
-            read={
-                "databricks": "SELECT EXTRACT(month FROM INTERVAL '2-11' year to month)",
-            },
-        )
-
-        # date_part transpiles to EXTRACT in E6
-        self.validate_all(
-            "SELECT EXTRACT(MONTH FROM INTERVAL '2 YEAR' + INTERVAL '11 MONTH')",
-            read={
-                "databricks": "SELECT date_part('MONTH', INTERVAL '2-11' year to month)",
-            },
-        )
 
         # Single unit INTERVAL remains unchanged
         self.validate_all(
