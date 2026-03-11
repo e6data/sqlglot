@@ -1867,15 +1867,42 @@ class E6(Dialect):
             # While you debug anything, you can see the tree like structures there and see what are our candidates to fetch and do manipulations
             # You can use evaluate exression also there to verfy what we want
 
-            # Handle IntervalSpan (e.g. INTERVAL '2-11' YEAR TO MONTH)
+            # Handle IntervalSpan (e.g. INTERVAL '2-11' YEAR TO MONTH, INTERVAL '5:30:45' HOUR TO SECOND)
             if isinstance(expression.unit, exp.IntervalSpan):
                 value = expression.this.name
                 first_unit = expression.unit.this.name.upper()
                 second_unit = expression.unit.expression.name.upper()
 
-                parts = value.split("-", 1) if "-" in value else [value, "0"]
+                # Expand the span into all intermediate units
+                # e.g. HOUR TO SECOND → [HOUR, MINUTE, SECOND]
+                all_units = ["YEAR", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND"]
+                start = all_units.index(first_unit)
+                end = all_units.index(second_unit)
+                span_units = all_units[start : end + 1]
 
-                return f"INTERVAL '{parts[0].strip()}' {first_unit} + INTERVAL '{parts[1].strip()}' {second_unit}"
+                # Split value: '-' for date spans (YEAR-MONTH), ':' for time spans (HH:MM:SS)
+                if "-" in value:
+                    parts = value.split("-")
+                elif ":" in value:
+                    parts = value.split(":")
+                else:
+                    parts = [value]
+
+                # Pad with '0' if fewer parts than span units
+                while len(parts) < len(span_units):
+                    parts.append("0")
+
+                # Wrap each part as exp.Var (outputs raw SQL without quoting)
+                interval_vars = []
+                for i, unit in enumerate(span_units):
+                    interval_vars.append(exp.Var(this=f"INTERVAL '{parts[i].strip()}' {unit}"))
+
+                # Chain with exp.Add: A + B + C → Add(Add(A, B), C)
+                result_expr: exp.Expression = interval_vars[0]
+                for interval in interval_vars[1:]:
+                    result_expr = exp.Add(this=result_expr, expression=interval)
+
+                return self.sql(result_expr)
 
             # Check if both 'this' (value) and 'unit' are present in the expression
             if expression.this and expression.unit:

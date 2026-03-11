@@ -3306,6 +3306,22 @@ FROM dual"""
             },
         )
 
+        # INTERVAL HOUR TO SECOND (colon-delimited, 3 parts)
+        self.validate_all(
+            "SELECT EXTRACT(HOUR FROM INTERVAL '5' HOUR + INTERVAL '30' MINUTE + INTERVAL '45.123' SECOND) AS hr_5, EXTRACT(MINUTE FROM INTERVAL '5' HOUR + INTERVAL '30' MINUTE + INTERVAL '45.123' SECOND) AS mi_30, EXTRACT(SECOND FROM INTERVAL '5' HOUR + INTERVAL '30' MINUTE + INTERVAL '45.123' SECOND) AS sec_45_123, EXTRACT(DAY FROM INTERVAL '100 DAY') AS day_100, EXTRACT(DAY FROM INTERVAL '0 DAY') AS day_0 ORDER BY 1",
+            read={
+                "databricks": "select EXTRACT(hour from INTERVAL '5:30:45.123' hour to second) as hr_5, EXTRACT(minute from INTERVAL '5:30:45.123' hour to second) as mi_30, EXTRACT(second from INTERVAL '5:30:45.123' hour to second) as sec_45_123, EXTRACT(day from INTERVAL '100' day) as day_100, EXTRACT(day from INTERVAL '0' day) as day_0 order by 1",
+            },
+        )
+
+        # DATE_PART and EXTRACT with INTERVAL YEAR TO MONTH
+        self.validate_all(
+            "SELECT EXTRACT(MONTH FROM INTERVAL '2' YEAR + INTERVAL '11' MONTH) AS dp_mon_11, EXTRACT(MONTH FROM INTERVAL '2' YEAR + INTERVAL '11' MONTH) AS ext_mon_11, EXTRACT(YEAR FROM INTERVAL '2' YEAR + INTERVAL '11' MONTH) AS dp_yr_2, EXTRACT(YEAR FROM INTERVAL '2' YEAR + INTERVAL '11' MONTH) AS ext_yr_2 ORDER BY 1",
+            read={
+                "databricks": "select date_part('MONTH', INTERVAL '2-11' year to month) as dp_mon_11, EXTRACT(month from INTERVAL '2-11' year to month) as ext_mon_11, date_part('YEAR', INTERVAL '2-11' year to month) as dp_yr_2, EXTRACT(year from INTERVAL '2-11' year to month) as ext_yr_2 order by 1",
+            },
+        )
+
     def test_postgres_coalesce_over_window(self):
         """Test Postgres/Tableau COALESCE(...) OVER (... ROWS ...) is wrapped in SUM()."""
         import sqlglot
