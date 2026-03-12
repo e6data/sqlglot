@@ -166,6 +166,46 @@ class Databricks(Spark):
             **Spark.Parser.FACTOR,
         }
 
+        def _parse_where(self, skip_where_token: bool = False) -> t.Optional[exp.Where]:
+            """
+            Override to handle empty WHERE clauses in Databricks SQL.
+
+            Problem: Queries like "SELECT * FROM table WHERE" (with no condition after WHERE)
+            cause a ParseError in the base parser because the Where expression requires a
+            'this' (condition) argument.
+
+            Solution: After consuming the WHERE token, we check if there's actually a condition.
+            If not, we return None which tells the parent (_parse_query_modifiers) to skip
+            attaching a WHERE clause — effectively removing the empty WHERE from the AST.
+
+            Flow:
+            1. _match(TokenType.WHERE) checks if current token is WHERE.
+               - If yes: consumes it (advances past it), returns True.
+               - If no: returns False, and we return None (no WHERE clause present).
+            2. _parse_assignment() tries to parse the condition expression after WHERE.
+               - e.g. "col = 5" -> returns an EQ expression node
+               - e.g. nothing/empty -> returns None
+            3. If the parsed condition is None (empty WHERE), return None to drop it.
+            4. Otherwise, build the Where expression node as normal.
+            """
+            # Step 1: Check if the current token is WHERE and consume it
+            # skip_where_token=True means the caller already consumed the WHERE token
+            # (e.g. _parse_delete, _parse_update) so we skip the token match and go
+            # straight to parsing the condition. When False (default), we need to
+            # find and consume the WHERE token ourselves.
+            if not skip_where_token and not self._match(TokenType.WHERE):
+                return None
+
+            # Step 2: Try to parse the condition expression after WHERE
+            this = self._parse_assignment()
+
+            # Step 3: If no condition was found, the WHERE clause is empty — drop it
+            if not this:
+                return None
+
+            # Step 4: Build and return the Where expression node with the parsed condition
+            return self.expression(exp.Where, comments=self._prev_comments, this=this)
+
         def _parse_colon_as_variant_extract(
             self, this: t.Optional[exp.Expression]
         ) -> t.Optional[exp.Expression]:

@@ -503,6 +503,102 @@ class TestDatabricks(Validator):
             },
         )
 
+    def test_empty_where_clause(self):
+        """
+        Test that the Databricks parser handles empty/missing WHERE clauses gracefully.
+
+        The override in Databricks.Parser._parse_where() should:
+        - Drop an empty WHERE clause (WHERE with no condition) instead of raising ParseError
+        - Still parse normal WHERE clauses correctly
+        - Handle WHERE in subqueries, CTEs, and combined with other clauses
+        """
+
+        # ---- Case 1: Basic empty WHERE clause ----
+        # WHERE keyword with no condition should be silently removed
+        # Input:  SELECT * FROM t WHERE
+        # Output: SELECT * FROM t
+        self.validate_identity(
+            "SELECT * FROM t WHERE",
+            write_sql="SELECT * FROM t",
+        )
+
+        # ---- Case 2: Empty WHERE with trailing whitespace/newlines ----
+        # Same as Case 1 but with extra whitespace — should still be dropped
+        self.validate_identity(
+            "SELECT * FROM t WHERE   ",
+            write_sql="SELECT * FROM t",
+        )
+
+        # ---- Case 3: Empty WHERE followed by GROUP BY ----
+        # The empty WHERE should be dropped, but GROUP BY should still be parsed
+        # Input:  SELECT col, COUNT(*) FROM t WHERE GROUP BY col
+        # Output: SELECT col, COUNT(*) FROM t GROUP BY col
+        self.validate_identity(
+            "SELECT col, COUNT(*) FROM t WHERE GROUP BY col",
+            write_sql="SELECT col, COUNT(*) FROM t GROUP BY col",
+        )
+
+        # ---- Case 4: Empty WHERE followed by ORDER BY ----
+        # Input:  SELECT * FROM t WHERE ORDER BY col
+        # Output: SELECT * FROM t ORDER BY col
+        self.validate_identity(
+            "SELECT * FROM t WHERE ORDER BY col",
+            write_sql="SELECT * FROM t ORDER BY col",
+        )
+
+        # ---- Case 5: Normal WHERE clause still works ----
+        # A valid WHERE condition should parse and generate as usual
+        self.validate_identity(
+            "SELECT * FROM t WHERE col = 1",
+        )
+
+        # ---- Case 7: Normal WHERE with multiple conditions ----
+        self.validate_identity(
+            "SELECT * FROM t WHERE col1 = 1 AND col2 > 5",
+        )
+
+        # ---- Case 8: WHERE with complex expression (function, BETWEEN, IN) ----
+        self.validate_identity(
+            "SELECT * FROM t WHERE col IN (1, 2, 3) AND dt BETWEEN '2024-01-01' AND '2024-12-31'",
+        )
+
+        # ---- Case 9: Fully qualified table with empty WHERE ----
+        # Mirrors the original failing query from test_transpile.py
+        # Input:  SELECT * FROM catalog.schema.table WHERE
+        # Output: SELECT * FROM catalog.schema.table
+        self.validate_identity(
+            "SELECT * FROM espresso_gold_test.global.adt_api_ingestion WHERE",
+            write_sql="SELECT * FROM espresso_gold_test.global.adt_api_ingestion",
+        )
+
+        # ---- Case 10: Empty WHERE in a subquery ----
+        # The inner query's empty WHERE should be dropped
+        self.validate_identity(
+            "SELECT * FROM (SELECT * FROM t WHERE) AS subq",
+            write_sql="SELECT * FROM (SELECT * FROM t) AS subq",
+        )
+
+        # ---- Case 11: Transpile empty WHERE from Databricks to other dialects ----
+        # Verify the empty WHERE is dropped when transpiling to other targets
+        self.validate_all(
+            "SELECT * FROM t",
+            read={
+                "databricks": "SELECT * FROM t WHERE",
+            },
+            write={
+                "databricks": "SELECT * FROM t",
+                "e6": "SELECT * FROM t",
+                "spark": "SELECT * FROM t",
+            },
+        )
+
+        # ---- Case 12: Empty WHERE with GROUP BY + HAVING + ORDER BY ----
+        # All subsequent clauses should survive even though WHERE is dropped
+        self.validate_identity(
+            "SELECT col, COUNT(*) FROM t WHERE GROUP BY col HAVING COUNT(*) > 1 ORDER BY col",
+            write_sql="SELECT col, COUNT(*) FROM t GROUP BY col HAVING COUNT(*) > 1 ORDER BY col",
+        )
+
     def test_regexp_substr(self):
         self.validate_all(
             "REGEXP_SUBSTR(subject, pattern)",
