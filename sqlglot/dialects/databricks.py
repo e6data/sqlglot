@@ -160,11 +160,36 @@ class Databricks(Spark):
             "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
                 this=seq_get(args, 0), scale=exp.Literal.string("seconds")
             ),
+            "TRY_DIVIDE": lambda args: exp.SafeDivide(
+                this=seq_get(args, 0), expression=seq_get(args, 1)
+            ),
         }
 
         FACTOR = {
             **Spark.Parser.FACTOR,
         }
+
+        def _parse_pivot_aggregation(self) -> t.Optional[exp.Expression]:
+            """
+            Override to support arbitrary expressions in PIVOT aggregation lists.
+
+            Databricks allows expressions like:
+                try_divide(sum(dus), SUM(dus_total)) * 100 AS dus_perc
+
+            Why _parse_bitwise() and not _parse_disjunction():
+                The PIVOT syntax is: PIVOT(agg_expr [AS alias], ... FOR col IN (...))
+                _parse_disjunction -> _parse_range which includes FOR and IN in its
+                RANGE_PARSERS. That means _parse_disjunction would consume
+                "expr FOR col IN (...)" as a single comprehension expression,
+                stealing the FOR/IN tokens from the PIVOT clause.
+
+                _parse_bitwise stops before _parse_range, so it handles:
+                - Function calls: SUM(x), try_divide(a, b)
+                - Arithmetic: * 100, + 1, / 2
+                - Bitwise ops: &, |, ^
+                But does NOT consume FOR or IN, leaving them for _parse_pivot.
+            """
+            return self._parse_alias(self._parse_bitwise())
 
         def _parse_where(self, skip_where_token: bool = False) -> t.Optional[exp.Where]:
             """
