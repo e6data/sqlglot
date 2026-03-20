@@ -3393,3 +3393,30 @@ FROM dual"""
             transpile('SELECT CAST("col" AS TEXT) FROM t'),
             'SELECT CAST("col" AS VARCHAR) FROM t',
         )
+
+    def test_try_divide(self):
+        """Test TRY_DIVIDE transpilation from Databricks to E6."""
+        self.validate_all(
+            "SELECT TRY_DIVIDE(a, b)",
+            read={"databricks": "SELECT TRY_DIVIDE(a, b)"},
+        )
+        self.validate_all(
+            "SELECT TRY_DIVIDE(SUM(x), SUM(y)) * 100 AS pct",
+            read={"databricks": "SELECT TRY_DIVIDE(SUM(x), SUM(y)) * 100 AS pct"},
+        )
+
+    def test_pivot_with_try_divide(self):
+        """Test PIVOT with TRY_DIVIDE expressions transpiled from Databricks to E6."""
+        import sqlglot
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="databricks", write="e6", from_dialect="databricks")[
+                0
+            ]
+
+        self.assertEqual(
+            transpile(
+                "SELECT * FROM t PIVOT(SUM(x) AS x, TRY_DIVIDE(SUM(a), SUM(b)) * 100 AS pct FOR col IN ('A', 'B'))"
+            ),
+            "SELECT * FROM t PIVOT(SUM(x) AS x, TRY_DIVIDE(SUM(a), SUM(b)) * 100 AS pct FOR col IN ('A', 'B'))",
+        )

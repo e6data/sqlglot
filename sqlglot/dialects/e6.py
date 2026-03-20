@@ -2910,6 +2910,7 @@ class E6(Dialect):
             ),
             exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
+            exp.SafeDivide: rename_func("TRY_DIVIDE"),
             exp.SortArray: rename_func("ARRAY_SORT"),
             exp.TableFromRows: tablefromrows_sql,
             exp.AtTimeZone: attimezone_sql,
