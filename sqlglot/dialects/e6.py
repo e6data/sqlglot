@@ -2327,7 +2327,7 @@ class E6(Dialect):
             while parent:
                 if isinstance(parent, exp.Select):
                     break
-                if isinstance(parent, (exp.Values, exp.Update)):
+                if isinstance(parent, (exp.Values, exp.Insert, exp.Update)):
                     if isinstance(keys, exp.Array) and isinstance(values, exp.Array):
                         interleaved = []
                         for k, v in zip(keys.expressions, values.expressions):
