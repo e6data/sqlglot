@@ -2319,6 +2319,23 @@ class E6(Dialect):
         def map_sql(self, expression: exp.Map | exp.VarMap) -> str:
             keys = expression.args.get("keys")
             values = expression.args.get("values")
+
+            # Inside INSERT VALUES or UPDATE SET (but not inside a SELECT subquery),
+            # map(...) is a literal map constructor — preserve as map('k1', 'v1', ...)
+            # instead of rewriting to MAP[ARRAY[...], ARRAY[...]].
+            parent = expression.parent
+            while parent:
+                if isinstance(parent, exp.Select):
+                    break
+                if isinstance(parent, (exp.Values, exp.Update)):
+                    if isinstance(keys, exp.Array) and isinstance(values, exp.Array):
+                        interleaved = []
+                        for k, v in zip(keys.expressions, values.expressions):
+                            interleaved.extend([k, v])
+                        return self.func("map", *interleaved, normalize=False)
+                    return self.func("map", keys, values, normalize=False)
+                parent = parent.parent
+
             final_keys = keys
             final_values = values
             if isinstance(keys, exp.Split):

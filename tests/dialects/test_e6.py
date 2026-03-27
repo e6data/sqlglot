@@ -1,5 +1,6 @@
 import os
 
+from sqlglot import parse_one
 from tests.dialects.test_dialect import Validator
 
 
@@ -599,6 +600,57 @@ class TestE6(Validator):
             "INSERT INTO t1 (selection, report_id) VALUES (map['k1', 'v1', 'k2', 'v2'], '123')",
             read={
                 "databricks": "INSERT INTO t1 (selection, report_id) VALUES (map['k1', 'v1', 'k2', 'v2'], '123')",
+            },
+        )
+
+        # map(...) with parens inside INSERT VALUES should preserve as map(...)
+        # and NOT be rewritten to MAP[ARRAY[...], ARRAY[...]]
+        self.assertEqual(
+            parse_one(
+                "INSERT INTO t1 (selection) VALUES (map('k1', 'v1', 'k2', 'v2'))",
+                read="databricks",
+            ).sql("e6"),
+            "INSERT INTO t1 (selection) VALUES (map('k1', 'v1', 'k2', 'v2'))",
+        )
+
+        self.assertEqual(
+            parse_one(
+                "INSERT INTO t1 (selection, name) VALUES (map('product_id', '46208865', 'name', 'PEOPLE WATCHING'), 'test')",
+                read="databricks",
+            ).sql("e6"),
+            "INSERT INTO t1 (selection, name) VALUES (map('product_id', '46208865', 'name', 'PEOPLE WATCHING'), 'test')",
+        )
+
+        # map(...) with 2 args inside INSERT VALUES should also preserve
+        self.validate_all(
+            "INSERT INTO t1 (selection) VALUES (map('k1', 'v1'))",
+            read={
+                "databricks": "INSERT INTO t1 (selection) VALUES (map('k1', 'v1'))",
+            },
+        )
+
+        # map(...) in UPDATE SET should preserve as map(...)
+        self.assertEqual(
+            parse_one(
+                "UPDATE t1 SET col1 = map('k1', 'v1', 'k2', 'v2') WHERE id = 1",
+                read="databricks",
+            ).sql("e6"),
+            "UPDATE t1 SET col1 = map('k1', 'v1', 'k2', 'v2') WHERE id = 1",
+        )
+
+        # map(...) in INSERT SELECT should convert to MAP[ARRAY[...], ARRAY[...]]
+        self.validate_all(
+            "INSERT INTO t1 SELECT MAP[ARRAY['k1'],ARRAY['v1']] FROM t2",
+            read={
+                "databricks": "INSERT INTO t1 SELECT map('k1', 'v1') FROM t2",
+            },
+        )
+
+        # map(...) in regular SELECT should convert to MAP[ARRAY[...], ARRAY[...]]
+        self.validate_all(
+            "SELECT MAP[ARRAY['k1'],ARRAY['v1']] FROM t1",
+            read={
+                "databricks": "SELECT map('k1', 'v1') FROM t1",
             },
         )
 
