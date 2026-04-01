@@ -2785,7 +2785,11 @@ class E6(Dialect):
 
                 if not is_placeholder:
                     if not path_sql.startswith("'$."):
-                        path = add_single_quotes("$." + path_sql)
+                        if path_sql.startswith("["):
+                            escaped = ("$" + path_sql).replace("'", "\\'")
+                            path = f"'{escaped}'"
+                        else:
+                            path = add_single_quotes("$." + path_sql)
                     else:
                         path = path_sql
 
