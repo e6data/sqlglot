@@ -3140,6 +3140,7 @@ class E6(Dialect):
             "grouping",
             "having",
             "in",
+            "index",
             "inner",
             "int",
             "integer",
