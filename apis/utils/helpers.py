@@ -579,6 +579,18 @@ def normalize_unicode_spaces(sql: str) -> str:
     return "".join(out_chars)
 
 
+def fix_quote_escapes(sql: str) -> str:
+    """Pre-process: convert '' to \\'\\'  when it's an apostrophe inside a string.
+    Example: 'IT''S CHRISTMAS' -> 'IT\\'\\' S CHRISTMAS'
+    """
+    return re.sub(r"(?<=[a-zA-Z0-9])''(?!')", "\\'\\'" , sql)
+
+
+def restore_quote_escapes(sql: str) -> str:
+    """Post-process: convert \\'\\' back to '' in transpiled output."""
+    return sql.replace("\\'\\'" , "''")
+
+
 def transform_table_part(expression: exp.Expression) -> exp.Expression:
     for column_or_table in expression.find_all(exp.Column, exp.Table):
         db = column_or_table.args.get("db")

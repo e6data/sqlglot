@@ -33,6 +33,8 @@ from apis.utils.helpers import (
     transform_table_part,
     transform_catalog_schema_only,
     set_cte_names_case_sensitively,
+    fix_quote_escapes,
+    restore_quote_escapes,
 )
 from formatting_utils import preserve_formatting
 
@@ -45,6 +47,7 @@ ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
 SKIP_COMMENT = os.getenv("SKIP_COMMENT", "True")  # Always strip multi-line comments
+FIX_QUOTE_ESCAPES = os.getenv("FIX_QUOTE_ESCAPES", "False")  # Fix '' inside single-quoted strings
 
 storage_service_client = None
 
@@ -119,6 +122,10 @@ async def convert_query(
 
         if SKIP_COMMENT.lower() == "true":
             query, comment = strip_comment(query)
+
+        if FIX_QUOTE_ESCAPES.lower() == "true":
+            query = fix_quote_escapes(query)
+
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
@@ -147,6 +154,9 @@ async def convert_query(
         )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+        if FIX_QUOTE_ESCAPES.lower() == "true":
+            double_quotes_added_query = restore_quote_escapes(double_quotes_added_query)
 
         # Preserve original formatting if enabled via feature flag
         if flags_dict.get("PRESERVE_FORMATTING", False):
