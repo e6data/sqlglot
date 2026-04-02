@@ -61,7 +61,10 @@ def process_guardrail(query, schema, catalog, storage_service_client):
     Validate a SQL query against guardrails.
     """
     from sqlglot import parse
-    from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
+    from guardrail.main import (
+        extract_sql_components_per_table_with_alias,
+        get_table_infos,
+    )
     from guardrail.rules_validator import validate_queries
 
     parsed = parse(query, error_level=None)
@@ -577,6 +580,18 @@ def normalize_unicode_spaces(sql: str) -> str:
         i += 1
 
     return "".join(out_chars)
+
+
+def fix_quote_escapes(sql: str) -> str:
+    """Pre-process: convert '' to \\'\\'  when it's an apostrophe inside a string.
+    Example: 'IT''S CHRISTMAS' -> 'IT\\'\\' S CHRISTMAS'
+    """
+    return re.sub(r"(?<=[a-zA-Z0-9])''(?!')", "\\'\\'", sql)
+
+
+def restore_quote_escapes(sql: str) -> str:
+    """Post-process: convert \\'\\' back to '' in transpiled output."""
+    return sql.replace("\\'\\'", "''")
 
 
 def transform_table_part(expression: exp.Expression) -> exp.Expression:
