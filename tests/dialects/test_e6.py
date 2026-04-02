@@ -1301,6 +1301,30 @@ class TestE6(Validator):
             read={"databricks": "SELECT FROM_JSON(GET_JSON_OBJECT(ra1_0.attributesJSON, ?), ?)"},
         )
 
+        # Bracket notation: get_json_object with $['key'] path (map/array access)
+        self.validate_all(
+            r"""SELECT JSON_EXTRACT(ra1_0.attributesWithLinkTypeJSON, '$[\'DestinationAccessLinkType:assets:dataRetention\']')""",
+            read={
+                "databricks": r"""SELECT GET_JSON_OBJECT(ra1_0.attributesWithLinkTypeJSON, '$[\'DestinationAccessLinkType:assets:dataRetention\']')""",
+            },
+        )
+
+        # Dot notation: get_json_object with $.field path (struct access)
+        self.validate_all(
+            "SELECT JSON_EXTRACT(endpoints, '$.youtube')",
+            read={
+                "databricks": "SELECT GET_JSON_OBJECT(endpoints, '$.youtube')",
+            },
+        )
+
+        # Dot notation: nested path
+        self.validate_all(
+            "SELECT JSON_EXTRACT(col, '$.foo.bar')",
+            read={
+                "databricks": "SELECT GET_JSON_OBJECT(col, '$.foo.bar')",
+            },
+        )
+
     def test_array_slice(self):
         self.validate_all(
             "SELECT ARRAY_SLICE(A, B, C + B)",
