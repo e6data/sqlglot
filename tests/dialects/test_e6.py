@@ -1303,9 +1303,9 @@ class TestE6(Validator):
 
         # Bracket notation: get_json_object with $['key'] path (map/array access)
         self.validate_all(
-            """SELECT JSON_EXTRACT(ra1_0.attributesWithLinkTypeJSON, '$[\\'DestinationAccessLinkType:assets:dataRetention\\']')""",
+            r"""SELECT JSON_EXTRACT(ra1_0.attributesWithLinkTypeJSON, '$[\'DestinationAccessLinkType:assets:dataRetention\']')""",
             read={
-                "databricks": """SELECT GET_JSON_OBJECT(ra1_0.attributesWithLinkTypeJSON, '$[\\'DestinationAccessLinkType:assets:dataRetention\\']')""",
+                "databricks": r"""SELECT GET_JSON_OBJECT(ra1_0.attributesWithLinkTypeJSON, '$[\'DestinationAccessLinkType:assets:dataRetention\']')""",
             },
         )
 
