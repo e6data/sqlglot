@@ -150,7 +150,9 @@ async def convert_query(
         cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
 
         double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
-            dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
+            dialect=to_sql,
+            from_dialect=from_sql,
+            pretty=flags_dict.get("PRETTY_PRINT", True),
         )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
@@ -393,7 +395,9 @@ async def stats_api(
             tree2 = quote_identifiers(tree, dialect=to_sql)
 
             double_quotes_added_query = tree2.sql(
-                dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
+                dialect=to_sql,
+                from_dialect=from_sql,
+                pretty=flags_dict.get("PRETTY_PRINT", True),
             )
 
             double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
@@ -409,12 +413,18 @@ async def stats_api(
             logger.info("Got the converted query!!!!")
 
             all_functions_converted_query = extract_functions_from_query(
-                double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
+                double_quotes_added_query,
+                function_pattern,
+                keyword_pattern,
+                exclusion_list,
             )
-            supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
-                categorize_functions(
-                    all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
-                )
+            (
+                supported_functions_in_converted_query,
+                unsupported_functions_in_converted_query,
+            ) = categorize_functions(
+                all_functions_converted_query,
+                supported_functions_in_e6,
+                functions_as_keywords,
             )
 
             double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
@@ -593,10 +603,13 @@ async def guardstats(
         all_functions_converted_query = extract_functions_from_query(
             double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
         )
-        supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
-            categorize_functions(
-                all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
-            )
+        (
+            supported_functions_in_converted_query,
+            unsupported_functions_in_converted_query,
+        ) = categorize_functions(
+            all_functions_converted_query,
+            supported_functions_in_e6,
+            functions_as_keywords,
         )
 
         double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
@@ -680,4 +693,10 @@ if __name__ == "__main__":
 
     logger.info(f"Detected {cpu_cores} CPU cores, using {workers} workers")
 
-    uvicorn.run("converter_api:app", host="0.0.0.0", port=8100, proxy_headers=True, workers=workers)
+    uvicorn.run(
+        "converter_api:app",
+        host="0.0.0.0",
+        port=8100,
+        proxy_headers=True,
+        workers=workers,
+    )
