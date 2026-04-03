@@ -2416,6 +2416,11 @@ class E6(Dialect):
             elif function_name.lower() == "table":
                 return f"{self.sql(*expression.expressions)}"
 
+            if function_name.lower() == "from_json":
+                for arg in expression.expressions:
+                    if isinstance(arg, exp.Literal) and arg.is_string and "value:" in arg.this:
+                        arg.set("this", arg.this.replace("value:", "`value`:"))
+
             return self.func(function_name, *expression.expressions)
 
         def to_timestamp_sql(self: E6.Generator, expression: exp.StrToTime) -> str:
@@ -2785,7 +2790,11 @@ class E6(Dialect):
 
                 if not is_placeholder:
                     if not path_sql.startswith("'$."):
-                        path = add_single_quotes("$." + path_sql)
+                        if path_sql.startswith("["):
+                            escaped = ("$" + path_sql).replace("'", "\\'")
+                            path = f"'{escaped}'"
+                        else:
+                            path = add_single_quotes("$." + path_sql)
                     else:
                         path = path_sql
 

@@ -33,6 +33,8 @@ from apis.utils.helpers import (
     transform_table_part,
     transform_catalog_schema_only,
     set_cte_names_case_sensitively,
+    fix_quote_escapes,
+    restore_quote_escapes,
 )
 from formatting_utils import preserve_formatting
 
@@ -45,6 +47,7 @@ ENABLE_GUARDRAIL = os.getenv("ENABLE_GUARDRAIL", "False")
 STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-storage-storage-blue
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
 SKIP_COMMENT = os.getenv("SKIP_COMMENT", "True")  # Always strip multi-line comments
+FIX_QUOTE_ESCAPES = os.getenv("FIX_QUOTE_ESCAPES", "False")  # Fix '' inside single-quoted strings
 
 storage_service_client = None
 
@@ -61,10 +64,11 @@ if ENABLE_GUARDRAIL.lower() == "true":
 
 logger.info("Storage Service Client is created")
 logger.info(
-    "Environment flags — ENABLE_GUARDRAIL: %s, SKIP_COMMENT: %s, "
+    "Environment flags — ENABLE_GUARDRAIL: %s, SKIP_COMMENT: %s, FIX_QUOTE_ESCAPES: %s, "
     "STORAGE_ENGINE_URL: %s, STORAGE_ENGINE_PORT: %s",
     ENABLE_GUARDRAIL,
     SKIP_COMMENT,
+    FIX_QUOTE_ESCAPES,
     STORAGE_ENGINE_URL,
     STORAGE_ENGINE_PORT,
 )
@@ -129,6 +133,10 @@ async def convert_query(
             query, comment = strip_comment(query)
             logger.info("%s — SKIP_COMMENT: stripped comments", query_id)
 
+        if FIX_QUOTE_ESCAPES.lower() == "true":
+            query = fix_quote_escapes(query)
+            logger.info("%s — FIX_QUOTE_ESCAPES: pre-processed quote escapes", query_id)
+
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
@@ -155,10 +163,16 @@ async def convert_query(
         cte_names_equivalence_checked_ast = set_cte_names_case_sensitively(values_ensured_ast)
 
         double_quotes_added_query = cte_names_equivalence_checked_ast.sql(
-            dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
+            dialect=to_sql,
+            from_dialect=from_sql,
+            pretty=flags_dict.get("PRETTY_PRINT", True),
         )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+        if FIX_QUOTE_ESCAPES.lower() == "true":
+            double_quotes_added_query = restore_quote_escapes(double_quotes_added_query)
+            logger.info("%s — FIX_QUOTE_ESCAPES: post-processed quote escapes", query_id)
 
         # Preserve original formatting if enabled via feature flag
         if flags_dict.get("PRESERVE_FORMATTING", False):
@@ -396,7 +410,9 @@ async def stats_api(
             tree2 = quote_identifiers(tree, dialect=to_sql)
 
             double_quotes_added_query = tree2.sql(
-                dialect=to_sql, from_dialect=from_sql, pretty=flags_dict.get("PRETTY_PRINT", True)
+                dialect=to_sql,
+                from_dialect=from_sql,
+                pretty=flags_dict.get("PRETTY_PRINT", True),
             )
 
             double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
@@ -412,12 +428,18 @@ async def stats_api(
             logger.info("Got the converted query!!!!")
 
             all_functions_converted_query = extract_functions_from_query(
-                double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
+                double_quotes_added_query,
+                function_pattern,
+                keyword_pattern,
+                exclusion_list,
             )
-            supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
-                categorize_functions(
-                    all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
-                )
+            (
+                supported_functions_in_converted_query,
+                unsupported_functions_in_converted_query,
+            ) = categorize_functions(
+                all_functions_converted_query,
+                supported_functions_in_e6,
+                functions_as_keywords,
             )
 
             double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
@@ -596,10 +618,13 @@ async def guardstats(
         all_functions_converted_query = extract_functions_from_query(
             double_quotes_added_query, function_pattern, keyword_pattern, exclusion_list
         )
-        supported_functions_in_converted_query, unsupported_functions_in_converted_query = (
-            categorize_functions(
-                all_functions_converted_query, supported_functions_in_e6, functions_as_keywords
-            )
+        (
+            supported_functions_in_converted_query,
+            unsupported_functions_in_converted_query,
+        ) = categorize_functions(
+            all_functions_converted_query,
+            supported_functions_in_e6,
+            functions_as_keywords,
         )
 
         double_quote_ast = parse_one(double_quotes_added_query, read=to_sql)
@@ -683,4 +708,10 @@ if __name__ == "__main__":
 
     logger.info(f"Detected {cpu_cores} CPU cores, using {workers} workers")
 
-    uvicorn.run("converter_api:app", host="0.0.0.0", port=8100, proxy_headers=True, workers=workers)
+    uvicorn.run(
+        "converter_api:app",
+        host="0.0.0.0",
+        port=8100,
+        proxy_headers=True,
+        workers=workers,
+    )
