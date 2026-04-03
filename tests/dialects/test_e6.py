@@ -1325,6 +1325,14 @@ class TestE6(Validator):
             },
         )
 
+        # from_json: backtick 'value' keyword in struct type definition
+        self.validate_all(
+            "SELECT FROM_JSON(col, 'struct<`value`: string, valueKey: string>')",
+            read={
+                "databricks": "SELECT from_json(col, 'struct<value: string, valueKey: string>')",
+            },
+        )
+
     def test_array_slice(self):
         self.validate_all(
             "SELECT ARRAY_SLICE(A, B, C + B)",
