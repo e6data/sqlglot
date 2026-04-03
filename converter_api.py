@@ -63,6 +63,15 @@ if ENABLE_GUARDRAIL.lower() == "true":
     storage_service_client = StorageServiceClient(host=STORAGE_ENGINE_URL, port=STORAGE_ENGINE_PORT)
 
 logger.info("Storage Service Client is created")
+logger.info(
+    "Environment flags — ENABLE_GUARDRAIL: %s, SKIP_COMMENT: %s, FIX_QUOTE_ESCAPES: %s, "
+    "STORAGE_ENGINE_URL: %s, STORAGE_ENGINE_PORT: %s",
+    ENABLE_GUARDRAIL,
+    SKIP_COMMENT,
+    FIX_QUOTE_ESCAPES,
+    STORAGE_ENGINE_URL,
+    STORAGE_ENGINE_PORT,
+)
 
 
 def escape_unicode(s: str) -> str:
@@ -122,15 +131,19 @@ async def convert_query(
 
         if SKIP_COMMENT.lower() == "true":
             query, comment = strip_comment(query)
+            logger.info("%s — SKIP_COMMENT: stripped comments", query_id)
 
         if FIX_QUOTE_ESCAPES.lower() == "true":
             query = fix_quote_escapes(query)
+            logger.info("%s — FIX_QUOTE_ESCAPES: pre-processed quote escapes", query_id)
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
+            logger.info("%s — USE_TWO_PHASE_QUALIFICATION_SCHEME: enabled", query_id)
             # Check if we should only transform catalog.schema without full transpilation
             if flags_dict.get("SKIP_E6_TRANSPILATION", False):
+                logger.info("%s — SKIP_E6_TRANSPILATION: enabled", query_id)
                 transformed_query = transform_catalog_schema_only(query, from_sql)
                 # transformed_query = add_comment_to_query(transformed_query, comment)
                 logger.info(
@@ -159,9 +172,11 @@ async def convert_query(
 
         if FIX_QUOTE_ESCAPES.lower() == "true":
             double_quotes_added_query = restore_quote_escapes(double_quotes_added_query)
+            logger.info("%s — FIX_QUOTE_ESCAPES: post-processed quote escapes", query_id)
 
         # Preserve original formatting if enabled via feature flag
         if flags_dict.get("PRESERVE_FORMATTING", False):
+            logger.info("%s — PRESERVE_FORMATTING: enabled", query_id)
             double_quotes_added_query = preserve_formatting(
                 query, double_quotes_added_query, from_sql, to_sql
             )
