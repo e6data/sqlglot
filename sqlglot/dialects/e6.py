@@ -18,7 +18,8 @@ from sqlglot.dialects.dialect import (
     datestrtodate_sql,
     trim_sql,
 )
-from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset, flatten
+from sqlglot.helper import is_float, is_int, seq_get, flatten
+from sqlglot.expressions import apply_index_offset
 from sqlglot.tokens import TokenType
 from sqlglot.parser import build_coalesce
 from typing import Any, Optional
