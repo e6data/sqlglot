@@ -934,7 +934,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT GETDEK()",
+            'SELECT "perf_exp_qa_6zmhw2quv9uoavwzgpvjezzm".getdek()',
             read={"databricks": "select `perf_exp_qa_6zmhw2quv9uoavwzgpvjezzm`.getdek()"},
         )
 

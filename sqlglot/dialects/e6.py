@@ -2394,8 +2394,12 @@ class E6(Dialect):
         def anonymous_sql(self, expression: exp.Anonymous) -> str:
             # Map the function names that need to be rewritten with same order of arguments
             function_mapping_normal = {"REGEXP_INSTR": "INSTR"}
-            # Extract the function name from the expression
-            function_name = self.sql(expression, "this")
+            # Use the unquoted function name so backtick-quoted names are not quoted in e6
+            function_name = expression.name
+
+            # Don't normalize (uppercase) qualified functions like schema.func()
+            parent = expression.parent
+            is_qualified = isinstance(parent, exp.Dot) and expression is parent.expression
 
             # Postgres: TRUNC with 1 arg is a no-op on integers (e.g. EXTRACT(YEAR ...)).
             # E6 expects TRUNC with 2 args, so strip it and return the inner expression.
@@ -2406,9 +2410,9 @@ class E6(Dialect):
             ):
                 return self.sql(expression.expressions[0])
 
-            if function_name in function_mapping_normal:
+            if function_name.upper() in function_mapping_normal:
                 # Check if the function name needs to be mapped to a different one
-                mapped_function = function_mapping_normal.get(function_name, function_name)
+                mapped_function = function_mapping_normal.get(function_name.upper(), function_name)
 
                 # Generate the SQL for the mapped function with its expressions
                 return self.func(mapped_function, *expression.expressions)
@@ -2421,7 +2425,7 @@ class E6(Dialect):
                     if isinstance(arg, exp.Literal) and arg.is_string and "value:" in arg.this:
                         arg.set("this", arg.this.replace("value:", "`value`:"))
 
-            return self.func(function_name, *expression.expressions)
+            return self.func(function_name, *expression.expressions, normalize=not is_qualified)
 
         def to_timestamp_sql(self: E6.Generator, expression: exp.StrToTime) -> str:
             date_expr = expression.this
@@ -2972,18 +2976,7 @@ class E6(Dialect):
             exp.DayOfWeekIso: rename_func("DAYOFWEEKISO"),
             exp.DayOfWeek: rename_func("DAYOFWEEK"),
             exp.DayOfYear: extract_sql,
-            exp.Dot: lambda self, e: (
-                self.func("GETDEK")
-                if isinstance(e.expression, exp.Anonymous)
-                and (
-                    (isinstance(e.expression.this, str) and e.expression.this.upper() == "GETDEK")
-                    or (
-                        isinstance(e.expression.this, exp.Identifier)
-                        and e.expression.this.this.upper() == "GETDEK"
-                    )
-                )
-                else self.dot_sql(e)
-            ),
+            exp.Dot: lambda self, e: self.dot_sql(e),
             exp.Encode: lambda self, e: self.func("TO_UTF8", e.this),
             exp.Exists: lambda self, e: self.exists_sql(e),
             exp.Explode: explode_sql,
