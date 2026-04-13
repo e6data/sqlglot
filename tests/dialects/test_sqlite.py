@@ -1,5 +1,6 @@
 from tests.dialects.test_dialect import Validator
 
+from sqlglot import exp
 from sqlglot.helper import logger as helper_logger
 
 
@@ -7,6 +8,13 @@ class TestSQLite(Validator):
     dialect = "sqlite"
 
     def test_sqlite(self):
+        self.validate_identity("SELECT * FROM t AS t INDEXED BY s.i")
+        self.validate_identity("SELECT * FROM t INDEXED BY s.i")
+        self.validate_identity("SELECT * FROM t INDEXED BY i")
+        self.validate_identity("SELECT * FROM t NOT INDEXED")
+        self.validate_identity("SELECT match FROM t")
+        self.validate_identity("SELECT rowid FROM t1 WHERE t1 MATCH 'lorem'")
+        self.validate_identity("SELECT RANK() OVER (RANGE CURRENT ROW) FROM tbl")
         self.validate_identity("UNHEX(a, b)")
         self.validate_identity("SELECT DATE()")
         self.validate_identity("SELECT DATE('now', 'start of month', '+1 month', '-1 day')")
@@ -23,10 +31,21 @@ class TestSQLite(Validator):
         self.validate_identity("SELECT * FROM GENERATE_SERIES(1, 5)")
         self.validate_identity("SELECT INSTR(haystack, needle)")
         self.validate_identity(
+            "SELECT a, SUM(b) OVER (ORDER BY a ROWS BETWEEN -1 PRECEDING AND 1 FOLLOWING) FROM t1 ORDER BY 1"
+        )
+        self.validate_identity(
             "SELECT JSON_EXTRACT('[10, 20, [30, 40]]', '$[2]', '$[0]', '$[1]')",
         )
         self.validate_identity(
             """SELECT item AS "item", some AS "some" FROM data WHERE (item = 'value_1' COLLATE NOCASE) AND (some = 't' COLLATE NOCASE) ORDER BY item ASC LIMIT 1 OFFSET 0"""
+        )
+        self.validate_identity(
+            "SELECT a FROM t1 WHERE a NOT NULL AND a NOT NULL ORDER BY a",
+            "SELECT a FROM t1 WHERE NOT a IS NULL AND NOT a IS NULL ORDER BY a",
+        )
+        self.validate_identity(
+            "SELECT a, b FROM t1 WHERE b + a NOT NULL ORDER BY 1",
+            "SELECT a, b FROM t1 WHERE NOT b + a IS NULL ORDER BY 1",
         )
         self.validate_identity(
             "SELECT * FROM t1, t2",
@@ -40,8 +59,41 @@ class TestSQLite(Validator):
         self.validate_all("SELECT LIKE(y, x)", write={"sqlite": "SELECT x LIKE y"})
         self.validate_all("SELECT GLOB('*y*', 'xyz')", write={"sqlite": "SELECT 'xyz' GLOB '*y*'"})
         self.validate_all(
-            "SELECT LIKE('%y%', 'xyz', '')",
-            write={"sqlite": "SELECT 'xyz' LIKE '%y%' ESCAPE ''"},
+            "SELECT LIKE('%y%', 'xyz', '')", write={"sqlite": "SELECT 'xyz' LIKE '%y%' ESCAPE ''"}
+        )
+        self.validate_all(
+            "SELECT MIN(a, b) FROM t",
+            read={
+                "postgres": "SELECT LEAST(a, b) FROM t",
+                "sqlite": "SELECT MIN(a, b) FROM t",
+            },
+        )
+        self.validate_all(
+            "SELECT MAX(a, b) FROM t",
+            read={
+                "postgres": "SELECT GREATEST(a, b) FROM t",
+                "sqlite": "SELECT MAX(a, b) FROM t",
+            },
+        )
+        self.validate_all(
+            "SELECT JSON_GROUP_ARRAY(name) FROM t",
+            read={
+                "postgres": "SELECT JSON_AGG(name) FROM t",
+                "sqlite": "SELECT JSON_GROUP_ARRAY(name) FROM t",
+            },
+            write={
+                "postgres": "SELECT JSON_AGG(name) FROM t",
+            },
+        )
+        self.validate_all(
+            "SELECT JSON_GROUP_OBJECT(name, value) FROM t",
+            read={
+                "postgres": "SELECT JSON_OBJECT_AGG(name, value) FROM t",
+                "sqlite": "SELECT JSON_GROUP_OBJECT(name, value) FROM t",
+            },
+            write={
+                "postgres": "SELECT JSON_OBJECT_AGG(name, value) FROM t",
+            },
         )
         self.validate_all(
             "CURRENT_DATE",
@@ -54,7 +106,6 @@ class TestSQLite(Validator):
             "CURRENT_TIME",
             read={
                 "": "CURRENT_TIME",
-                "snowflake": "CURRENT_TIME()",
             },
         )
         self.validate_all(
@@ -96,6 +147,7 @@ class TestSQLite(Validator):
             },
         )
         self.validate_all("x", read={"snowflake": "LEAST(x)"})
+        self.validate_all("x", read={"postgres": "GREATEST(x)"})
         self.validate_all("MIN(x)", read={"snowflake": "MIN(x)"}, write={"snowflake": "MIN(x)"})
         self.validate_all(
             "MIN(x, y, z)",
@@ -139,6 +191,11 @@ class TestSQLite(Validator):
             "ATTACH 'foo' || '.foo2' AS schema_name",
         )
         self.validate_identity("DETACH DATABASE schema_name", "DETACH schema_name")
+        self.validate_identity("SELECT * FROM t WHERE NULL IS y")
+        self.validate_identity(
+            "SELECT * FROM t WHERE NULL IS NOT y", "SELECT * FROM t WHERE NOT NULL IS y"
+        )
+        self.validate_identity("SELECT SQLITE_VERSION()")
 
     def test_strftime(self):
         self.validate_identity("SELECT STRFTIME('%Y/%m/%d', 'now')")
@@ -209,11 +266,21 @@ class TestSQLite(Validator):
 
             self.assertIn("Named columns are not supported in table alias.", cm.output[0])
 
+    def test_trunc(self):
+        # SQLite TRUNC only accepts one argument
+        self.validate_identity("TRUNC(3.14)").assert_is(exp.Trunc)
+
+        # Decimals arg is dropped with warning (best-effort transpilation)
+        with self.assertLogs(helper_logger) as cm:
+            self.validate_identity("TRUNC(3.14, 2)", "TRUNC(3.14)").assert_is(exp.Trunc)
+            self.assertIn("'decimals' is not supported", cm.output[0])
+
     def test_ddl(self):
         for conflict_action in ("ABORT", "FAIL", "IGNORE", "REPLACE", "ROLLBACK"):
             with self.subTest(f"ON CONFLICT {conflict_action}"):
                 self.validate_identity("CREATE TABLE a (b, c, UNIQUE (b, c) ON CONFLICT IGNORE)")
 
+        self.validate_identity("CREATE TABLE over (x, y)")
         self.validate_identity("INSERT OR ABORT INTO foo (x, y) VALUES (1, 2)")
         self.validate_identity("INSERT OR FAIL INTO foo (x, y) VALUES (1, 2)")
         self.validate_identity("INSERT OR IGNORE INTO foo (x, y) VALUES (1, 2)")
@@ -221,6 +288,25 @@ class TestSQLite(Validator):
         self.validate_identity("INSERT OR ROLLBACK INTO foo (x, y) VALUES (1, 2)")
         self.validate_identity("CREATE TABLE foo (id INTEGER PRIMARY KEY ASC)")
         self.validate_identity("CREATE TEMPORARY TABLE foo (id INTEGER)")
+        self.validate_identity("CREATE VIRTUAL TABLE docs USING fts5(title, content)")
+        self.validate_identity("CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(title, content)")
+        self.validate_identity("CREATE VIRTUAL TABLE main.docs USING fts5(title, content)")
+        self.validate_identity(
+            "CREATE VIRTUAL TABLE demo_index USING rtree(id, minX, maxX, minY, maxY)"
+        )
+        self.validate_identity("CREATE VIRTUAL TABLE t USING module_name")
+        self.validate_identity("PRAGMA table_info")
+        self.validate_identity("PRAGMA schema")
+        self.validate_identity("PRAGMA full_column_names = on")
+        self.validate_identity("PRAGMA full_column_names = off")
+        self.validate_identity("PRAGMA cache_size = 2000")
+        self.validate_identity("PRAGMA foo = -2000")
+        self.validate_identity("PRAGMA foo(-2000)", "PRAGMA foo = -2000")
+        self.validate_identity("PRAGMA encoding = 'UTF-16'")
+        self.validate_identity("PRAGMA main.cache_size")
+        self.validate_identity("PRAGMA main.cache_size = 2000")
+        self.validate_identity("PRAGMA cache_size(2000)", "PRAGMA cache_size = 2000")
+        self.validate_identity("PRAGMA main.cache_size(2000)", "PRAGMA main.cache_size = 2000")
 
         self.validate_all(
             """
@@ -273,3 +359,20 @@ class TestSQLite(Validator):
     def test_analyze(self):
         self.validate_identity("ANALYZE tbl")
         self.validate_identity("ANALYZE schma.tbl")
+
+    def test_create_trigger(self):
+        """Test that SQLite CREATE TRIGGER statements fall back to Command parsing."""
+        self.validate_identity(
+            "CREATE TRIGGER log_insert AFTER INSERT ON users BEGIN INSERT INTO audit_log (user_id, action, created_at) VALUES (NEW.id, 'INSERT', datetime('now')) END",
+            check_command_warning=True,
+        )
+
+        self.validate_identity(
+            "CREATE TRIGGER check_balance BEFORE UPDATE OF balance ON accounts WHEN NEW.balance < 0 BEGIN UPDATE accounts SET balance = 0 WHERE id = NEW.id END",
+            check_command_warning=True,
+        )
+
+        self.validate_identity(
+            "CREATE TRIGGER view_insert INSTEAD OF INSERT ON employee_view BEGIN INSERT INTO employees (id, name, department) VALUES (NEW.id, NEW.name, NEW.department) END",
+            check_command_warning=True,
+        )

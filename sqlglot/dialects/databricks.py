@@ -1,355 +1,40 @@
 from __future__ import annotations
 
-import os
 from copy import deepcopy
 from collections import defaultdict
 
-import typing as t
-
-from sqlglot import exp, transforms, jsonpath
-from sqlglot.dialects.dialect import (
-    date_delta_sql,
-    build_date_delta,
-    timestamptrunc_sql,
-    build_formatted_time,
-    groupconcat_sql,
-    rename_func,
-    trim_sql,
-)
+from sqlglot import exp
 from sqlglot.dialects.spark import Spark
+from sqlglot.generators.databricks import DatabricksGenerator
+from sqlglot.parsers.databricks import DatabricksParser
 from sqlglot.tokens import TokenType
-from sqlglot.helper import seq_get
 from sqlglot.optimizer.annotate_types import TypeAnnotator
-
-
-def _build_json_extract(args: t.List) -> exp.JSONExtract:
-    # Transform GET_JSON_OBJECT(expr, '$.<path>') -> expr:<path>
-    this = args[0]
-    path = args[1].name.lstrip("$.")
-    return exp.JSONExtract(this=this, expression=path)
-
-
-def _jsonextract_sql(
-    self: Databricks.Generator, expression: exp.JSONExtract | exp.JSONExtractScalar
-) -> str:
-    this = self.sql(expression, "this")
-    expr = self.sql(expression, "expression")
-    return f"{this}:{expr}"
-
-
-class DatabricksMakeInterval(exp.MakeInterval):
-    # Databricks order: years, months, weeks, days, hours, mins, secs
-    arg_types = {
-        "year": False,
-        "month": False,
-        "week": False,
-        "day": False,
-        "hour": False,
-        "minute": False,
-        "second": False,
-    }
-
-
-def _build_make_interval(args: t.List) -> DatabricksMakeInterval:
-    return DatabricksMakeInterval(
-        year=seq_get(args, 0),
-        month=seq_get(args, 1),
-        week=seq_get(args, 2),
-        day=seq_get(args, 3),
-        hour=seq_get(args, 4),
-        minute=seq_get(args, 5),
-        second=seq_get(args, 6),
-    )
-
-
-def build_trim(args: t.List, is_left: bool = True):
-    if len(args) < 2:
-        return exp.Trim(
-            this=seq_get(args, 0),
-            position="LEADING" if is_left else "TRAILING",
-        )
-
-    else:
-        return exp.Trim(
-            this=seq_get(args, 1),
-            expression=seq_get(args, 0),
-            position="LEADING" if is_left else "TRAILING",
-        )
-
-
-def _trim_sql(self: Databricks.Generator, expression: exp.Trim) -> str:
-    target = self.sql(expression, "this")
-    trim_type = self.sql(expression, "position")
-    remove_chars = self.sql(expression, "expression")
-
-    if trim_type.upper() == "LEADING":
-        if remove_chars:
-            return self.func("LTRIM", remove_chars, target)
-        else:
-            return self.func("LTRIM", target)
-    elif trim_type.upper() == "TRAILING":
-        if remove_chars:
-            return self.func("RTRIM", remove_chars, target)
-        else:
-            return self.func("RTRIM", target)
-
-    else:
-        return trim_sql(self, expression)
 
 
 class Databricks(Spark):
     SAFE_DIVISION = False
     COPY_PARAMS_ARE_CSV = False
-    PRESERVE_ORIGINAL_NAMES = True
 
     COERCES_TO = defaultdict(set, deepcopy(TypeAnnotator.COERCES_TO))
     for text_type in exp.DataType.TEXT_TYPES:
         COERCES_TO[text_type] |= {
             *exp.DataType.NUMERIC_TYPES,
             *exp.DataType.TEMPORAL_TYPES,
-            exp.DataType.Type.BINARY,
-            exp.DataType.Type.BOOLEAN,
-            exp.DataType.Type.INTERVAL,
+            exp.DType.BINARY,
+            exp.DType.BOOLEAN,
+            exp.DType.INTERVAL,
         }
 
-    class JSONPathTokenizer(jsonpath.JSONPathTokenizer):
+    class JSONPathTokenizer(Spark.JSONPathTokenizer):
         IDENTIFIERS = ["`", '"']
 
     class Tokenizer(Spark.Tokenizer):
-        IDENTIFIERS = (
-            ["`", '"']
-            if os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower() == "true"
-            else ["`"]
-        )
         KEYWORDS = {
             **Spark.Tokenizer.KEYWORDS,
+            "STREAM": TokenType.STREAM,
             "VOID": TokenType.VOID,
         }
 
-    class Parser(Spark.Parser):
-        LOG_DEFAULTS_TO_LN = True
-        STRICT_CAST = True
-        COLON_IS_VARIANT_EXTRACT = True
-        VALUES_FOLLOWED_BY_PAREN = True
+    Parser = DatabricksParser
 
-        FUNCTIONS = {
-            **Spark.Parser.FUNCTIONS,
-            "MAKE_INTERVAL": _build_make_interval,
-            "DATEADD": build_date_delta(exp.DateAdd),
-            "DATE_ADD": build_date_delta(exp.DateAdd),
-            "DATEDIFF": build_date_delta(exp.DateDiff),
-            "DATE_DIFF": build_date_delta(exp.DateDiff),
-            "FIND_IN_SET": exp.FindInSet.from_arg_list,
-            "NEXT_DAY": exp.NextDay.from_arg_list,
-            "GETDATE": exp.CurrentTimestamp.from_arg_list,
-            "GET_JSON_OBJECT": _build_json_extract,
-            "TO_DATE": build_formatted_time(exp.TsOrDsToDate, "databricks"),
-            "LTRIM": lambda args: build_trim(args),
-            "REGEXP_SUBSTR": exp.RegexpExtract.from_arg_list,
-            "RTRIM": lambda args: build_trim(args, is_left=False),
-            "SPLIT_PART": exp.SplitPart.from_arg_list,
-            "TIMEDIFF": lambda args: exp.TimestampDiff(
-                unit=seq_get(args, 0), this=seq_get(args, 1), expression=seq_get(args, 2)
-            ),
-            "TIMESTAMP_MILLIS": lambda args: exp.UnixToTime(
-                this=seq_get(args, 0), scale=exp.UnixToTime.MILLIS
-            ),
-            "TIMESTAMP_MICROS": lambda args: exp.UnixToTime(
-                this=seq_get(args, 0), scale=exp.UnixToTime.MICROS
-            ),
-            "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
-                this=seq_get(args, 0), scale=exp.Literal.string("seconds")
-            ),
-            "TRY_DIVIDE": lambda args: exp.SafeDivide(
-                this=seq_get(args, 0), expression=seq_get(args, 1)
-            ),
-        }
-
-        FACTOR = {
-            **Spark.Parser.FACTOR,
-        }
-
-        def _parse_pivot_aggregation(self) -> t.Optional[exp.Expression]:
-            """
-            Override to support arbitrary expressions in PIVOT aggregation lists.
-
-            Databricks allows expressions like:
-                try_divide(sum(dus), SUM(dus_total)) * 100 AS dus_perc
-
-            Why _parse_bitwise() and not _parse_disjunction():
-                The PIVOT syntax is: PIVOT(agg_expr [AS alias], ... FOR col IN (...))
-                _parse_disjunction -> _parse_range which includes FOR and IN in its
-                RANGE_PARSERS. That means _parse_disjunction would consume
-                "expr FOR col IN (...)" as a single comprehension expression,
-                stealing the FOR/IN tokens from the PIVOT clause.
-
-                _parse_bitwise stops before _parse_range, so it handles:
-                - Function calls: SUM(x), try_divide(a, b)
-                - Arithmetic: * 100, + 1, / 2
-                - Bitwise ops: &, |, ^
-                But does NOT consume FOR or IN, leaving them for _parse_pivot.
-            """
-            return self._parse_alias(self._parse_bitwise())
-
-        def _parse_where(self, skip_where_token: bool = False) -> t.Optional[exp.Where]:
-            """
-            Override to handle empty WHERE clauses in Databricks SQL.
-
-            Problem: Queries like "SELECT * FROM table WHERE" (with no condition after WHERE)
-            cause a ParseError in the base parser because the Where expression requires a
-            'this' (condition) argument.
-
-            Solution: After consuming the WHERE token, we check if there's actually a condition.
-            If not, we return None which tells the parent (_parse_query_modifiers) to skip
-            attaching a WHERE clause — effectively removing the empty WHERE from the AST.
-
-            Flow:
-            1. _match(TokenType.WHERE) checks if current token is WHERE.
-               - If yes: consumes it (advances past it), returns True.
-               - If no: returns False, and we return None (no WHERE clause present).
-            2. _parse_assignment() tries to parse the condition expression after WHERE.
-               - e.g. "col = 5" -> returns an EQ expression node
-               - e.g. nothing/empty -> returns None
-            3. If the parsed condition is None (empty WHERE), return None to drop it.
-            4. Otherwise, build the Where expression node as normal.
-            """
-            # Step 1: Check if the current token is WHERE and consume it
-            # skip_where_token=True means the caller already consumed the WHERE token
-            # (e.g. _parse_delete, _parse_update) so we skip the token match and go
-            # straight to parsing the condition. When False (default), we need to
-            # find and consume the WHERE token ourselves.
-            if not skip_where_token and not self._match(TokenType.WHERE):
-                return None
-
-            # Step 2: Try to parse the condition expression after WHERE
-            this = self._parse_assignment()
-
-            # Step 3: If no condition was found, the WHERE clause is empty — drop it
-            if not this:
-                return None
-
-            # Step 4: Build and return the Where expression node with the parsed condition
-            return self.expression(exp.Where, comments=self._prev_comments, this=this)
-
-        def _parse_colon_as_variant_extract(
-            self, this: t.Optional[exp.Expression]
-        ) -> t.Optional[exp.Expression]:
-            """Override for Databricks colon syntax - variant_extract flag is set by parent"""
-            result = super()._parse_colon_as_variant_extract(this)
-            return result
-
-    class Generator(Spark.Generator):
-        TABLESAMPLE_SEED_KEYWORD = "REPEATABLE"
-        COPY_PARAMS_ARE_WRAPPED = False
-        COPY_PARAMS_EQ_REQUIRED = True
-        JSON_PATH_SINGLE_QUOTE_ESCAPE = False
-        QUOTE_JSON_PATH = False
-        PARSE_JSON_NAME = "PARSE_JSON"
-
-        TRANSFORMS = {
-            **Spark.Generator.TRANSFORMS,
-            exp.DateAdd: date_delta_sql("DATEADD"),
-            exp.DateDiff: date_delta_sql("DATEDIFF"),
-            exp.DatetimeAdd: lambda self, e: self.func(
-                "TIMESTAMPADD", e.unit, e.expression, e.this
-            ),
-            exp.DatetimeSub: lambda self, e: self.func(
-                "TIMESTAMPADD",
-                e.unit,
-                exp.Mul(this=e.expression, expression=exp.Literal.number(-1)),
-                e.this,
-            ),
-            exp.DatetimeTrunc: timestamptrunc_sql(),
-            exp.Floor: lambda self, e: self.floor_sql(e),
-            exp.GroupConcat: groupconcat_sql,
-            exp.Select: transforms.preprocess(
-                [
-                    transforms.eliminate_distinct_on,
-                    transforms.unnest_to_explode,
-                    transforms.any_to_exists,
-                ]
-            ),
-            exp.JSONExtract: _jsonextract_sql,
-            exp.JSONExtractScalar: _jsonextract_sql,
-            exp.JSONPathRoot: lambda *_: "",
-            exp.ToChar: lambda self, e: self.function_fallback_sql(e),
-            exp.SplitPart: rename_func("SPLIT_PART"),
-            exp.Trim: _trim_sql,
-        }
-
-        TRANSFORMS.pop(exp.TryCast)
-
-        TYPE_MAPPING = {
-            **Spark.Generator.TYPE_MAPPING,
-            exp.DataType.Type.NULL: "VOID",
-        }
-
-        def columndef_sql(self, expression: exp.ColumnDef, sep: str = " ") -> str:
-            constraint = expression.find(exp.GeneratedAsIdentityColumnConstraint)
-            kind = expression.kind
-            if (
-                constraint
-                and isinstance(kind, exp.DataType)
-                and kind.this in exp.DataType.INTEGER_TYPES
-            ):
-                # only BIGINT generated identity constraints are supported
-                expression.set("kind", exp.DataType.build("bigint"))
-
-            return super().columndef_sql(expression, sep)
-
-        def generatedasidentitycolumnconstraint_sql(
-            self, expression: exp.GeneratedAsIdentityColumnConstraint
-        ) -> str:
-            expression.set("this", True)  # trigger ALWAYS in super class
-            return super().generatedasidentitycolumnconstraint_sql(expression)
-
-        def floor_sql(self, expression: exp.Floor) -> str:
-            """
-            Custom handler for FLOOR in Databricks.
-            If FLOOR wraps TO_UNIX_TIMESTAMP(...)/1000 or UNIX_TIMESTAMP(...), unwrap it.
-            """
-            if self.from_dialect == "e6":
-                inner_expr = expression.this
-                # Case 1: FLOOR(TO_UNIX_TIMESTAMP(...)/1000) -> TO_UNIX_TIMESTAMP(...)/1000
-                if isinstance(inner_expr, exp.Div):
-                    left = inner_expr.this
-                    right = inner_expr.expression
-
-                    # Check if left side is TimeToUnix/StrToUnix and right side is 1000
-                    if (
-                        isinstance(left, (exp.TimeToUnix, exp.StrToUnix))
-                        and isinstance(right, exp.Literal)
-                        and right.this == "1000"
-                    ):
-                        # Return the division without FLOOR wrapper
-                        return self.sql(inner_expr)
-
-                    # Also check for Anonymous TO_UNIX_TIMESTAMP for backwards compatibility
-                    if (
-                        isinstance(left, exp.Anonymous)
-                        and left.this == "TO_UNIX_TIMESTAMP"
-                        and isinstance(right, exp.Literal)
-                        and right.this == "1000"
-                    ):
-                        # Return the division without FLOOR wrapper
-                        return self.sql(inner_expr)
-
-                # Case 2: FLOOR(TimeToUnix/StrToUnix(...)) -> UNIX_TIMESTAMP(...)
-                if isinstance(inner_expr, (exp.TimeToUnix, exp.StrToUnix)):
-                    # Return without FLOOR wrapper, explicitly as UNIX_TIMESTAMP
-                    return self.func("UNIX_TIMESTAMP", inner_expr.this)
-
-                # Case 3: FLOOR(UNIX_TIMESTAMP(...)) -> UNIX_TIMESTAMP(...)
-                if isinstance(inner_expr, exp.Anonymous) and inner_expr.this == "UNIX_TIMESTAMP":
-                    # Return just the UNIX_TIMESTAMP without FLOOR wrapper
-                    return self.func("UNIX_TIMESTAMP", *inner_expr.expressions)
-
-                # Default FLOOR behavior for other cases
-                return self.func("FLOOR", expression.this)
-
-            else:
-                return super().ceil_floor(expression)
-
-        def jsonpath_sql(self, expression: exp.JSONPath) -> str:
-            expression.set("escape", None)
-            return super().jsonpath_sql(expression)
+    Generator = DatabricksGenerator

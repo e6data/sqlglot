@@ -6,12 +6,12 @@ from sqlglot import exp
 from sqlglot.errors import OptimizeError
 from sqlglot.helper import while_changing
 from sqlglot.optimizer.scope import find_all_in_scope
-from sqlglot.optimizer.simplify import flatten, rewrite_between, uniq_sort
+from sqlglot.optimizer.simplify import Simplifier, flatten
 
 logger = logging.getLogger("sqlglot")
 
 
-def normalize(expression: exp.Expression, dnf: bool = False, max_distance: int = 128):
+def normalize(expression: exp.Expr, dnf: bool = False, max_distance: int = 128) -> exp.Expr:
     """
     Rewrite sqlglot AST into conjunctive normal form or disjunctive normal form.
 
@@ -26,8 +26,10 @@ def normalize(expression: exp.Expression, dnf: bool = False, max_distance: int =
         dnf: rewrite in disjunctive normal form instead.
         max_distance (int): the maximal estimated distance from cnf/dnf to attempt conversion
     Returns:
-        sqlglot.Expression: normalized expression
+        sqlglot.Expr: normalized expression
     """
+    simplifier = Simplifier(annotate_new_expressions=False)
+
     for node in tuple(expression.walk(prune=lambda e: isinstance(e, exp.Connector))):
         if isinstance(node, exp.Connector):
             if normalized(node, dnf=dnf):
@@ -35,7 +37,7 @@ def normalize(expression: exp.Expression, dnf: bool = False, max_distance: int =
             root = node is expression
             original = node.copy()
 
-            node.transform(rewrite_between, copy=False)
+            node.transform(simplifier.rewrite_between, copy=False)
             distance = normalization_distance(node, dnf=dnf, max_=max_distance)
 
             if distance > max_distance:
@@ -46,7 +48,10 @@ def normalize(expression: exp.Expression, dnf: bool = False, max_distance: int =
 
             try:
                 node = node.replace(
-                    while_changing(node, lambda e: distributive_law(e, dnf, max_distance))
+                    while_changing(
+                        node,
+                        lambda e: distributive_law(e, dnf, max_distance, simplifier=simplifier),
+                    )
                 )
             except OptimizeError as e:
                 logger.info(e)
@@ -61,7 +66,7 @@ def normalize(expression: exp.Expression, dnf: bool = False, max_distance: int =
     return expression
 
 
-def normalized(expression: exp.Expression, dnf: bool = False) -> bool:
+def normalized(expression: exp.Expr, dnf: bool = False) -> bool:
     """
     Checks whether a given expression is in a normal form of interest.
 
@@ -86,7 +91,7 @@ def normalized(expression: exp.Expression, dnf: bool = False) -> bool:
 
 
 def normalization_distance(
-    expression: exp.Expression, dnf: bool = False, max_: float = float("inf")
+    expression: exp.Expr, dnf: bool = False, max_: float = float("inf")
 ) -> int:
     """
     The difference in the number of predicates between a given expression and its normalized form.
@@ -146,7 +151,7 @@ def _predicate_lengths(expression, dnf, max_=float("inf"), depth=0):
         yield from _predicate_lengths(right, dnf, max_, depth)
 
 
-def distributive_law(expression, dnf, max_distance):
+def distributive_law(expression, dnf, max_distance, simplifier=None):
     """
     x OR (y AND z) -> (x OR y) AND (x OR z)
     (x AND y) OR (y AND z) -> (x OR y) AND (x OR z) AND (y OR y) AND (y OR z)
@@ -168,32 +173,34 @@ def distributive_law(expression, dnf, max_distance):
         from_func = exp.and_ if from_exp == exp.And else exp.or_
         to_func = exp.and_ if to_exp == exp.And else exp.or_
 
+        simplifier = simplifier or Simplifier(annotate_new_expressions=False)
+
         if isinstance(a, to_exp) and isinstance(b, to_exp):
             if len(tuple(a.find_all(exp.Connector))) > len(tuple(b.find_all(exp.Connector))):
-                return _distribute(a, b, from_func, to_func)
-            return _distribute(b, a, from_func, to_func)
+                return _distribute(a, b, from_func, to_func, simplifier)
+            return _distribute(b, a, from_func, to_func, simplifier)
         if isinstance(a, to_exp):
-            return _distribute(b, a, from_func, to_func)
+            return _distribute(b, a, from_func, to_func, simplifier)
         if isinstance(b, to_exp):
-            return _distribute(a, b, from_func, to_func)
+            return _distribute(a, b, from_func, to_func, simplifier)
 
     return expression
 
 
-def _distribute(a, b, from_func, to_func):
+def _distribute(a, b, from_func, to_func, simplifier):
     if isinstance(a, exp.Connector):
         exp.replace_children(
             a,
             lambda c: to_func(
-                uniq_sort(flatten(from_func(c, b.left))),
-                uniq_sort(flatten(from_func(c, b.right))),
+                simplifier.uniq_sort(flatten(from_func(c, b.left))),
+                simplifier.uniq_sort(flatten(from_func(c, b.right))),
                 copy=False,
             ),
         )
     else:
         a = to_func(
-            uniq_sort(flatten(from_func(a, b.left))),
-            uniq_sort(flatten(from_func(a, b.right))),
+            simplifier.uniq_sort(flatten(from_func(a, b.left))),
+            simplifier.uniq_sort(flatten(from_func(a, b.right))),
             copy=False,
         )
 

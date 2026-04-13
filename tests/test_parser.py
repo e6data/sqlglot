@@ -37,11 +37,15 @@ class TestParser(unittest.TestCase):
 
         self.assertEqual(
             str(ctx.exception),
-            "Failed to parse 'SELECT * FROM tbl' into <class 'sqlglot.expressions.Table'>",
+            "Failed to parse 'SELECT * FROM tbl' into <class 'sqlglot.expressions.query.Table'>",
         )
 
+        self.assertIsInstance(parse_one("foo INT NOT NULL", into=exp.ColumnDef), exp.ColumnDef)
+
     def test_parse_into_error(self):
-        expected_message = "Failed to parse 'SELECT 1;' into [<class 'sqlglot.expressions.From'>]"
+        expected_message = (
+            "Failed to parse 'SELECT 1;' into [<class 'sqlglot.expressions.query.From'>]"
+        )
         expected_errors = [
             {
                 "description": "Invalid expression / Unexpected token",
@@ -60,7 +64,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(ctx.exception.errors, expected_errors)
 
     def test_parse_into_errors(self):
-        expected_message = "Failed to parse 'SELECT 1;' into [<class 'sqlglot.expressions.From'>, <class 'sqlglot.expressions.Join'>]"
+        expected_message = "Failed to parse 'SELECT 1;' into [<class 'sqlglot.expressions.query.From'>, <class 'sqlglot.expressions.query.Join'>]"
         expected_errors = [
             {
                 "description": "Invalid expression / Unexpected token",
@@ -209,7 +213,7 @@ class TestParser(unittest.TestCase):
         self.assertIsNone(expression.this)
         self.assertEqual(expression.args["modes"][0], "READ WRITE")
         self.assertEqual(expression.args["modes"][1], "ISOLATION LEVEL SERIALIZABLE")
-        self.assertEqual(expression.sql(), "BEGIN")
+        self.assertEqual(expression.sql(), "BEGIN READ WRITE, ISOLATION LEVEL SERIALIZABLE")
 
         expression = parse_one("BEGIN", read="bigquery")
         self.assertNotIsInstance(expression, exp.Transaction)
@@ -229,7 +233,7 @@ class TestParser(unittest.TestCase):
         assert expression.expressions[2].alias == "c"
         assert expression.expressions[3].alias == "D"
         assert expression.expressions[4].alias == "y|z'"
-        table = expression.args["from"].this
+        table = expression.args["from_"].this
         assert table.name == "z"
         assert table.args["db"].name == "y"
 
@@ -241,8 +245,8 @@ class TestParser(unittest.TestCase):
         )
 
         assert len(expressions) == 2
-        assert expressions[0].args["from"].name == "a"
-        assert expressions[1].args["from"].name == "b"
+        assert expressions[0].args["from_"].name == "a"
+        assert expressions[1].args["from_"].name == "b"
 
         expressions = parse("SELECT 1; ; SELECT 2")
 
@@ -251,19 +255,20 @@ class TestParser(unittest.TestCase):
 
     def test_expression(self):
         ignore = Parser(error_level=ErrorLevel.IGNORE)
-        self.assertIsInstance(ignore.expression(exp.Hint, expressions=[""]), exp.Hint)
-        self.assertIsInstance(ignore.expression(exp.Hint, y=""), exp.Hint)
-        self.assertIsInstance(ignore.expression(exp.Hint), exp.Hint)
+        self.assertIsInstance(ignore.expression(exp.Hint(expressions=[])), exp.Hint)
+        self.assertIsInstance(ignore.expression(exp.Hint(y="")), exp.Hint)
+        self.assertIsInstance(ignore.expression(exp.Hint()), exp.Hint)
 
         default = Parser(error_level=ErrorLevel.RAISE)
-        self.assertIsInstance(default.expression(exp.Hint, expressions=[""]), exp.Hint)
-        default.expression(exp.Hint, y="")
-        default.expression(exp.Hint)
-        self.assertEqual(len(default.errors), 3)
+        with self.assertRaises(TypeError):
+            default.expression(exp.Hint(y=""))
+        self.assertIsInstance(default.expression(exp.Hint(expressions=[])), exp.Hint)
+        default.expression(exp.Hint())
+        self.assertEqual(len(default.errors), 2)
 
         warn = Parser(error_level=ErrorLevel.WARN)
-        warn.expression(exp.Hint, y="")
-        self.assertEqual(len(warn.errors), 2)
+        warn.expression(exp.Hint())
+        self.assertEqual(len(warn.errors), 1)
 
     def test_parse_errors(self):
         with self.assertRaises(ParseError):
@@ -372,8 +377,8 @@ class TestParser(unittest.TestCase):
         )
 
         self.assertEqual(expression.comments, ["comment2"])
-        self.assertEqual(expression.args.get("from").comments, ["comment3"])
-        self.assertEqual(expression.args.get("with").comments, ["comment1.1", "comment1.2"])
+        self.assertEqual(expression.args.get("from_").comments, ["comment3"])
+        self.assertEqual(expression.args.get("with_").comments, ["comment1.1", "comment1.2"])
 
     def test_comments_insert(self):
         expression = parse_one(
@@ -404,7 +409,7 @@ class TestParser(unittest.TestCase):
 
         self.assertEqual(expression.comments, ["comment2"])
         self.assertEqual(expression.this.comments, ["comment3"])
-        self.assertEqual(expression.args.get("with").comments, ["comment1.1", "comment1.2"])
+        self.assertEqual(expression.args.get("with_").comments, ["comment1.1", "comment1.2"])
 
     def test_comments_update(self):
         expression = parse_one(
@@ -438,7 +443,7 @@ class TestParser(unittest.TestCase):
 
         self.assertEqual(expression.comments, ["comment2"])
         self.assertEqual(expression.this.comments, ["comment3"])
-        self.assertEqual(expression.args.get("with").comments, ["comment1.1", "comment1.2"])
+        self.assertEqual(expression.args.get("with_").comments, ["comment1.1", "comment1.2"])
 
     def test_comments_delete(self):
         expression = parse_one(
@@ -470,7 +475,7 @@ class TestParser(unittest.TestCase):
 
         self.assertEqual(expression.comments, ["comment2"])
         self.assertEqual(expression.this.comments, ["comment3"])
-        self.assertEqual(expression.args["with"].comments, ["comment1.1", "comment1.2"])
+        self.assertEqual(expression.args["with_"].comments, ["comment1.1", "comment1.2"])
 
     def test_type_literals(self):
         self.assertEqual(parse_one("int 1"), parse_one("CAST(1 AS INT)"))
@@ -479,8 +484,7 @@ class TestParser(unittest.TestCase):
             parse_one("TIMESTAMP '2022-01-01'").sql(), "CAST('2022-01-01' AS TIMESTAMP)"
         )
         self.assertEqual(
-            parse_one("TIMESTAMP(1) '2022-01-01'").sql(),
-            "CAST('2022-01-01' AS TIMESTAMP(1))",
+            parse_one("TIMESTAMP(1) '2022-01-01'").sql(), "CAST('2022-01-01' AS TIMESTAMP(1))"
         )
         self.assertEqual(
             parse_one("TIMESTAMP WITH TIME ZONE '2022-01-01'").sql(),
@@ -570,7 +574,7 @@ class TestParser(unittest.TestCase):
         )
 
         assert_logger_contains(
-            "Required keyword: 'this' missing for <class 'sqlglot.expressions.Sum'>. Line 4, Col: 1.",
+            "Required keyword: 'this' missing for <class 'sqlglot.expressions.aggregate.Sum'>. Line 4, Col: 1.",
             logger,
         )
 
@@ -582,7 +586,7 @@ class TestParser(unittest.TestCase):
         )
 
         assert_logger_contains(
-            "Required keyword: 'this' missing for <class 'sqlglot.expressions.Sum'>. Line 2, Col: 1.",
+            "Required keyword: 'this' missing for <class 'sqlglot.expressions.aggregate.Sum'>. Line 2, Col: 1.",
             logger,
         )
 
@@ -767,7 +771,7 @@ class TestParser(unittest.TestCase):
             for dialect, expected_columns in dialect_columns.items():
                 with self.subTest(f"Testing query '{query}' for dialect {dialect}"):
                     expr = parse_one(query, read=dialect)
-                    columns = expr.args["from"].this.args["pivots"][0].args["columns"]
+                    columns = expr.args["from_"].this.args["pivots"][0].args["columns"]
                     self.assertEqual(
                         expected_columns, [col.sql(dialect=dialect) for col in columns]
                     )
@@ -787,11 +791,11 @@ class TestParser(unittest.TestCase):
         warn_over_threshold("SELECT * FROM a " + ("LEFT JOIN b ON a.id = b.id " * 38))
         warn_over_threshold("SELECT * FROM a " + ("LEFT JOIN UNNEST(ARRAY[]) " * 15))
         warn_over_threshold("SELECT * FROM a " + ("OUTER APPLY (SELECT * FROM b) " * 30))
+        warn_over_threshold("SELECT * FROM a " + ("NATURAL FULL OUTER JOIN x " * 30))
 
     def test_parse_properties(self):
         self.assertEqual(
-            parse_one("create materialized table x").sql(),
-            "CREATE MATERIALIZED TABLE x",
+            parse_one("create materialized table x").sql(), "CREATE MATERIALIZED TABLE x"
         )
 
     def test_parse_floats(self):
@@ -832,7 +836,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(ast[0].sql(), "CONCAT_WS()")
 
     def test_parse_drop_schema(self):
-        for dialect in [None, "bigquery", "snowflake"]:
+        for dialect in [None, "bigquery", "snowflake", "duckdb"]:
             with self.subTest(dialect):
                 ast = parse_one("DROP SCHEMA catalog.schema", dialect=dialect)
                 self.assertEqual(
@@ -847,6 +851,41 @@ class TestParser(unittest.TestCase):
                     ),
                 )
                 self.assertEqual(ast.sql(dialect=dialect), "DROP SCHEMA catalog.schema")
+
+        # when there is IF EXISTS it must not displace catalog mapping
+        for dialect in [None, "bigquery", "snowflake", "duckdb"]:
+            with self.subTest(f"{dialect} IF EXISTS"):
+                ast = parse_one("DROP SCHEMA IF EXISTS catalog.schema", dialect=dialect)
+                self.assertEqual(
+                    ast,
+                    exp.Drop(
+                        this=exp.Table(
+                            this=None,
+                            db=exp.Identifier(this="schema", quoted=False),
+                            catalog=exp.Identifier(this="catalog", quoted=False),
+                        ),
+                        kind="SCHEMA",
+                        exists=True,
+                    ),
+                )
+                self.assertEqual(ast.sql(dialect=dialect), "DROP SCHEMA IF EXISTS catalog.schema")
+
+        # single part name no catalog and schema name in db
+        for dialect in [None, "bigquery", "snowflake", "duckdb"]:
+            with self.subTest(f"DROP SCHEMA for {dialect}"):
+                ast = parse_one("DROP SCHEMA IF EXISTS myschema", dialect=dialect)
+                self.assertEqual(
+                    ast,
+                    exp.Drop(
+                        this=exp.Table(
+                            this=None,
+                            db=exp.Identifier(this="myschema", quoted=False),
+                        ),
+                        kind="SCHEMA",
+                        exists=True,
+                    ),
+                )
+                self.assertEqual(ast.sql(), "DROP SCHEMA IF EXISTS myschema")
 
     def test_parse_create_schema(self):
         for dialect in [None, "bigquery", "snowflake"]:
@@ -910,8 +949,7 @@ class TestParser(unittest.TestCase):
         )
 
         self.assertEqual(
-            ";\n".join(e.sql() for e in expressions),
-            "SELECT * FROM x;\n/* my comment */",
+            ";\n".join(e.sql() for e in expressions), "SELECT * FROM x;\n/* my comment */"
         )
 
     def test_parse_prop_eq(self):
@@ -932,17 +970,6 @@ class TestParser(unittest.TestCase):
             self.assertIsInstance(collate_node, exp.Collate)
             self.assertIsInstance(collate_node.expression, collate_pair[1])
 
-    def test_odbc_date_literals(self):
-        for value, cls in [
-            ("{d'2024-01-01'}", exp.Date),
-            ("{t'12:00:00'}", exp.Time),
-            ("{ts'2024-01-01 12:00:00'}", exp.Timestamp),
-        ]:
-            sql = f"INSERT INTO tab(ds) VALUES ({value})"
-            expr = parse_one(sql)
-            self.assertIsInstance(expr, exp.Insert)
-            self.assertIsInstance(expr.expression.expressions[0].expressions[0], cls)
-
     def test_drop_column(self):
         ast = parse_one("ALTER TABLE tbl DROP COLUMN col")
         self.assertEqual(len(list(ast.find_all(exp.Table))), 1)
@@ -961,75 +988,55 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(ast, exp.Year)
 
     def test_token_position_meta(self):
-        from sqlglot import tokenize
-
-        # Check if tokenizer provides accurate whitespace_before (Python tokenizer only)
-        # Note: Expression meta always includes whitespace_before (with "" fallback for Rust tokenizer)
-        tokens = list(tokenize("SELECT 1"))
-        has_accurate_whitespace = hasattr(tokens[0], "whitespace_before") if tokens else False
-
         ast = parse_one(
             "SELECT a, b FROM test_schema.test_table_a UNION ALL SELECT c, d FROM test_catalog.test_schema.test_table_b"
         )
-
-        # Meta always includes whitespace_before (via getattr fallback in expressions.py)
-        expected_meta_keys = {"line", "col", "start", "end", "whitespace_before"}
-
         for identifier in ast.find_all(exp.Identifier):
-            self.assertEqual(set(identifier.meta), expected_meta_keys)
-
-        # With Rust tokenizer, whitespace_before is always "" (fallback)
-        # With Python tokenizer, whitespace_before is accurate
-        ws_empty = ""
-        ws_space = " " if has_accurate_whitespace else ""
+            self.assertEqual(set(identifier.meta), {"line", "col", "start", "end"})
 
         self.assertEqual(
-            ast.this.args["from"].this.args["this"].meta,
-            {"line": 1, "col": 41, "start": 29, "end": 40, "whitespace_before": ws_empty},
+            ast.this.args["from_"].this.args["this"].meta,
+            {"line": 1, "col": 41, "start": 29, "end": 40},
         )
         self.assertEqual(
-            ast.this.args["from"].this.args["db"].meta,
-            {"line": 1, "col": 28, "start": 17, "end": 27, "whitespace_before": ws_space},
+            ast.this.args["from_"].this.args["db"].meta,
+            {"line": 1, "col": 28, "start": 17, "end": 27},
         )
         self.assertEqual(
-            ast.expression.args["from"].this.args["this"].meta,
-            {"line": 1, "col": 106, "start": 94, "end": 105, "whitespace_before": ws_empty},
+            ast.expression.args["from_"].this.args["this"].meta,
+            {"line": 1, "col": 106, "start": 94, "end": 105},
         )
         self.assertEqual(
-            ast.expression.args["from"].this.args["db"].meta,
-            {"line": 1, "col": 93, "start": 82, "end": 92, "whitespace_before": ws_empty},
+            ast.expression.args["from_"].this.args["db"].meta,
+            {"line": 1, "col": 93, "start": 82, "end": 92},
         )
         self.assertEqual(
-            ast.expression.args["from"].this.args["catalog"].meta,
-            {"line": 1, "col": 81, "start": 69, "end": 80, "whitespace_before": ws_space},
+            ast.expression.args["from_"].this.args["catalog"].meta,
+            {"line": 1, "col": 81, "start": 69, "end": 80},
         )
 
         ast = parse_one("SELECT FOO()")
-        self.assertEqual(
-            ast.find(exp.Anonymous).meta,
-            {"line": 1, "col": 10, "start": 7, "end": 9, "whitespace_before": ws_space},
-        )
+        self.assertEqual(ast.find(exp.Anonymous).meta, {"line": 1, "col": 10, "start": 7, "end": 9})
 
         ast = parse_one("SELECT * FROM t")
-        self.assertEqual(
-            ast.find(exp.Star).meta,
-            {"line": 1, "col": 8, "start": 7, "end": 7, "whitespace_before": ws_space},
-        )
+        self.assertEqual(ast.find(exp.Star).meta, {"line": 1, "col": 8, "start": 7, "end": 7})
 
         ast = parse_one("SELECT t.* FROM t")
-        self.assertEqual(
-            ast.find(exp.Star).meta,
-            {"line": 1, "col": 10, "start": 9, "end": 9, "whitespace_before": ws_empty},
-        )
+        self.assertEqual(ast.find(exp.Star).meta, {"line": 1, "col": 10, "start": 9, "end": 9})
+
+        ast = parse_one("SELECT 1")
+        self.assertEqual(ast.find(exp.Literal).meta, {"line": 1, "col": 8, "start": 7, "end": 7})
+
+        self.assertEqual(parse_one("max(1)").meta, {"col": 3, "end": 2, "line": 1, "start": 0})
 
     def test_quoted_identifier_meta(self):
         sql = 'SELECT "a" FROM "test_schema"."test_table_a"'
         ast = parse_one(sql)
 
-        db_meta = ast.args["from"].this.args["db"].meta
+        db_meta = ast.args["from_"].this.args["db"].meta
         self.assertEqual(sql[db_meta["start"] : db_meta["end"] + 1], '"test_schema"')
 
-        table_meta = ast.args["from"].this.this.meta
+        table_meta = ast.args["from_"].this.this.meta
         self.assertEqual(sql[table_meta["start"] : table_meta["end"] + 1], '"test_table_a"')
 
     def test_qualified_function(self):
@@ -1043,3 +1050,37 @@ class TestParser(unittest.TestCase):
             parse_one("select * from tbl pivot(col1 for col2 in (val1, val1))")
 
         self.assertIn("Expecting an aggregation function in PIVOT", str(ctx.exception))
+
+    def test_multiple_query_modifiers(self):
+        sql = "SELECT * FROM a WHERE b = 'true' AND c > 50 WHERE c = 'false'"
+
+        with self.assertRaises(ParseError) as ctx:
+            parse_one(sql)
+
+        self.assertIn("Found multiple 'WHERE' clauses. Line 1, Col: 49.", str(ctx.exception))
+
+        self.assertEqual(
+            parse_one(sql, error_level=ErrorLevel.IGNORE).sql(),
+            "SELECT * FROM a WHERE c = 'false'",
+        )
+
+    def test_parse_into_grant_principal(self):
+        self.assertIsInstance(parse_one("ROLE blah", into=exp.GrantPrincipal), exp.GrantPrincipal)
+        self.assertIsInstance(parse_one("GROUP blah", into=exp.GrantPrincipal), exp.GrantPrincipal)
+        self.assertIsInstance(parse_one("blah", into=exp.GrantPrincipal), exp.GrantPrincipal)
+        self.assertIsInstance(
+            parse_one("ROLE `blah`", into=exp.GrantPrincipal, dialect="databricks"),
+            exp.GrantPrincipal,
+        )
+        self.assertEqual(
+            parse_one("ROLE `blah`", into=exp.GrantPrincipal, dialect="databricks").sql(
+                dialect="databricks"
+            ),
+            "ROLE `blah`",
+        )
+
+    def test_parse_into_grant_privilege(self):
+        self.assertIsInstance(parse_one("SELECT", into=exp.GrantPrivilege), exp.GrantPrivilege)
+        self.assertIsInstance(
+            parse_one("ALL PRIVILEGES", into=exp.GrantPrivilege), exp.GrantPrivilege
+        )

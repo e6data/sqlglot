@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import typing as t
-
+from collections.abc import Sequence
 from sqlglot import Schema, exp
 from sqlglot.dialects.dialect import DialectType
 from sqlglot.optimizer.annotate_types import annotate_types
@@ -21,7 +21,23 @@ from sqlglot.optimizer.simplify import simplify
 from sqlglot.optimizer.unnest_subqueries import unnest_subqueries
 from sqlglot.schema import ensure_schema
 
-RULES = (
+
+class OptimizerFn(t.Protocol):
+    """Protocol for optimizer rules functions.
+
+    An optimizer rule:
+
+        - **Must** accept an `Expr` as the first argument
+        - Can take undefined `*args` and `**kwargs` afterwards
+        - **Must** return an `Expr`.
+    Note:
+        We use `typing.Protocol` here because this is not doable with `collections.abc.Callable`.
+    """
+
+    def __call__(self, expression: exp.Expr, *args: t.Any, **kwargs: t.Any) -> exp.Expr: ...
+
+
+RULES: tuple[OptimizerFn, ...] = (
     qualify,
     pushdown_projections,
     normalize,
@@ -40,14 +56,15 @@ RULES = (
 
 
 def optimize(
-    expression: str | exp.Expression,
-    schema: t.Optional[dict | Schema] = None,
-    db: t.Optional[str | exp.Identifier] = None,
-    catalog: t.Optional[str | exp.Identifier] = None,
+    expression: str | exp.Expr,
+    schema: dict[str, object] | Schema | None = None,
+    db: str | exp.Identifier | None = None,
+    catalog: str | exp.Identifier | None = None,
     dialect: DialectType = None,
-    rules: t.Sequence[t.Callable] = RULES,
-    **kwargs,
-) -> exp.Expression:
+    rules: Sequence[OptimizerFn] = RULES,
+    sql: str | None = None,
+    **kwargs: object,
+) -> exp.Expr:
     """
     Rewrite a sqlglot AST into an optimized form.
 
@@ -66,6 +83,8 @@ def optimize(
         rules: sequence of optimizer rules to use.
             Many of the rules require tables and columns to be qualified.
             Do not remove `qualify` from the sequence of rules unless you know what you're doing!
+        sql: Original SQL string for error highlighting. If not provided, errors will not include
+            highlighting. Requires that the expression has position metadata from parsing.
         **kwargs: If a rule has a keyword argument with a same name in **kwargs, it will be passed in.
 
     Returns:
@@ -77,6 +96,7 @@ def optimize(
         "catalog": catalog,
         "schema": schema,
         "dialect": dialect,
+        "sql": sql,
         "isolate_tables": True,  # needed for other optimizations to perform well
         "quote_identifiers": False,
         **kwargs,

@@ -1,4 +1,4 @@
-from sqlglot import exp, parse, parse_one
+from sqlglot import exp, parse_one
 from sqlglot.errors import ParseError, UnsupportedError
 from sqlglot.optimizer.annotate_types import annotate_types
 from tests.dialects.test_dialect import Validator
@@ -8,22 +8,31 @@ class TestTSQL(Validator):
     dialect = "tsql"
 
     def test_tsql(self):
-        self.validate_identity(
-            "with x as (select 1) select * from x union select * from x order by 1 limit 0",
+        self.validate_all(
             "WITH x AS (SELECT 1 AS [1]) SELECT TOP 0 * FROM (SELECT * FROM x UNION SELECT * FROM x) AS _l_0 ORDER BY 1",
+            read={
+                "": "WITH x AS (SELECT 1) SELECT * FROM x UNION SELECT * FROM x ORDER BY 1 LIMIT 0",
+            },
         )
 
         # https://learn.microsoft.com/en-us/previous-versions/sql/sql-server-2008-r2/ms187879(v=sql.105)?redirectedfrom=MSDN
         # tsql allows .. which means use the default schema
         self.validate_identity("SELECT * FROM a..b")
 
+        self.validate_identity("SELECT TOP (SELECT 1) * FROM t")
+        self.validate_identity("SELECT ATN2(x, y)")
+        self.validate_identity("SELECT EXP(1)")
         self.validate_identity("SELECT SYSDATETIMEOFFSET()")
+        self.validate_identity("SELECT COMPRESS('Hello World')")
         self.validate_identity("GO").assert_is(exp.Command)
         self.validate_identity("SELECT go").selects[0].assert_is(exp.Column)
         self.validate_identity("CREATE view a.b.c", "CREATE VIEW b.c")
         self.validate_identity("DROP view a.b.c", "DROP VIEW b.c")
         self.validate_identity("ROUND(x, 1, 0)")
-        self.validate_identity("EXEC MyProc @id=7, @name='Lochristi'", check_command_warning=True)
+        self.validate_identity(
+            "EXEC MyProc @id = 7, @name = 'Lochristi'",
+            "EXECUTE MyProc @id = 7, @name = 'Lochristi'",
+        )
         self.validate_identity("SELECT TRIM('     test    ') AS Result")
         self.validate_identity("SELECT TRIM('.,! ' FROM '     #     test    .') AS Result")
         self.validate_identity("SELECT * FROM t TABLESAMPLE (10 PERCENT)")
@@ -40,6 +49,9 @@ class TestTSQL(Validator):
         self.validate_identity("CAST(x AS int) OR y", "CAST(x AS INTEGER) <> 0 OR y <> 0")
         self.validate_identity("TRUNCATE TABLE t1 WITH (PARTITIONS(1, 2 TO 5, 10 TO 20, 84))")
         self.validate_identity(
+            "WITH t1 AS (SELECT 1 AS a), t2 AS (SELECT 1 AS a) SELECT TOP 10 a FROM t1 UNION ALL SELECT TOP 10 a FROM t2"
+        )
+        self.validate_identity(
             "SELECT TOP 10 s.RECORDID, n.c.VALUE('(/*:FORM_ROOT/*:SOME_TAG)[1]', 'float') AS SOME_TAG_VALUE FROM source_table.dbo.source_data AS s(nolock) CROSS APPLY FormContent.nodes('/*:FORM_ROOT') AS N(C)"
         )
         self.validate_identity(
@@ -55,6 +67,12 @@ class TestTSQL(Validator):
             "COPY INTO test_1 FROM 'path' WITH (FORMAT_NAME = test, FILE_TYPE = 'CSV', CREDENTIAL = (IDENTITY='Shared Access Signature', SECRET='token'), FIELDTERMINATOR = ';', ROWTERMINATOR = '0X0A', ENCODING = 'UTF8', DATEFORMAT = 'ymd', MAXERRORS = 10, ERRORFILE = 'errorsfolder', IDENTITY_INSERT = 'ON')"
         )
         self.validate_identity(
+            "WITH t1 AS (SELECT 1 AS a), t2 AS (SELECT 1 AS a) SELECT TOP 10 a FROM t1 UNION ALL SELECT TOP 10 a FROM t2 ORDER BY a DESC"
+        )
+        self.validate_identity(
+            "WITH t1 AS (SELECT 1 AS a), t2 AS (SELECT 1 AS a) SELECT COUNT(*) FROM (SELECT TOP 10 a FROM t1 UNION ALL SELECT TOP 10 a FROM t2 ORDER BY a DESC) AS t"
+        )
+        self.validate_identity(
             'SELECT 1 AS "[x]"',
             "SELECT 1 AS [[x]]]",
         )
@@ -68,6 +86,13 @@ class TestTSQL(Validator):
             "SELECT 1 WHERE EXISTS(SELECT 1)",
         )
 
+        self.validate_all(
+            "CREATE TABLE test_table([ID] [BIGINT] NOT NULL,[EffectiveFrom] [DATETIME2] (3) NOT NULL)",
+            write={
+                "spark": "CREATE TABLE test_table (`ID` BIGINT NOT NULL, `EffectiveFrom` TIMESTAMP NOT NULL)",
+                "tsql": "CREATE TABLE test_table ([ID] BIGINT NOT NULL, [EffectiveFrom] DATETIME2(3) NOT NULL)",
+            },
+        )
         self.validate_all(
             "SELECT CONVERT(DATETIME, '2006-04-25T15:50:59.997', 126)",
             write={
@@ -293,9 +318,17 @@ class TestTSQL(Validator):
         ).args["alias"].assert_is(exp.Identifier)
 
         self.validate_all(
-            "IF OBJECT_ID('tempdb.dbo.#TempTableName', 'U') IS NOT NULL DROP TABLE #TempTableName",
+            "IF OBJECT_ID('tempdb.dbo.#TempTableName', 'U') IS NOT NULL BEGIN DROP TABLE #TempTableName; END",
             write={
-                "tsql": "DROP TABLE IF EXISTS #TempTableName",
+                "tsql": "IF NOT OBJECT_ID('tempdb.dbo.#TempTableName', 'U') IS NULL BEGIN DROP TABLE #TempTableName; END",
+                "spark": "DROP TABLE IF EXISTS TempTableName",
+            },
+        )
+
+        self.validate_all(
+            "IF OBJECT_ID('tempdb.dbo.#TempTableName') IS NOT NULL BEGIN DROP TABLE #TempTableName; END",
+            write={
+                "tsql": "IF NOT OBJECT_ID('tempdb.dbo.#TempTableName') IS NULL BEGIN DROP TABLE #TempTableName; END",
                 "spark": "DROP TABLE IF EXISTS TempTableName",
             },
         )
@@ -325,10 +358,10 @@ class TestTSQL(Validator):
         self.validate_identity("SELECT a = 1", "SELECT 1 AS a")
         self.validate_identity(
             "DECLARE @TestVariable AS VARCHAR(100) = 'Save Our Planet'",
+            "DECLARE @TestVariable VARCHAR(100) = 'Save Our Planet'",
         )
         self.validate_identity(
-            "SELECT a = 1 UNION ALL SELECT a = b",
-            "SELECT 1 AS a UNION ALL SELECT b AS a",
+            "SELECT a = 1 UNION ALL SELECT a = b", "SELECT 1 AS a UNION ALL SELECT b AS a"
         )
         self.validate_identity(
             "SELECT x FROM @MyTableVar AS m JOIN Employee ON m.EmployeeID = Employee.EmployeeID"
@@ -493,7 +526,10 @@ class TestTSQL(Validator):
             parse_one("SELECT begin", read="tsql")
 
         self.validate_identity("CREATE PROCEDURE test(@v1 INTEGER = 1, @v2 CHAR(1) = 'c')")
-        self.validate_identity("DECLARE @v1 AS INTEGER = 1, @v2 AS CHAR(1) = 'c'")
+        self.validate_identity(
+            "DECLARE @v1 AS INTEGER = 1, @v2 AS CHAR(1) = 'c'",
+            "DECLARE @v1 INTEGER = 1, @v2 CHAR(1) = 'c'",
+        )
 
         for output in ("OUT", "OUTPUT", "READONLY"):
             self.validate_identity(
@@ -504,6 +540,23 @@ class TestTSQL(Validator):
             "CREATE PROCEDURE test(@v1 AS INTEGER = 1, @v2 AS CHAR(1) = 'c')",
             "CREATE PROCEDURE test(@v1 INTEGER = 1, @v2 CHAR(1) = 'c')",
         )
+
+        for order_by in ("", " ORDER BY c"):
+            for json_clause in ("", " NULL ON NULL", " ABSENT ON NULL"):
+                with self.subTest(f"Testing JSON_ARRAYAGG with options: {order_by}, {json_clause}"):
+                    self.validate_identity(f"JSON_ARRAYAGG(c{order_by}{json_clause})")
+
+        self.validate_all(
+            "JSON_ARRAYAGG(c1 ORDER BY c1)",
+            write={
+                "tsql": "JSON_ARRAYAGG(c1 ORDER BY c1)",
+                "postgres": "JSON_AGG(c1 ORDER BY c1 NULLS FIRST)",
+            },
+        )
+        self.validate_identity("CEILING(2)")
+
+        self.validate_identity("OBJECT_ID('foo')")
+        self.validate_identity("OBJECT_ID('foo', 'U')")
 
     def test_option(self):
         possible_options = [
@@ -548,6 +601,7 @@ class TestTSQL(Validator):
             # "UPDATE Customers SET ContactName = 'Alfred Schmidt', City = 'Frankfurt' WHERE CustomerID = 1",
             "SELECT * FROM Table1",
             "SELECT * FROM Table1 WHERE id = 2",
+            "UPDATE t1 SET k = t2.k FROM t2",
         ]
 
         for statement in possible_statements:
@@ -760,8 +814,7 @@ FOR XML
         )
 
         self.validate_all(
-            "CAST(x as FLOAT(6))",
-            write={"tsql": "CAST(x AS FLOAT(6))", "hive": "CAST(x AS FLOAT)"},
+            "CAST(x as FLOAT(6))", write={"tsql": "CAST(x AS FLOAT(6))", "hive": "CAST(x AS FLOAT)"}
         )
 
         self.validate_all(
@@ -959,8 +1012,7 @@ FOR XML
         self.validate_all("SELECT TRUE AS a, FALSE AS b", write={"tsql": "SELECT 1 AS a, 0 AS b"})
 
         self.validate_all(
-            "SELECT 1 FROM a WHERE TRUE",
-            write={"tsql": "SELECT 1 FROM a WHERE (1 = 1)"},
+            "SELECT 1 FROM a WHERE TRUE", write={"tsql": "SELECT 1 FROM a WHERE (1 = 1)"}
         )
 
         self.validate_all(
@@ -998,6 +1050,9 @@ FOR XML
         self.validate_identity("ALTER TABLE tbl SET (DATA_DELETION=ON)")
         self.validate_identity("ALTER TABLE tbl SET (DATA_DELETION=OFF)")
         self.validate_identity(
+            "ALTER TABLE t1 WITH CHECK ADD CONSTRAINT ctr FOREIGN KEY (c1) REFERENCES t2 (c2)"
+        )
+        self.validate_identity(
             "ALTER TABLE tbl SET (SYSTEM_VERSIONING=ON(HISTORY_TABLE=db.tbl, DATA_CONSISTENCY_CHECK=OFF, HISTORY_RETENTION_PERIOD=5 DAYS))"
         )
         self.validate_identity(
@@ -1026,8 +1081,8 @@ FOR XML
             "CREATE NONCLUSTERED COLUMNSTORE INDEX index_name ON foo.bar",
         )
         self.validate_identity(
-            "CREATE PROCEDURE foo AS BEGIN DELETE FROM bla WHERE foo < CURRENT_TIMESTAMP - 7 END",
-            "CREATE PROCEDURE foo AS BEGIN DELETE FROM bla WHERE foo < GETDATE() - 7 END",
+            "CREATE PROCEDURE foo AS BEGIN DELETE FROM bla WHERE foo < CURRENT_TIMESTAMP - 7; END",
+            "CREATE PROCEDURE foo AS BEGIN DELETE FROM bla WHERE foo < GETDATE() - 7; END",
         )
         self.validate_identity(
             "INSERT INTO Production.UpdatedInventory SELECT ProductID, LocationID, NewQty, PreviousQty FROM (MERGE INTO Production.ProductInventory AS pi USING (SELECT ProductID, SUM(OrderQty) FROM Sales.SalesOrderDetail AS sod INNER JOIN Sales.SalesOrderHeader AS soh ON sod.SalesOrderID = soh.SalesOrderID AND soh.OrderDate BETWEEN '20030701' AND '20030731' GROUP BY ProductID) AS src(ProductID, OrderQty) ON pi.ProductID = src.ProductID WHEN MATCHED AND pi.Quantity - src.OrderQty >= 0 THEN UPDATE SET pi.Quantity = pi.Quantity - src.OrderQty WHEN MATCHED AND pi.Quantity - src.OrderQty <= 0 THEN DELETE OUTPUT $action, Inserted.ProductID, Inserted.LocationID, Inserted.Quantity AS NewQty, Deleted.Quantity AS PreviousQty) AS Changes(Action, ProductID, LocationID, NewQty, PreviousQty) WHERE Action = 'UPDATE'",
@@ -1082,7 +1137,7 @@ WHERE
                 "tsql": "CREATE TABLE tbl (id INTEGER NOT NULL IDENTITY(10, 1) PRIMARY KEY)",
             },
             write={
-                "databricks": "CREATE TABLE tbl (id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 10 INCREMENT BY 1) PRIMARY KEY)",
+                "databricks": "CREATE TABLE tbl (id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 10 INCREMENT BY 1) PRIMARY KEY)",
                 "postgres": "CREATE TABLE tbl (id INT NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 10 INCREMENT BY 1) PRIMARY KEY)",
             },
         )
@@ -1207,6 +1262,7 @@ WHERE
     def test_udf(self):
         self.validate_identity(
             "DECLARE @DWH_DateCreated AS DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104)",
+            "DECLARE @DWH_DateCreated DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104)",
         )
         self.validate_identity(
             "CREATE PROCEDURE foo @a INTEGER, @b INTEGER AS SELECT @a = SUM(bla) FROM baz AS bar"
@@ -1280,60 +1336,6 @@ WHERE
         self.validate_identity("END")
         self.validate_identity("SET XACT_ABORT ON")
 
-    def test_fullproc(self):
-        sql = """
-            CREATE procedure [TRANSF].[SP_Merge_Sales_Real]
-                @Loadid INTEGER
-               ,@NumberOfRows INTEGER
-            WITH EXECUTE AS OWNER, SCHEMABINDING, NATIVE_COMPILATION
-            AS
-            BEGIN
-                SET XACT_ABORT ON;
-
-                DECLARE @DWH_DateCreated AS DATETIME = CONVERT(DATETIME, getdate(), 104);
-                DECLARE @DWH_DateModified DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104);
-                DECLARE @DWH_IdUserCreated INTEGER = SUSER_ID (CURRENT_USER());
-                DECLARE @DWH_IdUserModified INTEGER = SUSER_ID (SYSTEM_USER);
-
-                DECLARE @SalesAmountBefore float;
-                SELECT @SalesAmountBefore=SUM(SalesAmount) FROM TRANSF.[Pre_Merge_Sales_Real] S;
-            END
-        """
-
-        expected_sqls = [
-            "CREATE PROCEDURE [TRANSF].[SP_Merge_Sales_Real] @Loadid INTEGER, @NumberOfRows INTEGER WITH EXECUTE AS OWNER, SCHEMABINDING, NATIVE_COMPILATION AS BEGIN SET XACT_ABORT ON",
-            "DECLARE @DWH_DateCreated AS DATETIME = CONVERT(DATETIME, GETDATE(), 104)",
-            "DECLARE @DWH_DateModified AS DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104)",
-            "DECLARE @DWH_IdUserCreated AS INTEGER = SUSER_ID(CURRENT_USER())",
-            "DECLARE @DWH_IdUserModified AS INTEGER = SUSER_ID(CURRENT_USER())",
-            "DECLARE @SalesAmountBefore AS FLOAT",
-            "SELECT @SalesAmountBefore = SUM(SalesAmount) FROM TRANSF.[Pre_Merge_Sales_Real] AS S",
-            "END",
-        ]
-
-        for expr, expected_sql in zip(parse(sql, read="tsql"), expected_sqls):
-            self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
-
-        sql = """
-            CREATE PROC [dbo].[transform_proc] AS
-
-            DECLARE @CurrentDate VARCHAR(20);
-            SET @CurrentDate = CONVERT(VARCHAR(20), GETDATE(), 120);
-
-            CREATE TABLE [target_schema].[target_table]
-            (a INTEGER)
-            WITH (DISTRIBUTION = REPLICATE, HEAP);
-        """
-
-        expected_sqls = [
-            "CREATE PROC [dbo].[transform_proc] AS DECLARE @CurrentDate AS VARCHAR(20)",
-            "SET @CurrentDate = CONVERT(VARCHAR(20), GETDATE(), 120)",
-            "CREATE TABLE [target_schema].[target_table] (a INTEGER) WITH (DISTRIBUTION=REPLICATE, HEAP)",
-        ]
-
-        for expr, expected_sql in zip(parse(sql, read="tsql"), expected_sqls):
-            self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
-
     def test_charindex(self):
         self.validate_identity(
             "SELECT CAST(SUBSTRING('ABCD~1234', CHARINDEX('~', 'ABCD~1234') + 1, LEN('ABCD~1234')) AS BIGINT)"
@@ -1382,9 +1384,7 @@ WHERE
 
     def test_len(self):
         self.validate_all(
-            "LEN(x)",
-            read={"": "LENGTH(x)"},
-            write={"spark": "LENGTH(CAST(x AS STRING))"},
+            "LEN(x)", read={"": "LENGTH(x)"}, write={"spark": "LENGTH(CAST(x AS STRING))"}
         )
         self.validate_all(
             "RIGHT(x, 1)",
@@ -1459,33 +1459,48 @@ WHERE
         )
 
     def test_datepart(self):
-        self.validate_identity(
-            "DATEPART(QUARTER, x)",
-            "DATEPART(QUARTER, CAST(x AS DATETIME2))",
+        datepart_formats = (
+            (("QUARTER", "qq", "q"), "QUARTER"),
+            (("YEAR", "yy", "yyyy"), "YEAR"),
+            (("HOUR", "hh"), "HOUR"),
+            (("MINUTE", "mi", "n"), "MINUTE"),
+            (("SECOND", "ss", "s"), "SECOND"),
+            (("MILLISECOND", "ms"), "MILLISECOND"),
+            (("MICROSECOND", "mcs"), "MICROSECOND"),
+            (("NANOSECOND", "ns"), "NANOSECOND"),
+            (("WEEKDAY", "dw"), "WEEKDAY"),
+            (("TZOFFSET", "tz"), "TZOFFSET"),
+            (("MONTH", "mm", "m"), "MONTH"),
+            (("DAYOFYEAR", "dy", "y"), "DAYOFYEAR"),
+            (("DAY", "dd", "d"), "DAY"),
         )
-        self.validate_identity(
-            "DATEPART(YEAR, x)",
-            "FORMAT(CAST(x AS DATETIME2), 'yyyy')",
+
+        for formats, canonical in datepart_formats:
+            for fmt in formats:
+                with self.subTest(f"Testing DATEPART where part is: {fmt}"):
+                    self.validate_identity(
+                        f"DATEPART({fmt}, x)",
+                        f"DATEPART({canonical}, x)",
+                    )
+
+        select_datepart_formats = (
+            (("WEEK", "WW", "WK"), "WEEK"),
+            (("ISOWK", "ISOWW", "ISO_WEEK"), "ISO_WEEK"),
         )
-        self.validate_identity(
-            "DATEPART(HOUR, date_and_time)",
-            "DATEPART(HOUR, CAST(date_and_time AS DATETIME2))",
-        )
-        self.validate_identity(
-            "DATEPART(WEEKDAY, date_and_time)",
-            "DATEPART(DW, CAST(date_and_time AS DATETIME2))",
-        )
-        self.validate_identity(
-            "DATEPART(DW, date_and_time)",
-            "DATEPART(DW, CAST(date_and_time AS DATETIME2))",
-        )
+
+        for formats, canonical in select_datepart_formats:
+            for fmt in formats:
+                with self.subTest(f"Testing DATEPART where part is: {fmt}"):
+                    self.validate_identity(
+                        f"SELECT DATEPART({fmt}, '2024-11-21')",
+                        f"SELECT DATEPART({canonical}, '2024-11-21')",
+                    )
 
         self.validate_all(
             "SELECT DATEPART(month,'1970-01-01')",
             write={
-                "postgres": "SELECT TO_CHAR(CAST('1970-01-01' AS TIMESTAMP), 'MM')",
-                "spark": "SELECT DATE_FORMAT(CAST('1970-01-01' AS TIMESTAMP), 'MM')",
-                "tsql": "SELECT FORMAT(CAST('1970-01-01' AS DATETIME2), 'MM')",
+                "spark": "SELECT EXTRACT(month FROM '1970-01-01')",
+                "tsql": "SELECT DATEPART(month, '1970-01-01')",
             },
         )
         self.validate_all(
@@ -1494,9 +1509,9 @@ WHERE
                 "postgres": "SELECT DATE_PART('YEAR', '2017-01-01'::DATE)",
             },
             write={
-                "postgres": "SELECT TO_CHAR(CAST(CAST('2017-01-01' AS DATE) AS TIMESTAMP), 'YYYY')",
-                "spark": "SELECT DATE_FORMAT(CAST(CAST('2017-01-01' AS DATE) AS TIMESTAMP), 'yyyy')",
-                "tsql": "SELECT FORMAT(CAST(CAST('2017-01-01' AS DATE) AS DATETIME2), 'yyyy')",
+                "postgres": "SELECT EXTRACT(YEAR FROM CAST('2017-01-01' AS DATE))",
+                "spark": "SELECT EXTRACT(YEAR FROM CAST('2017-01-01' AS DATE))",
+                "tsql": "SELECT DATEPART(YEAR, CAST('2017-01-01' AS DATE))",
             },
         )
         self.validate_all(
@@ -1505,9 +1520,9 @@ WHERE
                 "postgres": "SELECT DATE_PART('month', '2017-03-01'::DATE)",
             },
             write={
-                "postgres": "SELECT TO_CHAR(CAST(CAST('2017-03-01' AS DATE) AS TIMESTAMP), 'MM')",
-                "spark": "SELECT DATE_FORMAT(CAST(CAST('2017-03-01' AS DATE) AS TIMESTAMP), 'MM')",
-                "tsql": "SELECT FORMAT(CAST(CAST('2017-03-01' AS DATE) AS DATETIME2), 'MM')",
+                "postgres": "SELECT EXTRACT(month FROM CAST('2017-03-01' AS DATE))",
+                "spark": "SELECT EXTRACT(month FROM CAST('2017-03-01' AS DATE))",
+                "tsql": "SELECT DATEPART(month, CAST('2017-03-01' AS DATE))",
             },
         )
         self.validate_all(
@@ -1516,17 +1531,15 @@ WHERE
                 "postgres": "SELECT DATE_PART('day', '2017-01-02'::DATE)",
             },
             write={
-                "postgres": "SELECT TO_CHAR(CAST(CAST('2017-01-02' AS DATE) AS TIMESTAMP), 'DD')",
-                "spark": "SELECT DATE_FORMAT(CAST(CAST('2017-01-02' AS DATE) AS TIMESTAMP), 'dd')",
-                "tsql": "SELECT FORMAT(CAST(CAST('2017-01-02' AS DATE) AS DATETIME2), 'dd')",
+                "postgres": "SELECT EXTRACT(day FROM CAST('2017-01-02' AS DATE))",
+                "spark": "SELECT EXTRACT(day FROM CAST('2017-01-02' AS DATE))",
+                "tsql": "SELECT DATEPART(day, CAST('2017-01-02' AS DATE))",
             },
         )
-
-        for fmt in ("WEEK", "WW", "WK"):
-            self.validate_identity(
-                f"SELECT DATEPART({fmt}, '2024-11-21')",
-                "SELECT DATEPART(WK, CAST('2024-11-21' AS DATETIME2))",
-            )
+        self.validate_identity(
+            'SELECT DATEPART("dd", x)',
+            "SELECT DATEPART(DAY, x)",
+        )
 
     def test_convert(self):
         self.validate_all(
@@ -1746,68 +1759,72 @@ WHERE
 
     def test_date_diff(self):
         self.validate_identity("SELECT DATEDIFF(HOUR, 1.5, '2021-01-01')")
+        self.validate_identity("SELECT DATEDIFF_BIG(HOUR, 1.5, '2021-01-01')")
 
-        self.validate_all(
-            "SELECT DATEDIFF(quarter, 0, '2021-01-01')",
-            write={
-                "tsql": "SELECT DATEDIFF(QUARTER, CAST('1900-01-01' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
-                "spark": "SELECT DATEDIFF(QUARTER, CAST('1900-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-                "duckdb": "SELECT DATE_DIFF('QUARTER', CAST('1900-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-            },
-        )
-        self.validate_all(
-            "SELECT DATEDIFF(day, 1, '2021-01-01')",
-            write={
-                "tsql": "SELECT DATEDIFF(DAY, CAST('1900-01-02' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
-                "spark": "SELECT DATEDIFF(DAY, CAST('1900-01-02' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-                "duckdb": "SELECT DATE_DIFF('DAY', CAST('1900-01-02' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-            },
-        )
-        self.validate_all(
-            "SELECT DATEDIFF(year, '2020-01-01', '2021-01-01')",
-            write={
-                "tsql": "SELECT DATEDIFF(YEAR, CAST('2020-01-01' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
-                "spark": "SELECT DATEDIFF(YEAR, CAST('2020-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
-                "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('2021-01-01' AS TIMESTAMP), CAST('2020-01-01' AS TIMESTAMP)) / 12 AS INT)",
-            },
-        )
-        self.validate_all(
-            "SELECT DATEDIFF(mm, 'start', 'end')",
-            write={
-                "databricks": "SELECT DATEDIFF(MONTH, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
-                "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) AS INT)",
-                "tsql": "SELECT DATEDIFF(MONTH, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
-            },
-        )
-        self.validate_all(
-            "SELECT DATEDIFF(quarter, 'start', 'end')",
-            write={
-                "databricks": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
-                "spark": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
-                "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) / 3 AS INT)",
-                "tsql": "SELECT DATEDIFF(QUARTER, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
-            },
-        )
+        for fnc in ["DATEDIFF", "DATEDIFF_BIG"]:
+            with self.subTest(f"Transpiling T-SQL's {fnc}"):
+                self.validate_all(
+                    f"SELECT {fnc}(quarter, 0, '2021-01-01')",
+                    write={
+                        "tsql": f"SELECT {fnc}(QUARTER, CAST('1900-01-01' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
+                        "spark": "SELECT DATEDIFF(QUARTER, CAST('1900-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                        "duckdb": "SELECT DATE_DIFF('QUARTER', CAST('1900-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT {fnc}(day, 1, '2021-01-01')",
+                    write={
+                        "tsql": f"SELECT {fnc}(DAY, CAST('1900-01-02' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
+                        "spark": "SELECT DATEDIFF(DAY, CAST('1900-01-02' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                        "duckdb": "SELECT DATE_DIFF('DAY', CAST('1900-01-02' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT {fnc}(year, '2020-01-01', '2021-01-01')",
+                    write={
+                        "tsql": f"SELECT {fnc}(YEAR, CAST('2020-01-01' AS DATETIME2), CAST('2021-01-01' AS DATETIME2))",
+                        "spark": "SELECT DATEDIFF(YEAR, CAST('2020-01-01' AS TIMESTAMP), CAST('2021-01-01' AS TIMESTAMP))",
+                        "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('2021-01-01' AS TIMESTAMP), CAST('2020-01-01' AS TIMESTAMP)) / 12 AS INT)",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT {fnc}(mm, 'start', 'end')",
+                    write={
+                        "databricks": "SELECT DATEDIFF(MONTH, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
+                        "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) AS INT)",
+                        "tsql": f"SELECT {fnc}(MONTH, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
+                    },
+                )
+                self.validate_all(
+                    f"SELECT {fnc}(quarter, 'start', 'end')",
+                    write={
+                        "databricks": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
+                        "spark": "SELECT DATEDIFF(QUARTER, CAST('start' AS TIMESTAMP), CAST('end' AS TIMESTAMP))",
+                        "spark2": "SELECT CAST(MONTHS_BETWEEN(CAST('end' AS TIMESTAMP), CAST('start' AS TIMESTAMP)) / 3 AS INT)",
+                        "tsql": f"SELECT {fnc}(QUARTER, CAST('start' AS DATETIME2), CAST('end' AS DATETIME2))",
+                    },
+                )
 
-        # Check superfluous casts arent added. ref: https://github.com/TobikoData/sqlmesh/issues/2672
-        self.validate_all(
-            "SELECT DATEDIFF(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
-            write={
-                "tsql": "SELECT DATEDIFF(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
-                "clickhouse": "SELECT DATE_DIFF(DAY, CAST(CAST(a AS Nullable(DateTime)) AS DateTime64(6)), CAST(CAST(b AS Nullable(DateTime)) AS DateTime64(6))) AS x FROM foo",
-            },
-        )
+                # Check superfluous casts arent added. ref: https://github.com/TobikoData/sqlmesh/issues/2672
+                self.validate_all(
+                    f"SELECT {fnc}(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
+                    write={
+                        "tsql": f"SELECT {fnc}(DAY, CAST(a AS DATETIME2), CAST(b AS DATETIME2)) AS x FROM foo",
+                        "clickhouse": "SELECT DATE_DIFF(DAY, CAST(CAST(a AS Nullable(DateTime)) AS DateTime64(6)), CAST(CAST(b AS Nullable(DateTime)) AS DateTime64(6))) AS x FROM foo",
+                    },
+                )
 
-        self.validate_identity(
-            "SELECT DATEADD(DAY, DATEDIFF(DAY, -3, GETDATE()), '08:00:00')",
-            "SELECT DATEADD(DAY, DATEDIFF(DAY, CAST('1899-12-29' AS DATETIME2), CAST(GETDATE() AS DATETIME2)), '08:00:00')",
-        )
+                self.validate_identity(
+                    f"SELECT DATEADD(DAY, {fnc}(DAY, -3, GETDATE()), '08:00:00')",
+                    f"SELECT DATEADD(DAY, {fnc}(DAY, CAST('1899-12-29' AS DATETIME2), CAST(GETDATE() AS DATETIME2)), '08:00:00')",
+                )
 
     def test_lateral_subquery(self):
         self.validate_all(
             "SELECT x.a, x.b, t.v, t.y FROM x CROSS APPLY (SELECT v, y FROM t) t(v, y)",
             write={
                 "spark": "SELECT x.a, x.b, t.v, t.y FROM x INNER JOIN LATERAL (SELECT v, y FROM t) AS t(v, y)",
+                "postgres": "SELECT x.a, x.b, t.v, t.y FROM x INNER JOIN LATERAL (SELECT v, y FROM t) AS t(v, y) ON TRUE",
                 "tsql": "SELECT x.a, x.b, t.v, t.y FROM x CROSS APPLY (SELECT v, y FROM t) AS t(v, y)",
             },
         )
@@ -1815,6 +1832,7 @@ WHERE
             "SELECT x.a, x.b, t.v, t.y FROM x OUTER APPLY (SELECT v, y FROM t) t(v, y)",
             write={
                 "spark": "SELECT x.a, x.b, t.v, t.y FROM x LEFT JOIN LATERAL (SELECT v, y FROM t) AS t(v, y)",
+                "postgres": "SELECT x.a, x.b, t.v, t.y FROM x LEFT JOIN LATERAL (SELECT v, y FROM t) AS t(v, y) ON TRUE",
                 "tsql": "SELECT x.a, x.b, t.v, t.y FROM x OUTER APPLY (SELECT v, y FROM t) AS t(v, y)",
             },
         )
@@ -1822,6 +1840,7 @@ WHERE
             "SELECT x.a, x.b, t.v, t.y, s.v, s.y FROM x OUTER APPLY (SELECT v, y FROM t) t(v, y) OUTER APPLY (SELECT v, y FROM t) s(v, y) LEFT JOIN z ON z.id = s.id",
             write={
                 "spark": "SELECT x.a, x.b, t.v, t.y, s.v, s.y FROM x LEFT JOIN LATERAL (SELECT v, y FROM t) AS t(v, y) LEFT JOIN LATERAL (SELECT v, y FROM t) AS s(v, y) LEFT JOIN z ON z.id = s.id",
+                "postgres": "SELECT x.a, x.b, t.v, t.y, s.v, s.y FROM x LEFT JOIN LATERAL (SELECT v, y FROM t) AS t(v, y) ON TRUE LEFT JOIN LATERAL (SELECT v, y FROM t) AS s(v, y) ON TRUE LEFT JOIN z ON z.id = s.id",
                 "tsql": "SELECT x.a, x.b, t.v, t.y, s.v, s.y FROM x OUTER APPLY (SELECT v, y FROM t) AS t(v, y) OUTER APPLY (SELECT v, y FROM t) AS s(v, y) LEFT JOIN z ON z.id = s.id",
             },
         )
@@ -1831,6 +1850,7 @@ WHERE
             "SELECT t.x, y.z FROM x CROSS APPLY tvfTest(t.x) y(z)",
             write={
                 "spark": "SELECT t.x, y.z FROM x INNER JOIN LATERAL TVFTEST(t.x) AS y(z)",
+                "postgres": "SELECT t.x, y.z FROM x INNER JOIN LATERAL TVFTEST(t.x) AS y(z) ON TRUE",
                 "tsql": "SELECT t.x, y.z FROM x CROSS APPLY TVFTEST(t.x) AS y(z)",
             },
         )
@@ -1838,6 +1858,7 @@ WHERE
             "SELECT t.x, y.z FROM x OUTER APPLY tvfTest(t.x)y(z)",
             write={
                 "spark": "SELECT t.x, y.z FROM x LEFT JOIN LATERAL TVFTEST(t.x) AS y(z)",
+                "postgres": "SELECT t.x, y.z FROM x LEFT JOIN LATERAL TVFTEST(t.x) AS y(z) ON TRUE",
                 "tsql": "SELECT t.x, y.z FROM x OUTER APPLY TVFTEST(t.x) AS y(z)",
             },
         )
@@ -1845,6 +1866,7 @@ WHERE
             "SELECT t.x, y.z FROM x OUTER APPLY a.b.tvfTest(t.x)y(z)",
             write={
                 "spark": "SELECT t.x, y.z FROM x LEFT JOIN LATERAL a.b.tvfTest(t.x) AS y(z)",
+                "postgres": "SELECT t.x, y.z FROM x LEFT JOIN LATERAL a.b.tvfTest(t.x) AS y(z) ON TRUE",
                 "tsql": "SELECT t.x, y.z FROM x OUTER APPLY a.b.tvfTest(t.x) AS y(z)",
             },
         )
@@ -1984,11 +2006,11 @@ WHERE
             self.validate_identity("##x")
             .assert_is(exp.Column)
             .this.assert_is(exp.Identifier)
-            .args.get("global")
+            .args.get("global_")
         )
 
         self.validate_identity("@x").assert_is(exp.Parameter).this.assert_is(exp.Var)
-        self.validate_identity("SELECT * FROM @x").args["from"].this.assert_is(
+        self.validate_identity("SELECT * FROM @x").args["from_"].this.assert_is(
             exp.Table
         ).this.assert_is(exp.Parameter).this.assert_is(exp.Var)
 
@@ -2178,26 +2200,26 @@ FROM OPENJSON(@json) WITH (
 
     def test_declare(self):
         # supported cases
-        self.validate_identity("DECLARE @X INT", "DECLARE @X AS INTEGER")
-        self.validate_identity("DECLARE @X INT = 1", "DECLARE @X AS INTEGER = 1")
+        self.validate_identity("DECLARE @X INT", "DECLARE @X INTEGER")
+        self.validate_identity("DECLARE @X INT = 1", "DECLARE @X INTEGER = 1")
         self.validate_identity(
-            "DECLARE @X INT, @Y VARCHAR(10)", "DECLARE @X AS INTEGER, @Y AS VARCHAR(10)"
+            "DECLARE @X INT, @Y VARCHAR(10)", "DECLARE @X INTEGER, @Y VARCHAR(10)"
         )
         self.validate_identity(
             "declare @X int = (select col from table where id = 1)",
-            "DECLARE @X AS INTEGER = (SELECT col FROM table WHERE id = 1)",
+            "DECLARE @X INTEGER = (SELECT col FROM table WHERE id = 1)",
         )
         self.validate_identity(
             "declare @X TABLE (Id INT NOT NULL, Name VARCHAR(100) NOT NULL)",
-            "DECLARE @X AS TABLE (Id INTEGER NOT NULL, Name VARCHAR(100) NOT NULL)",
+            "DECLARE @X TABLE (Id INTEGER NOT NULL, Name VARCHAR(100) NOT NULL)",
         )
         self.validate_identity(
             "declare @X TABLE (Id INT NOT NULL, constraint PK_Id primary key (Id))",
-            "DECLARE @X AS TABLE (Id INTEGER NOT NULL, CONSTRAINT PK_Id PRIMARY KEY (Id))",
+            "DECLARE @X TABLE (Id INTEGER NOT NULL, CONSTRAINT PK_Id PRIMARY KEY (Id))",
         )
         self.validate_identity(
             "declare @X UserDefinedTableType",
-            "DECLARE @X AS UserDefinedTableType",
+            "DECLARE @X UserDefinedTableType",
         )
         self.validate_identity(
             "DECLARE @MyTableVar TABLE (EmpID INT NOT NULL, PRIMARY KEY CLUSTERED (EmpID), UNIQUE NONCLUSTERED (EmpID), INDEX CustomNonClusteredIndex NONCLUSTERED (EmpID))",
@@ -2262,9 +2284,12 @@ FROM OPENJSON(@json) WITH (
         self.validate_identity("GRANT EXECUTE ON TestProc TO User2")
         self.validate_identity("GRANT EXECUTE ON TestProc TO TesterRole WITH GRANT OPTION")
         self.validate_identity(
-            "GRANT EXECUTE ON TestProc TO User2 AS TesterRole",
-            check_command_warning=True,
+            "GRANT EXECUTE ON TestProc TO User2 AS TesterRole", check_command_warning=True
         )
+
+    def test_revoke(self):
+        self.validate_identity("REVOKE EXECUTE ON TestProc FROM User2")
+        self.validate_identity("REVOKE EXECUTE ON TestProc FROM TesterRole")
 
     def test_parsename(self):
         for i in range(4):
@@ -2341,7 +2366,297 @@ FROM OPENJSON(@json) WITH (
             },
         )
 
+    def test_numeric_trunc(self):
+        # T-SQL doesn't have native TRUNC - uses ROUND with third parameter = 1
+        # Cross-dialect transpilation: other dialects' TRUNC -> T-SQL ROUND(x, n, 1)
+        self.validate_all(
+            "ROUND(3.14159, 2, 1)",
+            read={
+                "oracle": "TRUNC(3.14159, 2)",
+                "postgres": "TRUNC(3.14159, 2)",
+                "mysql": "TRUNCATE(3.14159, 2)",
+            },
+            write={
+                "tsql": "ROUND(3.14159, 2, 1)",
+            },
+        )
+
     def test_collation_parse(self):
         self.validate_identity("ALTER TABLE a ALTER COLUMN b CHAR(10) COLLATE abc").assert_is(
             exp.Alter
         ).args.get("actions")[0].args.get("collate").this.assert_is(exp.Var)
+
+    def test_odbc_date_literals(self):
+        for value, cls in [
+            ("{d'2024-01-01'}", exp.Date),
+            ("{t'12:00:00'}", exp.Time),
+            ("{ts'2024-01-01 12:00:00'}", exp.Timestamp),
+        ]:
+            with self.subTest(f"Testing ODBC date literal: {value}"):
+                sql = f"INSERT INTO tab(ds) VALUES ({value})"
+                expr = self.parse_one(sql)
+                self.assertIsInstance(expr, exp.Insert)
+                self.assertIsInstance(expr.expression.expressions[0].expressions[0], cls)
+
+    def test_create_trigger(self):
+        self.validate_identity(
+            "CREATE TRIGGER reminder ON customers AFTER INSERT AS BEGIN INSERT INTO audit_log (customer_id, action, created_at) SELECT id, 'INSERT', GETDATE() FROM inserted END",
+            check_command_warning=True,
+        )
+
+        self.validate_identity(
+            "CREATE TRIGGER updview ON vw_employees INSTEAD OF UPDATE AS BEGIN UPDATE employees SET salary = inserted.salary FROM inserted WHERE employees.id = inserted.id END",
+            check_command_warning=True,
+        )
+
+        self.validate_identity(
+            "CREATE TRIGGER ddl_trig ON DATABASE FOR CREATE_TABLE AS BEGIN INSERT INTO schema_changes (event_type, event_time, login_name) VALUES ('CREATE_TABLE', GETDATE(), SYSTEM_USER) END",
+            check_command_warning=True,
+        )
+
+    def test_procedures(self):
+        self.validate_identity("SELECT 1; SELECT 2").assert_is(exp.Block)
+
+        sqls = [
+            "EXECUTE test @in1 = 100, @in2",
+            "EXECUTE sp_executesql @payload, @param_str, @param1 = value1, @param2 = value2",
+            "EXECUTE sp_executesql @stmt = @payload, @params = param_str, @param1 = value1, @param2 = value2",
+            """
+            CREATE
+            PROCEDURE test1
+            AS
+            BEGIN
+                SELECT 1;
+                SELECT 2;
+                SELECT 3;
+            END
+            """,
+            """
+            CREATE PROCEDURE test2(@in1 INTEGER, @c CHAR(1))
+            AS
+            BEGIN
+                IF @in1 > 1 AND @c = 'c'
+                BEGIN
+                    SELECT col1 FROM t WHERE t.col2 = @in1;
+                END;
+            END
+            """,
+            """
+            CREATE PROCEDURE test(@in1 INTEGER)
+            AS
+            BEGIN
+                SELECT 1;
+                IF @in1 > 1
+                BEGIN
+                    SELECT 1;
+                    SELECT 2;
+                END;
+                ELSE
+                BEGIN
+                    SELECT 3;
+                    SELECT 4;
+                END;
+            END
+            """,
+            """
+            CREATE PROCEDURE test(@in1 INTEGER)
+            AS
+            BEGIN
+                IF @in1 > 1
+                BEGIN
+                    SELECT col1 FROM t WHERE t.col2 = @in1;
+                    SELECT 100;
+                END;
+                IF @in1 > 1
+                BEGIN
+                    SELECT col2 FROM t1;
+                END;
+            END
+            """,
+            """
+            CREATE PROCEDURE test(@in1 INTEGER)
+            AS
+            BEGIN
+                DECLARE @q1 INTEGER, @q2 INTEGER, @q3 INTEGER;
+                SET @q1 = (SELECT MAX(col1) FROM t1);
+                SET @q2 = (SELECT MIN(col1) FROM t2);
+                IF @in1 > 1
+                BEGIN
+                    SELECT 3;
+                    SET @q3 = (SELECT MAX(col2) FROM t1);
+                    IF @q3 < 5
+                    BEGIN
+                        SELECT 1;
+                        SELECT 2;
+                    END;
+                END;
+                IF @in1 > 1
+                BEGIN
+                    SELECT 1;
+                END;
+            END
+            """,
+            """
+            CREATE PROCEDURE test(@in1 INTEGER)
+            AS
+            BEGIN
+                SELECT 1;
+                IF @in1 > 1
+                BEGIN
+                    SELECT 3;
+                END;
+                ELSE
+                BEGIN
+                    SELECT 4;
+                    SELECT 5;
+                    IF @in1 < 0
+                    BEGIN
+                        SELECT 1;
+                    END;
+                END;
+            END
+            """,
+            """
+            CREATE PROCEDURE test(@in1 INTEGER, @c CHAR(1))
+            AS
+            BEGIN
+                WHILE @in1 > 100
+                BEGIN
+                    SELECT col1 FROM t WHERE t.col2 = @in1 AND t.col3 = @c;
+                    SET @in1 = @in1 - 1;
+                END;
+            END
+            """,
+            """
+            CREATE PROCEDURE test(@in1 INTEGER)
+            AS
+            BEGIN
+                DECLARE @temp INTEGER;
+                WHILE @in1 > 100
+                BEGIN
+                    SET @temp = (SELECT MAX(col1) FROM t WHERE t.col2 = @in1);
+                    SET @in1 = @in1 - @temp;
+                END;
+                SET @in1 = 50;
+                WHILE @in1 > 5
+                BEGIN
+                    SELECT col2 FROM t1 WHERE t1.col3 = @in1;
+                    SET @in1 = @in1 - 1;
+                END;
+            END
+            """,
+            """
+            CREATE PROCEDURE dbo.test(@in1 INTEGER = 5, @in2 VARCHAR(40) = 'empty', @in3 INTEGER = 1)
+            AS
+            BEGIN
+                INSERT INTO t (id, col1, col2) VALUES (@in1, @in2, @in3);
+            END;
+            CREATE PROCEDURE c.s.test2
+            AS
+            BEGIN
+                EXECUTE dbo.test;
+                DECLARE @i INTEGER = 0;
+                WHILE @i < 100
+                BEGIN
+                    EXECUTE test @in2 = 'temp_new';
+                    SET @i = @i + 100;
+                END;
+            END
+            """,
+            """
+            CREATE PROCEDURE DropTableIfExists
+                @TableName NVARCHAR(128)
+            AS
+            BEGIN
+                DECLARE @SQL NVARCHAR(MAX);
+                SET @SQL = N'DROP TABLE IF EXISTS [' + @TableName + ']';
+                EXECUTE sp_executesql 'SELECT 1 AS c';
+                EXECUTE sp_executesql N'SELECT 1 AS c';
+                EXECUTE sp_executesql @SQL;
+                EXECUTE sp_executesql @stmt = @SQL;
+            END
+            """,
+            """
+            CREATE PROCEDURE test
+            AS
+            BEGIN
+                DECLARE @x INTEGER = 100;
+                IF @x > ANY (SELECT 100)
+                BEGIN
+                    SET @x = 100;
+                END;
+                ELSE
+                BEGIN
+                    SET @x = 0;
+                END;
+            END
+            """,
+        ]
+        for sql in sqls:
+            ast = parse_one(sql, read="tsql")
+            expected_sql = " ".join(line for line in (l.strip() for l in sql.splitlines()) if line)
+            roundtripped_sql = ast.sql("tsql")
+            with self.subTest(f"Testing: {sql}"):
+                self.assertEqual(expected_sql, roundtripped_sql)
+
+        self.validate_identity(
+            "EXEC sp_executesql @payload", "EXECUTE sp_executesql @payload"
+        ).assert_is(exp.ExecuteSql)
+
+        sql = """
+            CREATE procedure [TRANSF].[SP_Merge_Sales_Real]
+                @Loadid INTEGER
+               ,@NumberOfRows INTEGER
+            WITH EXECUTE AS OWNER, SCHEMABINDING, NATIVE_COMPILATION
+            AS
+            BEGIN
+                SET XACT_ABORT ON;
+
+                DECLARE @DWH_DateCreated AS DATETIME = CONVERT(DATETIME, getdate(), 104);
+                DECLARE @DWH_DateModified DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104);
+                DECLARE @DWH_IdUserCreated INTEGER = SUSER_ID (CURRENT_USER());
+                DECLARE @DWH_IdUserModified INTEGER = SUSER_ID (SYSTEM_USER);
+
+                DECLARE @SalesAmountBefore float;
+                SELECT @SalesAmountBefore=SUM(SalesAmount) FROM TRANSF.[Pre_Merge_Sales_Real] S;
+            END
+        """
+
+        expected_sqls = [
+            "CREATE PROCEDURE [TRANSF].[SP_Merge_Sales_Real] @Loadid INTEGER, @NumberOfRows INTEGER WITH EXECUTE AS OWNER, SCHEMABINDING, NATIVE_COMPILATION AS BEGIN SET XACT_ABORT ON",
+            "DECLARE @DWH_DateCreated DATETIME = CONVERT(DATETIME, GETDATE(), 104)",
+            "DECLARE @DWH_DateModified DATETIME2 = CONVERT(DATETIME2, GETDATE(), 104)",
+            "DECLARE @DWH_IdUserCreated INTEGER = SUSER_ID(CURRENT_USER())",
+            "DECLARE @DWH_IdUserModified INTEGER = SUSER_ID(CURRENT_USER())",
+            "DECLARE @SalesAmountBefore FLOAT",
+            "SELECT @SalesAmountBefore = SUM(SalesAmount) FROM TRANSF.[Pre_Merge_Sales_Real] AS S",
+            "END",
+        ]
+
+        for expr, expected_sql in zip(parse_one(sql, read="tsql").expressions, expected_sqls):
+            self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
+
+        sql = """
+            CREATE PROC [dbo].[transform_proc] AS
+
+            DECLARE @CurrentDate VARCHAR(20);
+            SET @CurrentDate = CONVERT(VARCHAR(20), GETDATE(), 120);
+
+            CREATE TABLE [target_schema].[target_table]
+            (a INTEGER)
+            WITH (DISTRIBUTION = REPLICATE, HEAP);
+        """
+
+        expected_sqls = [
+            "CREATE PROC [dbo].[transform_proc] AS DECLARE @CurrentDate VARCHAR(20)",
+            "SET @CurrentDate = CONVERT(VARCHAR(20), GETDATE(), 120)",
+            "CREATE TABLE [target_schema].[target_table] (a INTEGER) WITH (DISTRIBUTION=REPLICATE, HEAP)",
+        ]
+
+        for expr, expected_sql in zip(parse_one(sql, read="tsql").expressions, expected_sqls):
+            self.assertEqual(expr.sql(dialect="tsql"), expected_sql)
+
+        self.validate_identity(
+            "IF ((@x = @y AND GETDATE() = GETDATE()) OR (GETDATE() = @t)) BEGIN SET @query_result = (SELECT MAX(id) + 1 FROM t); END",
+            "IF (@x = @y AND GETDATE() = GETDATE()) OR (GETDATE() = @t) BEGIN SET @query_result = (SELECT MAX(id) + 1 FROM t); END",
+        )

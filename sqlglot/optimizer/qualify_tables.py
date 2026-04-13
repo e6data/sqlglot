@@ -1,26 +1,25 @@
 from __future__ import annotations
 
-import itertools
 import typing as t
 
-from sqlglot import alias, exp
-from sqlglot.dialects.dialect import DialectType
-from sqlglot.helper import csv_reader, name_sequence
+from sqlglot import exp
+from sqlglot.dialects.dialect import Dialect, DialectType
+from sqlglot.helper import name_sequence, seq_get, ensure_list
+from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 from sqlglot.optimizer.scope import Scope, traverse_scope
-from sqlglot.schema import Schema
-from sqlglot.dialects.dialect import Dialect
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
+    from collections.abc import Sequence
 
 
 def qualify_tables(
     expression: E,
-    db: t.Optional[str | exp.Identifier] = None,
-    catalog: t.Optional[str | exp.Identifier] = None,
-    schema: t.Optional[Schema] = None,
-    infer_csv_schemas: bool = False,
+    db: str | exp.Identifier | None = None,
+    catalog: str | exp.Identifier | None = None,
+    on_qualify: t.Callable[[exp.Table], None] | None = None,
     dialect: DialectType = None,
+    canonicalize_table_aliases: bool = False,
 ) -> E:
     """
     Rewrite sqlglot AST to have fully qualified tables. Join constructs such as
@@ -37,20 +36,28 @@ def qualify_tables(
         'SELECT 1 FROM (SELECT * FROM t1 AS t1, t2 AS t2) AS t'
 
     Args:
-        expression: Expression to qualify
+        expression: Expr to qualify
         db: Database name
         catalog: Catalog name
-        schema: A schema to populate
-        infer_csv_schemas: Whether to scan READ_CSV calls in order to infer the CSVs' schemas.
+        on_qualify: Callback after a table has been qualified.
         dialect: The dialect to parse catalog and schema into.
+        canonicalize_table_aliases: Whether to use canonical aliases (_0, _1, ...) for all sources
+            instead of preserving table names. Defaults to False.
 
     Returns:
         The qualified expression.
     """
-    next_alias_name = name_sequence("_q_")
-    db = exp.parse_identifier(db, dialect=dialect) if db else None
-    catalog = exp.parse_identifier(catalog, dialect=dialect) if catalog else None
     dialect = Dialect.get_or_raise(dialect)
+    next_alias_name = name_sequence("_")
+
+    if db := db or None:
+        db = exp.parse_identifier(db, dialect=dialect)
+        db.meta["is_table"] = True
+        db = normalize_identifiers(db, dialect=dialect)
+    if catalog := catalog or None:
+        catalog = exp.parse_identifier(catalog, dialect=dialect)
+        catalog.meta["is_table"] = True
+        catalog = normalize_identifiers(catalog, dialect=dialect)
 
     def _qualify(table: exp.Table) -> None:
         if isinstance(table.this, exp.Identifier):
@@ -60,105 +67,134 @@ def qualify_tables(
                 table.set("catalog", catalog.copy())
 
     if (db or catalog) and not isinstance(expression, exp.Query):
-        with_ = expression.args.get("with") or exp.With()
+        with_ = expression.args.get("with_") or exp.With()
         cte_names = {cte.alias_or_name for cte in with_.expressions}
 
         for node in expression.walk(prune=lambda n: isinstance(n, exp.Query)):
             if isinstance(node, exp.Table) and node.name not in cte_names:
                 _qualify(node)
 
+    def _set_alias(
+        expression: exp.Expr,
+        canonical_aliases: dict[str, str],
+        target_alias: str | None = None,
+        scope: Scope | None = None,
+        normalize: bool = False,
+        columns: Sequence[str | exp.Identifier] | None = None,
+    ) -> None:
+        alias = expression.args.get("alias") or exp.TableAlias()
+
+        if canonicalize_table_aliases:
+            new_alias_name = next_alias_name()
+            canonical_aliases[alias.name or target_alias or ""] = new_alias_name
+        elif not alias.name:
+            new_alias_name = target_alias or next_alias_name()
+            if normalize and target_alias:
+                new_alias_name = normalize_identifiers(new_alias_name, dialect=dialect).name
+        else:
+            return
+
+        alias.set("this", exp.to_identifier(new_alias_name))
+
+        if columns:
+            alias.set("columns", [exp.to_identifier(c) for c in columns])
+
+        expression.set("alias", alias)
+
+        if scope:
+            scope.rename_source(None, new_alias_name)
+
     for scope in traverse_scope(expression):
-        for derived_table in itertools.chain(scope.ctes, scope.derived_tables):
-            if isinstance(derived_table, exp.Subquery):
-                unnested = derived_table.unnest()
-                if isinstance(unnested, exp.Table):
-                    joins = unnested.args.pop("joins", None)
-                    derived_table.this.replace(exp.select("*").from_(unnested.copy(), copy=False))
-                    derived_table.this.set("joins", joins)
+        local_columns = scope.local_columns
+        canonical_aliases: dict[str, str] = {}
 
-            if not derived_table.args.get("alias"):
-                alias_ = next_alias_name()
-                derived_table.set("alias", exp.TableAlias(this=exp.to_identifier(alias_)))
-                scope.rename_source(None, alias_)
+        for query in scope.subqueries:
+            subquery = query.parent
+            if isinstance(subquery, exp.Subquery):
+                subquery.unwrap().replace(subquery)
 
-            pivots = derived_table.args.get("pivots")
-            if pivots and not pivots[0].alias:
-                pivots[0].set("alias", exp.TableAlias(this=exp.to_identifier(next_alias_name())))
+        for derived_table in scope.derived_tables:
+            unnested = derived_table.unnest()
+            if isinstance(unnested, exp.Table):
+                joins = unnested.args.get("joins")
+                unnested.set("joins", None)
+                derived_table.this.replace(exp.select("*").from_(unnested.copy(), copy=False))
+                derived_table.this.set("joins", joins)
+
+            _set_alias(derived_table, canonical_aliases, scope=scope)
+            if pivot := seq_get(derived_table.args.get("pivots") or [], 0):
+                _set_alias(pivot, canonical_aliases)
 
         table_aliases = {}
 
         for name, source in scope.sources.items():
             if isinstance(source, exp.Table):
-                pivots = source.args.get("pivots")
-                if not source.alias:
-                    # Don't add the pivot's alias to the pivoted table, use the table's name instead
-                    if pivots and pivots[0].alias == name:
-                        name = source.name
+                # When the name is empty, it means that we have a non-table source, e.g. a pivoted cte
+                is_real_table_source = bool(name)
 
-                    # Mutates the source by attaching an alias to it
-                    alias(
-                        source,
-                        name or source.name or next_alias_name(),
-                        copy=False,
-                        table=True,
-                    )
+                if pivot := seq_get(source.args.get("pivots") or [], 0):
+                    name = source.name
 
-                table_aliases[".".join(p.name for p in source.parts)] = exp.to_identifier(
-                    source.alias
+                table_this = source.this
+                table_alias = source.args.get("alias")
+                function_columns: Sequence[str | exp.Identifier] | None = None
+                if isinstance(table_this, exp.Func):
+                    if not table_alias:
+                        function_columns = ensure_list(
+                            dialect.DEFAULT_FUNCTIONS_COLUMN_NAMES.get(type(table_this))
+                        )
+                    elif columns := table_alias.columns:
+                        function_columns = columns
+                    elif type(table_this) in dialect.DEFAULT_FUNCTIONS_COLUMN_NAMES:
+                        function_columns = ensure_list(source.alias_or_name)
+                        source.set("alias", None)
+                        name = ""
+
+                _set_alias(
+                    source,
+                    canonical_aliases,
+                    target_alias=name or source.name or None,
+                    normalize=True,
+                    columns=function_columns,
                 )
 
-                if pivots:
-                    pivot = pivots[0]
-                    if not pivot.alias:
-                        pivot_alias = source.alias if pivot.unpivot else next_alias_name()
-                        pivot.set("alias", exp.TableAlias(this=exp.to_identifier(pivot_alias)))
+                source_fqn = ".".join(p.name for p in source.parts)
+                had_explicit_alias = table_alias and table_alias.name
+                if not had_explicit_alias or source_fqn not in table_aliases:
+                    table_aliases[source_fqn] = source.args["alias"].this.copy()
+
+                if pivot:
+                    target_alias = source.alias if pivot.unpivot else None
+                    _set_alias(pivot, canonical_aliases, target_alias=target_alias, normalize=True)
 
                     # This case corresponds to a pivoted CTE, we don't want to qualify that
                     if isinstance(scope.sources.get(source.alias_or_name), Scope):
                         continue
 
-                _qualify(source)
+                if is_real_table_source:
+                    _qualify(source)
 
-                if infer_csv_schemas and schema and isinstance(source.this, exp.ReadCSV):
-                    with csv_reader(source.this) as reader:
-                        header = next(reader)
-                        columns = next(reader)
-                        schema.add_table(
-                            source,
-                            {k: type(v).__name__ for k, v in zip(header, columns)},
-                            match_depth=False,
-                        )
+                    if on_qualify:
+                        on_qualify(source)
             elif isinstance(source, Scope) and source.is_udtf:
-                udtf = source.expression
-                table_alias = udtf.args.get("alias") or exp.TableAlias(
-                    this=exp.to_identifier(next_alias_name())
-                )
-                if (
-                    isinstance(udtf, exp.Unnest)
-                    and dialect.UNNEST_COLUMN_ONLY
-                    and not table_alias.columns
-                ):
-                    table_alias.set("columns", [table_alias.this.copy()])
-                    table_alias.set("column_only", True)
+                _set_alias(udtf := source.expression, canonical_aliases)
 
-                udtf.set("alias", table_alias)
+                table_alias = udtf.args["alias"]
 
-                if not table_alias.name:
-                    table_alias.set("this", exp.to_identifier(next_alias_name()))
                 if isinstance(udtf, exp.Values) and not table_alias.columns:
-                    column_aliases = dialect.generate_values_aliases(udtf)
+                    column_aliases = [
+                        normalize_identifiers(i, dialect=dialect)
+                        for i in dialect.generate_values_aliases(udtf)
+                    ]
                     table_alias.set("columns", column_aliases)
-            else:
-                for node in scope.walk():
-                    if (
-                        isinstance(node, exp.Table)
-                        and not node.alias
-                        and isinstance(node.parent, (exp.From, exp.Join))
-                    ):
-                        # Mutates the table by attaching an alias to it
-                        alias(node, node.name, copy=False, table=True)
 
-        for column in scope.columns:
+        for table in scope.tables:
+            if not table.alias and isinstance(table.parent, (exp.From, exp.Join)):
+                _set_alias(table, canonical_aliases, target_alias=table.name)
+
+        for column in local_columns:
+            column_table = column.table
+
             if column.db:
                 table_alias = table_aliases.get(".".join(p.name for p in column.parts[0:-1]))
 
@@ -167,5 +203,12 @@ def qualify_tables(
                         column.set(p, None)
 
                     column.set("table", table_alias.copy())
+            elif (
+                canonical_aliases
+                and column_table
+                and (canonical_table := canonical_aliases.get(column_table, "")) != column_table
+            ):
+                # Amend existing aliases, e.g. t.c -> _0.c if t is aliased to _0
+                column.set("table", exp.to_identifier(canonical_table))
 
     return expression

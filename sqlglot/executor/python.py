@@ -1,4 +1,3 @@
-import ast
 import collections
 import itertools
 import math
@@ -9,7 +8,7 @@ from sqlglot.errors import ExecuteError
 from sqlglot.executor.context import Context
 from sqlglot.executor.env import ENV
 from sqlglot.executor.table import RowReader, Table
-from sqlglot.helper import csv_reader, subclasses
+from sqlglot.helper import subclasses
 
 
 class PythonExecutor:
@@ -81,14 +80,14 @@ class PythonExecutor:
 
     def table(self, expressions):
         return Table(
-            expression.alias_or_name if isinstance(expression, exp.Expression) else expression
+            expression.alias_or_name if isinstance(expression, exp.Expr) else expression
             for expression in expressions
         )
 
     def scan(self, step, context):
         source = step.source
 
-        if source and isinstance(source, exp.Expression):
+        if source and isinstance(source, exp.Expr):
             source = source.name or source.alias
 
         if source is None:
@@ -97,9 +96,6 @@ class PythonExecutor:
             if not step.projections and not step.condition:
                 return self.context({step.name: context.tables[source]})
             table_iter = context.table_iter(source)
-        elif isinstance(step.source, exp.Table) and isinstance(step.source.this, exp.ReadCSV):
-            table_iter = self.scan_csv(step)
-            context = next(table_iter)
         else:
             context, table_iter = self.scan_table(step)
 
@@ -131,30 +127,6 @@ class PythonExecutor:
         table = self.tables.find(step.source)
         context = self.context({step.source.alias_or_name: table})
         return context, iter(table)
-
-    def scan_csv(self, step):
-        alias = step.source.alias
-        source = step.source.this
-
-        with csv_reader(source) as reader:
-            columns = next(reader)
-            table = Table(columns)
-            context = self.context({alias: table})
-            yield context
-            types = []
-            for row in reader:
-                if not types:
-                    for v in row:
-                        try:
-                            types.append(type(ast.literal_eval(v)))
-                        except (ValueError, SyntaxError):
-                            types.append(str)
-
-                # We can't cast empty values ('') to non-string types, so we convert them to None instead
-                context.set_row(
-                    tuple(None if (t is not str and v == "") else t(v) for t, v in zip(types, row))
-                )
-                yield context.table.reader
 
     def join(self, step, context):
         source = step.source_name
@@ -431,18 +403,21 @@ class Python(Dialect):
             exp.And: lambda self, e: self.binary(e, "and"),
             exp.Between: _rename,
             exp.Boolean: lambda self, e: "True" if e.this else "False",
-            exp.Cast: lambda self, e: f"CAST({self.sql(e.this)}, exp.DataType.Type.{e.args['to']})",
-            exp.Column: lambda self,
-            e: f"scope[{self.sql(e, 'table') or None}][{self.sql(e.this)}]",
+            exp.Cast: lambda self, e: f"CAST({self.sql(e.this)}, exp.DType.{e.args['to']})",
+            exp.Column: lambda self, e: (
+                f"scope[{self.sql(e, 'table') or None}][{self.sql(e.this)}]"
+            ),
             exp.Concat: lambda self, e: self.func(
                 "SAFECONCAT" if e.args.get("safe") else "CONCAT", *e.expressions
             ),
             exp.Distinct: lambda self, e: f"set({self.sql(e, 'this')})",
             exp.Div: _div_sql,
-            exp.Extract: lambda self,
-            e: f"EXTRACT('{e.name.lower()}', {self.sql(e, 'expression')})",
-            exp.In: lambda self,
-            e: f"{self.sql(e, 'this')} in {{{self.expressions(e, flat=True)}}}",
+            exp.Extract: lambda self, e: (
+                f"EXTRACT('{e.name.lower()}', {self.sql(e, 'expression')})"
+            ),
+            exp.In: lambda self, e: (
+                f"{self.sql(e, 'this')} in {{{self.expressions(e, flat=True)}}}"
+            ),
             exp.Interval: lambda self, e: f"INTERVAL({self.sql(e.this)}, '{self.sql(e.unit)}')",
             exp.Is: lambda self, e: (
                 self.binary(e, "==") if isinstance(e.this, exp.Literal) else self.binary(e, "is")

@@ -1,4 +1,4 @@
-from sqlglot import exp, transpile
+from sqlglot import exp, transpile, parse_one
 from sqlglot.errors import ParseError
 from tests.dialects.test_dialect import Validator
 
@@ -7,13 +7,23 @@ class TestDatabricks(Validator):
     dialect = "databricks"
 
     def test_databricks(self):
+        self.validate_identity("SELECT COSH(1.5)")
         null_type = exp.DataType.build("VOID", dialect="databricks")
         self.assertEqual(null_type.sql(), "NULL")
         self.assertEqual(null_type.sql("databricks"), "VOID")
 
+        self.validate_identity("DESCRIBE EXTENDED staging.onetrade_startb AS JSON")
+        self.validate_identity("SELECT BITMAP_BIT_POSITION(10)")
+        self.validate_identity("SELECT BITMAP_BUCKET_NUMBER(32769)")
+        self.validate_identity("SELECT BITMAP_CONSTRUCT_AGG(value)")
+        self.validate_identity("SELECT EXP(1)")
+        self.validate_identity("SELECT MODE(category)")
+        self.validate_identity("SELECT MODE(price, TRUE) AS deterministic_mode FROM products")
+        self.validate_identity("REGEXP_LIKE(x, y)")
         self.validate_identity("SELECT CAST(NULL AS VOID)")
         self.validate_identity("SELECT void FROM t")
         self.validate_identity("SELECT * FROM stream")
+        self.validate_identity("SELECT * FROM STREAM t")
         self.validate_identity("SELECT t.current_time FROM t")
         self.validate_identity("ALTER TABLE labels ADD COLUMN label_score FLOAT")
         self.validate_identity("DESCRIBE HISTORY a.b")
@@ -36,6 +46,12 @@ class TestDatabricks(Validator):
         self.validate_identity("CREATE TABLE foo (x DATE GENERATED ALWAYS AS (CAST(y AS DATE)))")
         self.validate_identity("TRUNCATE TABLE t1 PARTITION(age = 10, name = 'test', address)")
         self.validate_identity("SELECT PARSE_JSON('{}')")
+        self.validate_identity("SELECT RANDSTR(123)")
+        self.validate_identity("SELECT RANDSTR(123, 456)")
+
+        self.validate_identity("PARSE_URL('https://example.com/path')")
+        self.validate_identity("PARSE_URL('https://example.com/path', 'HOST')")
+        self.validate_identity("PARSE_URL('https://example.com/path', 'QUERY', 'param')")
         self.validate_identity(
             "CREATE TABLE IF NOT EXISTS db.table (a TIMESTAMP, b BOOLEAN GENERATED ALWAYS AS (NOT a IS NULL)) USING DELTA"
         )
@@ -83,6 +99,7 @@ class TestDatabricks(Validator):
         )
 
         self.validate_identity("SELECT SUBSTRING_INDEX(str, delim, count)")
+        self.validate_identity("BITMAP_OR_AGG(x)")
 
         self.validate_all(
             "SELECT SUBSTRING_INDEX('a.b.c.d', '.', 2)",
@@ -92,7 +109,14 @@ class TestDatabricks(Validator):
                 "mysql": "SELECT SUBSTRING_INDEX('a.b.c.d', '.', 2)",
             },
         )
-
+        self.validate_identity(
+            "SELECT SUBSTR('Spark' FROM 5 FOR 1)", "SELECT SUBSTRING('Spark', 5, 1)"
+        )
+        self.validate_identity("SELECT SUBSTR('Spark SQL', 5)", "SELECT SUBSTRING('Spark SQL', 5)")
+        self.validate_identity(
+            "SELECT SUBSTR(ENCODE('Spark SQL', 'utf-8'), 5)",
+            "SELECT SUBSTRING(ENCODE('Spark SQL', 'utf-8'), 5)",
+        )
         self.validate_all(
             "SELECT TYPEOF(1)",
             read={
@@ -151,23 +175,6 @@ class TestDatabricks(Validator):
             },
         )
 
-        self.validate_all(
-            "SELECT GETDATE()",
-            write={
-                "databricks": "SELECT GETDATE()",
-                "snowflake": "SELECT CURRENT_TIMESTAMP()",
-                "e6": "SELECT CURRENT_TIMESTAMP",
-                "trino": "SELECT CURRENT_TIMESTAMP",
-            },
-        )
-
-        self.validate_all(
-            "SELECT CURRENT_TIMESTAMP()",
-            write={
-                "e6": "SELECT CURRENT_TIMESTAMP",
-            },
-        )
-
         with self.assertRaises(ParseError):
             transpile(
                 "CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE PYTHON AS $foo$def add_one(x):\n  return x+1$$",
@@ -184,7 +191,7 @@ class TestDatabricks(Validator):
             "CREATE OR REPLACE FUNCTION func(a BIGINT, b BIGINT) RETURNS TABLE (a INT) RETURN SELECT a",
             write={
                 "databricks": "CREATE OR REPLACE FUNCTION func(a BIGINT, b BIGINT) RETURNS TABLE (a INT) RETURN SELECT a",
-                "duckdb": "CREATE OR REPLACE FUNCTION func(a, b) AS TABLE SELECT a",
+                "duckdb": "CREATE OR REPLACE FUNCTION func(a BIGINT, b BIGINT) AS TABLE SELECT a",
             },
         )
 
@@ -192,7 +199,7 @@ class TestDatabricks(Validator):
             "CREATE OR REPLACE FUNCTION func(a BIGINT, b BIGINT) RETURNS BIGINT RETURN a",
             write={
                 "databricks": "CREATE OR REPLACE FUNCTION func(a BIGINT, b BIGINT) RETURNS BIGINT RETURN a",
-                "duckdb": "CREATE OR REPLACE FUNCTION func(a, b) AS a",
+                "duckdb": "CREATE OR REPLACE FUNCTION func(a BIGINT, b BIGINT) AS a",
             },
         )
 
@@ -220,14 +227,43 @@ class TestDatabricks(Validator):
             "WITH t AS (VALUES ('foo_val') AS t(foo1)) SELECT foo1 FROM t",
             "WITH t AS (SELECT * FROM VALUES ('foo_val') AS t(foo1)) SELECT foo1 FROM t",
         )
-
+        self.validate_identity("NTILE() OVER (ORDER BY 1)")
+        self.validate_identity("CURRENT_VERSION()")
         self.validate_all(
-            "WITH cte AS (SELECT ARRAY_AGG(1) AS values) SELECT MAP_FROM_ENTRIES(ARRAY_AGG(STRUCT(2, values))) FROM cte",
+            "UNIFORM(1, 10, 5)",
             write={
-                "databricks": "WITH cte AS (SELECT COLLECT_LIST(1) AS values) SELECT MAP_FROM_ENTRIES(COLLECT_LIST(STRUCT(2 AS col1, values AS values))) FROM cte",
-                "snowflake": "WITH cte AS (SELECT ARRAY_AGG(1) AS values) SELECT MAP_FROM_ENTRIES(ARRAY_AGG(OBJECT_CONSTRUCT('col1', 2, 'values', values))) FROM cte",
+                "snowflake": "UNIFORM(1, 10, RANDOM(5))",
+                "databricks": "UNIFORM(1, 10, 5)",
             },
         )
+        self.validate_all(
+            "UNIFORM(1, 10)",
+            write={
+                "databricks": "UNIFORM(1, 10)",
+                "snowflake": "UNIFORM(1, 10, RANDOM())",
+            },
+        )
+        self.validate_identity("SELECT ELT(2, 'foo', 'bar', 'baz') AS Result")
+        self.validate_identity("GETDATE()", "CURRENT_TIMESTAMP()")
+        self.validate_identity("NOW()", "CURRENT_TIMESTAMP()")
+        self.validate_identity("CURRENT_TIMEZONE()")
+        self.validate_identity("CURDATE()", "CURRENT_DATE")
+        self.validate_identity("CURDATE", "CURRENT_DATE")
+        self.validate_identity("SELECT MAKE_INTERVAL(100, 11, 12, 13, 14, 14, 15)")
+        self.validate_identity("SELECT name, GROUPING_ID() FROM customer GROUP BY ROLLUP (name)")
+        self.validate_identity("BIT_GET(11, 0)", "GETBIT(11, 0)")
+        self.validate_identity("SELECT CURDATE()", "SELECT CURRENT_DATE")
+        self.validate_identity(
+            "CREATE TABLE tbl (id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 1 INCREMENT BY 1))"
+        )
+        self.validate_identity(
+            "CREATE TABLE tbl (id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1))"
+        )
+
+        self.validate_identity(
+            """WITH t AS (SELECT '{"x-y": "z"}' AS c) SELECT get_json_object(c, '$.x-y') FROM t""",
+            """WITH t AS (SELECT '{"x-y": "z"}' AS c) SELECT c:["x-y"] FROM t""",
+        ).selects[0].expression.assert_is(exp.JSONPath)
 
     # https://docs.databricks.com/sql/language-manual/functions/colonsign.html
     def test_json(self):
@@ -394,6 +430,14 @@ class TestDatabricks(Validator):
         self.validate_identity("GRANT ALL PRIVILEGES ON TABLE forecasts TO finance")
         self.validate_identity("GRANT SELECT ON TABLE t TO `fab9e00e-ca35-11ec-9d64-0242ac120002`")
 
+    def test_revoke(self):
+        self.validate_identity("REVOKE CREATE ON SCHEMA my_schema FROM `alf@melmak.et`")
+        self.validate_identity("REVOKE SELECT ON TABLE sample_data FROM `alf@melmak.et`")
+        self.validate_identity("REVOKE ALL PRIVILEGES ON TABLE forecasts FROM finance")
+        self.validate_identity(
+            "REVOKE SELECT ON TABLE t FROM `fab9e00e-ca35-11ec-9d64-0242ac120002`"
+        )
+
     def test_analyze(self):
         self.validate_identity("ANALYZE TABLE tbl COMPUTE DELTA STATISTICS NOSCAN")
         self.validate_identity("ANALYZE TABLE tbl COMPUTE DELTA STATISTICS FOR ALL COLUMNS")
@@ -411,200 +455,46 @@ class TestDatabricks(Validator):
             """CREATE FUNCTION a() ENVIRONMENT (dependencies = '["foo1==1", "foo2==2"]', environment_version = 'None')"""
         )
 
-    def test_is_null_and_is_not_null(self):
-        self.validate_identity("SELECT ISNULL(col)", "SELECT col IS NULL")
-        self.validate_identity("SELECT ISNOTNULL(col)", "SELECT NOT col IS NULL")
+    def test_udf_handler_property(self):
+        self.validate_identity("""CREATE FUNCTION a() HANDLER 'handler_function'""")
 
-    def test_date_part(self):
+    def test_udf_parameter_style_property(self):
+        self.validate_identity("""CREATE FUNCTION a() PARAMETER STYLE PANDAS""")
+
+    def test_to_char_is_numeric_transpile_to_cast(self):
+        # The input SQL simulates a TO_CHAR with is_numeric flag set (from dremio dialect)
+        sql = "SELECT TO_CHAR(12345, '#')"
+        expression = parse_one(sql, read="dremio")
+
+        to_char_exp = expression.find(exp.ToChar)
+        assert to_char_exp is not None
+        assert to_char_exp.args.get("is_numeric") is True
+
+        result = transpile(sql, read="dremio", write="databricks")[0]
+        assert "CAST(12345 AS STRING)" in result
+
+    def test_qdcolon(self):
+        self.validate_identity("SELECT '20'?::INTEGER", "SELECT TRY_CAST('20' AS INT)")
+
+    def test_overlay(self):
         self.validate_identity(
-            "SELECT DATE_PART(fieldStr, Str)", "SELECT EXTRACT(fieldStr FROM Str)"
+            "SELECT OVERLAY('Spark SQL', 'ANSI ', 7, 0)",
+            "SELECT OVERLAY('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0)",
         )
-
-    def test_trim(self):
-        self.validate_all(
-            "TRIM('a' FROM 'abc')",
-            read={
-                "bigquery": "TRIM('abc', 'a')",
-                "snowflake": "TRIM('abc', 'a')",
-                "e6": "TRIM('a' FROM 'abc')",
-            },
-            write={
-                "bigquery": "TRIM('abc', 'a')",
-                "snowflake": "TRIM('abc', 'a')",
-                "e6": "TRIM('a' FROM 'abc')",
-            },
-        )
-
-        self.validate_all(
-            "LTRIM('H', 'Hello World')",
-            read={
-                "oracle": "LTRIM('Hello World', 'H')",
-                "clickhouse": "TRIM(LEADING 'H' FROM 'Hello World')",
-                "e6": "TRIM(LEADING 'H' FROM 'Hello World')",
-                "snowflake": "LTRIM('Hello World', 'H')",
-                "bigquery": "LTRIM('Hello World', 'H')",
-            },
-            write={
-                "clickhouse": "TRIM(LEADING 'H' FROM 'Hello World')",
-                "oracle": "LTRIM('Hello World', 'H')",
-                "snowflake": "LTRIM('Hello World', 'H')",
-                "bigquery": "LTRIM('Hello World', 'H')",
-                "e6": "LTRIM('H', 'Hello World')",
-            },
-        )
-
-        self.validate_all(
-            "RTRIM('d', 'Hello World')",
-            read={
-                "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "e6": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "oracle": "RTRIM('Hello World', 'd')",
-                "snowflake": "RTRIM('Hello World', 'd')",
-                "bigquery": "RTRIM('Hello World', 'd')",
-            },
-            write={
-                "clickhouse": "TRIM(TRAILING 'd' FROM 'Hello World')",
-                "e6": "RTRIM('d', 'Hello World')",
-                "oracle": "RTRIM('Hello World', 'd')",
-                "snowflake": "RTRIM('Hello World', 'd')",
-                "bigquery": "RTRIM('Hello World', 'd')",
-            },
-        )
-
-        self.validate_all(
-            "TRIM('abcSpark')",
-            read={
-                "e6": "TRIM(BOTH from 'abcSpark')",
-                "snowflake": "TRIM('abcSpark')",
-                "oracle": "TRIM(BOTH from 'abcSpark')",
-                "bigquery": "TRIM('abcSpark')",
-                "clickhouse": "TRIM(BOTH from 'abcSpark')",
-            },
-            write={
-                "e6": "TRIM('abcSpark')",
-                "snowflake": "TRIM('abcSpark')",
-                "oracle": "TRIM('abcSpark')",
-                "bigquery": "TRIM('abcSpark')",
-                "clickhouse": "TRIM('abcSpark')",
-            },
-        )
-
-        self.validate_all(
-            "TRIM(BOTH trimstr FROM 'abcSpark')",
-            read={
-                "e6": "TRIM(BOTH trimstr FROM 'abcSpark')",
-                "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
-                "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
-            },
-            write={
-                "e6": "TRIM(BOTH trimstr FROM 'abcSpark')",
-                "oracle": "TRIM(BOTH trimstr FROM 'abcSpark')",
-                "clickhouse": "TRIM(BOTH trimstr FROM 'abcSpark')",
-            },
-        )
-
-    def test_empty_where_clause(self):
-        """
-        Test that the Databricks parser handles empty/missing WHERE clauses gracefully.
-
-        The override in Databricks.Parser._parse_where() should:
-        - Drop an empty WHERE clause (WHERE with no condition) instead of raising ParseError
-        - Still parse normal WHERE clauses correctly
-        - Handle WHERE in subqueries, CTEs, and combined with other clauses
-        """
-
-        # ---- Case 1: Basic empty WHERE clause ----
-        # WHERE keyword with no condition should be silently removed
-        # Input:  SELECT * FROM t WHERE
-        # Output: SELECT * FROM t
         self.validate_identity(
-            "SELECT * FROM t WHERE",
-            write_sql="SELECT * FROM t",
+            "SELECT OVERLAY('Spark SQL' PLACING 'CORE' FROM 7)",
         )
-
-        # ---- Case 2: Empty WHERE with trailing whitespace/newlines ----
-        # Same as Case 1 but with extra whitespace — should still be dropped
         self.validate_identity(
-            "SELECT * FROM t WHERE   ",
-            write_sql="SELECT * FROM t",
+            "SELECT OVERLAY(ENCODE('Spark SQL', 'utf-8') PLACING ENCODE('_', 'utf-8') FROM 6)",
         )
-
-        # ---- Case 3: Empty WHERE followed by GROUP BY ----
-        # The empty WHERE should be dropped, but GROUP BY should still be parsed
-        # Input:  SELECT col, COUNT(*) FROM t WHERE GROUP BY col
-        # Output: SELECT col, COUNT(*) FROM t GROUP BY col
         self.validate_identity(
-            "SELECT col, COUNT(*) FROM t WHERE GROUP BY col",
-            write_sql="SELECT col, COUNT(*) FROM t GROUP BY col",
+            "SELECT OVERLAY('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0)",
         )
 
-        # ---- Case 4: Empty WHERE followed by ORDER BY ----
-        # Input:  SELECT * FROM t WHERE ORDER BY col
-        # Output: SELECT * FROM t ORDER BY col
-        self.validate_identity(
-            "SELECT * FROM t WHERE ORDER BY col",
-            write_sql="SELECT * FROM t ORDER BY col",
-        )
-
-        # ---- Case 5: Normal WHERE clause still works ----
-        # A valid WHERE condition should parse and generate as usual
-        self.validate_identity(
-            "SELECT * FROM t WHERE col = 1",
-        )
-
-        # ---- Case 7: Normal WHERE with multiple conditions ----
-        self.validate_identity(
-            "SELECT * FROM t WHERE col1 = 1 AND col2 > 5",
-        )
-
-        # ---- Case 8: WHERE with complex expression (function, BETWEEN, IN) ----
-        self.validate_identity(
-            "SELECT * FROM t WHERE col IN (1, 2, 3) AND dt BETWEEN '2024-01-01' AND '2024-12-31'",
-        )
-
-        # ---- Case 9: Fully qualified table with empty WHERE ----
-        # Mirrors the original failing query from test_transpile.py
-        # Input:  SELECT * FROM catalog.schema.table WHERE
-        # Output: SELECT * FROM catalog.schema.table
-        self.validate_identity(
-            "SELECT * FROM espresso_gold_test.global.adt_api_ingestion WHERE",
-            write_sql="SELECT * FROM espresso_gold_test.global.adt_api_ingestion",
-        )
-
-        # ---- Case 10: Empty WHERE in a subquery ----
-        # The inner query's empty WHERE should be dropped
-        self.validate_identity(
-            "SELECT * FROM (SELECT * FROM t WHERE) AS subq",
-            write_sql="SELECT * FROM (SELECT * FROM t) AS subq",
-        )
-
-        # ---- Case 11: Transpile empty WHERE from Databricks to other dialects ----
-        # Verify the empty WHERE is dropped when transpiling to other targets
-        self.validate_all(
-            "SELECT * FROM t",
-            read={
-                "databricks": "SELECT * FROM t WHERE",
-            },
-            write={
-                "databricks": "SELECT * FROM t",
-                "e6": "SELECT * FROM t",
-                "spark": "SELECT * FROM t",
-            },
-        )
-
-        # ---- Case 12: Empty WHERE with GROUP BY + HAVING + ORDER BY ----
-        # All subsequent clauses should survive even though WHERE is dropped
-        self.validate_identity(
-            "SELECT col, COUNT(*) FROM t WHERE GROUP BY col HAVING COUNT(*) > 1 ORDER BY col",
-            write_sql="SELECT col, COUNT(*) FROM t GROUP BY col HAVING COUNT(*) > 1 ORDER BY col",
-        )
-
-    def test_regexp_substr(self):
-        self.validate_all(
-            "REGEXP_SUBSTR(subject, pattern)",
-            write={
-                "bigquery": "REGEXP_EXTRACT(subject, pattern)",
-                "snowflake": "REGEXP_SUBSTR(subject, pattern)",
-                "e6": "REGEXP_EXTRACT(subject, pattern)",
-            },
-        )
+    def test_declare(self):
+        self.validate_identity("DECLARE VAR x INT", "DECLARE x INT")
+        self.validate_identity("DECLARE x INT")
+        self.validate_identity("DECLARE VARIABLE myvar INT DEFAULT 1", "DECLARE myvar INT = 1")
+        self.validate_identity("DECLARE x, y, z INT DEFAULT 1", "DECLARE x, y, z INT = 1")
+        self.validate_identity("DECLARE x INT = 1")
+        self.validate_identity("DECLARE OR REPLACE x INT = 1")

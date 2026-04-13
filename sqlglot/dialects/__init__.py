@@ -35,22 +35,22 @@ class Custom(Dialect):
         }
 
     class Generator(Generator):
-        # Specifies how AST nodes, i.e. subclasses of exp.Expression, should be converted into SQL
+        # Specifies how AST nodes, i.e. subclasses of exp.Expr, should be converted into SQL
         TRANSFORMS = {
             exp.Array: lambda self, e: f"[{self.expressions(e)}]",
         }
 
         # Specifies how AST nodes representing data types should be converted into SQL
         TYPE_MAPPING = {
-            exp.DataType.Type.TINYINT: "INT64",
-            exp.DataType.Type.SMALLINT: "INT64",
-            exp.DataType.Type.INT: "INT64",
-            exp.DataType.Type.BIGINT: "INT64",
-            exp.DataType.Type.DECIMAL: "NUMERIC",
-            exp.DataType.Type.FLOAT: "FLOAT64",
-            exp.DataType.Type.DOUBLE: "FLOAT64",
-            exp.DataType.Type.BOOLEAN: "BOOL",
-            exp.DataType.Type.TEXT: "STRING",
+            exp.DType.TINYINT: "INT64",
+            exp.DType.SMALLINT: "INT64",
+            exp.DType.INT: "INT64",
+            exp.DType.BIGINT: "INT64",
+            exp.DType.DECIMAL: "NUMERIC",
+            exp.DType.FLOAT: "FLOAT64",
+            exp.DType.DOUBLE: "FLOAT64",
+            exp.DType.BOOLEAN: "BOOL",
+            exp.DType.TEXT: "STRING",
         }
 ```
 
@@ -75,6 +75,7 @@ DIALECTS = [
     "Druid",
     "DuckDB",
     "Dune",
+    "Exasol",
     "Fabric",
     "Hive",
     "Materialize",
@@ -87,6 +88,7 @@ DIALECTS = [
     "RisingWave",
     "SingleStore",
     "Snowflake",
+    "Solr",
     "Spark",
     "Spark2",
     "SQLite",
@@ -95,8 +97,6 @@ DIALECTS = [
     "Teradata",
     "Trino",
     "TSQL",
-    "Exasol",
-    "E6",
 ]
 
 MODULE_BY_DIALECT = {name: name.lower() for name in DIALECTS}

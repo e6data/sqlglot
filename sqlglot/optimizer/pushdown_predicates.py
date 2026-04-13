@@ -1,11 +1,19 @@
+from __future__ import annotations
+
+import typing as t
+
 from sqlglot import exp
 from sqlglot.optimizer.normalize import normalized
 from sqlglot.optimizer.scope import build_scope, find_in_scope
 from sqlglot.optimizer.simplify import simplify
 from sqlglot import Dialect
 
+if t.TYPE_CHECKING:
+    from sqlglot._typing import E
+    from sqlglot.dialects.dialect import DialectType
 
-def pushdown_predicates(expression, dialect=None):
+
+def pushdown_predicates(expression: E, dialect: DialectType = None) -> E:
     """
     Rewrite sqlglot AST to pushdown predicates in FROMS and JOINS
 
@@ -17,9 +25,9 @@ def pushdown_predicates(expression, dialect=None):
         'SELECT y.a AS a FROM (SELECT x.a AS a FROM x AS x WHERE x.a = 1) AS y WHERE TRUE'
 
     Args:
-        expression (sqlglot.Expression): expression to optimize
+        expression (sqlglot.Expr): expression to optimize
     Returns:
-        sqlglot.Expression: optimized expression
+        sqlglot.Expr: optimized expression
     """
     from sqlglot.dialects.athena import Athena
     from sqlglot.dialects.presto import Presto
@@ -88,26 +96,26 @@ def pushdown(condition, sources, scope_ref_count, dialect, join_index=None):
     if cnf_like:
         pushdown_cnf(predicates, sources, scope_ref_count, join_index=join_index)
     else:
-        pushdown_dnf(predicates, sources, scope_ref_count)
+        pushdown_dnf(predicates, sources, scope_ref_count, join_index=join_index)
 
 
 def pushdown_cnf(predicates, sources, scope_ref_count, join_index=None):
     """
     If the predicates are in CNF like form, we can simply replace each block in the parent.
     """
-    join_index = join_index or {}
     for predicate in predicates:
         for node in nodes_for_predicate(predicate, sources, scope_ref_count).values():
             if isinstance(node, exp.Join):
                 name = node.alias_or_name
                 predicate_tables = exp.column_table_names(predicate, name)
 
-                # Don't push the predicate if it references tables that appear in later joins
-                this_index = join_index[name]
-                if all(join_index.get(table, -1) < this_index for table in predicate_tables):
-                    predicate.replace(exp.true())
-                    node.on(predicate, copy=False)
-                    break
+                if join_index:
+                    # Don't push the predicate if it references tables that appear in later joins
+                    this_index = join_index[name]
+                    if all(join_index.get(table, -1) < this_index for table in predicate_tables):
+                        predicate.replace(exp.true())
+                        node.on(predicate, copy=False)
+                        break
             if isinstance(node, exp.Select):
                 predicate.replace(exp.true())
                 inner_predicate = replace_aliases(node, predicate)
@@ -117,7 +125,7 @@ def pushdown_cnf(predicates, sources, scope_ref_count, join_index=None):
                     node.where(inner_predicate, copy=False)
 
 
-def pushdown_dnf(predicates, sources, scope_ref_count):
+def pushdown_dnf(predicates, sources, scope_ref_count, join_index=None):
     """
     If the predicates are in DNF form, we can only push down conditions that are in all blocks.
     Additionally, we can't remove predicates from their original form.
@@ -157,6 +165,11 @@ def pushdown_dnf(predicates, sources, scope_ref_count):
             predicate = conditions[name]
 
             if isinstance(node, exp.Join):
+                if join_index:
+                    this_index = join_index[name]
+                    predicate_tables = exp.column_table_names(predicate, name)
+                    if not all(join_index.get(t, -1) < this_index for t in predicate_tables):
+                        continue
                 node.on(predicate, copy=False)
             elif isinstance(node, exp.Select):
                 inner_predicate = replace_aliases(node, predicate)
@@ -181,7 +194,7 @@ def nodes_for_predicate(predicate, sources, scope_ref_count):
 
         # a node can reference a CTE which should be pushed down
         if isinstance(node, exp.From) and not isinstance(source, exp.Table):
-            with_ = source.parent.expression.args.get("with")
+            with_ = source.parent.expression.args.get("with_")
             if with_ and with_.recursive:
                 return {}
             node = source.expression

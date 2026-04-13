@@ -40,7 +40,29 @@ class TestLineage(unittest.TestCase):
             "SELECT x.a AS a FROM x AS x",
         )
         self.assertEqual(downstream.source_name, "y")
-        self.assertGreater(len(node.to_html()._repr_html_()), 1000)
+
+        graph_html = node.to_html()
+        self.assertGreater(len(graph_html._repr_html_()), 1000)
+
+        for edge in graph_html.edges:
+            self.assertIn("from", edge)
+            self.assertIn("to", edge)
+
+        # test that sql is not modified
+        sql = "SELECT a FROM x"
+        ast = sqlglot.parse_one(sql)
+        node = lineage("a", ast)
+        self.assertEqual(ast.sql(), sql)
+
+        # test that sources are not modified
+        ast = sqlglot.parse_one(sql)
+
+        source_sql = "SELECT a FROM y"
+        source = sqlglot.parse_one(source_sql)
+
+        node = lineage("a", ast, sources={"x": source})
+
+        self.assertEqual(source.sql(), source_sql)
 
     def test_lineage_sql_with_cte(self) -> None:
         node = lineage(
@@ -122,6 +144,44 @@ class TestLineage(unittest.TestCase):
         )
         self.assertEqual(downstream.source_name, "")
         self.assertEqual(downstream.reference_node_name, "y")
+
+    def test_lineage_join_with_star(self) -> None:
+        node = lineage(
+            "*",
+            "SELECT * from x JOIN y USING (uid)",
+        )
+        self.assertEqual(
+            node.source.sql(),
+            "SELECT * FROM x AS x JOIN y AS y ON x.uid = y.uid",
+        )
+        self.assertEqual(node.source_name, "")
+        self.assertEqual(node.reference_node_name, "")
+        self.assertEqual(len(node.downstream), 2)
+
+        downstream = node.downstream[0]
+        self.assertEqual(downstream.expression.sql(), "x AS x")
+        self.assertEqual(downstream.name, "*")
+
+        downstream = node.downstream[1]
+        self.assertEqual(downstream.expression.sql(), "y AS y")
+        self.assertEqual(downstream.name, "*")
+
+    def test_lineage_join_with_qualified_star(self) -> None:
+        node = lineage(
+            "*",
+            "SELECT x.* from x JOIN y USING (uid)",
+        )
+        self.assertEqual(
+            node.source.sql(),
+            "SELECT x.* FROM x AS x JOIN y AS y ON x.uid = y.uid",
+        )
+        self.assertEqual(node.source_name, "")
+        self.assertEqual(node.reference_node_name, "")
+        self.assertEqual(len(node.downstream), 1)
+
+        downstream = node.downstream[0]
+        self.assertEqual(downstream.expression.sql(), "x AS x")
+        self.assertEqual(downstream.name, "x.*")
 
     def test_lineage_external_col(self) -> None:
         node = lineage(
@@ -359,8 +419,8 @@ class TestLineage(unittest.TestCase):
         self.assertEqual(node.name, "a")
         self.assertEqual(len(node.downstream), 1)
         node = node.downstream[0]
-        self.assertEqual(node.name, "_q_0.a")
-        self.assertEqual(node.reference_node_name, "_q_0")
+        self.assertEqual(node.name, "_0.a")
+        self.assertEqual(node.reference_node_name, "_0")
 
     def test_lineage_cte_union(self) -> None:
         query = """
@@ -426,7 +486,7 @@ class TestLineage(unittest.TestCase):
         self.assertEqual(node.name, "x")
 
         downstream = node.downstream[0]
-        self.assertEqual(downstream.name, "_q_0.x")
+        self.assertEqual(downstream.name, "_0.x")
         self.assertEqual(downstream.source.sql(), "SELECT * FROM table_a AS table_a")
 
         downstream = downstream.downstream[0]
@@ -446,6 +506,13 @@ class TestLineage(unittest.TestCase):
 
         with self.assertRaises(sqlglot.errors.SqlglotError):
             lineage('"a"', "WITH x AS (SELECT 1 a) SELECT a FROM x", dialect="snowflake")
+
+        with self.assertRaises(sqlglot.errors.SqlglotError):
+            lineage(
+                "b",
+                "SELECT a,b FROM table1 UNION ALL BY NAME SELECT a FROM table2",
+                dialect="duckdb",
+            )
 
     def test_ddl_lineage(self) -> None:
         sql = """
@@ -501,7 +568,7 @@ class TestLineage(unittest.TestCase):
 
     def test_pivot_without_alias(self) -> None:
         sql = """
-        SELECT 
+        SELECT
             a as other_a
         FROM (select value,category from sample_data)
         PIVOT (
@@ -511,12 +578,12 @@ class TestLineage(unittest.TestCase):
         """
         node = lineage("other_a", sql)
 
-        self.assertEqual(node.downstream[0].name, "_q_0.value")
+        self.assertEqual(node.downstream[0].name, "_0.value")
         self.assertEqual(node.downstream[0].downstream[0].name, "sample_data.value")
 
     def test_pivot_with_alias(self) -> None:
         sql = """
-            SELECT 
+            SELECT
                 cat_a_s as other_as
             FROM sample_data
             PIVOT (
@@ -532,7 +599,7 @@ class TestLineage(unittest.TestCase):
     def test_pivot_with_cte(self) -> None:
         sql = """
         WITH t as (
-            SELECT 
+            SELECT
                 a as other_a
             FROM sample_data
             PIVOT (
@@ -637,13 +704,13 @@ class TestLineage(unittest.TestCase):
         sql = """
         WITH cte AS (
             SELECT * FROM (
-                SELECT product_type, month, loan_id 
+                SELECT product_type, month, loan_id
                 FROM loan_ledger
             ) PIVOT (
                 COUNT(loan_id) FOR month IN ('2024-10', '2024-11')
             )
         )
-        SELECT 
+        SELECT
             cte.product_type AS product_type,
             cte."2024-10" AS "2024-10"
         FROM cte
@@ -651,12 +718,109 @@ class TestLineage(unittest.TestCase):
 
         node = lineage("product_type", sql, dialect="duckdb", schema=schema)
         self.assertEqual(node.downstream[0].name, "cte.product_type")
-        self.assertEqual(node.downstream[0].downstream[0].name, "_q_0.product_type")
+        self.assertEqual(node.downstream[0].downstream[0].name, "_0.product_type")
         self.assertEqual(
-            node.downstream[0].downstream[0].downstream[0].name, "loan_ledger.product_type"
+            node.downstream[0].downstream[0].downstream[0].name,
+            "loan_ledger.product_type",
         )
 
         node = lineage('"2024-10"', sql, dialect="duckdb", schema=schema)
         self.assertEqual(node.downstream[0].name, "cte.2024-10")
-        self.assertEqual(node.downstream[0].downstream[0].name, "_q_0.loan_id")
+        self.assertEqual(node.downstream[0].downstream[0].name, "_0.loan_id")
         self.assertEqual(node.downstream[0].downstream[0].downstream[0].name, "loan_ledger.loan_id")
+
+    def test_copy_flag(self) -> None:
+        schema = {
+            "x": {
+                "a": "int",
+            },
+        }
+
+        query = sqlglot.parse_one("SELECT a FROM z")
+        sources = {
+            "y": sqlglot.parse_one("SELECT * FROM x"),
+            "z": sqlglot.parse_one("SELECT * FROM y"),
+        }
+
+        lineage("a", query, schema=schema, sources=sources, copy=False)
+
+        self.assertEqual(sources["y"].sql(), "SELECT * FROM x")
+        self.assertEqual(sources["z"].sql(), "SELECT * FROM y")
+        self.assertEqual(
+            query.sql(),
+            "SELECT z.a AS a FROM (SELECT y.a AS a FROM (SELECT x.a AS a FROM x AS x) AS y /* source: y */) AS z /* source: z */",
+        )
+
+        query = sqlglot.parse_one("SELECT a FROM z")
+        sources = {
+            "y": sqlglot.parse_one("SELECT * FROM x"),
+            "z": sqlglot.parse_one("SELECT * FROM y"),
+        }
+
+        lineage("a", query, schema=schema, sources=sources, copy=True)
+
+        self.assertEqual(sources["y"].sql(), "SELECT * FROM x")
+        self.assertEqual(sources["z"].sql(), "SELECT * FROM y")
+        self.assertEqual(query.sql(), "SELECT a FROM z")
+
+        query = sqlglot.parse_one("SELECT a FROM z")
+        sources = {
+            "y": sqlglot.parse_one("SELECT * FROM x"),
+            "z": sqlglot.parse_one("SELECT * FROM y"),
+        }
+
+        query = sqlglot.parse_one("SELECT a FROM x")
+        lineage("a", query, schema=schema, copy=False)
+
+        self.assertEqual(query.sql(), "SELECT x.a AS a FROM x AS x")
+
+        query = sqlglot.parse_one("SELECT a FROM x")
+        lineage("a", query, schema=schema, copy=True)
+
+        self.assertEqual(query.sql(), "SELECT a FROM x")
+
+    def test_lineage_shared_cte_performance(self) -> None:
+        """Shared CTEs referenced from multiple places should not cause exponential expansion.
+
+        Each cte_k joins cte_{k-1} with itself and references both sides
+        (t1.a + t2.a), so without memoization to_node() is called 2^N times.
+        With N=12 that's 4096 expansions.
+        """
+        n_levels = 12
+        ctes = ["cte_0 AS (SELECT a FROM base_table)"]
+        for k in range(1, n_levels):
+            prev = f"cte_{k - 1}"
+            ctes.append(
+                f"cte_{k} AS (SELECT t1.a + t2.a AS a FROM {prev} t1 JOIN {prev} t2 ON t1.a = t2.a)"
+            )
+        sql = "WITH " + ",\n     ".join(ctes) + f"\nSELECT a FROM cte_{n_levels - 1}"
+
+        node = lineage("a", sql, schema={"base_table": {"a": "int"}})
+
+        # Walk the DAG and verify structure.
+        all_nodes = list(node.walk())
+
+        # shared references keep node count small (O(N), not O(2^N)).
+        self.assertLess(
+            len(all_nodes),
+            200,
+            f"got {len(all_nodes)} nodes -- DAG walk may be broken",
+        )
+
+        # walk() should yield each node exactly once.
+        all_ids = [id(n) for n in all_nodes]
+        self.assertEqual(len(all_ids), len(set(all_ids)))
+
+        # Leaf nodes should reference base_table.
+        leaves = [n for n in all_nodes if not n.downstream]
+        self.assertGreater(len(leaves), 0)
+        self.assertTrue(all("base_table" in n.source.sql() for n in leaves))
+
+    def test_lineage_cte_self_join_distinct_aliases(self) -> None:
+        node = lineage(
+            "combined",
+            "WITH shared AS (SELECT a FROM x) SELECT s1.a + s2.a AS combined FROM shared s1, shared s2",
+            schema={"x": {"a": "int"}},
+        )
+        downstream_names = sorted(d.name for d in node.downstream)
+        self.assertEqual(downstream_names, ["s1.a", "s2.a"])

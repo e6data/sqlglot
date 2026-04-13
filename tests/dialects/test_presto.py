@@ -293,7 +293,7 @@ class TestPresto(Validator):
         self.validate_all(
             "DATE_FORMAT(x, '%Y-%m-%d %H:%i:%S')",
             write={
-                "bigquery": "FORMAT_DATE('%Y-%m-%d %H:%M:%S', x)",
+                "bigquery": "FORMAT_DATE('%F %T', x)",
                 "duckdb": "STRFTIME(x, '%Y-%m-%d %H:%M:%S')",
                 "presto": "DATE_FORMAT(x, '%Y-%m-%d %T')",
                 "hive": "DATE_FORMAT(x, 'yyyy-MM-dd HH:mm:ss')",
@@ -357,7 +357,7 @@ class TestPresto(Validator):
                 "duckdb": "EPOCH(x)",
                 "presto": "TO_UNIXTIME(x)",
                 "hive": "UNIX_TIMESTAMP(x)",
-                "spark": "TO_UNIX_TIMESTAMP(x)",
+                "spark": "UNIX_TIMESTAMP(x)",
             },
         )
         self.validate_all(
@@ -449,10 +449,7 @@ class TestPresto(Validator):
         self.validate_all(
             "CAST(x AS TIMESTAMP)",
             write={"presto": "CAST(x AS TIMESTAMP)"},
-            read={
-                "mysql": "CAST(x AS DATETIME)",
-                "clickhouse": "CAST(x AS DATETIME64)",
-            },
+            read={"mysql": "CAST(x AS DATETIME)", "clickhouse": "CAST(x AS DATETIME64)"},
         )
         self.validate_all(
             "CAST(x AS TIMESTAMP)",
@@ -495,6 +492,18 @@ class TestPresto(Validator):
             "DATE_ADD('MINUTE', CAST(FLOOR(CAST(EXTRACT(MINUTE FROM CURRENT_TIMESTAMP) AS DOUBLE) / NULLIF(30, 0)) * 30 AS BIGINT), col)",
             read={
                 "spark": "TIMESTAMPADD(MINUTE, FLOOR(EXTRACT(MINUTE FROM CURRENT_TIMESTAMP)/30)*30, col)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT WEEK_OF_YEAR(y)",
+            read={
+                "presto": "SELECT WEEK(y)",
+            },
+            write={
+                "spark": "SELECT WEEKOFYEAR(y)",
+                "presto": "SELECT WEEK_OF_YEAR(y)",
+                "trino": "SELECT WEEK_OF_YEAR(y)",
             },
         )
 
@@ -678,10 +687,9 @@ class TestPresto(Validator):
 
     def test_presto(self):
         self.assertEqual(
-            exp.func(
-                "md5",
-                exp.func("concat", exp.cast("x", "text"), exp.Literal.string("s")),
-            ).sql(dialect="presto"),
+            exp.func("md5", exp.func("concat", exp.cast("x", "text"), exp.Literal.string("s"))).sql(
+                dialect="presto"
+            ),
             "LOWER(TO_HEX(MD5(TO_UTF8(CONCAT(CAST(x AS VARCHAR), CAST('s' AS VARCHAR))))))",
         )
 
@@ -710,6 +718,14 @@ class TestPresto(Validator):
         self.validate_identity("SELECT * FROM x OFFSET 1 LIMIT 1")
         self.validate_identity("SELECT * FROM x OFFSET 1 FETCH FIRST 1 ROWS ONLY")
         self.validate_identity("SELECT BOOL_OR(a > 10) FROM asd AS T(a)")
+
+        # Numeric TRUNCATE
+        self.validate_identity("TRUNCATE(3.14159, 2)").assert_is(exp.Trunc)
+        self.validate_identity("TRUNCATE(3.14159)").assert_is(exp.Trunc)
+        self.validate_all(
+            "TRUNCATE(3.14159, 2)",
+            read={"postgres": "TRUNC(3.14159, 2)"},
+        )
         self.validate_identity("SELECT * FROM (VALUES (1))")
         self.validate_identity("START TRANSACTION READ WRITE, ISOLATION LEVEL SERIALIZABLE")
         self.validate_identity("START TRANSACTION ISOLATION LEVEL REPEATABLE READ")
@@ -798,7 +814,6 @@ class TestPresto(Validator):
                 "databricks": "ANY_VALUE(x)",
                 "doris": "ANY_VALUE(x)",
                 "drill": "ANY_VALUE(x)",
-                "duckdb": "ANY_VALUE(x)",
                 "hive": "FIRST(x)",
                 "mysql": "ANY_VALUE(x)",
                 "oracle": "ANY_VALUE(x)",
@@ -1037,10 +1052,10 @@ class TestPresto(Validator):
             },
         )
         self.validate_all(
-            "WITH RECURSIVE t(n) AS (VALUES (1) UNION ALL SELECT n+1 FROM t WHERE n < 100 ) SELECT sum(n) FROM t",
+            "WITH RECURSIVE t(n) AS (VALUES (1) UNION ALL SELECT n+1 FROM t WHERE n < 100 ) SELECT SUM(n) FROM t",
             write={
                 "presto": "WITH RECURSIVE t(n) AS (VALUES (1) UNION ALL SELECT n + 1 FROM t WHERE n < 100) SELECT SUM(n) FROM t",
-                "spark": UnsupportedError,
+                "spark": "WITH RECURSIVE t(n) AS (VALUES (1) UNION ALL SELECT n + 1 FROM t WHERE n < 100) SELECT SUM(n) FROM t",
             },
         )
 
@@ -1122,36 +1137,16 @@ class TestPresto(Validator):
         self.validate_identity(
             "SELECT id, FIRST_VALUE(is_deleted) OVER (PARTITION BY id) AS first_is_deleted, NTH_VALUE(is_deleted, 2) OVER (PARTITION BY id) AS nth_is_deleted, LAST_VALUE(is_deleted) OVER (PARTITION BY id) AS last_is_deleted FROM my_table"
         )
-
-    def test_format_functions(self):
-        # Test FORMAT function
-        self.validate_identity("SELECT FORMAT('%s%%', 123)")
-        self.validate_identity("SELECT FORMAT('Hello %s', 'World')")
-        self.validate_identity("SELECT FORMAT('%d items', 42)")
-
-        # Test FORMAT_DATETIME function
-        self.validate_identity(
-            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')"
-        )
-        self.validate_identity(
-            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%H:%i:%s')"
-        )
-
-        # Test cross-dialect validation
         self.validate_all(
-            "SELECT FORMAT('%s%%', 123)",
-            write={
-                "presto": "SELECT FORMAT('%s%%', 123)",
-                "trino": "SELECT FORMAT('%s%%', 123)",
+            "SELECT NULLABLE FROM system.jdbc.types",
+            read={
+                "presto": "SELECT NULLABLE FROM system.jdbc.types",
+                "trino": "SELECT NULLABLE FROM system.jdbc.types",
             },
         )
 
-        self.validate_all(
-            "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
-            write={
-                "presto": "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
-                "trino": "SELECT FORMAT_DATETIME(CAST('2025-07-21 15:30:00' AS TIMESTAMP), '%Y-%m-%d')",
-            },
+        self.validate_identity(
+            "SELECT * FROM foo FOR TIMESTAMP AS OF CAST('2020-01-01 00:00:00' AS TIMESTAMP) AS bar"
         )
 
     def test_encode_decode(self):
@@ -1370,3 +1365,37 @@ MATCH_RECOGNIZE (
     def test_analyze(self):
         self.validate_identity("ANALYZE tbl")
         self.validate_identity("ANALYZE tbl WITH (prop1=val1, prop2=val2)")
+
+    def test_bit_aggs(self):
+        self.validate_all(
+            "BITWISE_AND_AGG(x)",
+            read={
+                "presto": "BITWISE_AND_AGG(x)",
+                "trino": "BITWISE_AND_AGG(x)",
+                "oracle": "BITWISE_AND_AGG(x)",
+            },
+        )
+        self.validate_all(
+            "BITWISE_OR_AGG(x)",
+            read={
+                "presto": "BITWISE_OR_AGG(x)",
+                "trino": "BITWISE_OR_AGG(x)",
+                "oracle": "BITWISE_OR_AGG(x)",
+            },
+        )
+        self.validate_all(
+            "BITWISE_XOR_AGG(x)",
+            read={
+                "presto": "BITWISE_XOR_AGG(x)",
+                "trino": "BITWISE_XOR_AGG(x)",
+                "oracle": "BITWISE_XOR_AGG(x)",
+            },
+        )
+
+    def test_initcap(self):
+        self.validate_all(
+            "INITCAP(col)",
+            write={
+                "presto": "REGEXP_REPLACE(col, '(\\w)(\\w*)', x -> UPPER(x[1]) || LOWER(x[2]))",
+            },
+        )

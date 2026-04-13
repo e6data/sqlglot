@@ -1,12 +1,13 @@
-from sqlglot import exp, UnsupportedError, ParseError, parse_one
+from sqlglot import exp, UnsupportedError, ParseError, parse, parse_one
 from tests.dialects.test_dialect import Validator
+from sqlglot.optimizer.qualify import qualify
 
 
 class TestOracle(Validator):
     dialect = "oracle"
 
     def test_oracle(self):
-        self.validate_identity("1 /* /* */")
+        self.validate_identity("1 /* /* */", "1 /* / * */")
         self.validate_all(
             "SELECT CONNECT_BY_ROOT x y",
             write={
@@ -16,6 +17,9 @@ class TestOracle(Validator):
         )
         self.parse_one("ALTER TABLE tbl_name DROP FOREIGN KEY fk_symbol").assert_is(exp.Alter)
 
+        self.validate_identity("XMLELEMENT(EVALNAME foo + bar)")
+        self.validate_identity("SELECT BITMAP_BUCKET_NUMBER(32769)")
+        self.validate_identity("SELECT BITMAP_CONSTRUCT_AGG(value)")
         self.validate_identity("DBMS_RANDOM.NORMAL")
         self.validate_identity("DBMS_RANDOM.VALUE(low, high)").assert_is(exp.Rand)
         self.validate_identity("DBMS_RANDOM.VALUE()").assert_is(exp.Rand)
@@ -25,6 +29,8 @@ class TestOracle(Validator):
         self.validate_identity("CREATE PRIVATE TEMPORARY TABLE t AS SELECT * FROM orders")
         self.validate_identity("REGEXP_REPLACE('source', 'search')")
         self.validate_identity("TIMESTAMP(3) WITH TIME ZONE")
+        self.validate_identity("SYSTIMESTAMP").assert_is(exp.Systimestamp)
+        self.validate_identity("SELECT SYSTIMESTAMP AT TIME ZONE 'UTC'")
         self.validate_identity("CURRENT_TIMESTAMP(precision)")
         self.validate_identity("ALTER TABLE tbl_name DROP FOREIGN KEY fk_symbol")
         self.validate_identity("ALTER TABLE Payments ADD Stock NUMBER NOT NULL")
@@ -51,6 +57,12 @@ class TestOracle(Validator):
         self.validate_identity("SELECT TO_DATE('January 15, 1989, 11:00 A.M.')")
         self.validate_identity("SELECT INSTR(haystack, needle)")
         self.validate_identity(
+            "SELECT (TIMESTAMP '2025-12-30 20:00:00' - TIMESTAMP '2025-12-29 14:30:00') DAY TO SECOND",
+            "SELECT (TO_TIMESTAMP('2025-12-30 20:00:00', 'YYYY-MM-DD HH24:MI:SS.FF6') - TO_TIMESTAMP('2025-12-29 14:30:00', 'YYYY-MM-DD HH24:MI:SS.FF6')) DAY TO SECOND",
+        )
+        self.validate_identity("SELECT (SYSTIMESTAMP - order_date) DAY(9) TO SECOND FROM orders")
+        self.validate_identity("SELECT (SYSTIMESTAMP - order_date) DAY(9) TO SECOND(3) FROM orders")
+        self.validate_identity(
             "SELECT * FROM consumer LEFT JOIN groceries ON consumer.groceries_id = consumer.id PIVOT(MAX(type_id) FOR consumer_type IN (1, 2, 3, 4))"
         )
         self.validate_identity(
@@ -75,6 +87,9 @@ class TestOracle(Validator):
             "SELECT COUNT(1) INTO V_Temp FROM TABLE(CAST(somelist AS data_list)) WHERE col LIKE '%contact'"
         )
         self.validate_identity(
+            "SELECT * FROM t WHERE c LIKE (:v)",
+        )
+        self.validate_identity(
             "SELECT department_id INTO v_department_id FROM departments FETCH FIRST 1 ROWS ONLY"
         )
         self.validate_identity(
@@ -85,6 +100,10 @@ class TestOracle(Validator):
         )
         self.validate_identity(
             "SELECT MIN(column_name) KEEP (DENSE_RANK FIRST ORDER BY column_name DESC) FROM table_name"
+        )
+        self.validate_identity(
+            'XMLELEMENT("ImageID", image.id)',
+            'XMLELEMENT(NAME "ImageID", image.id)',
         )
         self.validate_identity(
             "SELECT CAST('January 15, 1989, 11:00 A.M.' AS DATE DEFAULT NULL ON CONVERSION ERROR, 'Month dd, YYYY, HH:MI A.M.') FROM DUAL",
@@ -230,13 +249,6 @@ class TestOracle(Validator):
             },
         )
         self.validate_all(
-            "SELECT TO_CHAR(TIMESTAMP '1999-12-01 10:00:00')",
-            write={
-                "oracle": "SELECT TO_CHAR(CAST('1999-12-01 10:00:00' AS TIMESTAMP))",
-                "postgres": "SELECT TO_CHAR(CAST('1999-12-01 10:00:00' AS TIMESTAMP))",
-            },
-        )
-        self.validate_all(
             "SELECT CAST(NULL AS VARCHAR2(2328 CHAR)) AS COL1",
             write={
                 "oracle": "SELECT CAST(NULL AS VARCHAR2(2328 CHAR)) AS COL1",
@@ -350,6 +362,18 @@ class TestOracle(Validator):
         self.validate_identity(
             "SELECT TO_TIMESTAMP('05 Dec 2000 10:00 P.M.', 'DD Mon YYYY HH12:MI P.M.')"
         )
+        self.validate_identity(
+            "SELECT CUME_DIST(15, 0.05) WITHIN GROUP (ORDER BY col1, col2) FROM t"
+        )
+        self.validate_identity(
+            "SELECT DENSE_RANK(15, 0.05) WITHIN GROUP (ORDER BY col1, col2) FROM t"
+        )
+        self.validate_identity("SELECT RANK(15, 0.05) WITHIN GROUP (ORDER BY col1, col2) FROM t")
+        self.validate_identity(
+            "SELECT PERCENT_RANK(15, 0.05) WITHIN GROUP (ORDER BY col1, col2) FROM t"
+        )
+        self.validate_identity("L2_DISTANCE(x, y)")
+        self.validate_identity("BITMAP_OR_AGG(x)")
 
     def test_join_marker(self):
         self.validate_identity("SELECT e1.x, e2.x FROM e e1, e e2 WHERE e1.y (+) = e2.y")
@@ -385,6 +409,10 @@ class TestOracle(Validator):
         )
         self.validate_identity("INSERT /*+ APPEND */ INTO IAP_TBL (id, col1) VALUES (2, 'test2')")
         self.validate_identity("INSERT /*+ APPEND_VALUES */ INTO dest_table VALUES (i, 'Value')")
+        self.validate_identity("INSERT /*+ APPEND(d) */ INTO dest d VALUES (i, 'Value')")
+        self.validate_identity(
+            "INSERT /*+ APPEND(d) */ INTO dest d (i, value) SELECT 1, 'value' FROM dual"
+        )
         self.validate_identity(
             "SELECT /*+ LEADING(departments employees) USE_NL(employees) */ * FROM employees JOIN departments ON employees.department_id = departments.department_id",
             """SELECT /*+ LEADING(departments employees)
@@ -670,10 +698,7 @@ CONNECT BY PRIOR employee_id = manager_id AND LEVEL <= 4"""
                 " NULL ON EMPTY",
                 " DEFAULT 1 ON ERROR TRUE ON EMPTY",
             ):
-                for passing in (
-                    "",
-                    " PASSING 'name1' AS \"var1\", 'name2' AS \"var2\"",
-                ):
+                for passing in ("", " PASSING 'name1' AS \"var1\", 'name2' AS \"var2\""):
                     with self.subTest("Testing JSON_EXISTS()"):
                         self.validate_identity(
                             f"SELECT * FROM t WHERE JSON_EXISTS(name{format_json}, '$[1].middle'{passing}{on_cond})"
@@ -697,6 +722,24 @@ CONNECT BY PRIOR employee_id = manager_id AND LEVEL <= 4"""
         self.validate_identity("GRANT EXECUTE ON PROCEDURE p TO george")
         self.validate_identity("GRANT USAGE ON SEQUENCE order_id TO sales_role")
 
+    def test_revoke(self):
+        revoke_cmds = [
+            "REVOKE purchases_reader_role FROM george, maria",
+            "REVOKE USAGE ON TYPE price FROM finance_role",
+            "REVOKE USAGE ON DERBY AGGREGATE types.maxPrice FROM sales_role",
+        ]
+
+        for sql in revoke_cmds:
+            with self.subTest(f"Testing Oracle's REVOKE command statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
+        self.validate_identity("REVOKE SELECT ON TABLE t FROM maria, harry")
+        self.validate_identity("REVOKE SELECT ON TABLE s.v FROM PUBLIC")
+        self.validate_identity("REVOKE SELECT ON TABLE t FROM purchases_reader_role")
+        self.validate_identity("REVOKE UPDATE, TRIGGER ON TABLE t FROM anita, zhi")
+        self.validate_identity("REVOKE EXECUTE ON PROCEDURE p FROM george")
+        self.validate_identity("REVOKE USAGE ON SEQUENCE order_id FROM sales_role")
+
     def test_datetrunc(self):
         self.validate_all(
             "TRUNC(SYSDATE, 'YEAR')",
@@ -713,6 +756,92 @@ CONNECT BY PRIOR employee_id = manager_id AND LEVEL <= 4"""
             "'W'",
         ):
             self.validate_identity(f"TRUNC(x, {unit})")
+
+    def test_trunc_type_inference(self):
+        # Tests for build_trunc discrimination logic (shared across Oracle, Exasol, Snowflake)
+        # 5 cases: temporal+?, ?+string, numeric+?, ?+int, ?+?
+
+        # temporal + string: first arg typed as temporal
+        self.parse_one("TRUNC(CAST(x AS DATE), 'MONTH')").assert_is(exp.DateTrunc)
+        self.parse_one("TRUNC(SYSDATE, 'MONTH')").assert_is(exp.DateTrunc)
+
+        # ? + string: untyped first arg, string second arg infers DateTrunc
+        self.parse_one("TRUNC(col, 'MONTH')").assert_is(exp.DateTrunc)
+
+        # numeric + int: first arg typed as numeric (literal infers type)
+        self.validate_identity("TRUNC(3.14159, 2)").assert_is(exp.Trunc)
+
+        # ? + int: untyped first arg, int second arg infers Trunc
+        self.validate_identity("TRUNC(price, 0)").assert_is(exp.Trunc)
+
+        # ? + ?: neither arg typed, fallback to Anonymous
+        self.validate_identity("TRUNC(foo, bar)").assert_is(exp.Anonymous)
+
+    def test_trunc(self):
+        # Numeric truncation identity and transpilation
+        self.validate_identity("TRUNC(3.14159)").assert_is(exp.Trunc)
+        self.validate_all(
+            "TRUNC(3.14159)",
+            write={
+                "oracle": "TRUNC(3.14159)",
+                "postgres": "TRUNC(3.14159)",
+                "mysql": "TRUNCATE(3.14159)",
+                "tsql": "ROUND(3.14159, 0, 1)",
+            },
+        )
+
+        # Cross-dialect numeric truncation transpilation
+        self.validate_all(
+            "TRUNC(3.14159, 2)",
+            read={
+                "mysql": "TRUNCATE(3.14159, 2)",
+                "postgres": "TRUNC(3.14159, 2)",
+                "snowflake": "TRUNC(3.14159, 2)",
+            },
+            write={
+                "oracle": "TRUNC(3.14159, 2)",
+                "postgres": "TRUNC(3.14159, 2)",
+                "mysql": "TRUNCATE(3.14159, 2)",
+                "tsql": "ROUND(3.14159, 2, 1)",
+                "snowflake": "TRUNC(3.14159, 2)",
+                "bigquery": "TRUNC(3.14159, 2)",
+                "duckdb": "TRUNC(3.14159, 2)",
+                "presto": "TRUNCATE(3.14159, 2)",
+                "clickhouse": "trunc(3.14159, 2)",
+                "spark": "CAST(3.14159 AS BIGINT)",
+            },
+        )
+
+        # Date truncation with various units
+        for unit in ("DAY", "WEEK", "MONTH", "QUARTER", "YEAR"):
+            with self.subTest(f"Date TRUNC with {unit}"):
+                self.validate_all(
+                    f"TRUNC(CAST(x AS DATE), '{unit}')",
+                    write={
+                        "oracle": f"TRUNC(CAST(x AS DATE), '{unit}')",
+                        "snowflake": f"DATE_TRUNC('{unit}', CAST(x AS DATE))",
+                        "postgres": f"DATE_TRUNC('{unit}', CAST(x AS DATE))",
+                        "bigquery": f"DATE_TRUNC(CAST(x AS DATE), {unit})",
+                        "duckdb": f"DATE_TRUNC('{unit}', CAST(x AS DATE))",
+                        "tsql": f"DATE_TRUNC('{unit}', CAST(x AS DATE))",
+                        "spark": f"TRUNC(CAST(x AS DATE), '{unit}')",
+                    },
+                )
+
+        # Timestamp truncation with various units
+        for unit in ("HOUR", "MINUTE", "SECOND", "DAY", "MONTH", "YEAR"):
+            with self.subTest(f"Timestamp TRUNC with {unit}"):
+                self.validate_all(
+                    f"TRUNC(CAST(x AS TIMESTAMP), '{unit}')",
+                    write={
+                        "oracle": f"TRUNC(CAST(x AS TIMESTAMP), '{unit}')",
+                        "snowflake": f"DATE_TRUNC('{unit}', CAST(x AS TIMESTAMP))",
+                        "postgres": f"DATE_TRUNC('{unit}', CAST(x AS TIMESTAMP))",
+                        "duckdb": f"DATE_TRUNC('{unit}', CAST(x AS TIMESTAMP))",
+                        "tsql": f"DATE_TRUNC('{unit}', CAST(x AS DATETIME2))",
+                        "spark": f"TRUNC(CAST(x AS TIMESTAMP), '{unit}')",
+                    },
+                )
 
     def test_analyze(self):
         self.validate_identity("ANALYZE TABLE tbl")
@@ -745,3 +874,100 @@ CONNECT BY PRIOR employee_id = manager_id AND LEVEL <= 4"""
 
         with self.assertRaises(ParseError):
             parse_one("PRIOR as foo", read="oracle")
+
+    def test_utc_time(self):
+        self.validate_identity("UTC_TIME()").assert_is(exp.UtcTime)
+        self.validate_identity("UTC_TIME(6)").assert_is(exp.UtcTime)
+        self.validate_identity("UTC_TIMESTAMP()").assert_is(exp.UtcTimestamp)
+        self.validate_identity("UTC_TIMESTAMP(6)").assert_is(exp.UtcTimestamp)
+
+    def test_merge_builder_alias(self):
+        merge_stmt = exp.merge(
+            "WHEN MATCHED THEN UPDATE SET my_table.col1 = source_table.col1",
+            "WHEN NOT MATCHED THEN INSERT (my_table.id, my_table.col1) VALUES (source_table.id, source_table.col1)",
+            into="my_table",
+            using="(SELECT * FROM something) source_table",
+            on="my_table.id = source_table.id",
+            dialect="oracle",
+        )
+        self.assertEqual(
+            merge_stmt.sql("oracle"),
+            "MERGE INTO my_table USING (SELECT * FROM something) source_table ON my_table.id = source_table.id WHEN MATCHED THEN UPDATE SET my_table.col1 = source_table.col1 WHEN NOT MATCHED THEN INSERT (my_table.id, my_table.col1) VALUES (source_table.id, source_table.col1)",
+        )
+
+    def test_pseudocolumns(self):
+        ast = self.validate_identity(
+            "WITH t AS (SELECT 1 AS COL) SELECT col, ROWID FROM t WHERE ROWNUM = 1"
+        )
+        self.assertIsNone(ast.find(exp.Pseudocolumn))
+
+        qualified = qualify(ast, dialect="oracle")
+        self.assertIsNotNone(qualified.find(exp.Pseudocolumn))
+
+        self.assertEqual(
+            qualified.sql(dialect="oracle"),
+            'WITH "T" AS (SELECT 1 AS "COL") SELECT "T"."COL" AS "COL", ROWID AS "ROWID" FROM "T" "T" WHERE ROWNUM = 1',
+        )
+
+    def test_chr(self):
+        self.validate_identity("SELECT CHR(187 USING NCHAR_CS)")
+        self.validate_identity("SELECT CHR(187)")
+
+    def test_full_procedure(self):
+        sql = """
+        CREATE OR REPLACE PROCEDURE query_emp(
+            p_id     IN  VARCHAR2,
+            p_name   OUT VARCHAR2,
+            p_salary OUT NUMBER
+        ) AS
+        BEGIN
+            SELECT last_name, salary 
+            INTO p_name, p_salary
+            FROM employees
+            WHERE employee_id = p_id;
+        END;
+        """
+
+        expected_sqls = [
+            "CREATE OR REPLACE PROCEDURE query_emp(p_id IN VARCHAR2, p_name OUT VARCHAR2, p_salary OUT NUMBER) AS BEGIN SELECT last_name, salary INTO p_name, p_salary FROM employees WHERE employee_id = p_id; END",
+        ]
+
+        for expr, expected_sql in zip(parse(sql, read="oracle"), expected_sqls):
+            self.assertEqual(expr.sql(dialect="oracle"), expected_sql)
+
+        sql = """
+        CREATE OR REPLACE PROCEDURE test_proc (
+            a NUMBER,
+            b IN NUMBER,
+            c IN OUT NUMBER,
+            d OUT NUMBER
+        ) AS
+        BEGIN
+            c := c + a + b;
+            d := 42 + c;
+        END;
+        """
+
+        expected_sqls = [
+            "CREATE OR REPLACE PROCEDURE test_proc(a NUMBER, b IN NUMBER, c IN OUT NUMBER, d OUT NUMBER) AS BEGIN c := c + a + b; d := 42 + c; END",
+        ]
+
+        for expr, expected_sql in zip(parse(sql, read="oracle"), expected_sqls):
+            self.assertEqual(expr.sql(dialect="oracle"), expected_sql)
+
+    def test_create_trigger(self):
+        """Test that Oracle CREATE TRIGGER statements fall back to Command parsing."""
+        self.validate_identity(
+            "CREATE TRIGGER check_salary BEFORE INSERT ON employees FOR EACH ROW BEGIN :NEW.status := 'PENDING' END",
+            check_command_warning=True,
+        )
+
+        self.validate_identity(
+            "CREATE TRIGGER audit_trigger AFTER UPDATE ON accounts FOR EACH ROW BEGIN INSERT INTO audit_log (user_id, old_balance, new_balance, changed_at) VALUES (:OLD.id, :OLD.balance, :NEW.balance, SYSDATE) END",
+            check_command_warning=True,
+        )
+
+        self.validate_identity(
+            "CREATE TRIGGER view_insert INSTEAD OF INSERT ON employee_view FOR EACH ROW BEGIN INSERT INTO employees (id, name, dept_id) VALUES (:NEW.id, :NEW.name, :NEW.dept_id) END",
+            check_command_warning=True,
+        )

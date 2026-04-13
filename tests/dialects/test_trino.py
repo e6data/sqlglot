@@ -5,6 +5,7 @@ class TestTrino(Validator):
     dialect = "trino"
 
     def test_trino(self):
+        self.validate_identity("REFRESH MATERIALIZED VIEW mynamespace.test_view")
         self.validate_identity("JSON_QUERY(m.properties, 'lax $.area' OMIT QUOTES NULL ON ERROR)")
         self.validate_identity("JSON_EXTRACT(content, json_path)")
         self.validate_identity("JSON_QUERY(content, 'lax $.HY.*')")
@@ -35,6 +36,20 @@ class TestTrino(Validator):
                 "trino": "SELECT CAST('2012-10-31 01:00:00 +02:00' AS TIMESTAMP WITH TIME ZONE)",
             },
         )
+        self.validate_all(
+            "SELECT FORMAT('%s', 123)",
+            write={
+                "duckdb": "SELECT FORMAT('{}', 123)",
+                "snowflake": "SELECT TO_CHAR(123)",
+                "trino": "SELECT FORMAT('%s', 123)",
+            },
+        )
+
+        self.validate_identity(
+            "SELECT * FROM tbl MATCH_RECOGNIZE (PARTITION BY id ORDER BY col MEASURES FIRST(col, 2) AS col1, LAST(col, 2) AS col2 PATTERN (B* A) DEFINE A AS col = 1)"
+        )
+
+        self.validate_identity("SELECT VERSION()")
 
     def test_listagg(self):
         self.validate_identity(
@@ -88,8 +103,7 @@ class TestTrino(Validator):
             "ALTER TABLE people SET AUTHORIZATION alice", check_command_warning=True
         )
         self.validate_identity(
-            "ALTER TABLE people SET AUTHORIZATION ROLE PUBLIC",
-            check_command_warning=True,
+            "ALTER TABLE people SET AUTHORIZATION ROLE PUBLIC", check_command_warning=True
         )
         self.validate_identity(
             "ALTER TABLE people SET PROPERTIES x = 'y'", check_command_warning=True
@@ -131,3 +145,23 @@ class TestTrino(Validator):
     def test_analyze(self):
         self.validate_identity("ANALYZE tbl")
         self.validate_identity("ANALYZE tbl WITH (prop1=val1, prop2=val2)")
+
+    def test_json_value(self):
+        self.validate_identity(
+            "JSON_VALUE(jl.extra_attributes, 'lax $.amount_source' RETURNING VARCHAR)"
+        )
+
+        json_doc = """'{"item": "shoes", "price": "49.95"}'"""
+        self.validate_identity(f"""SELECT JSON_VALUE({json_doc}, 'strict $.price')""")
+        self.validate_identity(
+            f"""SELECT JSON_VALUE({json_doc}, 'lax $.price' RETURNING DECIMAL(4, 2))"""
+        )
+
+        for on_option in ("NULL", "ERROR", "DEFAULT 1"):
+            self.validate_identity(
+                f"""SELECT JSON_VALUE({json_doc}, 'lax $.price' RETURNING DECIMAL(4, 2) {on_option} ON EMPTY {on_option} ON ERROR) AS price"""
+            )
+
+    def test_array_first(self):
+        self.validate_identity("SELECT ARRAY_FIRST(ARRAY['a', 'b']) FROM tbl")
+        self.validate_identity("SELECT ARRAY_FIRST(ARRAY['a', 'b'], x -> x = 'b') FROM tbl")

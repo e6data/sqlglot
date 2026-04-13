@@ -17,14 +17,17 @@ class TestMySQL(Validator):
         self.validate_identity("CREATE TABLE bar (abacate DOUBLE(10, 2) UNSIGNED)")
         self.validate_identity("CREATE TABLE t (id DECIMAL(20, 4) UNSIGNED)")
         self.validate_identity("CREATE TABLE foo (a BIGINT, UNIQUE (b) USING BTREE)")
+        self.validate_identity("CREATE TABLE foo (a VARCHAR(32) NOT NULL UNIQUE COMMENT 'test')")
         self.validate_identity("CREATE TABLE foo (id BIGINT)")
         self.validate_identity("CREATE TABLE 00f (1d BIGINT)")
         self.validate_identity("CREATE TABLE temp (id SERIAL PRIMARY KEY)")
         self.validate_identity("UPDATE items SET items.price = 0 WHERE items.id >= 5 LIMIT 10")
         self.validate_identity("DELETE FROM t WHERE a <= 10 LIMIT 10")
+        self.validate_identity("DELETE FROM t FORCE INDEX (idx) WHERE a > 5 ORDER BY id")
         self.validate_identity("CREATE TABLE foo (a BIGINT, INDEX USING BTREE (b))")
         self.validate_identity("CREATE TABLE foo (a BIGINT, FULLTEXT INDEX (b))")
         self.validate_identity("CREATE TABLE foo (a BIGINT, SPATIAL INDEX (b))")
+        self.validate_identity("CREATE TABLE foo (a INT UNSIGNED ZEROFILL)")
         self.validate_identity("ALTER TABLE t1 ADD COLUMN x INT, ALGORITHM=INPLACE, LOCK=EXCLUSIVE")
         self.validate_identity("ALTER TABLE t ADD INDEX `i` (`c`)")
         self.validate_identity("ALTER TABLE t ADD UNIQUE `i` (`c`)")
@@ -32,16 +35,20 @@ class TestMySQL(Validator):
         self.validate_identity("ALTER VIEW v AS SELECT a, b, c, d FROM foo")
         self.validate_identity("ALTER VIEW v AS SELECT * FROM foo WHERE c > 100")
         self.validate_identity(
-            "ALTER ALGORITHM = MERGE VIEW v AS SELECT * FROM foo",
-            check_command_warning=True,
+            "ALTER ALGORITHM = MERGE VIEW v AS SELECT * FROM foo", check_command_warning=True
         )
         self.validate_identity(
             "ALTER DEFINER = 'admin'@'localhost' VIEW v AS SELECT * FROM foo",
             check_command_warning=True,
         )
         self.validate_identity(
-            "ALTER SQL SECURITY = DEFINER VIEW v AS SELECT * FROM foo",
-            check_command_warning=True,
+            "CREATE SQL SECURITY INVOKER VIEW id_test (id, foo) AS SELECT 0, foo FROM test"
+        )
+        self.validate_identity(
+            "CREATE SQL SECURITY DEFINER VIEW id_test (id, foo) AS SELECT 0, foo FROM test"
+        )
+        self.validate_identity(
+            "ALTER SQL SECURITY = DEFINER VIEW v AS SELECT * FROM foo", check_command_warning=True
         )
         self.validate_identity(
             "INSERT INTO things (a, b) VALUES (1, 2) AS new_data ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), a = new_data.a, b = new_data.b"
@@ -91,6 +98,13 @@ class TestMySQL(Validator):
         self.validate_identity(
             "CREATE TABLE test_table (id INT AUTO_INCREMENT, PRIMARY KEY (id) USING HASH)"
         )
+        self.validate_identity("CREATE TABLE test (id INT, PRIMARY KEY pk_name (id))")
+        self.validate_identity("CREATE TABLE test (id INT, PRIMARY KEY `pk_name` (id))")
+        self.validate_identity(
+            'CREATE TABLE test (id INT, PRIMARY KEY "pk_name" (id))',
+            "CREATE TABLE test (id INT, PRIMARY KEY `pk_name` (id))",
+        )
+        self.validate_identity("CREATE TABLE test (id INT, CONSTRAINT pk_name PRIMARY KEY (id))")
         self.validate_identity(
             "CREATE TABLE test (a INT, b INT GENERATED ALWAYS AS (a + a) STORED)"
         )
@@ -180,6 +194,38 @@ class TestMySQL(Validator):
         self.validate_identity("ALTER TABLE t ALTER INDEX i VISIBLE")
         self.validate_identity("ALTER TABLE t ALTER COLUMN c SET INVISIBLE")
         self.validate_identity("ALTER TABLE t ALTER COLUMN c SET VISIBLE")
+        self.validate_identity(
+            "UPDATE foo JOIN bar ON TRUE SET foo.a = bar.a WHERE foo.id = bar.id"
+        )
+
+        # PARTITION BY RANGE - simple column
+        self.validate_identity(
+            "CREATE TABLE t (id INT, created_at DATE) PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20), PARTITION p2 VALUES LESS THAN (MAXVALUE))"
+        )
+        self.validate_identity(
+            "CREATE TABLE t (id INT, name VARCHAR(50)) PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100))"
+        )
+        # PARTITION BY RANGE - with expression
+        self.validate_identity(
+            "CREATE TABLE orders (id INT, order_date DATE) PARTITION BY RANGE (YEAR(order_date)) (PARTITION p2023 VALUES LESS THAN (2024), PARTITION p2024 VALUES LESS THAN (2025), PARTITION pmax VALUES LESS THAN (MAXVALUE))"
+        )
+        self.validate_identity(
+            "CREATE TABLE sales (id INT, sale_date DATE) PARTITION BY RANGE (MONTH(sale_date)) (PARTITION q1 VALUES LESS THAN (4), PARTITION q2 VALUES LESS THAN (7), PARTITION q3 VALUES LESS THAN (10), PARTITION q4 VALUES LESS THAN (13))"
+        )
+        # PARTITION BY LIST - simple column
+        self.validate_identity(
+            "CREATE TABLE t (id INT, region VARCHAR(10)) PARTITION BY LIST (id) (PARTITION p_east VALUES IN (1, 2, 3), PARTITION p_west VALUES IN (4, 5, 6))"
+        )
+        self.validate_identity(
+            "CREATE TABLE t (id INT) PARTITION BY LIST (id) (PARTITION p0 VALUES IN (1, 2))"
+        )
+        self.validate_identity(
+            "CREATE TABLE employees (id INT, store_id INT) PARTITION BY LIST (store_id) (PARTITION pNorth VALUES IN (3, 5, 6), PARTITION pSouth VALUES IN (1, 2, 10))"
+        )
+        self.validate_identity(
+            "CREATE FUNCTION f () RETURNS VARCHAR LANGUAGE SQL SQL SECURITY INVOKER SELECT 'abc'",
+            "CREATE FUNCTION f() RETURNS TEXT LANGUAGE SQL SQL SECURITY INVOKER AS SELECT 'abc'",
+        )
 
     def test_identity(self):
         self.validate_identity("SELECT HIGH_PRIORITY STRAIGHT_JOIN SQL_CALC_FOUND_ROWS * FROM t")
@@ -201,6 +247,8 @@ class TestMySQL(Validator):
         self.validate_identity("""SELECT 'ab' MEMBER OF('[23, "abc", 17, "ab", 10]')""")
         self.validate_identity("""SELECT * FROM foo WHERE 'ab' MEMBER OF(content)""")
         self.validate_identity("SELECT CURRENT_TIMESTAMP(6)")
+        self.validate_identity("SELECT CURRENT_ROLE()")
+        self.validate_identity("SELECT CURTIME()", "SELECT CURRENT_TIME()")
         self.validate_identity("x ->> '$.name'")
         self.validate_identity("SELECT CAST(`a`.`b` AS CHAR) FROM foo")
         self.validate_identity("SELECT TRIM(LEADING 'bla' FROM ' XXX ')")
@@ -212,8 +260,10 @@ class TestMySQL(Validator):
         self.validate_identity("SELECT * FROM t1, t2 FOR SHARE OF t1, t2 SKIP LOCKED")
         self.validate_identity("SELECT a || b", "SELECT a OR b")
         self.validate_identity(
-            "SELECT * FROM x ORDER BY BINARY a",
-            "SELECT * FROM x ORDER BY CAST(a AS BINARY)",
+            "SELECT * FROM source, JSON_TABLE(source.links, '$.org[*]' COLUMNS(row_id FOR ORDINALITY, link VARCHAR(255) PATH '$.link')) AS links"
+        )
+        self.validate_identity(
+            "SELECT * FROM x ORDER BY BINARY a", "SELECT * FROM x ORDER BY CAST(a AS BINARY)"
         )
         self.validate_identity(
             """SELECT * FROM foo WHERE 3 MEMBER OF(JSON_EXTRACT(info, '$.value'))"""
@@ -222,8 +272,7 @@ class TestMySQL(Validator):
             "SELECT * FROM t1, t2, t3 FOR SHARE OF t1 NOWAIT FOR UPDATE OF t2, t3 SKIP LOCKED"
         )
         self.validate_identity(
-            "REPLACE INTO table SELECT id FROM table2 WHERE cnt > 100",
-            check_command_warning=True,
+            "REPLACE INTO table SELECT id FROM table2 WHERE cnt > 100", check_command_warning=True
         )
         self.validate_identity(
             "CAST(x AS VARCHAR)",
@@ -302,10 +351,23 @@ class TestMySQL(Validator):
         self.validate_identity("SELECT @var1 := 1, @var2")
         self.validate_identity("SELECT @var1, @var2 := @var1")
         self.validate_identity("SELECT @var1 := COUNT(*) FROM t1")
+        self.validate_identity("SET @var1 := 1", "SET @var1 = 1")
 
         self.validate_identity(
             "SELECT DISTINCTROW tbl.col FROM tbl", "SELECT DISTINCT tbl.col FROM tbl"
         )
+        self.validate_identity("ATAN(y, x)")
+
+        self.validate_identity(
+            "SELECT 'foo' SOUNDS LIKE 'bar'", "SELECT SOUNDEX('foo') = SOUNDEX('bar')"
+        )
+        self.validate_identity(
+            "SELECT 'foo' NOT SOUNDS LIKE 'bar'", "SELECT NOT SOUNDEX('foo') = SOUNDEX('bar')"
+        )
+        self.validate_identity("SELECT SUBSTR(1 FROM 2 FOR 3)", "SELECT SUBSTRING(1, 2, 3)")
+        self.validate_identity("SELECT ELT(2, 'foo', 'bar', 'baz') AS Result")
+        self.validate_identity("SELECT CHARSET(CHAR(100 USING utf8))")
+        self.validate_identity("SELECT VERSION()")
 
     def test_types(self):
         for char_type in MySQL.Generator.CHAR_CAST_MAPPING:
@@ -407,6 +469,20 @@ class TestMySQL(Validator):
             },
         )
 
+        self.validate_identity(
+            r"'\"'",
+            """\'"\'""",
+        )
+        self.validate_identity("'\\\\\"a'")
+        self.validate_identity(
+            "'\t'",
+            "'\\t'",
+        )
+        self.validate_identity(
+            r"'\j'",
+            "'j'",
+        )
+
     def test_introducers(self):
         self.validate_all(
             "_utf8mb4 'hola'",
@@ -442,7 +518,7 @@ class TestMySQL(Validator):
             "clickhouse": UnsupportedError,
             "databricks": "SELECT X'CC'",
             "drill": "SELECT 204",
-            "duckdb": "SELECT FROM_HEX('CC')",
+            "duckdb": "SELECT UNHEX('CC')",
             "hive": "SELECT 204",
             "mysql": "SELECT x'CC'",
             "oracle": "SELECT 204",
@@ -463,7 +539,7 @@ class TestMySQL(Validator):
             "clickhouse": UnsupportedError,
             "databricks": "SELECT X'0000CC'",
             "drill": "SELECT 204",
-            "duckdb": "SELECT FROM_HEX('0000CC')",
+            "duckdb": "SELECT UNHEX('0000CC')",
             "hive": "SELECT 204",
             "mysql": "SELECT x'0000CC'",
             "oracle": "SELECT 204",
@@ -533,6 +609,9 @@ class TestMySQL(Validator):
                 "mysql": "CAST(x AS CHAR CHARACTER SET latin1)",
             },
         )
+        self.validate_identity(
+            "CONVERT('a' USING binary)", "CAST('a' AS CHAR CHARACTER SET binary)"
+        )
 
     def test_match_against(self):
         self.validate_all(
@@ -576,6 +655,7 @@ class TestMySQL(Validator):
             write={
                 "mysql": "SELECT DATE_FORMAT('2017-06-15', '%Y')",
                 "snowflake": "SELECT TO_CHAR(CAST('2017-06-15' AS TIMESTAMP), 'yyyy')",
+                "exasol": "SELECT TO_CHAR(CAST('2017-06-15' AS TIMESTAMP), 'YYYY')",
             },
         )
         self.validate_all(
@@ -597,6 +677,7 @@ class TestMySQL(Validator):
             write={
                 "mysql": "SELECT DATE_FORMAT('2017-06-15', '%Y-%m-%d')",
                 "snowflake": "SELECT TO_CHAR(CAST('2017-06-15' AS TIMESTAMP), 'yyyy-mm-DD')",
+                "exasol": "SELECT TO_CHAR(CAST('2017-06-15' AS TIMESTAMP), 'YYYY-MM-DD')",
             },
         )
         self.validate_all(
@@ -632,6 +713,7 @@ class TestMySQL(Validator):
             write={
                 "mysql": "SELECT DATE_FORMAT('2007-10-04 22:23:00', '%T')",
                 "snowflake": "SELECT TO_CHAR(CAST('2007-10-04 22:23:00' AS TIMESTAMP), 'hh24:mi:ss')",
+                "exasol": "SELECT TO_CHAR(CAST('2007-10-04 22:23:00' AS TIMESTAMP), 'HH:MI:SS')",
             },
         )
         self.validate_all(
@@ -655,10 +737,12 @@ class TestMySQL(Validator):
         self.validate_all(
             "SELECT DATEDIFF(x, y)",
             read={
+                "exasol": "SELECT DAYS_BETWEEN(x, y)",
                 "presto": "SELECT DATE_DIFF('DAY', y, x)",
                 "redshift": "SELECT DATEDIFF(DAY, y, x)",
             },
             write={
+                "exasol": "SELECT DAYS_BETWEEN(x, y)",
                 "mysql": "SELECT DATEDIFF(x, y)",
                 "presto": "SELECT DATE_DIFF('DAY', y, x)",
                 "redshift": "SELECT DATEDIFF(DAY, y, x)",
@@ -708,8 +792,7 @@ class TestMySQL(Validator):
             write={"presto": "CAST(DATE_PARSE(x, '%Y-%m-%d') AS DATE)"},
         )
         self.validate_all(
-            "STR_TO_DATE(x, '%Y-%m-%dT%T')",
-            write={"presto": "DATE_PARSE(x, '%Y-%m-%dT%T')"},
+            "STR_TO_DATE(x, '%Y-%m-%dT%T')", write={"presto": "DATE_PARSE(x, '%Y-%m-%dT%T')"}
         )
         self.validate_all(
             "SELECT FROM_UNIXTIME(col)",
@@ -783,6 +866,13 @@ class TestMySQL(Validator):
                 )
 
         self.validate_all(
+            "WITH t AS (SELECT CAST('2020-01-10' AS DATE) AS col, 5 AS num_days) SELECT DATE_ADD(col, INTERVAL num_days DAY) FROM t",
+            write={
+                "mysql": "WITH t AS (SELECT CAST('2020-01-10' AS DATE) AS col, 5 AS num_days) SELECT DATE_ADD(col, INTERVAL num_days DAY) FROM t",
+                "postgres": "WITH t AS (SELECT CAST('2020-01-10' AS DATE) AS col, 5 AS num_days) SELECT col + INTERVAL '1 DAY' * num_days FROM t",
+            },
+        )
+        self.validate_all(
             "CURDATE()",
             write={
                 "mysql": "CURRENT_DATE",
@@ -796,7 +886,7 @@ class TestMySQL(Validator):
             },
             write={
                 "mysql": "SELECT CONCAT('11', '22')",
-                "postgres": "SELECT CONCAT('11', '22')",
+                "postgres": "SELECT '11' || '22'",
             },
         )
         self.validate_all(
@@ -910,8 +1000,7 @@ class TestMySQL(Validator):
             },
         )
         self.validate_all(
-            "SELECT * FROM t LOCK IN SHARE MODE",
-            write={"mysql": "SELECT * FROM t FOR SHARE"},
+            "SELECT * FROM t LOCK IN SHARE MODE", write={"mysql": "SELECT * FROM t FOR SHARE"}
         )
         self.validate_all(
             "SELECT DATE(DATE_SUB(`dt`, INTERVAL DAYOFMONTH(`dt`) - 1 DAY)) AS __timestamp FROM tableT",
@@ -976,8 +1065,8 @@ class TestMySQL(Validator):
             write={
                 "mysql": "GROUP_CONCAT(CONCAT(a, b, c) SEPARATOR ',')",
                 "sqlite": "GROUP_CONCAT(a || b || c, ',')",
-                "tsql": "STRING_AGG(CONCAT(a, b, c), ',')",
-                "postgres": "STRING_AGG(CONCAT(a, b, c), ',')",
+                "tsql": "STRING_AGG(a + b + c, ',')",
+                "postgres": "STRING_AGG(a || b || c, ',')",
                 "databricks": "LISTAGG(CONCAT(a, b, c), ',')",
                 "presto": "ARRAY_JOIN(ARRAY_AGG(CONCAT(CAST(a AS VARCHAR), CAST(b AS VARCHAR), CAST(c AS VARCHAR))), ',')",
             },
@@ -987,9 +1076,9 @@ class TestMySQL(Validator):
             write={
                 "mysql": "GROUP_CONCAT(CONCAT(a, b, c) SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(a || b || c, '')",
-                "tsql": "STRING_AGG(CONCAT(a, b, c), '')",
+                "tsql": "STRING_AGG(a + b + c, '')",
                 "databricks": "LISTAGG(CONCAT(a, b, c), '')",
-                "postgres": "STRING_AGG(CONCAT(a, b, c), '')",
+                "postgres": "STRING_AGG(a || b || c, '')",
             },
         )
         self.validate_all(
@@ -997,9 +1086,9 @@ class TestMySQL(Validator):
             write={
                 "mysql": "GROUP_CONCAT(DISTINCT CONCAT(a, b, c) SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(DISTINCT a || b || c, '')",
-                "tsql": "STRING_AGG(CONCAT(a, b, c), '')",
+                "tsql": "STRING_AGG(a + b + c, '')",
                 "databricks": "LISTAGG(DISTINCT CONCAT(a, b, c), '')",
-                "postgres": "STRING_AGG(DISTINCT CONCAT(a, b, c), '')",
+                "postgres": "STRING_AGG(DISTINCT a || b || c, '')",
             },
         )
         self.validate_all(
@@ -1007,9 +1096,9 @@ class TestMySQL(Validator):
             write={
                 "mysql": "GROUP_CONCAT(CONCAT(a, b, c) ORDER BY d SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(a || b || c, '')",
-                "tsql": "STRING_AGG(CONCAT(a, b, c), '') WITHIN GROUP (ORDER BY d)",
+                "tsql": "STRING_AGG(a + b + c, '') WITHIN GROUP (ORDER BY d)",
                 "databricks": "LISTAGG(CONCAT(a, b, c), '') WITHIN GROUP (ORDER BY d)",
-                "postgres": "STRING_AGG(CONCAT(a, b, c), '' ORDER BY d NULLS FIRST)",
+                "postgres": "STRING_AGG(a || b || c, '' ORDER BY d NULLS FIRST)",
             },
         )
         self.validate_all(
@@ -1017,9 +1106,9 @@ class TestMySQL(Validator):
             write={
                 "mysql": "GROUP_CONCAT(DISTINCT CONCAT(a, b, c) ORDER BY d SEPARATOR '')",
                 "sqlite": "GROUP_CONCAT(DISTINCT a || b || c, '')",
-                "tsql": "STRING_AGG(CONCAT(a, b, c), '') WITHIN GROUP (ORDER BY d)",
+                "tsql": "STRING_AGG(a + b + c, '') WITHIN GROUP (ORDER BY d)",
                 "databricks": "LISTAGG(DISTINCT CONCAT(a, b, c), '') WITHIN GROUP (ORDER BY d)",
-                "postgres": "STRING_AGG(DISTINCT CONCAT(a, b, c), '' ORDER BY d NULLS FIRST)",
+                "postgres": "STRING_AGG(DISTINCT a || b || c, '' ORDER BY d NULLS FIRST)",
             },
         )
         self.validate_identity(
@@ -1308,8 +1397,7 @@ COMMENT='客户账户表'"""
 
     def test_is_null(self):
         self.validate_all(
-            "SELECT ISNULL(x)",
-            write={"": "SELECT (x IS NULL)", "mysql": "SELECT (x IS NULL)"},
+            "SELECT ISNULL(x)", write={"": "SELECT (x IS NULL)", "mysql": "SELECT (x IS NULL)"}
         )
 
     def test_monthname(self):
@@ -1407,6 +1495,21 @@ COMMENT='客户账户表'"""
             with self.subTest(f"Testing MySQL's GRANT command statement: {sql}"):
                 self.validate_identity(sql, check_command_warning=True)
 
+    def test_revoke(self):
+        revoke_cmds = [
+            "REVOKE 'role1', 'role2' FROM 'user1'@'localhost', 'user2'@'localhost'",
+            "REVOKE SELECT ON world.* FROM 'role3'",
+            "REVOKE SELECT ON db2.invoice FROM 'jeffrey'@'localhost'",
+            "REVOKE INSERT ON `d%`.* FROM u",
+            "REVOKE ALL ON test.* FROM ''@'localhost'",
+            "REVOKE SELECT (col1), INSERT (col1, col2) ON mydb.mytbl FROM 'someuser'@'somehost'",
+            "REVOKE SELECT, INSERT, UPDATE ON *.* FROM u2",
+        ]
+
+        for sql in revoke_cmds:
+            with self.subTest(f"Testing MySQL's REVOKE command statement: {sql}"):
+                self.validate_identity(sql, check_command_warning=True)
+
     def test_explain(self):
         self.validate_identity(
             "EXPLAIN ANALYZE SELECT * FROM t", "DESCRIBE ANALYZE SELECT * FROM t"
@@ -1458,3 +1561,122 @@ COMMENT='客户账户表'"""
         self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1 WITH 5 BUCKETS AUTO UPDATE")
         self.validate_identity("ANALYZE tbl UPDATE HISTOGRAM ON col1 WITH 5 BUCKETS MANUAL UPDATE")
         self.validate_identity("ANALYZE tbl DROP HISTOGRAM ON col1")
+
+    def test_utc_time(self):
+        self.validate_identity("UTC_TIME()").assert_is(exp.UtcTime)
+        self.validate_identity("UTC_TIME(6)").assert_is(exp.UtcTime)
+        self.validate_identity("UTC_TIMESTAMP()").assert_is(exp.UtcTimestamp)
+        self.validate_identity("UTC_TIMESTAMP(6)").assert_is(exp.UtcTimestamp)
+
+    def test_mod(self):
+        self.validate_identity("x % y").assert_is(exp.Mod)
+        self.validate_identity("x MOD y", "x % y").assert_is(exp.Mod)
+        self.validate_identity("MOD(x, y)", "x % y").assert_is(exp.Mod)
+
+    def test_numeric_trunc(self):
+        # MySQL uses TRUNCATE for numeric truncation
+        self.validate_identity("TRUNCATE(3.14159, 2)").assert_is(exp.Trunc)
+        self.validate_identity("TRUNCATE(price, 0)").assert_is(exp.Trunc)
+
+        # TRUNC alias normalizes to TRUNCATE in MySQL
+        self.validate_identity("TRUNC(3.14159, 2)", "TRUNCATE(3.14159, 2)").assert_is(exp.Trunc)
+
+        # Cross-dialect numeric truncation transpilation
+        self.validate_all(
+            "TRUNCATE(3.14159, 2)",
+            write={
+                "mysql": "TRUNCATE(3.14159, 2)",
+                "oracle": "TRUNC(3.14159, 2)",
+                "postgres": "TRUNC(3.14159, 2)",
+                "snowflake": "TRUNC(3.14159, 2)",
+                "tsql": "ROUND(3.14159, 2, 1)",
+            },
+        )
+
+    def test_valid_interval_units(self):
+        for unit in (
+            "SECOND_MICROSECOND",
+            "MINUTE_MICROSECOND",
+            "MINUTE_SECOND",
+            "HOUR_MICROSECOND",
+            "HOUR_SECOND",
+            "HOUR_MINUTE",
+            "DAY_MICROSECOND",
+            "DAY_SECOND",
+            "DAY_MINUTE",
+            "DAY_HOUR",
+            "YEAR_MONTH",
+        ):
+            with self.subTest(f"Testing INTERVAL unit: {unit}"):
+                self.validate_identity(f"DATE_ADD(base_date, INTERVAL day_interval {unit})")
+
+    def test_create_trigger(self):
+        """Test that MySQL CREATE TRIGGER statements fall back to Command parsing."""
+        self.validate_identity(
+            "CREATE TRIGGER check_age BEFORE INSERT ON users FOR EACH ROW BEGIN SET NEW.created_at = NOW() END",
+            check_command_warning=True,
+        )
+
+        self.validate_identity(
+            "CREATE TRIGGER audit_update AFTER UPDATE ON accounts FOR EACH ROW BEGIN INSERT INTO audit_log (user_id, old_balance, new_balance, changed_at) VALUES (OLD.user_id, OLD.balance, NEW.balance, NOW()) END",
+            check_command_warning=True,
+        )
+
+        self.validate_identity(
+            "CREATE TRIGGER track_deletes BEFORE DELETE ON orders FOR EACH ROW BEGIN UPDATE statistics SET delete_count = delete_count + 1 WHERE table_name = 'orders' END",
+            check_command_warning=True,
+        )
+
+    def test_ignore_respect_nulls(self):
+        self.validate_all(
+            "SELECT FIRST_VALUE(col1) OVER (ORDER BY col2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM table1",
+            read={
+                "snowflake": "SELECT FIRST_VALUE(col1) IGNORE NULLS OVER (ORDER BY col2) FROM table1",
+            },
+            write={
+                "mysql": "SELECT FIRST_VALUE(col1) OVER (ORDER BY col2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM table1",
+                "oracle": "SELECT FIRST_VALUE(col1) OVER (ORDER BY col2 NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM table1",
+                "postgres": "SELECT FIRST_VALUE(col1) OVER (ORDER BY col2 NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM table1",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FIRST_VALUE(col1) RESPECT NULLS OVER (ORDER BY col2) FROM table1",
+            write={
+                "mysql": "SELECT FIRST_VALUE(col1) RESPECT NULLS OVER (ORDER BY col2) FROM table1",
+                "oracle": "SELECT FIRST_VALUE(col1) RESPECT NULLS OVER (ORDER BY col2 NULLS FIRST) FROM table1",
+                "postgres": "SELECT FIRST_VALUE(col1) OVER (ORDER BY col2 NULLS FIRST) FROM table1",
+                "snowflake": "SELECT FIRST_VALUE(col1) RESPECT NULLS OVER (ORDER BY col2 NULLS FIRST) FROM table1",
+            },
+        )
+
+        self.validate_all(
+            "SELECT LAST_VALUE(col1) OVER (PARTITION BY col3 ORDER BY col2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM table1",
+            read={
+                "snowflake": "SELECT LAST_VALUE(col1) IGNORE NULLS OVER (PARTITION BY col3 ORDER BY col2) FROM table1",
+            },
+            write={
+                "mysql": "SELECT LAST_VALUE(col1) OVER (PARTITION BY col3 ORDER BY col2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM table1",
+                "oracle": "SELECT LAST_VALUE(col1) OVER (PARTITION BY col3 ORDER BY col2 NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM table1",
+            },
+        )
+
+        self.validate_all(
+            "SELECT LAG(col1) OVER (ORDER BY CASE WHEN col2 IS NULL THEN 1 ELSE 0 END, col2) FROM table1",
+            read={
+                "snowflake": "SELECT LAG(col1) IGNORE NULLS OVER (ORDER BY col2) FROM table1",
+            },
+            write={
+                "mysql": "SELECT LAG(col1) OVER (ORDER BY CASE WHEN col2 IS NULL THEN 1 ELSE 0 END, col2) FROM table1",
+                "oracle": "SELECT LAG(col1) OVER (ORDER BY CASE WHEN col2 IS NULL THEN 1 ELSE 0 END NULLS FIRST, col2 NULLS FIRST) FROM table1",
+            },
+        )
+
+        self.validate_all(
+            "SELECT LEAD(col1, 1) RESPECT NULLS OVER (ORDER BY col2) FROM table1",
+            write={
+                "mysql": "SELECT LEAD(col1, 1) RESPECT NULLS OVER (ORDER BY col2) FROM table1",
+                "oracle": "SELECT LEAD(col1, 1) RESPECT NULLS OVER (ORDER BY col2 NULLS FIRST) FROM table1",
+                "snowflake": "SELECT LEAD(col1, 1) RESPECT NULLS OVER (ORDER BY col2 NULLS FIRST) FROM table1",
+            },
+        )

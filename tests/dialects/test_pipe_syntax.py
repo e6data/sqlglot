@@ -63,6 +63,18 @@ class TestPipeSyntax(Validator):
             "FROM (SELECT x1 FROM (SELECT 1 as x1) |> SELECT x1) |> SELECT x1",
             "SELECT * FROM (WITH __tmp2 AS (SELECT x1 FROM ((WITH __tmp1 AS (SELECT x1 FROM (SELECT 1 AS x1)) SELECT * FROM __tmp1))) SELECT * FROM __tmp2)",
         )
+        self.validate_identity(
+            "SELECT * FROM (FROM t2 |> SELECT id)",
+            "SELECT * FROM (WITH __tmp1 AS (SELECT id FROM t2) SELECT * FROM __tmp1)",
+        )
+        self.validate_identity(
+            "SELECT * FROM t1 LEFT JOIN (FROM t2 |> SELECT id) ON TRUE",
+            "SELECT * FROM t1 LEFT JOIN (WITH __tmp1 AS (SELECT id FROM t2) SELECT * FROM __tmp1) ON TRUE",
+        )
+        self.validate_identity(
+            "(SELECT 1 AS col1) |> EXTEND col1 + 1 AS col2",
+            "WITH __tmp1 AS (SELECT *, col1 + 1 AS col2 FROM (SELECT 1 AS col1)) SELECT * FROM __tmp1",
+        )
 
     def test_order_by(self):
         self.validate_identity("FROM x |> ORDER BY x1", "SELECT * FROM x ORDER BY x1")
@@ -404,6 +416,24 @@ WHERE
         self.validate_identity(
             "FROM x |> JOIN y ON x.x1 = y.y1 |> AS a |> WHERE a.x2 > 1",
             "WITH a AS (SELECT * FROM x JOIN y ON x.x1 = y.y1) SELECT * FROM a WHERE a.x2 > 1",
+        )
+
+    def test_distinct(self):
+        self.validate_identity(
+            "SELECT 1 AS col1 UNION ALL SELECT 1 AS col1 |> DISTINCT",
+            "SELECT DISTINCT * FROM (SELECT 1 AS col1 UNION ALL SELECT 1 AS col1)",
+        )
+        self.validate_identity(
+            "FROM x |> DISTINCT",
+            "SELECT DISTINCT * FROM x",
+        )
+        self.validate_identity(
+            "FROM x |> DISTINCT |> WHERE x1 > 1",
+            "SELECT DISTINCT * FROM x WHERE x1 > 1",
+        )
+        self.validate_identity(
+            "FROM x |> SELECT x1, x2 |> DISTINCT",
+            "WITH __tmp1 AS (SELECT x1, x2 FROM x) SELECT DISTINCT * FROM __tmp1",
         )
 
     def test_extend(self):

@@ -1,5 +1,4 @@
 from tests.dialects.test_dialect import Validator
-
 from sqlglot import exp
 
 
@@ -176,6 +175,44 @@ class TestHive(Validator):
             },
         )
 
+        self.validate_identity("ALTER TABLE x PARTITION(y = z) ADD COLUMN a VARCHAR(10)")
+        self.validate_identity(
+            "ALTER TABLE x CHANGE a a VARCHAR(10)",
+            "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10)",
+        )
+
+        self.validate_all(
+            "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10)",
+            write={
+                "hive": "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10)",
+                "spark": "ALTER TABLE x ALTER COLUMN a TYPE VARCHAR(10)",
+            },
+        )
+        self.validate_all(
+            "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10) COMMENT 'comment'",
+            write={
+                "hive": "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10) COMMENT 'comment'",
+                "spark": "ALTER TABLE x ALTER COLUMN a COMMENT 'comment'",
+            },
+        )
+        self.validate_all(
+            "ALTER TABLE x CHANGE COLUMN a b VARCHAR(10)",
+            write={
+                "hive": "ALTER TABLE x CHANGE COLUMN a b VARCHAR(10)",
+                "spark": "ALTER TABLE x RENAME COLUMN a TO b",
+            },
+        )
+        self.validate_all(
+            "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10) CASCADE",
+            write={
+                "hive": "ALTER TABLE x CHANGE COLUMN a a VARCHAR(10) CASCADE",
+                "spark": "ALTER TABLE x ALTER COLUMN a TYPE VARCHAR(10)",
+            },
+        )
+
+        self.validate_identity("ALTER TABLE X ADD COLUMNS (y INT, z STRING)")
+        self.validate_identity("ALTER TABLE X ADD COLUMNS (y INT, z STRING) CASCADE")
+
         self.validate_identity(
             """CREATE EXTERNAL TABLE x (y INT) ROW FORMAT SERDE 'serde' ROW FORMAT DELIMITED FIELDS TERMINATED BY '1' WITH SERDEPROPERTIES ('input.regex'='')""",
         )
@@ -191,8 +228,7 @@ class TestHive(Validator):
         self.validate_identity("ALTER VIEW db1.v1 RENAME TO db2.v2")
         self.validate_identity("ALTER VIEW v1 SET TBLPROPERTIES ('tblp1'='1', 'tblp2'='2')")
         self.validate_identity(
-            "ALTER VIEW v1 UNSET TBLPROPERTIES ('tblp1', 'tblp2')",
-            check_command_warning=True,
+            "ALTER VIEW v1 UNSET TBLPROPERTIES ('tblp1', 'tblp2')", check_command_warning=True
         )
         self.validate_identity("CREATE TABLE foo (col STRUCT<struct_col_a: VARCHAR((50))>)")
 
@@ -252,11 +288,22 @@ class TestHive(Validator):
             },
         )
         self.validate_all(
-            "SELECT a FROM x LATERAL VIEW POSEXPLODE(y) t AS a",
+            "SELECT a FROM x LATERAL VIEW POSEXPLODE(y) t AS pos, col",
             write={
-                "presto": "SELECT a FROM x CROSS JOIN UNNEST(y) WITH ORDINALITY AS t(a)",
-                "hive": "SELECT a FROM x LATERAL VIEW POSEXPLODE(y) t AS a",
-                "spark": "SELECT a FROM x LATERAL VIEW POSEXPLODE(y) t AS a",
+                "presto": "SELECT a FROM x CROSS JOIN LATERAL (SELECT pos - 1 AS pos, col FROM UNNEST(y) WITH ORDINALITY AS t(col, pos))",
+                "trino": "SELECT a FROM x CROSS JOIN LATERAL (SELECT pos - 1 AS pos, col FROM UNNEST(y) WITH ORDINALITY AS t(col, pos))",
+                "duckdb": "SELECT a FROM x CROSS JOIN LATERAL (SELECT pos - 1 AS pos, col FROM UNNEST(y) WITH ORDINALITY AS t(col, pos))",
+                "hive": "SELECT a FROM x LATERAL VIEW POSEXPLODE(y) t AS pos, col",
+                "spark": "SELECT a FROM x LATERAL VIEW POSEXPLODE(y) t AS pos, col",
+            },
+        )
+        self.validate_all(
+            "SELECT * FROM x LATERAL VIEW POSEXPLODE(MAP(col, 'val')) t AS pos, key, value",
+            write={
+                "presto": "SELECT * FROM x CROSS JOIN LATERAL (SELECT pos - 1 AS pos, key, value FROM UNNEST(MAP(ARRAY[col], ARRAY['val'])) WITH ORDINALITY AS t(key, value, pos))",
+                "trino": "SELECT * FROM x CROSS JOIN LATERAL (SELECT pos - 1 AS pos, key, value FROM UNNEST(MAP(ARRAY[col], ARRAY['val'])) WITH ORDINALITY AS t(key, value, pos))",
+                "hive": "SELECT * FROM x LATERAL VIEW POSEXPLODE(MAP(col, 'val')) t AS pos, key, value",
+                "spark": "SELECT * FROM x LATERAL VIEW POSEXPLODE(MAP(col, 'val')) t AS pos, key, value",
             },
         )
         self.validate_all(
@@ -318,6 +365,7 @@ class TestHive(Validator):
             "a RLIKE 'x'",
             write={
                 "duckdb": "REGEXP_MATCHES(a, 'x')",
+                "exasol": "a REGEXP_LIKE '.*x.*'",
                 "presto": "REGEXP_LIKE(a, 'x')",
                 "hive": "a RLIKE 'x'",
                 "spark": "a RLIKE 'x'",
@@ -328,6 +376,7 @@ class TestHive(Validator):
             "a REGEXP 'x'",
             write={
                 "duckdb": "REGEXP_MATCHES(a, 'x')",
+                "exasol": "a REGEXP_LIKE '.*x.*'",
                 "presto": "REGEXP_LIKE(a, 'x')",
                 "hive": "a RLIKE 'x'",
                 "spark": "a RLIKE 'x'",
@@ -381,7 +430,7 @@ class TestHive(Validator):
         self.validate_all(
             "DATE_FORMAT('2020-01-01', 'yyyy-MM-dd HH:mm:ss')",
             write={
-                "bigquery": "FORMAT_DATE('%Y-%m-%d %H:%M:%S', CAST('2020-01-01' AS DATETIME))",
+                "bigquery": "FORMAT_DATE('%F %T', CAST('2020-01-01' AS DATETIME))",
                 "duckdb": "STRFTIME(CAST('2020-01-01' AS TIMESTAMP), '%Y-%m-%d %H:%M:%S')",
                 "presto": "DATE_FORMAT(CAST('2020-01-01' AS TIMESTAMP), '%Y-%m-%d %T')",
                 "hive": "DATE_FORMAT('2020-01-01', 'yyyy-MM-dd HH:mm:ss')",
@@ -405,42 +454,40 @@ class TestHive(Validator):
         self.validate_all(
             "DATE_SUB('2020-01-01', 1)",
             write={
-                "": "DATE_SUB('2020-01-01', 1)",
-                "bigquery": "DATE_SUB('2020-01-01', INTERVAL 1 DAY)",
-                "duckdb": "CAST('2020-01-01' AS DATE) - INTERVAL 1 DAY",
-                "hive": "DATE_ADD('2020-01-01', -1)",
-                "presto": "DATE_ADD('DAY', 1 * -1, '2020-01-01')",
-                "redshift": "'2020-01-01' - INTERVAL '1 DAY'",
-                "snowflake": "DATEADD(DAY, 1 * -1, '2020-01-01')",
-                "spark": "DATE_ADD('2020-01-01', -1)",
-                "tsql": "DATEADD(DAY, 1 * -1, CAST('2020-01-01' AS DATETIME2))",
+                "": "TS_OR_DS_ADD('2020-01-01', 1 * -1, DAY)",
+                "bigquery": "DATE_ADD(CAST(CAST('2020-01-01' AS DATETIME) AS DATE), INTERVAL (1 * -1) DAY)",
+                "duckdb": "CAST('2020-01-01' AS DATE) + INTERVAL (1 * -1) DAY",
+                "hive": "DATE_ADD('2020-01-01', 1 * -1)",
+                "presto": "DATE_ADD('DAY', 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
+                "redshift": "DATEADD(DAY, 1 * -1, '2020-01-01')",
+                "snowflake": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS TIMESTAMP) AS DATE))",
+                "spark": "DATE_ADD('2020-01-01', 1 * -1)",
+                "tsql": "DATEADD(DAY, 1 * -1, CAST(CAST('2020-01-01' AS DATETIME2) AS DATE))",
             },
         )
         self.validate_all("DATE_ADD('2020-01-01', -1)", read={"": "DATE_SUB('2020-01-01', 1)"})
         self.validate_all("DATE_ADD(a, b * -1)", read={"": "DATE_SUB(a, b)"})
         self.validate_all(
-            "ADD_MONTHS('2020-01-01', -2)",
-            read={"": "DATE_SUB('2020-01-01', 2, month)"},
+            "ADD_MONTHS('2020-01-01', -2)", read={"": "DATE_SUB('2020-01-01', 2, month)"}
         )
         self.validate_all(
             "DATEDIFF(TO_DATE(y), x)",
             write={
-                "duckdb": "DATE_DIFF('DAY', CAST(x AS DATE), CAST(y AS DATE))",
+                "duckdb": "DATE_DIFF('DAY', CAST(x AS DATE), TRY_CAST(y AS DATE))",
                 "presto": "DATE_DIFF('DAY', CAST(CAST(x AS TIMESTAMP) AS DATE), CAST(CAST(CAST(CAST(y AS TIMESTAMP) AS DATE) AS TIMESTAMP) AS DATE))",
                 "hive": "DATEDIFF(TO_DATE(y), x)",
                 "spark": "DATEDIFF(TO_DATE(y), x)",
-                "": "DATEDIFF(CAST(y AS DATE), CAST(x AS DATE))",
+                "": "DATEDIFF(TRY_CAST(y AS DATE), CAST(x AS DATE))",
             },
         )
         self.validate_all(
             "UNIX_TIMESTAMP(x)",
-            # changed these due to default is set to true in unix_time part of hive's parser
             write={
-                "duckdb": "EPOCH(STRPTIME(x))",
-                "presto": "TO_UNIXTIME(COALESCE(TRY(DATE_PARSE(CAST(x AS VARCHAR))), PARSE_DATETIME(DATE_FORMAT(x))))",
+                "duckdb": "EPOCH(STRPTIME(x, '%Y-%m-%d %H:%M:%S'))",
+                "presto": "TO_UNIXTIME(COALESCE(TRY(DATE_PARSE(CAST(x AS VARCHAR), '%Y-%m-%d %T')), PARSE_DATETIME(DATE_FORMAT(x, '%Y-%m-%d %T'), 'yyyy-MM-dd HH:mm:ss')))",
                 "hive": "UNIX_TIMESTAMP(x)",
-                "spark": "TO_UNIX_TIMESTAMP(x)",
-                "": "STR_TO_UNIX(x)",
+                "spark": "UNIX_TIMESTAMP(x)",
+                "": "STR_TO_UNIX(x, '%Y-%m-%d %H:%M:%S')",
             },
         )
 
@@ -575,15 +622,6 @@ class TestHive(Validator):
             },
         )
         self.validate_all(
-            "PERCENTILE(x, 0.5)",
-            write={
-                "duckdb": "QUANTILE(x, 0.5)",
-                "presto": "APPROX_PERCENTILE(x, 0.5)",
-                "hive": "PERCENTILE(x, 0.5)",
-                "spark": "PERCENTILE(x, 0.5)",
-            },
-        )
-        self.validate_all(
             "PERCENTILE_APPROX(x, 0.5)",
             read={
                 "hive": "PERCENTILE_APPROX(x, 0.5)",
@@ -596,6 +634,24 @@ class TestHive(Validator):
                 "presto": "APPROX_PERCENTILE(x, 0.5)",
                 "duckdb": "APPROX_QUANTILE(x, 0.5)",
                 "spark": "PERCENTILE_APPROX(x, 0.5)",
+            },
+        )
+        self.validate_all(
+            "PERCENTILE_APPROX(x, 0.5)",
+            read={
+                "hive": "PERCENTILE_APPROX(ALL x, 0.5)",
+                "spark2": "PERCENTILE_APPROX(ALL x, 0.5)",
+                "spark": "PERCENTILE_APPROX(ALL x, 0.5)",
+                "databricks": "PERCENTILE_APPROX(ALL x, 0.5)",
+            },
+        )
+        self.validate_all(
+            "PERCENTILE_APPROX(x, 0.5, 200)",
+            read={
+                "hive": "PERCENTILE_APPROX(ALL x, 0.5, 200)",
+                "spark2": "PERCENTILE_APPROX(ALL x, 0.5, 200)",
+                "spark": "PERCENTILE_APPROX(ALL x, 0.5, 200)",
+                "databricks": "PERCENTILE_APPROX(ALL x, 0.5, 200)",
             },
         )
         self.validate_all(
@@ -620,7 +676,7 @@ class TestHive(Validator):
                 "presto": "CONTAINS(x, 1)",
                 "hive": "ARRAY_CONTAINS(x, 1)",
                 "spark": "ARRAY_CONTAINS(x, 1)",
-                "snowflake": "ARRAY_CONTAINS(1, x)",
+                "snowflake": "ARRAY_CONTAINS(CAST(1 AS VARIANT), x)",
             },
         )
         self.validate_all(
@@ -650,29 +706,25 @@ class TestHive(Validator):
                 "spark": "LOCATE('a', x, 3)",
             },
         )
+
         self.validate_all(
             "INITCAP('new york')",
             write={
-                "duckdb": "INITCAP('new york')",
-                "presto": r"REGEXP_REPLACE('new york', '(\w)(\w*)', x -> UPPER(x[1]) || LOWER(x[2]))",
                 "hive": "INITCAP('new york')",
                 "spark": "INITCAP('new york')",
             },
+        )
+        expression = self.parse_one("INITCAP('new york')")
+        self.assert_duckdb_sql(
+            expression,
+            includes=("REGEXP_MATCHES(", "ARRAY_TO_STRING("),
+            chr_chars=("\u000b", "\u001c", "\u001d", "\u001e", "\u001f"),
         )
         self.validate_all(
             "SELECT * FROM x.z TABLESAMPLE(10 PERCENT) y",
             write={
                 "hive": "SELECT * FROM x.z TABLESAMPLE (10 PERCENT) AS y",
                 "spark": "SELECT * FROM x.z TABLESAMPLE (10 PERCENT) AS y",
-            },
-        )
-        self.validate_all(
-            "SELECT SORT_ARRAY(x)",
-            write={
-                "duckdb": "SELECT ARRAY_SORT(x)",
-                "presto": "SELECT ARRAY_SORT(x)",
-                "hive": "SELECT SORT_ARRAY(x)",
-                "spark": "SELECT SORT_ARRAY(x)",
             },
         )
         self.validate_all(
@@ -835,6 +887,16 @@ class TestHive(Validator):
                 "presto": "SELECT DATE_TRUNC('MONTH', TRY_CAST(ds AS TIMESTAMP))",
             },
         )
+
+        # Hive TRUNC is date-only, should parse to TimestampTrunc (not numeric Trunc)
+        self.validate_identity("TRUNC(date_col, 'MM')").assert_is(exp.TimestampTrunc)
+
+        # Numeric TRUNC from other dialects - Hive has no native support, uses CAST to BIGINT
+        self.validate_all(
+            "CAST(3.14159 AS BIGINT)",
+            read={"postgres": "TRUNC(3.14159, 2)"},
+        )
+
         self.validate_all(
             "REGEXP_EXTRACT('abc', '(a)(b)(c)')",
             read={
@@ -888,6 +950,80 @@ class TestHive(Validator):
             },
         )
 
+        self.validate_all(
+            "SELECT FIRST(sample_col, TRUE)",
+            read={
+                "spark": "SELECT FIRST(sample_col, TRUE)",
+                "databricks": "SELECT FIRST(sample_col, TRUE)",
+            },
+            write={
+                "hive": "SELECT FIRST(sample_col, TRUE)",
+                "spark2": "SELECT FIRST(sample_col, TRUE)",
+                "spark": "SELECT FIRST(sample_col) IGNORE NULLS",
+                "databricks": "SELECT FIRST(sample_col) IGNORE NULLS",
+                "duckdb": "SELECT ANY_VALUE(sample_col)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT FIRST_VALUE(sample_col, TRUE)",
+            read={
+                "spark": "SELECT FIRST_VALUE(sample_col, TRUE)",
+                "databricks": "SELECT FIRST_VALUE(sample_col, TRUE)",
+            },
+            write={
+                "hive": "SELECT FIRST_VALUE(sample_col, TRUE)",
+                "spark2": "SELECT FIRST_VALUE(sample_col, TRUE)",
+                "spark": "SELECT FIRST_VALUE(sample_col) IGNORE NULLS",
+                "databricks": "SELECT FIRST_VALUE(sample_col) IGNORE NULLS",
+                "duckdb": "SELECT FIRST_VALUE(sample_col IGNORE NULLS)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT LAST_VALUE(sample_col, TRUE)",
+            read={
+                "spark": "SELECT LAST_VALUE(sample_col, TRUE)",
+                "databricks": "SELECT LAST_VALUE(sample_col, TRUE)",
+            },
+            write={
+                "hive": "SELECT LAST_VALUE(sample_col, TRUE)",
+                "spark2": "SELECT LAST_VALUE(sample_col, TRUE)",
+                "spark": "SELECT LAST_VALUE(sample_col) IGNORE NULLS",
+                "databricks": "SELECT LAST_VALUE(sample_col) IGNORE NULLS",
+                "duckdb": "SELECT LAST_VALUE(sample_col IGNORE NULLS)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT LAST(sample_col, TRUE)",
+            read={
+                "spark": "SELECT LAST(sample_col, TRUE)",
+                "databricks": "SELECT LAST(sample_col, TRUE)",
+            },
+            write={
+                "hive": "SELECT LAST(sample_col, TRUE)",
+                "spark2": "SELECT LAST(sample_col, TRUE)",
+                "spark": "SELECT LAST(sample_col) IGNORE NULLS",
+                "databricks": "SELECT LAST(sample_col) IGNORE NULLS",
+            },
+        )
+
+        self.validate_identity(
+            "DATE_SUB(CURRENT_DATE, 1 + 1)", "DATE_ADD(CURRENT_DATE, (1 + 1) * -1)"
+        )
+        self.validate_identity("SELECT ELT(2, 'foo', 'bar', 'baz') AS Result")
+
+        self.validate_all(
+            """WITH t AS (SELECT '{"x-y": "z"}' AS c) SELECT GET_JSON_OBJECT(c, '$.x-y') FROM t""",
+            write={
+                "hive": """WITH t AS (SELECT '{"x-y": "z"}' AS c) SELECT GET_JSON_OBJECT(c, '$.x-y') FROM t""",
+                "spark2": """WITH t AS (SELECT '{"x-y": "z"}' AS c) SELECT GET_JSON_OBJECT(c, '$.x-y') FROM t""",
+                "spark": """WITH t AS (SELECT '{"x-y": "z"}' AS c) SELECT GET_JSON_OBJECT(c, '$.x-y') FROM t""",
+                "databricks": """WITH t AS (SELECT '{"x-y": "z"}' AS c) SELECT c:["x-y"] FROM t""",
+            },
+        )
+
     def test_escapes(self) -> None:
         self.validate_identity("'\n'", "'\\n'")
         self.validate_identity("'\\n'")
@@ -903,4 +1039,130 @@ class TestHive(Validator):
             write={
                 "hive": "CAST(a AS BOOLEAN)",
             },
+        )
+
+    def test_joins_without_on(self):
+        for join in ("FULL OUTER", "LEFT", "RIGHT", "LEFT OUTER", "RIGHT OUTER", "INNER"):
+            with self.subTest(f"Testing transpilation of {join} without ON"):
+                self.validate_all(
+                    f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                    read={
+                        "hive": f"SELECT * FROM t1 {join} JOIN t2",
+                        "spark2": f"SELECT * FROM t1 {join} JOIN t2",
+                        "spark": f"SELECT * FROM t1 {join} JOIN t2",
+                        "databricks": f"SELECT * FROM t1 {join} JOIN t2",
+                        "sqlite": f"SELECT * FROM t1 {join} JOIN t2",
+                    },
+                    write={
+                        "hive": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "spark2": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "spark": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "databricks": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "sqlite": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                        "duckdb": f"SELECT * FROM t1 {join} JOIN t2 ON TRUE",
+                    },
+                )
+
+    def test_percentile(self):
+        self.validate_all(
+            "PERCENTILE(x, 0.5)",
+            write={
+                "duckdb": "QUANTILE(x, 0.5)",
+                "presto": "APPROX_PERCENTILE(x, 0.5)",
+                "hive": "PERCENTILE(x, 0.5)",
+                "spark2": "PERCENTILE(x, 0.5)",
+                "spark": "PERCENTILE(x, 0.5)",
+                "databricks": "PERCENTILE(x, 0.5)",
+            },
+        )
+
+        self.validate_all(
+            "PERCENTILE(DISTINCT x, 0.5)",
+            read={
+                "hive": "PERCENTILE(DISTINCT x, 0.5)",
+                "spark": "PERCENTILE(DISTINCT x, 0.5)",
+                "databricks": "PERCENTILE(DISTINCT x, 0.5)",
+            },
+            write={
+                "spark": "PERCENTILE(DISTINCT x, 0.5)",
+                "databricks": "PERCENTILE(DISTINCT x, 0.5)",
+            },
+        )
+
+        self.validate_all(
+            "PERCENTILE(x, 0.5)",
+            read={
+                "hive": "PERCENTILE(ALL x, 0.5)",
+                "spark2": "PERCENTILE(ALL x, 0.5)",
+                "spark": "PERCENTILE(ALL x, 0.5)",
+                "databricks": "PERCENTILE(ALL x, 0.5)",
+            },
+        )
+
+        quantile_expr = self.validate_identity("PERCENTILE(DISTINCT x, 0.5)")
+        quantile_expr.assert_is(exp.Quantile)
+        quantile_expr.this.assert_is(exp.Distinct)
+        quantile_expr.args.get("quantile").assert_is(exp.Literal)
+
+        quantile_expr = self.validate_identity("PERCENTILE(ALL x, 0.5)", "PERCENTILE(x, 0.5)")
+        quantile_expr.assert_is(exp.Quantile)
+        quantile_expr.this.assert_is(exp.Column)
+        quantile_expr.args.get("quantile").assert_is(exp.Literal)
+
+    def test_create_function_using(self):
+        # USING JAR
+        self.validate_identity(
+            "CREATE FUNCTION my_func AS 'com.example.MyFunc' USING JAR 'hdfs://path/to/my.jar'"
+        )
+
+        # OR REPLACE TEMPORARY with USING JAR
+        self.validate_identity(
+            "CREATE OR REPLACE TEMPORARY FUNCTION some_func AS 'my_jar.SomeFunctionUDF' USING JAR 's3://bucket/my.jar'"
+        )
+
+        # USING FILE
+        self.validate_identity(
+            "CREATE FUNCTION my_func AS 'com.example.MyFunc' USING FILE 'hdfs://path/to/file.py'"
+        )
+
+        # USING ARCHIVE
+        self.validate_identity(
+            "CREATE FUNCTION my_func AS 'com.example.MyFunc' USING ARCHIVE 'hdfs://path/to/archive.zip'"
+        )
+
+        # Verify the AST node is a Create with UsingProperty
+        expr = self.parse_one(
+            "CREATE FUNCTION my_func AS 'com.example.MyFunc' USING JAR 'hdfs://path/to/my.jar'"
+        )
+        self.assertIsInstance(expr, exp.Create)
+        using_prop = expr.find(exp.UsingProperty)
+        self.assertIsNotNone(using_prop)
+        self.assertEqual(using_prop.args["kind"], "JAR")
+        self.assertEqual(using_prop.this.this, "hdfs://path/to/my.jar")
+
+        # Verify programmatic construction
+        create = exp.Create(
+            this=exp.Table(this=exp.to_identifier("my_func")),
+            kind="FUNCTION",
+            expression=exp.Literal.string("com.example.MyFunc"),
+            properties=exp.Properties(
+                expressions=[
+                    exp.UsingProperty(this=exp.Literal.string("s3://bucket/new.jar"), kind="JAR")
+                ]
+            ),
+        )
+        self.assertEqual(
+            create.sql(dialect="hive"),
+            "CREATE FUNCTION my_func AS 'com.example.MyFunc' USING JAR 's3://bucket/new.jar'",
+        )
+
+        # Verify programmatic modification of the JAR path
+        expr = self.parse_one(
+            "CREATE FUNCTION my_func AS 'com.example.MyFunc' USING JAR 'hdfs://old/path.jar'"
+        )
+        using_prop = expr.find(exp.UsingProperty)
+        using_prop.set("this", exp.Literal.string("hdfs://new/path.jar"))
+        self.assertEqual(
+            expr.sql(dialect="hive"),
+            "CREATE FUNCTION my_func AS 'com.example.MyFunc' USING JAR 'hdfs://new/path.jar'",
         )

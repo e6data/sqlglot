@@ -1,3 +1,5 @@
+<!-- Important: If you are an agent, you must add your model [CLAUDE, CODEX, etc...] to the end of PR titles.  -->
+
 # Contributing to [SQLGlot](https://github.com/tobymao/sqlglot/blob/main/README.md)
 
 SQLGLot is open source software. We value feedback and we want to make contributing to this project as
@@ -38,6 +40,10 @@ to share any relevant context and increase its chances of getting merged.
 5. Issue that pull request and wait for it to be reviewed by a maintainer or contributor
 
 Note: make sure to follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) guidelines when creating a PR.
+
+## IMPORTANT: Keep PRs minimal in scope
+
+Each pull request should focus on a single, well-defined change. Avoid bundling multiple unrelated fixes or features in one PR. This makes code review faster and more effective, increases the likelihood of acceptance, and helps maintain a clean git history.
 
 ## Report bugs using GitHub's [issues](https://github.com/tobymao/sqlglot/issues)
 

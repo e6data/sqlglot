@@ -44,12 +44,33 @@ class TestTeradata(Validator):
         self.validate_identity("TRANSLATE(x USING LATIN_TO_UNICODE)")
         self.validate_identity("TRANSLATE(x USING LATIN_TO_UNICODE WITH ERROR)")
 
+    def test_locking(self):
+        self.validate_identity("LOCKING ROW FOR ACCESS SELECT * FROM table1")
+        self.validate_identity("LOCKING TABLE table1 FOR ACCESS SELECT col1, col2 FROM table1")
+        self.validate_identity("LOCKING ROW FOR SHARE SELECT * FROM table1")
+        self.validate_identity("LOCKING DATABASE db1 FOR READ SELECT * FROM table1")
+        self.validate_identity("LOCKING ROW FOR EXCLUSIVE SELECT * FROM table1")
+        self.validate_identity("LOCKING VIEW view1 FOR ACCESS SELECT * FROM view1")
+
+        # Test with more complex SELECT statements
+        self.validate_identity(
+            "LOCKING ROW FOR ACCESS SELECT col1, col2 FROM table1 WHERE col1 > 10"
+        )
+        self.validate_identity(
+            "LOCKING TABLE table1 FOR ACCESS SELECT * FROM table1 JOIN table2 ON table1.id = table2.id"
+        )
+
+        # Test that it still works in CREATE VIEW context (regression test)
+        self.validate_identity(
+            "CREATE VIEW view_b AS LOCKING ROW FOR ACCESS SELECT COL1, COL2 FROM table_b"
+        )
+
     def test_update(self):
         self.validate_all(
             "UPDATE A FROM schema.tableA AS A, (SELECT col1 FROM schema.tableA GROUP BY col1) AS B SET col2 = '' WHERE A.col1 = B.col1",
             write={
                 "teradata": "UPDATE A FROM schema.tableA AS A, (SELECT col1 FROM schema.tableA GROUP BY col1) AS B SET col2 = '' WHERE A.col1 = B.col1",
-                "mysql": "UPDATE A SET col2 = '' FROM `schema`.tableA AS A, (SELECT col1 FROM `schema`.tableA GROUP BY col1) AS B WHERE A.col1 = B.col1",
+                "mysql": "UPDATE A JOIN `schema`.tableA AS A ON TRUE JOIN (SELECT col1 FROM `schema`.tableA GROUP BY col1) AS B ON TRUE SET A.col2 = '' WHERE A.col1 = B.col1",
             },
         )
 
@@ -166,8 +187,7 @@ class TestTeradata(Validator):
 
     def test_insert(self):
         self.validate_all(
-            "INS INTO x SELECT * FROM y",
-            write={"teradata": "INSERT INTO x SELECT * FROM y"},
+            "INS INTO x SELECT * FROM y", write={"teradata": "INSERT INTO x SELECT * FROM y"}
         )
 
     def test_mod(self):
@@ -333,3 +353,17 @@ class TestTeradata(Validator):
                 "teradata": "CAST(TO_CHAR(x, 'Q') AS INT)",
             },
         )
+
+    def test_query_band(self):
+        self.validate_identity("SET QUERY_BAND = 'app=myapp;' FOR SESSION")
+        self.validate_identity("SET QUERY_BAND = 'app=myapp;user=john;' FOR TRANSACTION")
+        self.validate_identity("SET QUERY_BAND = 'priority=high;' UPDATE FOR SESSION")
+        self.validate_identity("SET QUERY_BAND = 'workload=batch;' UPDATE FOR TRANSACTION")
+        self.validate_identity("SET QUERY_BAND = 'org=Finance;report=Fin123;' FOR SESSION")
+        self.validate_identity("SET QUERY_BAND = NONE FOR SESSION")
+        self.validate_identity("SET QUERY_BAND = NONE FOR SESSION VOLATILE")
+        self.validate_identity("SET QUERY_BAND = 'priority=high;' UPDATE FOR SESSION VOLATILE")
+        self.validate_identity(
+            "SET QUERY_BAND = 'NONE' FOR SESSION"
+        )  # quoted NONE should remain quoted
+        self.validate_identity("SET QUERY_BAND = '' FOR SESSION")

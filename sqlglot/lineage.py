@@ -7,17 +7,14 @@ from dataclasses import dataclass, field
 
 from sqlglot import Schema, exp, maybe_parse
 from sqlglot.errors import SqlglotError
-from sqlglot.optimizer import (
-    Scope,
-    build_scope,
-    find_all_in_scope,
-    normalize_identifiers,
-    qualify,
-)
+from sqlglot.optimizer import Scope, build_scope, find_all_in_scope, normalize_identifiers, qualify
 from sqlglot.optimizer.scope import ScopeType
 
 if t.TYPE_CHECKING:
     from sqlglot.dialects.dialect import DialectType
+    from collections.abc import Iterator, Mapping, Sequence
+    from sqlglot._typing import GraphHTMLArgs
+    from typing_extensions import Unpack
 
 logger = logging.getLogger("sqlglot")
 
@@ -25,19 +22,25 @@ logger = logging.getLogger("sqlglot")
 @dataclass(frozen=True)
 class Node:
     name: str
-    expression: exp.Expression
-    source: exp.Expression
-    downstream: t.List[Node] = field(default_factory=list)
+    expression: exp.Expr
+    source: exp.Expr
+    downstream: list[Node] = field(default_factory=list)
     source_name: str = ""
     reference_node_name: str = ""
 
-    def walk(self) -> t.Iterator[Node]:
-        yield self
+    def walk(self) -> Iterator[Node]:
+        visited: set[int] = set()
+        queue = [self]
+        while queue:
+            node = queue.pop()
+            node_id = id(node)
+            if node_id in visited:
+                continue
+            visited.add(node_id)
+            yield node
+            queue.extend(reversed(node.downstream))
 
-        for d in self.downstream:
-            yield from d.walk()
-
-    def to_html(self, dialect: DialectType = None, **opts) -> GraphHTML:
+    def to_html(self, dialect: DialectType = None, **opts: Unpack[GraphHTMLArgs]) -> GraphHTML:
         nodes = {}
         edges = []
 
@@ -73,12 +76,13 @@ class Node:
 
 def lineage(
     column: str | exp.Column,
-    sql: str | exp.Expression,
-    schema: t.Optional[t.Dict | Schema] = None,
-    sources: t.Optional[t.Mapping[str, str | exp.Query]] = None,
+    sql: str | exp.Expr,
+    schema: dict | Schema | None = None,
+    sources: Mapping[str, str | exp.Query] | None = None,
     dialect: DialectType = None,
-    scope: t.Optional[Scope] = None,
+    scope: Scope | None = None,
     trim_selects: bool = True,
+    copy: bool = True,
     **kwargs,
 ) -> Node:
     """Build the lineage graph for a column of a SQL query.
@@ -90,21 +94,26 @@ def lineage(
         sources: A mapping of queries which will be used to continue building lineage.
         dialect: The dialect of input SQL.
         scope: A pre-created scope to use instead.
-        trim_selects: Whether or not to clean up selects by trimming to only relevant columns.
+        trim_selects: Whether to clean up selects by trimming to only relevant columns.
+        copy: Whether to copy the Expr arguments.
         **kwargs: Qualification optimizer kwargs.
 
     Returns:
         A lineage node.
     """
 
-    expression = maybe_parse(sql, dialect=dialect)
+    expression = maybe_parse(sql, copy=copy, dialect=dialect)
     column = normalize_identifiers.normalize_identifiers(column, dialect=dialect).name
 
     if sources:
         expression = exp.expand(
             expression,
-            {k: t.cast(exp.Query, maybe_parse(v, dialect=dialect)) for k, v in sources.items()},
+            {
+                k: t.cast(exp.Query, maybe_parse(v, copy=copy, dialect=dialect))
+                for k, v in sources.items()
+            },
             dialect=dialect,
+            copy=copy,
         )
 
     if not scope:
@@ -120,44 +129,64 @@ def lineage(
     if not scope:
         raise SqlglotError("Cannot build lineage, sql must be SELECT")
 
-    if not any(select.alias_or_name == column for select in scope.expression.selects):
+    selectable = scope.expression
+    if not isinstance(selectable, exp.Selectable) or not any(
+        select.alias_or_name == column for select in selectable.selects
+    ):
         raise SqlglotError(f"Cannot find column '{column}' in query.")
 
-    return to_node(column, scope, dialect, trim_selects=trim_selects)
+    return to_node(column, scope, dialect, trim_selects=trim_selects, _cache={})
 
 
 def to_node(
     column: str | int,
     scope: Scope,
     dialect: DialectType,
-    scope_name: t.Optional[str] = None,
-    upstream: t.Optional[Node] = None,
-    source_name: t.Optional[str] = None,
-    reference_node_name: t.Optional[str] = None,
+    scope_name: str | None = None,
+    upstream: Node | None = None,
+    source_name: str | None = None,
+    reference_node_name: str | None = None,
     trim_selects: bool = True,
+    _cache: dict[tuple, Node] | None = None,
 ) -> Node:
+    cache_key = (column, id(scope), scope_name, source_name, reference_node_name)
+
+    if _cache is not None and cache_key in _cache:
+        cached_node = _cache[cache_key]
+        if upstream:
+            upstream.downstream.append(cached_node)
+        return cached_node
+
     # Find the specific select clause that is the source of the column we want.
     # This can either be a specific, named select or a generic `*` clause.
-    select = (
-        scope.expression.selects[column]
-        if isinstance(column, int)
-        else next(
-            (select for select in scope.expression.selects if select.alias_or_name == column),
-            exp.Star() if scope.expression.is_star else scope.expression,
+    selectable = t.cast(exp.Selectable, scope.expression)
+    if isinstance(column, int):
+        if column >= len(selectable.selects):
+            raise SqlglotError(
+                f"Cannot find column's source with index {column} in query: {selectable.sql(dialect=dialect)}"
+            )
+        select = selectable.selects[column]
+    else:
+        select = next(
+            (select for select in selectable.selects if select.alias_or_name == column),
+            exp.Star() if selectable.is_star else scope.expression,
         )
-    )
 
     if isinstance(scope.expression, exp.Subquery):
-        for source in scope.subquery_scopes:
-            return to_node(
+        for inner_scope in scope.subquery_scopes:
+            result = to_node(
                 column,
-                scope=source,
+                scope=inner_scope,
                 dialect=dialect,
                 upstream=upstream,
                 source_name=source_name,
                 reference_node_name=reference_node_name,
                 trim_selects=trim_selects,
+                _cache=_cache,
             )
+            if _cache is not None:
+                _cache[cache_key] = result
+            return result
     if isinstance(scope.expression, exp.SetOperation):
         name = type(scope.expression).__name__.upper()
         upstream = upstream or Node(name=name, source=scope.expression, expression=select)
@@ -168,7 +197,7 @@ def to_node(
             else next(
                 (
                     i
-                    for i, select in enumerate(scope.expression.selects)
+                    for i, select in enumerate(selectable.selects)
                     if select.alias_or_name == column or select.is_star
                 ),
                 -1,  # mypy will not allow a None here, but a negative index should never be returned
@@ -187,8 +216,11 @@ def to_node(
                 source_name=source_name,
                 reference_node_name=reference_node_name,
                 trim_selects=trim_selects,
+                _cache=_cache,
             )
 
+        if _cache is not None:
+            _cache[cache_key] = upstream
         return upstream
 
     if trim_selects and isinstance(scope.expression, exp.Select):
@@ -196,7 +228,7 @@ def to_node(
         # a version that has only the column we care about.
         #   "x", SELECT x, y FROM foo
         #     => "x", SELECT x FROM foo
-        source = t.cast(exp.Expression, scope.expression.select(select, append=False))
+        source: exp.Expr = scope.expression.select(select, append=False)
     else:
         source = scope.expression
 
@@ -216,8 +248,8 @@ def to_node(
         id(subquery_scope.expression): subquery_scope for subquery_scope in scope.subquery_scopes
     }
 
-    for subquery in find_all_in_scope(select, exp.UNWRAPPED_QUERIES):
-        subquery_scope = subquery_scopes.get(id(subquery))
+    for subquery in find_all_in_scope(select, *exp.UNWRAPPED_QUERIES):
+        subquery_scope: Scope | None = subquery_scopes.get(id(subquery))
         if not subquery_scope:
             logger.warning(f"Unknown subquery scope: {subquery.sql(dialect=dialect)}")
             continue
@@ -229,15 +261,15 @@ def to_node(
                 dialect=dialect,
                 upstream=node,
                 trim_selects=trim_selects,
+                _cache=_cache,
             )
 
     # if the select is a star add all scope sources as downstreams
-    if select.is_star:
-        for source in scope.sources.values():
-            if isinstance(source, Scope):
-                source = source.expression
+    if isinstance(select, exp.Star):
+        for src in scope.sources.values():
+            src_expr = src.expression if isinstance(src, Scope) else src
             node.downstream.append(
-                Node(name=select.sql(comments=False), source=source, expression=source)
+                Node(name=select.sql(comments=False), source=src_expr, expression=src_expr)
             )
 
     # Find all columns that went into creating this one to list their lineage nodes.
@@ -246,10 +278,10 @@ def to_node(
     # If the source is a UDTF find columns used in the UDTF to generate the table
     if isinstance(source, exp.UDTF):
         source_columns |= set(source.find_all(exp.Column))
-        derived_tables = [
-            source.expression.parent
-            for source in scope.sources.values()
-            if isinstance(source, Scope) and source.is_derived_table
+        derived_tables: Sequence[exp.Expr] = [
+            src.expression.parent
+            for src in scope.sources.values()
+            if isinstance(src, Scope) and src.is_derived_table and src.expression.parent
         ]
     else:
         derived_tables = scope.derived_tables
@@ -283,26 +315,27 @@ def to_node(
 
     for c in source_columns:
         table = c.table
-        source = scope.sources.get(table)
+        col_source: exp.Table | Scope | None = scope.sources.get(table)
 
-        if isinstance(source, Scope):
+        if isinstance(col_source, Scope):
             reference_node_name = None
-            if source.scope_type == ScopeType.DERIVED_TABLE and table not in source_names:
+            if col_source.scope_type == ScopeType.DERIVED_TABLE and table not in source_names:
                 reference_node_name = table
-            elif source.scope_type == ScopeType.CTE:
+            elif col_source.scope_type == ScopeType.CTE:
                 selected_node, _ = scope.selected_sources.get(table, (None, None))
                 reference_node_name = selected_node.name if selected_node else None
 
             # The table itself came from a more specific scope. Recurse into that one using the unaliased column name.
             to_node(
                 c.name,
-                scope=source,
+                scope=col_source,
                 dialect=dialect,
                 scope_name=table,
                 upstream=node,
                 source_name=source_names.get(table) or source_name,
                 reference_node_name=reference_node_name,
                 trim_selects=trim_selects,
+                _cache=_cache,
             )
         elif pivot and pivot.alias_or_name == c.table:
             downstream_columns = []
@@ -313,29 +346,33 @@ def to_node(
             else:
                 # The column is not in the pivot, so it must be an implicit column of the
                 # pivoted source -- adapt column to be from the implicit pivoted source.
-                downstream_columns.append(exp.column(c.this, table=pivot.parent.alias_or_name))
+                pivot_parent = pivot.parent
+                downstream_columns.append(
+                    exp.column(c.this, table=pivot_parent.alias_or_name if pivot_parent else "")
+                )
 
             for downstream_column in downstream_columns:
                 table = downstream_column.table
-                source = scope.sources.get(table)
-                if isinstance(source, Scope):
+                col_source = scope.sources.get(table)
+                if isinstance(col_source, Scope):
                     to_node(
                         downstream_column.name,
-                        scope=source,
+                        scope=col_source,
                         scope_name=table,
                         dialect=dialect,
                         upstream=node,
                         source_name=source_names.get(table) or source_name,
                         reference_node_name=reference_node_name,
                         trim_selects=trim_selects,
+                        _cache=_cache,
                     )
                 else:
-                    source = source or exp.Placeholder()
+                    col_expr = col_source or exp.Placeholder()
                     node.downstream.append(
                         Node(
                             name=downstream_column.sql(comments=False),
-                            source=source,
-                            expression=source,
+                            source=col_expr,
+                            expression=col_expr,
                         )
                     )
         else:
@@ -343,10 +380,13 @@ def to_node(
             # of the line. At this point, if a source is not found it means this column's lineage
             # is unknown. This can happen if the definition of a source used in a query is not
             # passed into the `sources` map.
-            source = source or exp.Placeholder()
+            col_expr = col_source or exp.Placeholder()
             node.downstream.append(
-                Node(name=c.sql(comments=False), source=source, expression=source)
+                Node(name=c.sql(comments=False), source=col_expr, expression=col_expr)
             )
+
+    if _cache is not None:
+        _cache[cache_key] = node
 
     return node
 
@@ -359,10 +399,10 @@ class GraphHTML:
 
     def __init__(
         self,
-        nodes: t.Dict,
-        edges: t.List,
+        nodes: dict,
+        edges: list,
         imports: bool = True,
-        options: t.Optional[t.Dict] = None,
+        options: Mapping[str, object] | None = None,
     ):
         self.imports = imports
 

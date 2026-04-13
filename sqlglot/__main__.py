@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import argparse
 import sys
-import typing as t
 
 import sqlglot
+from sqlglot.helper import to_bool
 
 parser = argparse.ArgumentParser(description="Transpile SQL")
 parser.add_argument(
@@ -28,10 +28,11 @@ parser.add_argument(
     help="Dialect to write default is generic",
 )
 parser.add_argument(
-    "--no-identify",
+    "--identify",
     dest="identify",
-    action="store_false",
-    help="Don't auto identify fields",
+    type=str,
+    default="safe",
+    help="Whether to quote identifiers (safe, true, false)",
 )
 parser.add_argument(
     "--no-pretty",
@@ -72,7 +73,7 @@ error_level = sqlglot.ErrorLevel[args.error_level.upper()]
 sql = sys.stdin.read() if args.sql == "-" else args.sql
 
 if args.parse:
-    objs: t.Union[t.List[str], t.List[sqlglot.tokens.Token]] = [
+    objs: list[str] | list[sqlglot.tokens.Token] = [
         repr(expression)
         for expression in sqlglot.parse(
             sql,
@@ -87,7 +88,7 @@ else:
         sql,
         read=args.read,
         write=args.write,
-        identify=args.identify,
+        identify="safe" if args.identify == "safe" else to_bool(args.identify),
         pretty=args.pretty,
         error_level=error_level,
     )

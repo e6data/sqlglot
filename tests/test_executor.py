@@ -1,15 +1,17 @@
-import os
+import ast
+import csv
 import datetime
 import unittest
 from datetime import date, time
-from multiprocessing import Pool
+from concurrent.futures import ProcessPoolExecutor
 
 import duckdb
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from sqlglot import exp, parse_one, transpile
+import sqlglot.generator as _generator_module
+from sqlglot import exp, find_tables, parse_one, transpile
 from sqlglot.errors import ExecuteError
 from sqlglot.executor import execute
 from sqlglot.executor.python import Python
@@ -22,37 +24,97 @@ from tests.helpers import (
     TPCH_SCHEMA,
     TPCDS_SCHEMA,
     load_sql_fixture_pairs,
-    string_to_bool,
 )
+
+_GENERATOR_IS_COMPILED = getattr(_generator_module, "__file__", "").endswith(".so")
 
 DIR_TPCH = FIXTURES_DIR + "/optimizer/tpc-h/"
 DIR_TPCDS = FIXTURES_DIR + "/optimizer/tpc-ds/"
 
 
+def open_file(file_name):
+    """Open a file that may be compressed as gzip and return it in universal newline mode."""
+    with open(file_name, "rb") as f:
+        gzipped = f.read(2) == b"\x1f\x8b"
+
+    if gzipped:
+        import gzip
+
+        return gzip.open(file_name, "rt", newline="")
+
+    return open(file_name, encoding="utf-8", newline="")
+
+
+_schema = None
+_tables = None
+
+
+def initializer(schema, tables):
+    global _schema, _tables
+    _schema = schema
+    _tables = tables
+
+
+def mp_execute(expression, meta):
+    if not meta.get("execute"):
+        return None
+
+    tables = {}
+
+    for t in find_tables(expression):
+        name = t.name
+        tables[name] = _tables[name]
+
+    return execute(expression, schema=_schema, tables=tables)
+
+
 @unittest.skipIf(SKIP_INTEGRATION, "Skipping Integration Tests since `SKIP_INTEGRATION` is set")
+@unittest.skipIf(_GENERATOR_IS_COMPILED, "executor requires interpreted Generator subclass")
 class TestExecutor(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tpch_conn = duckdb.connect()
         cls.tpcds_conn = duckdb.connect()
+        cls.tpch_tables = {}
+        cls.tpcds_tables = {}
+
+        def setup(conn, directory, table, columns, tables):
+            file_name = f"{directory}{table}.csv.gz"
+
+            conn.execute(
+                f"""
+                CREATE VIEW {table} AS
+                SELECT *
+                FROM READ_CSV('{file_name}', delim='|', header=True, columns={columns})
+                """
+            )
+
+            reader = csv.reader(open_file(file_name), delimiter="|")
+            rows = []
+            ctypes = []
+            tables[table] = rows
+
+            next(reader)
+
+            for row in reader:
+                if not ctypes:
+                    for i, v in enumerate(row):
+                        try:
+                            ctypes.append(type(ast.literal_eval(v)))
+                        except (ValueError, SyntaxError):
+                            ctypes.append(str)
+
+                rows.append(
+                    tuple(None if (t is not str and v == "") else t(v) for t, v in zip(ctypes, row))
+                )
+
+            tables[table] = Table(columns=columns, rows=rows)
 
         for table, columns in TPCH_SCHEMA.items():
-            cls.tpch_conn.execute(
-                f"""
-                CREATE VIEW {table} AS
-                SELECT *
-                FROM READ_CSV('{DIR_TPCH}{table}.csv.gz', delim='|', header=True, columns={columns})
-                """
-            )
+            setup(cls.tpch_conn, DIR_TPCH, table, columns, cls.tpch_tables)
 
         for table, columns in TPCDS_SCHEMA.items():
-            cls.tpcds_conn.execute(
-                f"""
-                CREATE VIEW {table} AS
-                SELECT *
-                FROM READ_CSV('{DIR_TPCDS}{table}.csv.gz', delim='|', header=True, columns={columns})
-                """
-            )
+            setup(cls.tpcds_conn, DIR_TPCDS, table, columns, cls.tpcds_tables)
 
         cls.cache = {}
         cls.tpch_sqls = list(load_sql_fixture_pairs("optimizer/tpc-h/tpc-h.sql"))
@@ -99,40 +161,22 @@ class TestExecutor(unittest.TestCase):
             )
             assert_frame_equal(a, b, check_dtype=False, check_index_type=False)
 
-    def test_execute_tpch(self):
-        def to_csv(expression):
-            if isinstance(expression, exp.Table) and expression.name not in ("revenue"):
-                return parse_one(
-                    f"READ_CSV('{DIR_TPCH}{expression.name}.csv.gz', 'delimiter', '|') AS {expression.alias_or_name}"
-                )
-            return expression
+    def _mp_execute(self, schema, tables, sqls, tpch):
+        with ProcessPoolExecutor(
+            initializer=initializer,
+            initargs=(schema, tables),
+        ) as pool:
+            futures = [pool.submit(mp_execute, parse_one(sql), args) for args, sql, _ in sqls]
+            for i, future in enumerate(futures):
+                table = future.result()
+                if table is not None:
+                    self.subtestHelper(i, table, tpch=tpch)
 
-        with Pool() as pool:
-            for i, table in enumerate(
-                pool.starmap(
-                    execute,
-                    (
-                        (parse_one(sql).transform(to_csv).sql(pretty=True), TPCH_SCHEMA)
-                        for _, sql, _ in self.tpch_sqls
-                    ),
-                )
-            ):
-                self.subtestHelper(i, table, tpch=True)
+    def test_execute_tpch(self):
+        self._mp_execute(TPCH_SCHEMA, self.tpch_tables, self.tpch_sqls, True)
 
     def test_execute_tpcds(self):
-        def to_csv(expression):
-            if isinstance(expression, exp.Table) and os.path.exists(
-                f"{DIR_TPCDS}{expression.name}.csv.gz"
-            ):
-                return parse_one(
-                    f"READ_CSV('{DIR_TPCDS}{expression.name}.csv.gz', 'delimiter', '|') AS {expression.alias_or_name}"
-                )
-            return expression
-
-        for i, (meta, sql, _) in enumerate(self.tpcds_sqls):
-            if string_to_bool(meta.get("execute")):
-                table = execute(parse_one(sql).transform(to_csv).sql(pretty=True), TPCDS_SCHEMA)
-                self.subtestHelper(i, table, tpch=False)
+        self._mp_execute(TPCDS_SCHEMA, self.tpcds_tables, self.tpcds_sqls, False)
 
     def test_execute_callable(self):
         tables = {
@@ -331,10 +375,7 @@ class TestExecutor(unittest.TestCase):
             ("SELECT 1 / 0 AS a", ["a"], ZeroDivisionError),
             (
                 exp.select(
-                    exp.alias_(
-                        exp.Literal.number(1).div(exp.Literal.number(2), typed=True),
-                        "a",
-                    )
+                    exp.alias_(exp.Literal.number(1).div(exp.Literal.number(2), typed=True), "a")
                 ),
                 ["a"],
                 [
@@ -716,10 +757,7 @@ class TestExecutor(unittest.TestCase):
                 "UNIXTOTIME(1659981729)",
                 datetime.datetime(2022, 8, 8, 18, 2, 9, tzinfo=datetime.timezone.utc),
             ),
-            (
-                "TIMESTRTOTIME('2013-04-05 01:02:03')",
-                datetime.datetime(2013, 4, 5, 1, 2, 3),
-            ),
+            ("TIMESTRTOTIME('2013-04-05 01:02:03')", datetime.datetime(2013, 4, 5, 1, 2, 3)),
             (
                 "UNIXTOTIME(40 * 365 * 86400)",
                 datetime.datetime(2009, 12, 22, 00, 00, 00, tzinfo=datetime.timezone.utc),
@@ -843,19 +881,19 @@ class TestExecutor(unittest.TestCase):
     def test_nested_values(self):
         tables = {"foo": [{"raw": {"name": "Hello, World", "a": [{"b": 1}]}}]}
 
-        result = execute("SELECT raw:name AS name FROM foo", read="snowflake", tables=tables)
+        result = execute("SELECT raw:name AS name FROM foo", dialect="snowflake", tables=tables)
         self.assertEqual(result.columns, ("NAME",))
         self.assertEqual(result.rows, [("Hello, World",)])
 
-        result = execute("SELECT raw:a[0].b AS b FROM foo", read="snowflake", tables=tables)
+        result = execute("SELECT raw:a[0].b AS b FROM foo", dialect="snowflake", tables=tables)
         self.assertEqual(result.columns, ("B",))
         self.assertEqual(result.rows, [(1,)])
 
-        result = execute("SELECT raw:a[1].b AS b FROM foo", read="snowflake", tables=tables)
+        result = execute("SELECT raw:a[1].b AS b FROM foo", dialect="snowflake", tables=tables)
         self.assertEqual(result.columns, ("B",))
         self.assertEqual(result.rows, [(None,)])
 
-        result = execute("SELECT raw:a[0].c AS c FROM foo", read="snowflake", tables=tables)
+        result = execute("SELECT raw:a[0].c AS c FROM foo", dialect="snowflake", tables=tables)
         self.assertEqual(result.columns, ("C",))
         self.assertEqual(result.rows, [(None,)])
 
@@ -866,7 +904,9 @@ class TestExecutor(unittest.TestCase):
                 {"id": 3, "attributes": {"flavor": "apple", "taste": None}},
             ]
         }
-        result = execute("SELECT i.attributes.flavor FROM `ITEM` i", read="bigquery", tables=tables)
+        result = execute(
+            "SELECT i.attributes.flavor FROM `ITEM` i", dialect="bigquery", tables=tables
+        )
 
         self.assertEqual(result.columns, ("flavor",))
         self.assertEqual(result.rows, [("cherry",), ("lime",), ("apple",)])
