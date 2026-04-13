@@ -97,6 +97,7 @@ DIALECTS = [
     "Teradata",
     "Trino",
     "TSQL",
+    "E6",
 ]
 
 MODULE_BY_DIALECT = {name: name.lower() for name in DIALECTS}
