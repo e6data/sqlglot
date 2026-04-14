@@ -24,6 +24,21 @@ from sqlglot.tokens import TokenType
 from sqlglot.parser import build_coalesce
 from typing import Any, Optional
 
+class FindInSet(exp.Func):
+    """
+    FIND_IN_SET function that returns the position of a string within a comma-separated list of strings.
+
+    Returns:
+        The position (1-based) of searchExpr in sourceExpr, or 0 if not found or if searchExpr contains a comma.
+
+    Args:
+        this: The string to search for (searchExpr)
+        expression: The comma-separated list of strings to search in (sourceExpr)
+    """
+
+    arg_types = {"this": True, "expression": True}
+
+
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
@@ -1595,6 +1610,12 @@ class E6(Dialect):
         class to define how various expressions and data types should be formatted in your dialect.
         """
 
+        __slots__ = ("from_dialect",)
+
+        def __init__(self, from_dialect: t.Optional[str] = None, **kwargs: t.Any) -> None:
+            super().__init__(**kwargs)
+            self.from_dialect = from_dialect
+
         EXTRACT_ALLOWS_QUOTES = False
         JSON_KEY_VALUE_PAIR_SEP = ","
         NVL2_SUPPORTED = True
@@ -2910,7 +2931,7 @@ class E6(Dialect):
             exp.Anonymous: anonymous_sql,
             exp.Any: lambda self, e: self.any_sql(e).replace("ANY", "SOME"),
             exp.Cast: transforms.preprocess([epoch_cast_to_ts_e6]),
-            exp.FindInSet: lambda self, e: self.func(
+            FindInSet: lambda self, e: self.func(
                 "ARRAY_POSITION", e.this, self.func("SPLIT", e.expression, exp.Literal.string(","))
             ),
             exp.AnyValue: rename_func("ARBITRARY"),
@@ -2992,7 +3013,7 @@ class E6(Dialect):
             exp.FirstValue: rename_func("FIRST_VALUE"),
             exp.First: rename_func("FIRST_VALUE"),
             exp.Format: rename_func("FORMAT"),
-            exp.FormatDatetime: rename_func("FORMAT_DATETIME"),
+            exp.TsOrDsToDatetime: rename_func("FORMAT_DATETIME"),
             exp.FromBase64: rename_func("unbase64_binary"),
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
@@ -3018,7 +3039,6 @@ class E6(Dialect):
             exp.MakeInterval: lambda self, e: make_interval_sql(self, e)
             if self.from_dialect == "databricks"
             else self.makeinterval_sql(e),
-            databricks.DatabricksMakeInterval: make_interval_sql,
             exp.Map: map_sql,
             exp.Max: max_or_greatest,
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),

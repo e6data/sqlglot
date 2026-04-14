@@ -95,6 +95,15 @@ class SparkParser(Spark2Parser):
         "LISTAGG": exp.GroupConcat.from_arg_list,
         "TIMESTAMP_LTZ": build_as_cast("TIMESTAMP_LTZ"),
         "TIMESTAMP_NTZ": build_as_cast("TIMESTAMP_NTZ"),
+        "TIMESTAMP_MICROS": lambda args: exp.UnixToTime(
+            this=seq_get(args, 0), scale=exp.UnixToTime.MICROS
+        ),
+        "TIMESTAMP_MILLIS": lambda args: exp.UnixToTime(
+            this=seq_get(args, 0), scale=exp.UnixToTime.MILLIS
+        ),
+        "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
+            this=seq_get(args, 0), scale=exp.Literal.string("seconds")
+        ),
         "TRY_ELEMENT_AT": lambda args: exp.Bracket(
             this=seq_get(args, 0),
             expressions=ensure_list(seq_get(args, 1)),
