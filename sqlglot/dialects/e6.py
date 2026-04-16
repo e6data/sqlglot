@@ -1632,6 +1632,29 @@ class E6(Dialect):
         # But whenever we pass a normal query, by default parts like `NULLS LAST` etc were getting by defaults in order by clause which will differs the sequence of results displayed in original dialect and ours.
         # In order to tackle that, I overridden that so as to maintain structure of sqlglot with out altering original methods
 
+        def escape_str(self, text: str, escape_backslash: bool = True) -> str:
+            """
+            Override to skip re-escaping single quotes when FIX_QUOTE_ESCAPES
+            is enabled, while still handling backslash escaping.
+
+            The Databricks parser's _parse_primary merges adjacent single-quoted
+            string tokens (caused by '' escape patterns like ROCKIN'' or d'''')
+            into a single Literal with '' already in the text. We skip the
+            quote escaping step so '' passes through unchanged, but still
+            process ESCAPED_SEQUENCES for backslash handling (e.g. \\ -> \\\\).
+
+            When FIX_QUOTE_ESCAPES is not enabled, falls back to base behavior.
+            """
+            if os.getenv("FIX_QUOTE_ESCAPES", "False").lower() == "true":
+                if self.dialect.ESCAPED_SEQUENCES:
+                    to_escaped = self.dialect.ESCAPED_SEQUENCES
+                    text = "".join(
+                        to_escaped.get(ch, ch) if escape_backslash or ch != "\\" else ch
+                        for ch in text
+                    )
+                return self._replace_line_breaks(text)
+            return super().escape_str(text, escape_backslash)
+
         def pad_comment(self, comment: str) -> str:
             comment = comment.replace("/*", "/ *").replace("*/", "* /")
             comment = " " + comment if comment[0].strip() else comment

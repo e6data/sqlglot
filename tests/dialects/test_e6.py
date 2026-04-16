@@ -3504,3 +3504,45 @@ FROM dual"""
             ),
             "SELECT * FROM t PIVOT(SUM(x) AS x, TRY_DIVIDE(SUM(a), SUM(b)) * 100 AS pct FOR col IN ('A', 'B'))",
         )
+
+    def test_fix_quote_escapes(self):
+        """Test that '' escape patterns in Databricks are preserved in e6 output
+        without being converted to CONCAT, when FIX_QUOTE_ESCAPES is enabled."""
+        import sqlglot
+
+        os.environ["FIX_QUOTE_ESCAPES"] = "True"
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="databricks", write="e6", from_dialect="databricks")[
+                0
+            ]
+
+        # 1. Simple '' escape
+        self.assertEqual(
+            transpile("SELECT 'ROCKIN'' AROUND THE CHRISTMAS TREE' AS title"),
+            "SELECT 'ROCKIN'' AROUND THE CHRISTMAS TREE' AS title",
+        )
+
+        # 2. Four quotes ('''')
+        self.assertEqual(
+            transpile("SELECT 'Côte d''''Azur' AS region"),
+            "SELECT 'Côte d''''Azur' AS region",
+        )
+
+        # 3. Large INSERT with d''''Azur and d''album
+        self.assertEqual(
+            transpile(
+                r"""INSERT INTO espresso_gold_prod.global.my_reports (report_id, report_name, report_parameter, user_id, email_id, category_id, created_date, status_id, country_id, audio_video_flag, selection_object, frequency_id, custom_report_yn, selection_summary) SELECT uuid(), 'MARKET SHARE_260416100118', '{"moduleName":"Market","tabName":"Market Share","scenario":"label","countryId":"3","mediaType":"audio","languageCode":"fr","data":[{"field":"breakdown_column","name":"Provence-Alpes-Côte d''''Azur,France","id":null,"display":"Breakdown Column","operatorUsed":""}]}', '1', 'payel.masanta@kantar.com', 5, CURRENT_TIMESTAMP, '1', '3', 'Audio', '{"test":"data"}', '1', 'Y', 'Time Period 1: Hebdomadaire 2601 - 2615 | Album Type: Tous types d''album | Display Units: Unites*'"""
+            ),
+            """INSERT INTO espresso_gold_prod.global.my_reports (report_id, report_name, report_parameter, user_id, email_id, category_id, created_date, status_id, country_id, audio_video_flag, selection_object, frequency_id, custom_report_yn, selection_summary) SELECT UUID(), 'MARKET SHARE_260416100118', '{"moduleName":"Market","tabName":"Market Share","scenario":"label","countryId":"3","mediaType":"audio","languageCode":"fr","data":[{"field":"breakdown_column","name":"Provence-Alpes-Côte d''''Azur,France","id":null,"display":"Breakdown Column","operatorUsed":""}]}', '1', 'payel.masanta@kantar.com', 5, CURRENT_TIMESTAMP, '1', '3', 'Audio', '{"test":"data"}', '1', 'Y', 'Time Period 1: Hebdomadaire 2601 - 2615 | Album Type: Tous types d''album | Display Units: Unites*'""",
+        )
+
+        # 4. Large INSERT with multiple '' patterns in JSON data
+        self.assertEqual(
+            transpile(
+                """INSERT INTO espresso_gold_test.e6data_test.story_items_dml_clone (story_item_id, story_id, item_data) SELECT uuid(), '54e04514-5aad-4e24-9189-2b369970e70b', '[{"Title":"ROCKIN'' AROUND THE CHRISTMAS TREE","Artist":"BRENDA LEE"},{"Title":"SHAKIN'' STEVENS"},{"Title":"DO THEY KNOW IT''S CHRISTMAS"},{"Title":"IT''S THE MOST WONDERFUL TIME"},{"Title":"SANTA CAN''T YOU HEAR ME"},{"Title":"NOBODY''S GIRL"},{"Title":"SANTA CLAUS IS COMIN'' TO TOWN"},{"Title":"DON''T CALL"},{"Title":"NOBODY''S SON"}]'"""
+            ),
+            """INSERT INTO espresso_gold_test.e6data_test.story_items_dml_clone (story_item_id, story_id, item_data) SELECT UUID(), '54e04514-5aad-4e24-9189-2b369970e70b', '[{"Title":"ROCKIN'' AROUND THE CHRISTMAS TREE","Artist":"BRENDA LEE"},{"Title":"SHAKIN'' STEVENS"},{"Title":"DO THEY KNOW IT''S CHRISTMAS"},{"Title":"IT''S THE MOST WONDERFUL TIME"},{"Title":"SANTA CAN''T YOU HEAR ME"},{"Title":"NOBODY''S GIRL"},{"Title":"SANTA CLAUS IS COMIN'' TO TOWN"},{"Title":"DON''T CALL"},{"Title":"NOBODY''S SON"}]'""",
+        )
+
+        os.environ["FIX_QUOTE_ESCAPES"] = "False"
