@@ -169,6 +169,85 @@ class Databricks(Spark):
             **Spark.Parser.FACTOR,
         }
 
+        def _parse_primary(self) -> t.Optional[exp.Expression]:
+            """
+            Override of the base parser's _parse_primary to handle consecutive
+            single-quoted string tokens when FIX_QUOTE_ESCAPES is enabled.
+
+            Problem:
+                In Databricks SQL, '' inside a string (e.g. 'ROCKIN'' AROUND')
+                is not treated as an escape sequence by the tokenizer (Hive-inherited
+                STRING_ESCAPES only has '\\'). So the tokenizer splits it into two
+                adjacent STRING tokens: 'ROCKIN' and ' AROUND'.
+
+                The base parser (parser.py:5807-5813) sees these adjacent STRING
+                tokens and wraps them in an exp.Concat node. The e6 generator then
+                outputs this as CONCAT('ROCKIN', ' AROUND'), which is incorrect.
+
+            Solution (gated behind FIX_QUOTE_ESCAPES env var):
+                Instead of creating a Concat, we merge consecutive single-quoted
+                STRING tokens back into a single exp.Literal, joining the parts
+                with '' (two single quotes). This preserves the original quote
+                structure as-is in the literal text:
+
+                Input:  'ROCKIN'' AROUND'   (2 adjacent STRING tokens)
+                Merged: Literal("ROCKIN'' AROUND") (1 literal, '' preserved)
+                Output: 'ROCKIN'' AROUND'   (passed through unchanged)
+
+                Input:  'Côte d''''Azur'    (3 adjacent STRING tokens)
+                Merged: Literal("Côte d''''Azur")  (1 literal, '''' preserved)
+                Output: 'Côte d''''Azur'    (passed through unchanged)
+
+            Note:
+                When FIX_QUOTE_ESCAPES is not enabled, falls back to base behavior
+                (adjacent strings become Concat). The rest of _parse_primary
+                (DOT+NUMBER, ODBC datetime, _parse_paren) is unchanged from base.
+            """
+            if os.getenv("FIX_QUOTE_ESCAPES", "False").lower() != "true":
+                return super()._parse_primary()
+
+            # Branch 1: Match against PRIMARY_PARSERS (handles STRING, NUMBER, etc.)
+            if self._match_set(self.PRIMARY_PARSERS):
+                token_type = self._prev.token_type
+                primary = self.PRIMARY_PARSERS[token_type](self, self._prev)
+
+                # Handle consecutive single-quoted STRING tokens:
+                # Merge them into one Literal with '' as separator instead of Concat
+                if token_type == TokenType.STRING:
+                    parts = [primary]
+                    while self._match(TokenType.STRING):
+                        parts.append(exp.Literal.string(self._prev.text))
+
+                    if len(parts) > 1:
+                        # Join with '' (two single quotes) to preserve the original
+                        # quote escaping as-is. The e6 generator's literal_sql is
+                        # overridden to output the text without re-escaping, so
+                        # '' passes through unchanged to the output.
+                        merged = "''".join(e.this for e in parts)
+                        return exp.Literal.string(merged)
+
+                return primary
+
+            # Branch 2: Handle .5 style decimal literals (DOT followed by NUMBER)
+            if self._match_pair(TokenType.DOT, TokenType.NUMBER):
+                return exp.Literal.number(f"0.{self._prev.text}")
+
+            # Branch 3: Check for ODBC datetime literals {d '...'}, {t '...'}, {ts '...'}
+            # Must match exact pattern: L_BRACE, VAR (d/t/ts), STRING, R_BRACE
+            if (
+                self._match(TokenType.L_BRACE, advance=False)
+                and self._next
+                and self._next.token_type == TokenType.VAR
+                and self._next.text.lower() in self.ODBC_DATETIME_LITERALS
+                and len(self._tokens) > self._index + 2
+                and self._tokens[self._index + 2].token_type == TokenType.STRING
+            ):
+                self._advance()  # consume L_BRACE
+                return self._parse_odbc_datetime_literal()
+
+            # Branch 4: Fallback to parsing parenthesized expressions
+            return self._parse_paren()
+
         def _parse_pivot_aggregation(self) -> t.Optional[exp.Expression]:
             """
             Override to support arbitrary expressions in PIVOT aggregation lists.

@@ -133,10 +133,6 @@ async def convert_query(
             query, comment = strip_comment(query)
             logger.info("%s — SKIP_COMMENT: stripped comments", query_id)
 
-        if FIX_QUOTE_ESCAPES.lower() == "true":
-            query = fix_quote_escapes(query)
-            logger.info("%s — FIX_QUOTE_ESCAPES: pre-processed quote escapes", query_id)
-
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
@@ -169,10 +165,6 @@ async def convert_query(
         )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
-
-        if FIX_QUOTE_ESCAPES.lower() == "true":
-            double_quotes_added_query = restore_quote_escapes(double_quotes_added_query)
-            logger.info("%s — FIX_QUOTE_ESCAPES: post-processed quote escapes", query_id)
 
         # Preserve original formatting if enabled via feature flag
         if flags_dict.get("PRESERVE_FORMATTING", False):
