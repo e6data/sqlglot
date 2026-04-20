@@ -3160,6 +3160,38 @@ class TestE6(Validator):
             },
         )
 
+        # 'module' as a qualified column should be quoted
+        self.validate_all(
+            'SELECT t."module" FROM my_table AS t',
+            read={
+                "snowflake": "SELECT t.module FROM my_table t",
+            },
+        )
+
+        # 'module' as a bare column should be quoted
+        self.validate_all(
+            'SELECT "module" FROM my_table',
+            read={
+                "snowflake": "SELECT module FROM my_table",
+            },
+        )
+
+        # 'module' qualified by full table name should be quoted
+        self.validate_all(
+            'SELECT my_table."module" FROM my_table',
+            read={
+                "snowflake": "SELECT my_table.module FROM my_table",
+            },
+        )
+
+        # 'MODULE' (uppercase) should also be quoted
+        self.validate_all(
+            'SELECT "MODULE" FROM my_table',
+            read={
+                "snowflake": "SELECT MODULE FROM my_table",
+            },
+        )
+
     def test_cast_precision_preserved(self):
         """Test that CAST preserves precision/scale for DECIMAL and other types.
 
