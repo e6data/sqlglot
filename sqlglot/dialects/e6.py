@@ -3185,6 +3185,7 @@ class E6(Dialect):
             "localtime",
             "localtimestamp",
             "mod",
+            "module",
             "not",
             "nth_value",
             "ntile",
