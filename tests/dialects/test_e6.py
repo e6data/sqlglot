@@ -2453,6 +2453,30 @@ class TestE6(Validator):
             },
         )
 
+    def test_unix_timestamp_native_executor(self):
+        # With E6_EXECUTOR_TYPE=native, TO_UNIX_TIMESTAMP is emitted without /1000
+        # because NE already returns seconds. Default (java) keeps the /1000 divisor.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            # no-format branch
+            self.validate_all(
+                "SELECT TO_UNIX_TIMESTAMP(CAST(A AS TIMESTAMP))",
+                read={"databricks": "SELECT UNIX_TIMESTAMP(A)"},
+            )
+            # format branch (PARSE_DATETIME)
+            self.validate_all(
+                "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2016-04-08'))",
+                read={"databricks": "SELECT unix_timestamp('2016-04-08', 'yyyy-MM-dd')"},
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (flag unset) -> java behavior, /1000 preserved
+        self.validate_all(
+            "SELECT TO_UNIX_TIMESTAMP(CAST(A AS TIMESTAMP)) / 1000",
+            read={"databricks": "SELECT UNIX_TIMESTAMP(A)"},
+        )
+
     def test_timestamp_seconds(self):
         # Test basic TIMESTAMP_SECONDS with integer literal
         self.validate_all(
