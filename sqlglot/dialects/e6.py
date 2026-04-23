@@ -2626,6 +2626,10 @@ class E6(Dialect):
             time_expr = expression.this
             format_expr = expression.args.get("format")
 
+            # Java executor returns milliseconds so divide by 1000 to get seconds.
+            # Native executor already returns seconds (matches Databricks) so skip the division.
+            is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+
             if format_expr:
                 format_str = format_expr.this
                 for key, value in E6().TIME_MAPPING_FOR_PARSE_FUNCTIONS.items():
@@ -2633,15 +2637,15 @@ class E6(Dialect):
 
             # Generate final function with or without format argument
             if format_str:
-                # Build expression tree for TO_UNIX_TIMESTAMP(PARSE_DATETIME(...)) / 1000
                 parse_datetime_expr = exp.Anonymous(
                     this="PARSE_DATETIME", expressions=[exp.Literal.string(format_str), time_expr]
                 )
                 to_unix_expr = exp.Anonymous(
                     this="TO_UNIX_TIMESTAMP", expressions=[parse_datetime_expr]
                 )
-                div_expr = exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000"))
-                return self.sql(div_expr)
+                if is_native:
+                    return self.sql(to_unix_expr)
+                return self.sql(exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000")))
 
             # Wrap argument in CAST(... AS TIMESTAMP) since E6's TO_UNIX_TIMESTAMP
             # only accepts TIMESTAMP/DATE types, not integers or strings
@@ -2651,10 +2655,10 @@ class E6(Dialect):
             ):
                 time_expr = exp.Cast(this=time_expr, to=exp.DataType.build("TIMESTAMP"))
 
-            # Build expression tree for TO_UNIX_TIMESTAMP(CAST(... AS TIMESTAMP)) / 1000
             to_unix_expr = exp.Anonymous(this="TO_UNIX_TIMESTAMP", expressions=[time_expr])
-            div_expr = exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000"))
-            return self.sql(div_expr)
+            if is_native:
+                return self.sql(to_unix_expr)
+            return self.sql(exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000")))
 
         def lateral_sql(self, expression: exp.Lateral) -> str:
             expression.set("view", True)

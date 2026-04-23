@@ -48,6 +48,9 @@ STORAGE_ENGINE_URL = os.getenv("STORAGE_ENGINE_URL", "localhost")  # cops-beta1-
 STORAGE_ENGINE_PORT = os.getenv("STORAGE_ENGINE_PORT", 9005)
 SKIP_COMMENT = os.getenv("SKIP_COMMENT", "True")  # Always strip multi-line comments
 FIX_QUOTE_ESCAPES = os.getenv("FIX_QUOTE_ESCAPES", "False")  # Fix '' inside single-quoted strings
+E6_EXECUTOR_TYPE = os.getenv(
+    "E6_EXECUTOR_TYPE", "java"
+)  # "java" divides TO_UNIX_TIMESTAMP by 1000; "native" does not
 
 storage_service_client = None
 
@@ -65,10 +68,11 @@ if ENABLE_GUARDRAIL.lower() == "true":
 logger.info("Storage Service Client is created")
 logger.info(
     "Environment flags — ENABLE_GUARDRAIL: %s, SKIP_COMMENT: %s, FIX_QUOTE_ESCAPES: %s, "
-    "STORAGE_ENGINE_URL: %s, STORAGE_ENGINE_PORT: %s",
+    "E6_EXECUTOR_TYPE: %s, STORAGE_ENGINE_URL: %s, STORAGE_ENGINE_PORT: %s",
     ENABLE_GUARDRAIL,
     SKIP_COMMENT,
     FIX_QUOTE_ESCAPES,
+    E6_EXECUTOR_TYPE,
     STORAGE_ENGINE_URL,
     STORAGE_ENGINE_PORT,
 )
