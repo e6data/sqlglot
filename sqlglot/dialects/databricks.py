@@ -135,8 +135,11 @@ class Databricks(Spark):
         FUNCTIONS = {
             **Spark.Parser.FUNCTIONS,
             "MAKE_INTERVAL": _build_make_interval,
-            "DATEADD": build_date_delta(exp.DateAdd),
-            "DATE_ADD": build_date_delta(exp.DateAdd),
+            # default_unit=None preserves the 2-arg vs 3-arg distinction:
+            # 2-arg DATE_ADD(date, n) -> unit=None (returns DATE in DBR);
+            # 3-arg DATE_ADD(unit, n, ts) -> unit=Var(unit) (returns TIMESTAMP).
+            "DATEADD": build_date_delta(exp.DateAdd, default_unit=None),
+            "DATE_ADD": build_date_delta(exp.DateAdd, default_unit=None),
             "DATEDIFF": build_date_delta(exp.DateDiff),
             "DATE_DIFF": build_date_delta(exp.DateDiff),
             "FIND_IN_SET": exp.FindInSet.from_arg_list,
