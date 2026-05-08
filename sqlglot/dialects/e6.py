@@ -1466,7 +1466,9 @@ class E6(Dialect):
             "CURRENT_TIMESTAMP": exp.CurrentTimestamp.from_arg_list,
             "DATE": _build_date,
             "DATE_ADD": lambda args: exp.DateAdd(
-                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
+                this=seq_get(args, 0) if len(args) == 2 else seq_get(args, 2),
+                expression=seq_get(args, 1),
+                unit=exp.Literal.string("DAY") if len(args) == 2 else seq_get(args, 0),
             ),
             "DATE_DIFF": build_datediff(exp.DateDiff),
             "DATEDIFF": build_datediff(exp.DateDiff),
@@ -2619,6 +2621,23 @@ class E6(Dialect):
             else:
                 return self.func("TO_DATE", expression.this, add_single_quotes(format_str))
 
+        def dateadd_sql(self, expression: exp.DateAdd) -> str:
+            # On native executor, preserve the DBR source arity: 2-arg
+            # DATE_ADD(date, n) (unit=None after parse) returns DATE in DBR,
+            # so emit e6's 2-arg form to keep that return type. 3-arg input
+            # keeps an explicit unit and stays 3-arg.
+            # On java executor (default), always emit 3-arg with DAY filled in
+            # for the 2-arg case — unchanged from prior behavior.
+            unit = expression.args.get("unit")
+            is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+
+            if is_native and unit is None:
+                return self.func("DATE_ADD", expression.this, _to_int(expression.expression))
+
+            return self.func(
+                "DATE_ADD", unit_to_str(expression), _to_int(expression.expression), expression.this
+            )
+
         def to_unix_timestamp_sql(
             self: E6.Generator, expression: exp.TimeToUnix | exp.StrToUnix
         ) -> str:
@@ -2987,12 +3006,6 @@ class E6(Dialect):
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.Coalesce: coalesce_sql,
             exp.Date: lambda self, e: self.func("DATE", e.this),
-            exp.DateAdd: lambda self, e: self.func(
-                "DATE_ADD",
-                unit_to_str(e),
-                _to_int(e.expression),
-                e.this,
-            ),
             # follows signature DATE_DIFF([ <unit>,] <date_expr1>, <date_expr2>) of E6. => date_expr1 - date_expr2, so interchanging the second and third arg
             exp.DateDiff: date_diff_sql,  # lambda self, e: self.func("DATEDIFF", e.this, e.expression, unit_to_str(e)),
             exp.DateSub: rename_func("DATE_SUB"),

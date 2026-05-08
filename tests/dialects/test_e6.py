@@ -2059,6 +2059,13 @@ class TestE6(Validator):
             read={"databricks": "select date_add('year', 5, cast('2000-08-05' as date))"},
         )
 
+        # Java default: 2-arg DBR DATE_ADD always converts to 3-arg with DAY filled in
+        # (preserves prior behavior).
+        self.validate_all(
+            "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)",
+            read={"databricks": "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)"},
+        )
+
         self.validate_all(
             "SELECT DATE_DIFF('2022-03-28', '2021-01-01', 'YEAR')",
             read={"databricks": """SELECT date_diff("YEAR", '2021-01-01', '2022-03-28')"""},
@@ -2475,6 +2482,34 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT TO_UNIX_TIMESTAMP(CAST(A AS TIMESTAMP)) / 1000",
             read={"databricks": "SELECT UNIX_TIMESTAMP(A)"},
+        )
+
+    def test_date_add_native_executor(self):
+        # With E6_EXECUTOR_TYPE=native, preserve DBR DATE_ADD arity:
+        # 2-arg DATE_ADD(date, n) returns DATE -> emit e6 2-arg form;
+        # 3-arg DATE_ADD(unit, n, ts) returns TIMESTAMP -> emit e6 3-arg form.
+        # Default (java) collapses both to 3-arg, matching prior behavior.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            self.validate_all(
+                "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)",
+                read={"databricks": "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)"},
+            )
+            self.validate_all(
+                "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)",
+                read={"databricks": "SELECT DATEADD(CURRENT_TIMESTAMP, 2)"},
+            )
+            self.validate_all(
+                "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)",
+                read={"databricks": "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)"},
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (java): 2-arg DBR converts to 3-arg with DAY filled in
+        self.validate_all(
+            "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)",
+            read={"databricks": "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)"},
         )
 
     def test_timestamp_seconds(self):
