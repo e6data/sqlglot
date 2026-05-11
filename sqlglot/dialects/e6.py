@@ -1648,6 +1648,8 @@ class E6(Dialect):
             When FIX_QUOTE_ESCAPES is not enabled, falls back to base behavior.
             """
             if os.getenv("FIX_QUOTE_ESCAPES", "False").lower() == "true":
+                if "''" not in text:
+                    return super().escape_str(text, escape_backslash)
                 if self.dialect.ESCAPED_SEQUENCES:
                     to_escaped = self.dialect.ESCAPED_SEQUENCES
                     text = "".join(
