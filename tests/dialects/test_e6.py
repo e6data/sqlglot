@@ -3636,13 +3636,13 @@ FROM dual"""
             """INSERT INTO espresso_gold_test.e6data_test.story_items_dml_clone (story_item_id, story_id, item_data) SELECT UUID(), '54e04514-5aad-4e24-9189-2b369970e70b', '[{"Title":"ROCKIN'' AROUND THE CHRISTMAS TREE","Artist":"BRENDA LEE"},{"Title":"SHAKIN'' STEVENS"},{"Title":"DO THEY KNOW IT''S CHRISTMAS"},{"Title":"IT''S THE MOST WONDERFUL TIME"},{"Title":"SANTA CAN''T YOU HEAR ME"},{"Title":"NOBODY''S GIRL"},{"Title":"SANTA CLAUS IS COMIN'' TO TOWN"},{"Title":"DON''T CALL"},{"Title":"NOBODY''S SON"}]'""",
         )
 
-        # 5. Databricks double-quoted string with apostrophe inside (Kantar variant A)
+        # 5. Databricks double-quoted string with apostrophe inside (variant A)
         self.assertEqual(
             transpile("""SELECT "SCARLET'S WALK (2023 REMASTER)" AS name"""),
             r"""SELECT 'SCARLET\'S WALK (2023 REMASTER)' AS name""",
         )
 
-        # 6. Full Kantar INSERT — double-quoted string with apostrophe in map() value
+        # 6. Full INSERT — double-quoted string with apostrophe in map() value
         self.assertEqual(
             transpile(
                 """INSERT INTO espresso_gold_prod.global.ui_my_fav_charts_main (selection, module_name) VALUES (map('product_id', '51605207', 'name', "SCARLET'S WALK (2023 REMASTER)", 'class_dbid', ''), 'Product-Summary')"""
