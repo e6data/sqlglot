@@ -2454,6 +2454,41 @@ class E6(Dialect):
 
             return self.func(function_name, *expression.expressions, normalize=not is_qualified)
 
+        def dot_sql(self, expression: exp.Dot) -> str:
+            # Databricks (default) lexes `"X"` as a string, so a producer that
+            # wrote `"$Table"."col"` as an ANSI-style column reference ends up
+            # with Dot(Literal('$Table'), Literal('col')) and would round-trip
+            # as `'$Table'.'col'`. When the Dot sits as a SELECT projection
+            # (directly or wrapped in an Alias), rebuild it as a Column with
+            # quoted Identifier qualifiers so the e6 generator emits proper
+            # "X"."Y". Other positions (CONCAT args, struct paths, WHERE
+            # values, etc.) fall through to the default Dot rendering.
+            parent = expression.parent
+            grandparent = parent.parent if isinstance(parent, exp.Alias) else None
+            in_select_projection = isinstance(parent, exp.Select) or isinstance(
+                grandparent, exp.Select
+            )
+
+            if in_select_projection:
+                left = expression.args.get("this")
+                right = expression.args.get("expression")
+                left_is_str_lit = isinstance(left, exp.Literal) and left.is_string
+                right_is_str_lit = isinstance(right, exp.Literal) and right.is_string
+                if left_is_str_lit or right_is_str_lit:
+                    table = (
+                        exp.to_identifier(left.name, quoted=True)
+                        if isinstance(left, exp.Literal) and left.is_string
+                        else left
+                    )
+                    column = (
+                        exp.to_identifier(right.name, quoted=True)
+                        if isinstance(right, exp.Literal) and right.is_string
+                        else right
+                    )
+                    return self.sql(exp.Column(this=column, table=table))
+
+            return super().dot_sql(expression)
+
         def to_timestamp_sql(self: E6.Generator, expression: exp.StrToTime) -> str:
             date_expr = expression.this
             format_expr = self.convert_format_time(expression)

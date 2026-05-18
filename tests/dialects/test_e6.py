@@ -3251,6 +3251,59 @@ class TestE6(Validator):
             },
         )
 
+    def test_databricks_double_quoted_dot_projection(self):
+        """In Databricks (default) `"X"` lexes as a string, so `"X"."Y"` parses
+        as Dot(Literal, Literal). When such a Dot is used as a SELECT projection
+        (a common pattern from BI tools that emit ANSI-style quoting wrapped as
+        Databricks SQL), the e6 generator should re-emit the operands as quoted
+        identifiers — not as single-quoted string literals.
+
+        Other positions (function arguments like CONCAT) and other source
+        dialects (snowflake, e6) are untouched.
+        """
+        # Bare Dot projection: "$Table"."col" from Databricks must become "$Table"."col"
+        self.validate_all(
+            'SELECT "$Table"."col" FROM t',
+            read={
+                "databricks": 'SELECT "$Table"."col" FROM t',
+            },
+        )
+
+        # Aliased Dot projection: AS "alias" must also round-trip with both sides quoted
+        self.validate_all(
+            'SELECT "$Table"."col" AS "col_alias" FROM t',
+            read={
+                "databricks": 'SELECT "$Table"."col" AS "col_alias" FROM t',
+            },
+        )
+
+        # Multiple projections in one query (mirrors the real BI-tool shape)
+        self.validate_all(
+            'SELECT "$Table"."a" AS "a", "$Table"."b" AS "b" FROM t',
+            read={
+                "databricks": 'SELECT "$Table"."a" AS "a", "$Table"."b" AS "b" FROM t',
+            },
+        )
+
+        # Regression: CONCAT("x", "y") in Databricks must still emit string
+        # literals, not identifiers. The Literals here are function arguments,
+        # not Dot operands — the override must leave them alone.
+        self.validate_all(
+            "SELECT CONCAT('hello', 'world') AS greeting FROM t",
+            read={
+                "databricks": 'SELECT CONCAT("hello", "world") AS greeting FROM t',
+            },
+        )
+
+        # Regression: Snowflake source already parses `"X"."Y"` as identifiers,
+        # so the override must not double-handle it.
+        self.validate_all(
+            'SELECT "$Table"."col" FROM t',
+            read={
+                "snowflake": 'SELECT "$Table"."col" FROM t',
+            },
+        )
+
     def test_cast_precision_preserved(self):
         """Test that CAST preserves precision/scale for DECIMAL and other types.
 
