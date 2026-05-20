@@ -3252,16 +3252,16 @@ class TestE6(Validator):
         )
 
     def test_databricks_double_quoted_dot_projection(self):
-        """In Databricks (default) `"X"` lexes as a string, so `"X"."Y"` parses
-        as Dot(Literal, Literal). When such a Dot is used as a SELECT projection
-        (a common pattern from BI tools that emit ANSI-style quoting wrapped as
-        Databricks SQL), the e6 generator should re-emit the operands as quoted
-        identifiers — not as single-quoted string literals.
+        """In Databricks (default) `"X"` lexes as a string, so `"X"."Y"`
+        (and longer chains like `"schema"."table"."col"`) parse as Dot of
+        string Literals. The e6 generator should re-emit those operands as
+        quoted identifiers wherever the chain appears as a column reference
+        — SELECT projection, WHERE, ORDER BY — not as single-quoted strings.
 
-        Other positions (function arguments like CONCAT) and other source
-        dialects (snowflake, e6) are untouched.
+        Function arguments (CONCAT, etc.) and other source dialects
+        (snowflake, e6) are untouched.
         """
-        # Bare Dot projection: "$Table"."col" from Databricks must become "$Table"."col"
+        # 2-part: bare projection
         self.validate_all(
             'SELECT "$Table"."col" FROM t',
             read={
@@ -3269,7 +3269,7 @@ class TestE6(Validator):
             },
         )
 
-        # Aliased Dot projection: AS "alias" must also round-trip with both sides quoted
+        # 2-part: aliased projection
         self.validate_all(
             'SELECT "$Table"."col" AS "col_alias" FROM t',
             read={
@@ -3277,11 +3277,43 @@ class TestE6(Validator):
             },
         )
 
-        # Multiple projections in one query (mirrors the real BI-tool shape)
+        # 2-part: multiple projections in one query
         self.validate_all(
             'SELECT "$Table"."a" AS "a", "$Table"."b" AS "b" FROM t',
             read={
                 "databricks": 'SELECT "$Table"."a" AS "a", "$Table"."b" AS "b" FROM t',
+            },
+        )
+
+        # 3-part: nested Dot chain in projection
+        self.validate_all(
+            'SELECT "schema"."table"."col" FROM t',
+            read={
+                "databricks": 'SELECT "schema"."table"."col" FROM t',
+            },
+        )
+
+        # 3-part: aliased
+        self.validate_all(
+            'SELECT "schema"."table"."col" AS "aliased" FROM t',
+            read={
+                "databricks": 'SELECT "schema"."table"."col" AS "aliased" FROM t',
+            },
+        )
+
+        # 3-part: WHERE clause column reference
+        self.validate_all(
+            'SELECT * FROM t WHERE "schema"."table"."col" = 1',
+            read={
+                "databricks": 'SELECT * FROM t WHERE "schema"."table"."col" = 1',
+            },
+        )
+
+        # 3-part: ORDER BY column reference
+        self.validate_all(
+            'SELECT * FROM t ORDER BY "schema"."table"."col"',
+            read={
+                "databricks": 'SELECT * FROM t ORDER BY "schema"."table"."col"',
             },
         )
 
