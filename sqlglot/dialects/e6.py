@@ -2455,39 +2455,45 @@ class E6(Dialect):
             return self.func(function_name, *expression.expressions, normalize=not is_qualified)
 
         def dot_sql(self, expression: exp.Dot) -> str:
-            # Databricks (default) lexes `"X"` as a string, so a producer that
-            # wrote `"$Table"."col"` as an ANSI-style column reference ends up
-            # with Dot(Literal('$Table'), Literal('col')) and would round-trip
-            # as `'$Table'.'col'`. When the Dot sits as a SELECT projection
-            # (directly or wrapped in an Alias), rebuild it as a Column with
-            # quoted Identifier qualifiers so the e6 generator emits proper
-            # "X"."Y". Other positions (CONCAT args, struct paths, WHERE
-            # values, etc.) fall through to the default Dot rendering.
-            parent = expression.parent
-            grandparent = parent.parent if isinstance(parent, exp.Alias) else None
-            in_select_projection = isinstance(parent, exp.Select) or isinstance(
-                grandparent, exp.Select
-            )
+            # In Databricks (default), `"X"` lexes as a string Literal, so an
+            # ANSI-style column reference such as `"$Table"."col"` or
+            # `"schema"."table"."col"` parses as a (possibly nested) Dot whose
+            # operands are string Literals. Round-tripping that through the
+            # default generator emits `'$Table'.'col'` / `'schema'.'table'.'col'`
+            # which the e6 planner won't accept as a column reference.
+            #
+            # When a Dot's chain contains string Literals, recursively rebuild
+            # the chain with each Literal coerced to a quoted Identifier, then
+            # delegate to super for rendering. CONCAT args and other non-Dot
+            # positions are untouched — they are not Dot operands. Other source
+            # dialects (snowflake, e6) parse `"X"` as Identifier already, so
+            # this path is a no-op for them.
+            left = expression.args.get("this")
+            right = expression.args.get("expression")
 
-            if in_select_projection:
-                left = expression.args.get("this")
-                right = expression.args.get("expression")
-                left_is_str_lit = isinstance(left, exp.Literal) and left.is_string
-                right_is_str_lit = isinstance(right, exp.Literal) and right.is_string
-                if left_is_str_lit or right_is_str_lit:
-                    table = (
-                        exp.to_identifier(left.name, quoted=True)
-                        if isinstance(left, exp.Literal) and left.is_string
-                        else left
+            def _has_string_literal(node: t.Optional[exp.Expression]) -> bool:
+                if isinstance(node, exp.Literal) and node.is_string:
+                    return True
+                if isinstance(node, exp.Dot):
+                    return _has_string_literal(node.args.get("this")) or _has_string_literal(
+                        node.args.get("expression")
                     )
-                    column = (
-                        exp.to_identifier(right.name, quoted=True)
-                        if isinstance(right, exp.Literal) and right.is_string
-                        else right
-                    )
-                    return self.sql(exp.Column(this=column, table=table))
+                return False
 
-            return super().dot_sql(expression)
+            if not (_has_string_literal(left) or _has_string_literal(right)):
+                return super().dot_sql(expression)
+
+            def _coerce(node: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
+                if isinstance(node, exp.Literal) and node.is_string:
+                    return exp.to_identifier(node.name, quoted=True)
+                if isinstance(node, exp.Dot):
+                    return exp.Dot(
+                        this=_coerce(node.args.get("this")),
+                        expression=_coerce(node.args.get("expression")),
+                    )
+                return node.copy() if node is not None else node
+
+            return super().dot_sql(exp.Dot(this=_coerce(left), expression=_coerce(right)))
 
         def to_timestamp_sql(self: E6.Generator, expression: exp.StrToTime) -> str:
             date_expr = expression.this
