@@ -104,6 +104,28 @@ async def convert_query(
         except json.JSONDecodeError as je:
             return HTTPException(status_code=500, detail=str(je))
 
+    if flags_dict.get("POWERBI_SF_TO_DBR", False):
+        # Intermediary vanilla Snowflake -> Databricks transpile. The result is
+        # then handed back to the normal pipeline below (parse + e6 transforms +
+        # generator) using the caller's `from_sql` and `to_sql` unchanged.
+        logger.info(
+            "%s AT %s — POWERBI_SF_TO_DBR: intermediary Snowflake -> Databricks transpile",
+            query_id,
+            timestamp,
+        )
+        query = sqlglot.transpile(
+            query,
+            read="snowflake",
+            write="databricks",
+            identify=False,
+        )[0]
+        logger.info(
+            "%s AT %s — Intermediary (SF -> DBR) result:\n%s",
+            query_id,
+            timestamp,
+            query,
+        )
+
     if not query or not query.strip():
         logger.info(
             "%s AT %s FROM %s — Empty query received, returning empty result",
