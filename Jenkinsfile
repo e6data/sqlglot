@@ -1,6 +1,6 @@
 pipeline {
   environment {
-    IMAGE_TAG_PREFIX = "3.0.${BUILD_NUMBER}-"
+    IMAGE_TAG_PREFIX = "1.0.${BUILD_NUMBER}-"
     PR_TAG_PREFIX = "0.2.${BUILD_NUMBER}-pr-"
 
     REPOSITORY = "github.com/e6data/e6-transpiler"
@@ -9,7 +9,7 @@ pipeline {
     HUB_TOKEN = credentials('HUB_TOKEN')
 
     AWS_REGION = "us-east-1"
-    ASSUMED_ROLE_ARN ="arn:aws:iam::670514002493:role/cross-account-jenkins-access"
+    ASSUMED_ROLE_ARN = credentials('ASSUMED_ROLE_ARN')
 
     GCP_PROJECT_ID = credentials('GCP_PROJECT_ID')
 
@@ -21,9 +21,9 @@ pipeline {
     SERVERLESS_BETA_IMAGE = "908027423391.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
     SERVERLESS_PROD_IMAGE = "390844744777.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
 
-    // Role ARNs for cross-account access
-    SERVERLESS_BETA_ROLE_ARN = "arn:aws:iam::908027423391:role/cross-account-jenkins-access"
-    SERVERLESS_PROD_ROLE_ARN = "arn:aws:iam::390844744777:role/cross-account-jenkins-access"
+    // Role ARNs for cross-account access (from Jenkins credential store)
+    SERVERLESS_BETA_ROLE_ARN = credentials('SERVERLESS_BETA_ROLE_ARN')
+    SERVERLESS_PROD_ROLE_ARN = credentials('SERVERLESS_PROD_ROLE_ARN')
 
     JMX_PROM_VERSION = "1.0.1"
   }
