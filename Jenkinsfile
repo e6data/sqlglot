@@ -1,6 +1,6 @@
 pipeline {
   environment {
-    IMAGE_TAG_PREFIX = "1.0.${BUILD_NUMBER}-"
+    IMAGE_TAG_PREFIX = "3.0.${BUILD_NUMBER}-"
     PR_TAG_PREFIX = "0.2.${BUILD_NUMBER}-pr-"
 
     REPOSITORY = "github.com/e6data/e6-transpiler"
