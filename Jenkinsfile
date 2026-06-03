@@ -13,12 +13,12 @@ pipeline {
         AZURE_IMAGE = "e6labs.azurecr.io/${RELEASE_NAME}"
         
         AWS_REGION = "us-east-1"
-        ASSUMED_ROLE_ARN = "arn:aws:iam::670514002493:role/cross-account-jenkins-access"
+        ASSUMED_ROLE_ARN = credentials('ASSUMED_ROLE_ARN')
         DEV_IMAGE = "670514002493.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}:latest"
 
         // Serverless beta/prod push targets (added)
-        SERVERLESS_BETA_ROLE_ARN = "arn:aws:iam::908027423391:role/cross-account-jenkins-access"
-        SERVERLESS_PROD_ROLE_ARN = "arn:aws:iam::390844744777:role/cross-account-jenkins-access"
+        SERVERLESS_BETA_ROLE_ARN = credentials('SERVERLESS_BETA_ROLE_ARN')
+        SERVERLESS_PROD_ROLE_ARN = credentials('SERVERLESS_PROD_ROLE_ARN')
         SERVERLESS_BETA_IMAGE = "908027423391.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
         SERVERLESS_PROD_IMAGE = "390844744777.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
     }
