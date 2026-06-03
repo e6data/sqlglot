@@ -13,8 +13,14 @@ pipeline {
         AZURE_IMAGE = "e6labs.azurecr.io/${RELEASE_NAME}"
         
         AWS_REGION = "us-east-1"
-        ASSUMED_ROLE_ARN = "arn:aws:iam::670514002493:role/cross-account-jenkins-access"
+        ASSUMED_ROLE_ARN = credentials('ASSUMED_ROLE_ARN')
         DEV_IMAGE = "670514002493.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}:latest"
+
+        // Serverless beta/prod push targets (added)
+        SERVERLESS_BETA_ROLE_ARN = credentials('SERVERLESS_BETA_ROLE_ARN')
+        SERVERLESS_PROD_ROLE_ARN = credentials('SERVERLESS_PROD_ROLE_ARN')
+        SERVERLESS_BETA_IMAGE = "908027423391.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
+        SERVERLESS_PROD_IMAGE = "390844744777.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
     }
 
     options {
@@ -109,6 +115,15 @@ pipeline {
                     env.GIT_COMMIT_HASH = sh(script: 'git rev-parse --short HEAD', returnStdout: true)
                     env.TAG_VALUE = "${IMAGE_TAG_PREFIX}${GIT_COMMIT_HASH}"
                     env.GCP_DOCKER_TOKEN = sh(returnStdout: true, script: "gcloud auth print-access-token").trim() 
+
+                    // Serverless beta/prod ECR tokens (added) — assumed by the OIDC role BEFORE
+                    // the dev assume below overwrites AWS_ACCESS_KEY_ID/SECRET/SESSION.
+                    env.SERVERLESS_BETA_TEMP_ROLE = sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${SERVERLESS_BETA_ROLE_ARN} --role-session-name transpiler-slbeta-${BUILD_NUMBER}').trim()
+                    env.SERVERLESS_BETA_ECR_TOKEN = sh(returnStdout: true, script: 'AWS_ACCESS_KEY_ID=$(echo $SERVERLESS_BETA_TEMP_ROLE | jq -r ".Credentials.AccessKeyId") AWS_SECRET_ACCESS_KEY=$(echo $SERVERLESS_BETA_TEMP_ROLE | jq -r ".Credentials.SecretAccessKey") AWS_SESSION_TOKEN=$(echo $SERVERLESS_BETA_TEMP_ROLE | jq -r ".Credentials.SessionToken") aws ecr get-login-password --region ${AWS_REGION} --output text').trim()
+
+                    env.SERVERLESS_PROD_TEMP_ROLE = sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${SERVERLESS_PROD_ROLE_ARN} --role-session-name transpiler-slprod-${BUILD_NUMBER}').trim()
+                    env.SERVERLESS_PROD_ECR_TOKEN = sh(returnStdout: true, script: 'AWS_ACCESS_KEY_ID=$(echo $SERVERLESS_PROD_TEMP_ROLE | jq -r ".Credentials.AccessKeyId") AWS_SECRET_ACCESS_KEY=$(echo $SERVERLESS_PROD_TEMP_ROLE | jq -r ".Credentials.SecretAccessKey") AWS_SESSION_TOKEN=$(echo $SERVERLESS_PROD_TEMP_ROLE | jq -r ".Credentials.SessionToken") aws ecr get-login-password --region ${AWS_REGION} --output text').trim()
+
                     env.TEMP_ROLE = sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${ASSUMED_ROLE_ARN} --role-session-name storage-service-${BUILD_NUMBER}').trim()
                     env.AWS_ACCESS_KEY_ID = sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.AccessKeyId"').trim()
                     env.AWS_SECRET_ACCESS_KEY = sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SecretAccessKey"').trim()
@@ -190,6 +205,14 @@ pipeline {
                 sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${DEV_IMAGE}'
                 sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://670514002493.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}:${TAG_VALUE}'
                 sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${AZURE_IMAGE}:${TAG_VALUE}'
+
+                // Push to Serverless Beta ECR (added)
+                sh 'skopeo login --username AWS --password ${SERVERLESS_BETA_ECR_TOKEN} 908027423391.dkr.ecr.us-east-1.amazonaws.com'
+                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${SERVERLESS_BETA_IMAGE}:${TAG_VALUE}'
+
+                // Push to Serverless Prod ECR (added)
+                sh 'skopeo login --username AWS --password ${SERVERLESS_PROD_ECR_TOKEN} 390844744777.dkr.ecr.us-east-1.amazonaws.com'
+                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${SERVERLESS_PROD_IMAGE}:${TAG_VALUE}'
             }
         }
     }
