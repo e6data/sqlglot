@@ -2428,6 +2428,14 @@ class E6(Dialect):
             parent = expression.parent
             is_qualified = isinstance(parent, exp.Dot) and expression is parent.expression
 
+            # E6 has no TRY_URL_DECODE; rewrite as TRY(URL_DECODE(arg)) so the
+            # surrounding TRY swallows the URLDecoder failure at runtime.
+            # Emit as a TRY(...) function call (not exp.Try) so the rewrite
+            # survives generation regardless of TRY_SUPPORTED.
+            if function_name.upper() == "TRY_URL_DECODE" and expression.expressions:
+                inner = self.func("URL_DECODE", *expression.expressions)
+                return f"TRY({inner})"
+
             # Postgres: TRUNC with 1 arg is a no-op on integers (e.g. EXTRACT(YEAR ...)).
             # E6 expects TRUNC with 2 args, so strip it and return the inner expression.
             if (

@@ -3736,3 +3736,16 @@ FROM dual"""
         )
 
         os.environ["FIX_QUOTE_ESCAPES"] = "False"
+
+    def test_try_url_decode_rewrite(self):
+        import sqlglot
+
+        out = sqlglot.transpile(
+            "SELECT TRY_URL_DECODE(x), URL_DECODE(y) FROM t",
+            read="databricks",
+            write="e6",
+        )[0]
+        # TRY_URL_DECODE rewritten as TRY(URL_DECODE(...)); plain URL_DECODE untouched.
+        self.assertEqual(out, "SELECT TRY(URL_DECODE(x)), URL_DECODE(y) FROM t")
+        self.assertIn("TRY(URL_DECODE(x))", out)
+        self.assertNotIn("TRY_URL_DECODE", out)
