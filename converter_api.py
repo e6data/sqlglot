@@ -105,37 +105,51 @@ async def convert_query(
             return HTTPException(status_code=500, detail=str(je))
 
     if flags_dict.get("POWERBI_SF_TO_DBR", False):
-        # Intermediary vanilla Snowflake -> Databricks transpile. The result is
-        # then handed back to the normal pipeline below (parse + e6 transforms +
-        # generator) using the caller's `from_sql` and `to_sql` unchanged.
-        # If the intermediary transpile fails (e.g. the input isn't actually
-        # Snowflake-shaped), fall through with the original query untouched
-        # so the downstream pipeline still gets a chance to process it.
-        logger.info(
-            "%s AT %s — POWERBI_SF_TO_DBR: intermediary Snowflake -> Databricks transpile",
-            query_id,
-            timestamp,
-        )
-        try:
-            query = sqlglot.transpile(
-                query,
-                read="snowflake",
-                write="databricks",
-                identify=False,
-            )[0]
+        # The flag is only meaningful when the caller actually claims the input
+        # is Snowflake. If `from_sql` is anything else, skip the intermediary
+        # entirely so we don't run a needless SF parse over a non-SF query.
+        if from_sql.lower() != "snowflake":
             logger.info(
-                "%s AT %s — Intermediary (SF -> DBR) result:\n%s",
+                "%s AT %s — POWERBI_SF_TO_DBR ignored: from_sql=%s (flag only applies when from_sql=snowflake)",
                 query_id,
                 timestamp,
-                query,
+                from_sql,
             )
-        except Exception as e:
-            logger.warning(
-                "%s AT %s — Intermediary SF -> DBR failed (%s); forwarding original query to pipeline",
+        else:
+            # Intermediary vanilla Snowflake -> Databricks transpile.
+            #   - on success: `query` is now Databricks-shaped (SF identifiers
+            #     turned into backticks, function renames, etc.).
+            #   - on failure: keep the original query unchanged; assume it was
+            #     already Databricks-shaped.
+            # In either case the query going into the downstream pipeline is
+            # Databricks-shaped, so override `from_sql` to "databricks" so the
+            # rest of the handler parses it with the right dialect.
+            logger.info(
+                "%s AT %s — POWERBI_SF_TO_DBR: intermediary Snowflake -> Databricks transpile",
                 query_id,
                 timestamp,
-                e,
             )
+            try:
+                query = sqlglot.transpile(
+                    query,
+                    read="snowflake",
+                    write="databricks",
+                    identify=False,
+                )[0]
+                logger.info(
+                    "%s AT %s — Intermediary (SF -> DBR) result:\n%s",
+                    query_id,
+                    timestamp,
+                    query,
+                )
+            except Exception as e:
+                logger.warning(
+                    "%s AT %s — Intermediary SF -> DBR failed (%s); forwarding original query as Databricks",
+                    query_id,
+                    timestamp,
+                    e,
+                )
+            from_sql = "databricks"
 
     if not query or not query.strip():
         logger.info(
