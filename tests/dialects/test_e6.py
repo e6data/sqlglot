@@ -29,6 +29,13 @@ class TestE6(Validator):
         )
 
         self.validate_all(
+            "SELECT TRIM(v) AS du_id FROM (SELECT EXPLODE(SPLIT('VZ_05690013012,VZ_05690013048', ',')) AS v) AS g",
+            read={
+                "postgres": "SELECT TRIM(v) AS du_id FROM (SELECT UNNEST(REGEXP_SPLIT_TO_ARRAY('VZ_05690013012,VZ_05690013048', ',')) AS v) AS g"
+            },
+        )
+
+        self.validate_all(
             "SELECT CONVERT_TIMEZONE('America/Los_Angeles', CAST('2022-11-01 09:08:07.321' AS TIMESTAMP))",
             read={
                 "snowflake": "Select convert_timezone('America/Los_Angeles', '2022-11-01 09:08:07.321' ::TIMESTAMP)",
