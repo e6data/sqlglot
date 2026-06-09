@@ -183,16 +183,19 @@ class TestE6(Validator):
         )
 
         self.validate_identity("SELECT a FROM tab WHERE a != 5")
-        self.validate_identity("SELECT a FROM tab WHERE a <> 5")
         self.validate_all(
             "SELECT a FROM tab WHERE a <> 5",
-            read={"e6": "SELECT a FROM tab WHERE a <> 5"},
-            write={"e6": "SELECT a FROM tab WHERE a <> 5"},
+            read={
+                "databricks": "SELECT a FROM tab WHERE a <> 5",
+                "snowflake": "SELECT a FROM tab WHERE a <> 5",
+            },
         )
         self.validate_all(
             "SELECT a FROM tab WHERE a != 5",
-            read={"e6": "SELECT a FROM tab WHERE a != 5"},
-            write={"e6": "SELECT a FROM tab WHERE a != 5"},
+            read={
+                "databricks": "SELECT a FROM tab WHERE a != 5",
+                "snowflake": "SELECT a FROM tab WHERE a != 5",
+            },
         )
 
         self.validate_all(

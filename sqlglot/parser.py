@@ -4994,7 +4994,21 @@ class Parser(metaclass=_Parser):
         return self._parse_tokens(self._parse_equality, self.CONJUNCTION)
 
     def _parse_equality(self) -> t.Optional[exp.Expression]:
-        return self._parse_tokens(self._parse_comparison, self.EQUALITY)
+        this = self._parse_comparison()
+
+        while self._match_set(self.EQUALITY):
+            klass = self.EQUALITY[self._prev.token_type]
+            token_text = self._prev.text
+            this = self.expression(
+                klass,
+                this=this,
+                comments=self._prev_comments,
+                expression=self._parse_comparison(),
+            )
+            if klass is exp.NEQ and token_text == "<>":
+                this.meta["neq_op"] = "<>"
+
+        return this
 
     def _parse_comparison(self) -> t.Optional[exp.Expression]:
         return self._parse_tokens(self._parse_range, self.COMPARISON)
