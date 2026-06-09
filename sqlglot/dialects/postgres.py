@@ -400,6 +400,7 @@ class Postgres(Dialect):
             "MAKE_TIMESTAMP": exp.TimestampFromParts.from_arg_list,
             "NOW": exp.CurrentTimestamp.from_arg_list,
             "REGEXP_REPLACE": _build_regexp_replace,
+            "REGEXP_SPLIT_TO_ARRAY": exp.RegexpSplit.from_arg_list,
             "TO_CHAR": build_formatted_time(exp.TimeToStr, "postgres"),
             "TO_DATE": build_formatted_time(exp.StrToDate, "postgres"),
             "TO_TIMESTAMP": _build_to_timestamp,
