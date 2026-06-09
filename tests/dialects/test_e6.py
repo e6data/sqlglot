@@ -195,6 +195,11 @@ class TestE6(Validator):
             write={"e6": "SELECT a FROM tab WHERE a != 5"},
         )
 
+        self.validate_all(
+            "SELECT TRY(URL_DECODE(raw)) FROM t",
+            read={"databricks": "SELECT TRY_URL_DECODE(raw) FROM t"},
+        )
+
         self.validate_all("SELECT DAYS('2024-11-09')", read={"trino": "SELECT DAYS('2024-11-09')"})
 
         self.validate_all(
