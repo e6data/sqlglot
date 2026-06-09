@@ -1386,6 +1386,23 @@ class E6(Dialect):
             "VARBINARY",
         }
 
+        def _parse_equality(self) -> t.Optional[exp.Expression]:
+            this = self._parse_comparison()
+
+            while self._match_set(self.EQUALITY):
+                klass = self.EQUALITY[self._prev.token_type]
+                token_text = self._prev.text
+                this = self.expression(
+                    klass,
+                    this=this,
+                    comments=self._prev_comments,
+                    expression=self._parse_comparison(),
+                )
+                if klass is exp.NEQ and token_text == "<>":
+                    this.meta["neq_op"] = "<>"
+
+            return this
+
         def _parse_cast(self, strict: bool, safe: t.Optional[bool] = None) -> exp.Expression:
             """
             Overrides the base class's _parse_cast method to include validation
@@ -2266,7 +2283,7 @@ class E6(Dialect):
             return self.func("NAMED_STRUCT", *flatten(zip(keys, values)))
 
         def neq_sql(self, expression: exp.NEQ) -> str:
-            return self.binary(expression, "!=")
+            return self.binary(expression, expression.meta.get("neq_op", "!="))
 
         def tochar_sql(self, expression: exp.ToChar) -> str:
             date_expr = expression.this
