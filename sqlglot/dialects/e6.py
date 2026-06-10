@@ -2437,9 +2437,6 @@ class E6(Dialect):
             ):
                 return self.sql(expression.expressions[0])
 
-            if function_name.upper() == "TRY_URL_DECODE":
-                return self.func("TRY", self.func("URL_DECODE", *expression.expressions))
-
             if function_name.upper() in function_mapping_normal:
                 # Check if the function name needs to be mapped to a different one
                 mapped_function = function_mapping_normal.get(function_name.upper(), function_name)
