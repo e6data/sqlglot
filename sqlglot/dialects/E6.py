@@ -252,6 +252,55 @@ def format_time_for_parsefunctions(expression):
     return format_str
 
 
+def _is_variant_root(node):
+    # A value that is already parsed-JSON / VARIANT. A bracket index on such a
+    # value is JSON-path navigation, not array ELEMENT_AT.
+    if isinstance(node, exp.ParseJSON):
+        return True
+    if isinstance(node, exp.JSONExtract) and node.args.get("variant_extract"):
+        return True
+    if isinstance(node, exp.Bracket):
+        return _is_variant_root(node.this)
+    return False
+
+
+def _bracket_path_segments(bracket):
+    # Convert a Bracket's subscripts into JSON path segments ([0] -> subscript,
+    # ['k'] -> key) so they can be folded into a json_extract path.
+    segments = []
+    for index in bracket.expressions:
+        if isinstance(index, exp.Literal) and not index.args.get("is_string"):
+            segments.append(exp.JSONPathSubscript(this=int(index.name)))
+        else:
+            segments.append(exp.JSONPathKey(this=index.name))
+    return segments
+
+
+def _bracket_sql(self, expression):
+    # A bracket index on a PARSE_JSON / variant root is JSON-path navigation;
+    # fold it into json_extract instead of ELEMENT_AT, which the engine rejects
+    # for the {metadata, value} variant struct PARSE_JSON produces.
+    if _is_variant_root(expression.this):
+        path = exp.JSONPath(expressions=[exp.JSONPathRoot(), *_bracket_path_segments(expression)])
+        return self.func("JSON_EXTRACT", expression.this, path)
+    return self.func("ELEMENT_AT", expression.this, expression.expression)
+
+
+def _variant_jsonextract_sql(self, expression):
+    this = expression.this
+    path = expression.args.get("expression")
+    # PARSE_JSON(c)[0]:id parses as JSONExtract(Bracket(PARSE_JSON(c), [0]), '$.id').
+    # Merge the leading bracket index into the front of the path so the result is a
+    # single json_extract(PARSE_JSON(c), '$[0].id') rather than ELEMENT_AT-wrapped.
+    if isinstance(this, exp.Bracket) and _is_variant_root(this.this) and isinstance(path, exp.JSONPath):
+        segments = list(path.expressions)
+        new_path = exp.JSONPath(
+            expressions=[*segments[:1], *_bracket_path_segments(this), *segments[1:]]
+        )
+        return self.func("JSON_EXTRACT", this.this, new_path)
+    return self.func("json_extract", this, path)
+
+
 class E6(Dialect):
     NORMALIZATION_STRATEGY = NormalizationStrategy.LOWERCASE
 
@@ -719,7 +768,7 @@ class E6(Dialect):
             exp.BitwiseOr: lambda self, e: self.func("BITWISE_OR", e.this, e.expression),
             exp.BitwiseRightShift: lambda self, e: self.func("SHIFTRIGHT", e.this, e.expression),
             exp.BitwiseXor: lambda self, e: self.func("BITWISE_XOR", e.this, e.expression),
-            exp.Bracket: lambda self, e: self.func("ELEMENT_AT", e.this, e.expression),
+            exp.Bracket: _bracket_sql,
             exp.CurrentDate: lambda *_: "CURRENT_DATE",
             exp.CurrentTimestamp: lambda *_: "CURRENT_TIMESTAMP",
             exp.Date: lambda self, e: self.func("DATE", e.this),
@@ -748,8 +797,8 @@ class E6(Dialect):
                 e.args.get("separator") or exp.Literal.string(',')
             ),
             exp.Interval: interval_sql,
-            exp.JSONExtract: lambda self, e: self.func("json_extract", e.this, e.expression),
-            exp.JSONExtractScalar: lambda self, e: self.func("json_extract", e.this, e.expression),
+            exp.JSONExtract: _variant_jsonextract_sql,
+            exp.JSONExtractScalar: _variant_jsonextract_sql,
             exp.Lag: lambda self, e: self.func("LAG", e.this, e.args.get("offset")),
             exp.LastDay: _last_day_sql,
             exp.LastValue: rename_func("LAST_VALUE"),
