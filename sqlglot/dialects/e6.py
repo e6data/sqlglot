@@ -347,6 +347,43 @@ def format_time_for_parsefunctions(expression):
     return format_str
 
 
+def _is_variant_root(node):
+    # A value that is already parsed-JSON / VARIANT. A bracket index on such a
+    # value is JSON-path navigation, not array ELEMENT_AT.
+    if isinstance(node, exp.ParseJSON):
+        return True
+    if isinstance(node, exp.JSONExtract) and node.args.get("variant_extract"):
+        return True
+    if isinstance(node, exp.Bracket):
+        return _is_variant_root(node.this)
+    # A cast of a variant (e.g. PARSE_JSON(c)::ARRAY) is still a variant root for the
+    # purpose of folding a following [i] index into the JSON path.
+    if isinstance(node, exp.Cast):
+        return _is_variant_root(node.this)
+    return False
+
+
+def _variant_root_value(node):
+    # Strip a variant-preserving cast (e.g. ::ARRAY) so the folded json_extract runs
+    # on the underlying variant. E6 has no CAST(... AS ARRAY); the cast is redundant
+    # for JSON-path navigation.
+    while isinstance(node, exp.Cast) and _is_variant_root(node.this):
+        node = node.this
+    return node
+
+
+def _bracket_path_segments(bracket):
+    # Convert a Bracket's subscripts into JSON path segments ([0] -> subscript,
+    # ['k'] -> key) so they can be folded into a json_extract path.
+    segments = []
+    for index in bracket.expressions:
+        if isinstance(index, exp.Literal) and not index.args.get("is_string"):
+            segments.append(exp.JSONPathSubscript(this=int(index.name)))
+        else:
+            segments.append(exp.JSONPathKey(this=index.name))
+    return segments
+
+
 def add_single_quotes(expression) -> str:
     quoted_str = f"'{expression}'"
     return quoted_str
@@ -2293,6 +2330,15 @@ class E6(Dialect):
             - Inside VALUES: map[...] preserved as-is (Databricks uses MAP() with
               parens for constructors, so map[...] in INSERT VALUES is not ELEMENT_AT)
             """
+            # A bracket index on a PARSE_JSON / variant root is JSON-path navigation;
+            # fold it into json_extract instead of ELEMENT_AT, which the engine rejects
+            # for the {metadata, value} variant struct PARSE_JSON produces.
+            if _is_variant_root(expression.this):
+                path = exp.JSONPath(
+                    expressions=[exp.JSONPathRoot(), *_bracket_path_segments(expression)]
+                )
+                return self.func("JSON_EXTRACT", _variant_root_value(expression.this), path)
+
             # Inside a VALUES clause, map[...] bracket syntax should be preserved
             # as-is. In Databricks MAP() with parens is the constructor; map[...]
             # in VALUES is a literal value that must not be rewritten to ELEMENT_AT.
@@ -2850,6 +2896,22 @@ class E6(Dialect):
             return self.func("TO_JSON", inner)
 
         def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
+            # PARSE_JSON(c)[0]:id parses as JSONExtract(Bracket(PARSE_JSON(c), [0]), '$.id').
+            # Merge the leading bracket index into the front of the path so the result is a
+            # single json_extract(PARSE_JSON(c), '$[0].id') rather than ELEMENT_AT-wrapped.
+            this = e.this
+            path = e.expression
+            if (
+                isinstance(this, exp.Bracket)
+                and _is_variant_root(this.this)
+                and isinstance(path, exp.JSONPath)
+            ):
+                segments = list(path.expressions)
+                new_path = exp.JSONPath(
+                    expressions=[*segments[:1], *_bracket_path_segments(this), *segments[1:]]
+                )
+                return self.func("JSON_EXTRACT", _variant_root_value(this.this), new_path)
+
             # Check if this is Databricks colon syntax (marked with variant_extract=True)
             variant_extract_flag = getattr(e, "variant_extract", False) or e.args.get(
                 "variant_extract", False
