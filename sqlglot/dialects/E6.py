@@ -261,7 +261,20 @@ def _is_variant_root(node):
         return True
     if isinstance(node, exp.Bracket):
         return _is_variant_root(node.this)
+    # A cast of a variant (e.g. PARSE_JSON(c)::ARRAY) is still a variant root for the
+    # purpose of folding a following [i] index into the JSON path.
+    if isinstance(node, exp.Cast):
+        return _is_variant_root(node.this)
     return False
+
+
+def _variant_root_value(node):
+    # Strip a variant-preserving cast (e.g. ::ARRAY) so the folded json_extract runs
+    # on the underlying variant. E6 has no CAST(... AS ARRAY); the cast is redundant
+    # for JSON-path navigation.
+    while isinstance(node, exp.Cast) and _is_variant_root(node.this):
+        node = node.this
+    return node
 
 
 def _bracket_path_segments(bracket):
@@ -282,7 +295,7 @@ def _bracket_sql(self, expression):
     # for the {metadata, value} variant struct PARSE_JSON produces.
     if _is_variant_root(expression.this):
         path = exp.JSONPath(expressions=[exp.JSONPathRoot(), *_bracket_path_segments(expression)])
-        return self.func("JSON_EXTRACT", expression.this, path)
+        return self.func("JSON_EXTRACT", _variant_root_value(expression.this), path)
     return self.func("ELEMENT_AT", expression.this, expression.expression)
 
 
@@ -297,7 +310,7 @@ def _variant_jsonextract_sql(self, expression):
         new_path = exp.JSONPath(
             expressions=[*segments[:1], *_bracket_path_segments(this), *segments[1:]]
         )
-        return self.func("JSON_EXTRACT", this.this, new_path)
+        return self.func("JSON_EXTRACT", _variant_root_value(this.this), new_path)
     return self.func("json_extract", this, path)
 
 
@@ -663,12 +676,14 @@ class E6(Dialect):
             return format_string
 
         def cast_sql(self, expression: exp.Cast, safe_prefix: t.Optional[str] = None) -> str:
-            # Get the target type of the cast expression
             target_type = expression.to.this
-            # Find the corresponding type in E6 from the mapping
-            e6_type = self.CAST_SUPPORTED_TYPE_MAPPING.get(target_type, target_type)
-            # Generate the SQL for casting with the mapped type
-            return f"CAST({self.sql(expression.this)} AS {e6_type})"
+            # Types with an explicit E6 coercion (e.g. TINYINT -> INT, TEXT -> VARCHAR).
+            if target_type in self.CAST_SUPPORTED_TYPE_MAPPING:
+                e6_type = self.CAST_SUPPORTED_TYPE_MAPPING[target_type]
+                return f"CAST({self.sql(expression.this)} AS {e6_type})"
+            # Otherwise render the datatype normally (via TYPE_MAPPING + nested types such as
+            # ARRAY/STRUCT) rather than leaking the Python enum repr (e.g. "Type.ARRAY").
+            return super().cast_sql(expression, safe_prefix=safe_prefix)
 
         def interval_sql(self: E6.Generator, expression: exp.Interval) -> str:
             if expression.this and expression.unit:
