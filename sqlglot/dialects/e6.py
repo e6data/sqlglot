@@ -384,6 +384,42 @@ def _bracket_path_segments(bracket):
     return segments
 
 
+def _variant_extract_parts(expression):
+    # Resolve a Snowflake variant navigation (PARSE_JSON(c)[0]:id,
+    # PARSE_JSON(c):[0]:id, PARSE_JSON(c)::ARRAY[0]:id) into (root, segments) where
+    # `root` is the underlying variant (any redundant ::ARRAY cast stripped) and
+    # `segments` are the ordered JSON-path steps. Returns None if not a variant root.
+    this = expression.this
+    path = expression.expression
+
+    if isinstance(this, exp.Bracket) and _is_variant_root(this.this):
+        # A leading [i] index on the variant root (PARSE_JSON(c)[0]:id) — fold the
+        # bracket index in front of the colon path.
+        root = _variant_root_value(this.this)
+        lead = _bracket_path_segments(this)
+    elif _is_variant_root(this):
+        root = _variant_root_value(this)
+        lead = []
+    else:
+        return None
+
+    tail = []
+    if isinstance(path, exp.JSONPath):
+        tail = [seg for seg in path.expressions if not isinstance(seg, exp.JSONPathRoot)]
+
+    return root, [*lead, *tail]
+
+
+def _is_variant_colon_extract(node):
+    # True for a JSONExtract that navigates a parsed-JSON/variant root, i.e. one that
+    # E6 renders with colon syntax (so its wrapping CAST keeps the ::TYPE postfix form).
+    return (
+        isinstance(node, exp.JSONExtract)
+        and bool(node.args.get("variant_extract"))
+        and _variant_extract_parts(node) is not None
+    )
+
+
 def add_single_quotes(expression) -> str:
     quoted_str = f"'{expression}'"
     return quoted_str
@@ -1869,6 +1905,11 @@ class E6(Dialect):
             if expression.is_type(exp.DataType.Type.INTERVAL):
                 return self.double_colon_interval_sql(expression)
 
+            # A CAST over Snowflake variant colon navigation keeps the ::TYPE postfix
+            # form, e.g. PARSE_JSON(c):[0]:id::VARCHAR (not CAST(... AS VARCHAR)).
+            if self.from_dialect == "snowflake" and _is_variant_colon_extract(expression.this):
+                return f"{self.sql(expression.this)}::{self.sql(expression.to)}"
+
             # Delegate to base generator's cast_sql which properly uses datatype_sql
             # to handle type mappings and preserve precision/scale
             return super().cast_sql(expression, safe_prefix=safe_prefix)
@@ -2330,14 +2371,14 @@ class E6(Dialect):
             - Inside VALUES: map[...] preserved as-is (Databricks uses MAP() with
               parens for constructors, so map[...] in INSERT VALUES is not ELEMENT_AT)
             """
-            # A bracket index on a PARSE_JSON / variant root is JSON-path navigation;
-            # fold it into json_extract instead of ELEMENT_AT, which the engine rejects
-            # for the {metadata, value} variant struct PARSE_JSON produces.
-            if _is_variant_root(expression.this):
-                path = exp.JSONPath(
-                    expressions=[exp.JSONPathRoot(), *_bracket_path_segments(expression)]
+            # A bracket index on a PARSE_JSON / variant root is variant navigation, not
+            # array ELEMENT_AT (which the engine rejects for the {metadata, value}
+            # variant struct PARSE_JSON produces). Render E6 colon syntax:
+            # PARSE_JSON(c)[0] -> PARSE_JSON(c):[0].
+            if self.from_dialect == "snowflake" and _is_variant_root(expression.this):
+                return self._render_variant_colon(
+                    _variant_root_value(expression.this), _bracket_path_segments(expression)
                 )
-                return self.func("JSON_EXTRACT", _variant_root_value(expression.this), path)
 
             # Inside a VALUES clause, map[...] bracket syntax should be preserved
             # as-is. In Databricks MAP() with parens is the constructor; map[...]
@@ -2895,27 +2936,34 @@ class E6(Dialect):
                 return self.func("TO_JSON", inner.this)
             return self.func("TO_JSON", inner)
 
-        def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
-            # PARSE_JSON(c)[0]:id parses as JSONExtract(Bracket(PARSE_JSON(c), [0]), '$.id').
-            # Merge the leading bracket index into the front of the path so the result is a
-            # single json_extract(PARSE_JSON(c), '$[0].id') rather than ELEMENT_AT-wrapped.
-            this = e.this
-            path = e.expression
-            if (
-                isinstance(this, exp.Bracket)
-                and _is_variant_root(this.this)
-                and isinstance(path, exp.JSONPath)
-            ):
-                segments = list(path.expressions)
-                new_path = exp.JSONPath(
-                    expressions=[*segments[:1], *_bracket_path_segments(this), *segments[1:]]
-                )
-                return self.func("JSON_EXTRACT", _variant_root_value(this.this), new_path)
+        def _render_variant_colon(self, root, segments) -> str:
+            # E6 variant navigation: PARSE_JSON(c):[0]:id  (subscript -> :[i], key -> :name).
+            sql = self.sql(root)
+            for seg in segments:
+                if isinstance(seg, exp.JSONPathSubscript):
+                    sql += f":[{seg.this}]"
+                elif isinstance(seg, exp.JSONPathKey):
+                    key = seg.this
+                    if key in self.RESERVED_DATATYPE_KEYWORDS or seg.args.get("escape"):
+                        sql += f':"{key}"'
+                    else:
+                        sql += f":{key}"
+            return sql
 
+        def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
             # Check if this is Databricks colon syntax (marked with variant_extract=True)
             variant_extract_flag = getattr(e, "variant_extract", False) or e.args.get(
                 "variant_extract", False
             )
+
+            # Snowflake variant navigation (PARSE_JSON(c)[0]:id, PARSE_JSON(c):[0]:id,
+            # PARSE_JSON(c)::ARRAY[0]:id) -> E6 colon syntax PARSE_JSON(c):[0]:id. The
+            # leading [i] index folds into the colon path and a redundant ::ARRAY cast
+            # is dropped. (Was previously wrapped in ELEMENT_AT/JSON_EXTRACT.)
+            if self.from_dialect == "snowflake" and variant_extract_flag:
+                parts = _variant_extract_parts(e)
+                if parts is not None:
+                    return self._render_variant_colon(*parts)
 
             if self.from_dialect == "databricks" and variant_extract_flag:
                 if isinstance(e.expression, exp.JSONPath):

@@ -1355,36 +1355,44 @@ class TestE6(Validator):
         )
 
     def test_variant_bracket_json_path(self):
-        # A leading array index on a PARSE_JSON/variant root must fold into the JSON
-        # path, NOT become ELEMENT_AT over the PARSE_JSON variant struct (which the
-        # planner rejects for the {metadata, value} variant struct).
+        # A leading array index on a PARSE_JSON/variant root is variant navigation, not
+        # array ELEMENT_AT (which the planner rejects for the {metadata, value} variant
+        # struct). E6 renders it as colon syntax: PARSE_JSON(c)[0]:id -> PARSE_JSON(c):[0]:id.
         self.validate_all(
-            "SELECT CAST(JSON_EXTRACT(PARSE_JSON(c), '$[0].id') AS VARCHAR) AS x FROM t",
+            "SELECT PARSE_JSON(c):[0]:id::VARCHAR AS x FROM t",
             read={
                 "snowflake": "SELECT PARSE_JSON(c)[0]:id::TEXT AS x FROM t",
             },
         )
 
+        # Already-colon input is preserved (not rewritten).
+        self.validate_all(
+            "SELECT PARSE_JSON(c):[0]:id::VARCHAR AS x FROM t",
+            read={
+                "snowflake": "SELECT PARSE_JSON(c):[0]:id::TEXT AS x FROM t",
+            },
+        )
+
         # Standalone bracket on a variant root (no trailing colon path).
         self.validate_all(
-            "SELECT JSON_EXTRACT(PARSE_JSON(c), '$[0]') AS x FROM t",
+            "SELECT PARSE_JSON(c):[0] AS x FROM t",
             read={
                 "snowflake": "SELECT PARSE_JSON(c)[0] AS x FROM t",
             },
         )
 
-        # Colon-only navigation (no bracket) must remain unchanged.
+        # Colon-only navigation (no bracket).
         self.validate_all(
-            "SELECT CAST(JSON_EXTRACT(PARSE_JSON(c), '$.id') AS VARCHAR) AS x FROM t",
+            "SELECT PARSE_JSON(c):id::VARCHAR AS x FROM t",
             read={
                 "snowflake": "SELECT PARSE_JSON(c):id::TEXT AS x FROM t",
             },
         )
 
-        # A ::ARRAY cast in front of a variant index folds the index into the JSON path
-        # AND drops the redundant array cast (E6 has no CAST(... AS ARRAY)).
+        # A ::ARRAY cast in front of a variant index folds the index into the colon
+        # path AND drops the redundant array cast (E6 has no CAST(... AS ARRAY)).
         self.validate_all(
-            "SELECT CAST(JSON_EXTRACT(PARSE_JSON(c), '$[0].id') AS VARCHAR) AS x FROM t",
+            "SELECT PARSE_JSON(c):[0]:id::VARCHAR AS x FROM t",
             read={
                 "snowflake": "SELECT PARSE_JSON(c)::ARRAY[0]:id::TEXT AS x FROM t",
             },
@@ -1392,7 +1400,7 @@ class TestE6(Validator):
 
         # Real ServiceTitan dbt model (jpm_submittal): two variant-bracket columns.
         self.validate_all(
-            'SELECT T.ID, CAST(JSON_EXTRACT(PARSE_JSON(T.FIELDS_SYS_STATUS_CATEGORY_VALUE), \'$[0].id\') AS VARCHAR) AS STATUS_CATEGORY_ID, CAST(JSON_EXTRACT(PARSE_JSON(T.FIELDS_SYS_PRIORITY_VALUE), \'$[0].id\') AS VARCHAR) AS PRIORITY FROM "e6datapoc_catalogForTS"."e6datapoc.icebergForTS"."jpm_submittal" AS T LIMIT 100',
+            'SELECT T.ID, PARSE_JSON(T.FIELDS_SYS_STATUS_CATEGORY_VALUE):[0]:id::VARCHAR AS STATUS_CATEGORY_ID, PARSE_JSON(T.FIELDS_SYS_PRIORITY_VALUE):[0]:id::VARCHAR AS PRIORITY FROM "e6datapoc_catalogForTS"."e6datapoc.icebergForTS"."jpm_submittal" AS T LIMIT 100',
             read={
                 "snowflake": 'SELECT T.ID, PARSE_JSON(T.FIELDS_SYS_STATUS_CATEGORY_VALUE)[0]:id::TEXT AS STATUS_CATEGORY_ID, PARSE_JSON(T.FIELDS_SYS_PRIORITY_VALUE)[0]:id::TEXT AS PRIORITY FROM "e6datapoc_catalogForTS"."e6datapoc.icebergForTS"."jpm_submittal" T LIMIT 100',
             },
@@ -1401,7 +1409,7 @@ class TestE6(Validator):
         # Real ServiceTitan dbt model (jpm_requests_rfi): plain [0] columns plus two
         # ::ARRAY[0] columns where the redundant array cast must also be dropped.
         self.validate_all(
-            "SELECT T.ID, CAST(JSON_EXTRACT(PARSE_JSON(T.FIELDS_SYS_STATUS_CATEGORY_VALUE), '$[0].id') AS VARCHAR) AS STATUS_CATEGORY_ID, CAST(JSON_EXTRACT(PARSE_JSON(T.FIELDS_SYS_PRIORITY_VALUE), '$[0].id') AS VARCHAR) AS PRIORITY, CAST(JSON_EXTRACT(PARSE_JSON(T.FIELDS_JPM_REQUESTS_COST_IMPACT_VALUE), '$[0].id') AS VARCHAR) AS COST_IMPACT_ID, CAST(JSON_EXTRACT(PARSE_JSON(T.FIELDS_JPM_REQUESTS_SCHEDULE_IMPACT_VALUE), '$[0].id') AS VARCHAR) AS SCHEDULE_IMPACT_ID FROM \"e6datapoc_catalogForTS\".\"e6datapoc.icebergForTS\".\"jpm_requests_rfi\" AS T LIMIT 100",
+            'SELECT T.ID, PARSE_JSON(T.FIELDS_SYS_STATUS_CATEGORY_VALUE):[0]:id::VARCHAR AS STATUS_CATEGORY_ID, PARSE_JSON(T.FIELDS_SYS_PRIORITY_VALUE):[0]:id::VARCHAR AS PRIORITY, PARSE_JSON(T.FIELDS_JPM_REQUESTS_COST_IMPACT_VALUE):[0]:id::VARCHAR AS COST_IMPACT_ID, PARSE_JSON(T.FIELDS_JPM_REQUESTS_SCHEDULE_IMPACT_VALUE):[0]:id::VARCHAR AS SCHEDULE_IMPACT_ID FROM "e6datapoc_catalogForTS"."e6datapoc.icebergForTS"."jpm_requests_rfi" AS T LIMIT 100',
             read={
                 "snowflake": 'SELECT T.ID, PARSE_JSON(T.FIELDS_SYS_STATUS_CATEGORY_VALUE)[0]:id::TEXT AS STATUS_CATEGORY_ID, PARSE_JSON(T.FIELDS_SYS_PRIORITY_VALUE)[0]:id::TEXT AS PRIORITY, PARSE_JSON(T.FIELDS_JPM_REQUESTS_COST_IMPACT_VALUE)::ARRAY[0]:id::TEXT AS COST_IMPACT_ID, PARSE_JSON(T.FIELDS_JPM_REQUESTS_SCHEDULE_IMPACT_VALUE)::ARRAY[0]:id::TEXT AS SCHEDULE_IMPACT_ID FROM "e6datapoc_catalogForTS"."e6datapoc.icebergForTS"."jpm_requests_rfi" T LIMIT 100',
             },
