@@ -2307,13 +2307,24 @@ class E6(Dialect):
             time_format_tokens = {"h", "hh", "s", "ss", "H", "HH", "m", "mm", "S", "SS"}
             requires_timestamp = any(token in format_expr for token in time_format_tokens)
 
+            # On native executor, map DATE_FORMAT as-is (native implements DATE_FORMAT,
+            # not the FORMAT_DATE/FORMAT_TIMESTAMP pair). On java executor (default),
+            # keep the existing FORMAT_DATE/FORMAT_TIMESTAMP split. Argument order is
+            # unchanged in both cases; only the function name differs.
+            is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+            func_name = (
+                "DATE_FORMAT"
+                if is_native
+                else ("FORMAT_TIMESTAMP" if requires_timestamp else "FORMAT_DATE")
+            )
+
             if (
                 isinstance(date_expr, exp.CurrentDate)
                 or isinstance(date_expr, exp.CurrentTimestamp)
                 or isinstance(date_expr, exp.TsOrDsToDate)
             ):
                 return self.func(
-                    "FORMAT_TIMESTAMP" if requires_timestamp else "FORMAT_DATE",
+                    func_name,
                     date_expr,
                     format_expr_quoted,
                 )
@@ -2322,7 +2333,7 @@ class E6(Dialect):
             ):
                 date_expr = f"CAST({date_expr} AS DATE)"
             return self.func(
-                "FORMAT_TIMESTAMP" if requires_timestamp else "FORMAT_DATE",
+                func_name,
                 date_expr,
                 format_expr_quoted,
             )
