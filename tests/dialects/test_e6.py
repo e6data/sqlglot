@@ -2594,6 +2594,36 @@ class TestE6(Validator):
             read={"databricks": "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)"},
         )
 
+    def test_date_format_native_executor(self):
+        # With E6_EXECUTOR_TYPE=native, TimeToStr is emitted as DATE_FORMAT
+        # (native implements DATE_FORMAT, not FORMAT_DATE/FORMAT_TIMESTAMP).
+        # Default (java) keeps the FORMAT_DATE/FORMAT_TIMESTAMP split. Argument
+        # order is unchanged in both cases; only the function name differs.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            # date-only format
+            self.validate_all(
+                "SELECT DATE_FORMAT(d, 'yyyy-MM-dd')",
+                read={"presto": "SELECT DATE_FORMAT(d, 'yyyy-MM-dd')"},
+            )
+            # timestamp format (time tokens) also maps to DATE_FORMAT on native
+            self.validate_all(
+                "SELECT DATE_FORMAT(CAST(d AS TIMESTAMP), 'y-MM-dd HH:mm:ss')",
+                read={"databricks": "SELECT DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss')"},
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (java): FORMAT_DATE for date-only, FORMAT_TIMESTAMP for time
+        self.validate_all(
+            "SELECT FORMAT_DATE(d, 'yyyy-MM-dd')",
+            read={"presto": "SELECT DATE_FORMAT(d, 'yyyy-MM-dd')"},
+        )
+        self.validate_all(
+            "SELECT FORMAT_TIMESTAMP(CAST(d AS TIMESTAMP), 'y-MM-dd HH:mm:ss')",
+            read={"databricks": "SELECT DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss')"},
+        )
+
     def test_timestamp_seconds(self):
         # Test basic TIMESTAMP_SECONDS with integer literal
         self.validate_all(
