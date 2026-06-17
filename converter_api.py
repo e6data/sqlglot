@@ -13,6 +13,7 @@ import pyarrow.parquet as pq
 import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
+from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
@@ -123,9 +124,15 @@ async def convert_query(
             from_sql,
         )
         try:
+            # Parse as Snowflake but tolerate Databricks backtick identifiers:
+            # Power BI queries mix ANSI double-quoted identifiers (the outer
+            # wrapper) with backtick identifiers (inner CTEs). Plain Snowflake
+            # chokes on the backticks; SnowflakeBackticks treats both " and `
+            # as identifiers, so every identifier is correctly carried over to
+            # Databricks backticks while single-quoted strings stay literals.
             query = sqlglot.transpile(
                 query,
-                read="snowflake",
+                read=SnowflakeBackticks,
                 write="databricks",
                 identify=False,
             )[0]

@@ -3219,6 +3219,53 @@ class TestE6(Validator):
             },
         )
 
+    def test_powerbi_mixed_quote_sf_to_dbr(self):
+        """Power BI SF->DBR->E6 path for mixed-quote queries.
+
+        Power BI Snowflake SQL mixes ANSI double-quoted identifiers (outer
+        wrapper) with Databricks backtick identifiers (inner CTEs). Parsing as
+        SnowflakeBackticks (which accepts both " and ` as identifiers) keeps
+        every identifier an identifier and every single-quoted string a literal,
+        then the existing Databricks->E6 step renders them as E6 identifiers.
+        """
+        import sqlglot
+        from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks
+
+        def sf_backtick_to_e6(sql):
+            dbr = sqlglot.transpile(
+                sql, read=SnowflakeBackticks, write="databricks", identify=False
+            )[0]
+            return sqlglot.transpile(dbr, read="databricks", write="e6")[0]
+
+        # Mixed: backtick-quoted table + ANSI double-quoted identifiers +
+        # single-quoted literal. Identifiers stay identifiers; 'lit' stays a literal.
+        self.assertEqual(
+            sf_backtick_to_e6(
+                'SELECT "ID" AS "c47", "k" FROM cat.`MyTbl` WHERE "k" = \'lit\' GROUP BY "ID"'
+            ),
+            'SELECT "ID" AS "c47", "k" FROM cat."MyTbl" WHERE "k" = \'lit\' GROUP BY "ID"',
+        )
+
+        # Standalone double-quoted identifier in projection and GROUP BY must NOT
+        # become the string literal 'ID'.
+        self.assertEqual(
+            sf_backtick_to_e6('SELECT "ID" FROM cat.`Tbl` GROUP BY "ID"'),
+            'SELECT "ID" FROM cat."Tbl" GROUP BY "ID"',
+        )
+
+        # Single-quoted string stays a literal.
+        self.assertEqual(
+            sf_backtick_to_e6("SELECT 'hello' AS x FROM t"),
+            "SELECT 'hello' AS x FROM t",
+        )
+
+        # Regression: base Snowflake (no backtick variant) already treats "ID" as
+        # an identifier, so default behavior is unchanged.
+        self.assertEqual(
+            sqlglot.transpile('SELECT "ID" FROM t', read="snowflake", write="e6")[0],
+            'SELECT "ID" FROM t',
+        )
+
     def test_make_interval(self):
         """Test make_interval transpilation from Databricks to E6."""
 
