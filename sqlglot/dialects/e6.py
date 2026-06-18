@@ -2797,14 +2797,18 @@ class E6(Dialect):
 
             # Generate final function with or without format argument
             if format_str:
+                # Native executor doesn't implement PARSE_DATETIME, but its
+                # TO_UNIX_TIMESTAMP accepts the format directly as a second
+                # argument (Spark-style pattern), so emit
+                # TO_UNIX_TIMESTAMP(<expr>, '<format>') and skip PARSE_DATETIME.
+                if is_native:
+                    return self.func("TO_UNIX_TIMESTAMP", time_expr, self.format_time(expression))
                 parse_datetime_expr = exp.Anonymous(
                     this="PARSE_DATETIME", expressions=[exp.Literal.string(format_str), time_expr]
                 )
                 to_unix_expr = exp.Anonymous(
                     this="TO_UNIX_TIMESTAMP", expressions=[parse_datetime_expr]
                 )
-                if is_native:
-                    return self.sql(to_unix_expr)
                 return self.sql(exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000")))
 
             # Wrap argument in CAST(... AS TIMESTAMP) since E6's TO_UNIX_TIMESTAMP
