@@ -2552,10 +2552,18 @@ class TestE6(Validator):
                 "SELECT TO_UNIX_TIMESTAMP(CAST(A AS TIMESTAMP))",
                 read={"databricks": "SELECT UNIX_TIMESTAMP(A)"},
             )
-            # format branch (PARSE_DATETIME)
+            # format branch: native has no PARSE_DATETIME, so the format is passed
+            # directly as TO_UNIX_TIMESTAMP's 2nd arg (Spark-style pattern) instead.
             self.validate_all(
-                "SELECT TO_UNIX_TIMESTAMP(PARSE_DATETIME('%Y-%m-%d', '2016-04-08'))",
+                "SELECT TO_UNIX_TIMESTAMP('2016-04-08', 'yyyy-MM-dd')",
                 read={"databricks": "SELECT unix_timestamp('2016-04-08', 'yyyy-MM-dd')"},
+            )
+            # reported case: from_unixtime(unix_timestamp(col, 'yyyyMMdd'))
+            self.validate_all(
+                'SELECT FROM_UNIXTIME(TO_UNIX_TIMESTAMP("t"."day_id", \'yyyyMMdd\'))',
+                read={
+                    "databricks": "SELECT from_unixtime(unix_timestamp(`t`.`day_id`, 'yyyyMMdd'))"
+                },
             )
         finally:
             os.environ.pop("E6_EXECUTOR_TYPE", None)
