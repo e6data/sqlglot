@@ -2277,24 +2277,30 @@ class E6(Dialect):
             # Subquery form: EXISTS(subquery) -> EXISTS(subquery)
             return f"EXISTS {self.wrap(expression)}"
 
+        def _flatten_passthrough_sql(self, explode: exp.Explode) -> str:
+            """
+            Render a Snowflake FLATTEN(...) call without converting it, so the E6
+            planner can expand it natively.
+
+            The FLATTEN call is rebuilt from the Explode node (rather than delegating
+            to the Snowflake generator) so the arguments -- e.g. variant access inside
+            ``input => ...`` -- still get E6-specific rendering.
+            """
+            args = [self.sql(explode, "this")]
+            args.extend(self.sql(arg) for arg in explode.args.get("expressions") or [])
+            return f"FLATTEN({', '.join(arg for arg in args if arg)})"
+
         def tablefromrows_sql(self, expression: exp.TableFromRows) -> str:
             """
-            Handle Snowflake's TABLE(FLATTEN(...)) -> UNNEST(...) transformation.
-            When the inner expression is an Explode (from FLATTEN), convert to UNNEST.
+            Pass Snowflake's TABLE(FLATTEN(...)) through as TABLE(FLATTEN(...)) so the
+            E6 planner expands it natively, instead of converting it to UNNEST.
             """
             inner = expression.this
 
-            # Check if inner expression is Explode (from Snowflake FLATTEN)
             if self.from_dialect == "snowflake" and isinstance(inner, exp.Explode):
-                # Get the content inside EXPLODE/FLATTEN
-                content = inner.this
-                content_sql = self.sql(content)
-
-                # Handle alias using standard pattern
                 alias = self.sql(expression, "alias")
                 alias_sql = f" AS {alias}" if alias else ""
-
-                return f"UNNEST({content_sql}){alias_sql}"
+                return f"TABLE({self._flatten_passthrough_sql(inner)}){alias_sql}"
 
             # Default behavior for other cases
             return super().tablefromrows_sql(expression)
@@ -2825,6 +2831,17 @@ class E6(Dialect):
             return self.sql(exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000")))
 
         def lateral_sql(self, expression: exp.Lateral) -> str:
+            # Keep Snowflake LATERAL FLATTEN(...) as native FLATTEN so the E6 planner
+            # expands it, instead of converting to LATERAL VIEW EXPLODE. The default
+            # FLATTEN output columns (SEQ, KEY, PATH, INDEX, VALUE, THIS) the Snowflake
+            # reader auto-adds to the alias are dropped -- they aren't in the source
+            # query and would only cause identifier-quoting mismatches.
+            if self.from_dialect == "snowflake" and isinstance(expression.this, exp.Explode):
+                flatten = self._flatten_passthrough_sql(expression.this)
+                alias = expression.args.get("alias")
+                name = alias.name if alias else ""
+                return self.seg(f"LATERAL {flatten} AS {name}" if name else f"LATERAL {flatten}")
+
             expression.set("view", True)
             this = self.sql(expression, "this")
 
