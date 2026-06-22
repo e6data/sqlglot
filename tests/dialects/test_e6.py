@@ -396,7 +396,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT LATERAL VIEW EXPLODE(input => mv.content) AS f",
+            "SELECT LATERAL FLATTEN(input => mv.content) AS f",
             read={"snowflake": "select lateral flatten(input => mv.content) f"},
         )
 
@@ -3333,8 +3333,8 @@ class TestE6(Validator):
             },
         )
 
-    def test_snowflake_flatten_to_unnest(self):
-        """Test Snowflake TABLE(FLATTEN(...)) -> UNNEST(...) transformation."""
+    def test_snowflake_flatten_passthrough(self):
+        """Snowflake TABLE(FLATTEN(...)) is passed through unchanged for the E6 planner."""
         import sqlglot
 
         # Basic FLATTEN with input parameter
@@ -3344,7 +3344,7 @@ class TestE6(Validator):
             write="e6",
             from_dialect="snowflake",
         )[0]
-        self.assertEqual(result, "SELECT * FROM UNNEST(input => my_array) AS t")
+        self.assertEqual(result, "SELECT * FROM TABLE(FLATTEN(input => my_array)) AS t")
 
         # FLATTEN with subquery
         result = sqlglot.transpile(
@@ -3355,7 +3355,7 @@ class TestE6(Validator):
         )[0]
         self.assertEqual(
             result,
-            "SELECT * FROM UNNEST(SELECT tenant_ids FROM session_tenant_mappings WHERE session_id = '158558983524602') AS test",
+            "SELECT * FROM TABLE(FLATTEN(SELECT tenant_ids FROM session_tenant_mappings WHERE session_id = '158558983524602')) AS test",
         )
 
         # FLATTEN with direct column reference
@@ -3365,7 +3365,7 @@ class TestE6(Validator):
             write="e6",
             from_dialect="snowflake",
         )[0]
-        self.assertEqual(result, "SELECT * FROM UNNEST(my_column)")
+        self.assertEqual(result, "SELECT * FROM TABLE(FLATTEN(my_column))")
 
     def test_reserved_keywords_quoted(self):
         """Test that reserved keywords are properly quoted when used as table names."""
