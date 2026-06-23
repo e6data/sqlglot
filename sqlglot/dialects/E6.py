@@ -824,6 +824,12 @@ class E6(Dialect):
             exp.MD5Digest: lambda self, e: self.func("MD5", e.this),
             exp.Min: min_or_least,
             exp.Mod: lambda self, e: self.func("MOD", e.this, e.expression),
+            # TRY_PARSE_JSON parses into exp.ParseJSON(safe=True); the safe flag must
+            # survive so the engine routes to the non-throwing TRY_PARSE_JSON instead
+            # of PARSE_JSON, which throws on empty/invalid input.
+            exp.ParseJSON: lambda self, e: self.func(
+                "TRY_PARSE_JSON" if e.args.get("safe") else "PARSE_JSON", e.this
+            ),
             exp.Pow: rename_func("POWER"),
             exp.RegexpExtract: rename_func("REGEXP_EXTRACT"),
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),

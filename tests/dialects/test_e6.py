@@ -5,6 +5,35 @@ from sqlglot import transpile
 class TestE6(Validator):
     dialect = "E6"
 
+    def test_try_parse_json_preserves_safe(self):
+        # TRY_PARSE_JSON parses into exp.ParseJSON(safe=True). The E6 generator must
+        # emit TRY_PARSE_JSON (NOT PARSE_JSON), otherwise the executor routes to the
+        # throwing ParseJson and crashes on empty/invalid input with
+        # "JsonParseException: Unexpected null token" instead of returning NULL.
+        self.validate_all(
+            "SELECT TRY_PARSE_JSON(value)",
+            read={
+                "snowflake": "SELECT TRY_PARSE_JSON(value)",
+            },
+        )
+
+        # Non-safe PARSE_JSON must remain PARSE_JSON.
+        self.validate_all(
+            "SELECT PARSE_JSON(value)",
+            read={
+                "snowflake": "SELECT PARSE_JSON(value)",
+            },
+        )
+
+        # The real failing shape from accounting_stg_costing_settings: TRY semantics
+        # must survive through GET_PATH + CAST folding.
+        self.validate_all(
+            "SELECT CAST(JSON_EXTRACT(TRY_PARSE_JSON(value), '$.CalculationOption') AS DECIMAL)",
+            read={
+                "snowflake": "SELECT CAST(GET_PATH(TRY_PARSE_JSON(value), 'CalculationOption') AS NUMBER)",
+            },
+        )
+
     def test_variant_bracket_json_path(self):
         # A leading array index on a PARSE_JSON/variant root must fold into the
         # JSON path, NOT become ELEMENT_AT over the PARSE_JSON variant struct
