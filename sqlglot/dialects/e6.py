@@ -2277,6 +2277,14 @@ class E6(Dialect):
             # Subquery form: EXISTS(subquery) -> EXISTS(subquery)
             return f"EXISTS {self.wrap(expression)}"
 
+        def parsejson_sql(self, expression: exp.ParseJSON) -> str:
+            # Snowflake TRY_PARSE_JSON is represented as ParseJSON(safe=True); keep
+            # the TRY_ variant instead of collapsing it to PARSE_JSON (mirrors the
+            # Snowflake generator). Non-safe ParseJSON falls back to the default.
+            if expression.args.get("safe"):
+                return self.func("TRY_PARSE_JSON", expression.this, expression.expression)
+            return super().parsejson_sql(expression)
+
         def _flatten_passthrough_sql(self, explode: exp.Explode) -> str:
             """
             Render a Snowflake FLATTEN(...) call without converting it, so the E6
