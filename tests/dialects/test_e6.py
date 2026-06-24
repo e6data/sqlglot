@@ -1415,6 +1415,41 @@ class TestE6(Validator):
             },
         )
 
+    def test_try_parse_json(self):
+        """Snowflake TRY_PARSE_JSON is parsed as ParseJSON(safe=True); the TRY_ prefix
+        must be preserved on output, not collapsed to PARSE_JSON."""
+        import sqlglot
+
+        # Reported query: TRY_PARSE_JSON with variant navigation.
+        result = sqlglot.transpile(
+            "SELECT try_parse_json(value):CalculationOption FROM namedvalue",
+            read="snowflake",
+            write="e6",
+        )[0]
+        self.assertEqual(
+            result,
+            "SELECT JSON_EXTRACT(TRY_PARSE_JSON(value), '$.CalculationOption') FROM namedvalue",
+        )
+
+        # Bare TRY_PARSE_JSON (no variant navigation) is preserved.
+        result = sqlglot.transpile(
+            "SELECT try_parse_json(value) FROM namedvalue",
+            read="snowflake",
+            write="e6",
+        )[0]
+        self.assertEqual(result, "SELECT TRY_PARSE_JSON(value) FROM namedvalue")
+
+        # Non-safe PARSE_JSON is unaffected.
+        result = sqlglot.transpile(
+            "SELECT parse_json(value):CalculationOption FROM namedvalue",
+            read="snowflake",
+            write="e6",
+        )[0]
+        self.assertEqual(
+            result,
+            "SELECT JSON_EXTRACT(PARSE_JSON(value), '$.CalculationOption') FROM namedvalue",
+        )
+
     def test_array_slice(self):
         self.validate_all(
             "SELECT ARRAY_SLICE(A, B, C + B)",
