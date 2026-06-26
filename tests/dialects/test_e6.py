@@ -3309,6 +3309,58 @@ class TestE6(Validator):
             'SELECT "ID" FROM t',
         )
 
+    def test_powerbi_pg_to_dbr_two_pass(self):
+        """Power BI PG->DBR->E6 two-pass for a Postgres outer wrapper with inner
+        Databricks subqueries.
+
+        Outer ANSI ``"id"`` identifiers stay identifiers; inner Databricks ``"str"``
+        string literals become ``'str'``; inner backtick identifiers become ``"id"``.
+        """
+        import sqlglot
+        from apis.utils.powerbi_two_pass import pg_outer_to_databricks
+
+        def pg_to_e6(sql):
+            return sqlglot.transpile(pg_outer_to_databricks(sql), read="databricks", write="e6")[0]
+
+        # FROM-derived inner subquery: backtick identifiers -> "..." ; outer "a" kept.
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM (SELECT `x` FROM `t`) "s"'),
+            'SELECT "a" FROM (SELECT "x" FROM "t") AS "s"',
+        )
+
+        # The core conflict: inner Databricks "active"/"Y"/"N" string literals -> '...'
+        # while the outer "flag" identifier stays an identifier.
+        self.assertEqual(
+            pg_to_e6(
+                'SELECT "flag" FROM '
+                '(SELECT CASE WHEN `s` = "active" THEN "Y" ELSE "N" END AS flag FROM `t`) "q"'
+            ),
+            'SELECT "flag" FROM '
+            '(SELECT CASE WHEN "s" = \'active\' THEN \'Y\' ELSE \'N\' END AS flag FROM "t") AS "q"',
+        )
+
+        # IN-subquery context.
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM t WHERE "a" IN (SELECT `x` FROM `t`)'),
+            'SELECT "a" FROM t WHERE "a" IN (SELECT "x" FROM "t")',
+        )
+
+        # A backtick inside a function call must not be mistaken for a subquery.
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM (SELECT CONCAT(`x`, \'y\') AS c FROM `t`) "s"'),
+            'SELECT "a" FROM (SELECT CONCAT("x", \'y\') AS c FROM "t") AS "s"',
+        )
+
+        # Multiple inner subqueries are pulled out one error at a time.
+        self.assertEqual(
+            pg_to_e6(
+                'SELECT "a" FROM (SELECT `x` FROM `t1`) "p" '
+                'JOIN (SELECT `y` FROM `t2`) "q" ON "p"."x" = "q"."y"'
+            ),
+            'SELECT "a" FROM (SELECT "x" FROM "t1") AS "p" '
+            'JOIN (SELECT "y" FROM "t2") AS "q" ON "p"."x" = "q"."y"',
+        )
+
     def test_make_interval(self):
         """Test make_interval transpilation from Databricks to E6."""
 

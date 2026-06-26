@@ -14,6 +14,7 @@ import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks
+from apis.utils.powerbi_two_pass import pg_outer_to_databricks
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
@@ -105,7 +106,30 @@ async def convert_query(
         except json.JSONDecodeError as je:
             return HTTPException(status_code=500, detail=str(je))
 
-    if flags_dict.get("POWERBI_SF_TO_DBR", False):
+    if flags_dict.get("POWERBI_PG_TO_DBR", False):
+        # Two-pass for Power BI queries with a Postgres outer wrapper and inner
+        # Databricks subqueries: transpile the Postgres outer to Databricks while
+        # keeping the inner Databricks subqueries verbatim, producing one uniform
+        # Databricks query. The downstream pipeline below is the Databricks -> e6 step.
+        # On any failure, forward the original query as Databricks.
+        logger.info(
+            "%s AT %s — POWERBI_PG_TO_DBR: two-pass Postgres -> Databricks (from_sql=%s ignored)",
+            query_id,
+            timestamp,
+            from_sql,
+        )
+        try:
+            query = pg_outer_to_databricks(query)
+            logger.info("%s AT %s — Two-pass (PG -> DBR) result:\n%s", query_id, timestamp, query)
+        except Exception as e:
+            logger.warning(
+                "%s AT %s — Two-pass PG -> DBR failed (%s); forwarding original query as Databricks",
+                query_id,
+                timestamp,
+                e,
+            )
+        from_sql = "databricks"
+    elif flags_dict.get("POWERBI_SF_TO_DBR", False):
         # Intermediary vanilla Snowflake -> Databricks transpile, run
         # unconditionally whenever the flag is set -- the caller's `from_sql`
         # is intentionally ignored so the planner can opt a query into the
