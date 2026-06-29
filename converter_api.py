@@ -14,7 +14,7 @@ import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks
-from apis.utils.powerbi_two_pass import pg_outer_to_databricks
+from apis.utils.multidialect import pg_outer_to_inner, split_pg_outer, _splice
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
@@ -88,6 +88,35 @@ def escape_unicode(s: str) -> str:
     return s.encode("unicode_escape").decode("ascii")
 
 
+def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
+    """Transpile ONE region of a multi-dialect BI-tool query to e6.
+
+    This deliberately runs the SAME steps as the main /convert-query pipeline
+    (normalize -> strip comments -> parse -> quote identifiers -> ensure SELECT FROM
+    VALUES -> case-sensitive CTE names -> .sql -> replace STRUCT), so a region
+    produces output identical to any other query going through the converter.
+
+    The one thing that varies is ``from_sql`` -- the dialect is "rewired" per region:
+      - "databricks" for the primary path (the merged pg->dbr intermediary) and for each
+        inner subquery, and
+      - "postgres" for the fallback OUTER, so e6 applies its Postgres-specific rules
+        (e.g. dropping a 1-arg numeric ``TRUNC`` that Databricks would mis-read as a
+        date truncation).
+    """
+    # Same input cleanup the main path does before parsing.
+    region_sql = normalize_unicode_spaces(region_sql)
+    if SKIP_COMMENT.lower() == "true":
+        region_sql, _ = strip_comment(region_sql)
+    # Parse with the region's own source dialect, then run the standard e6 steps.
+    tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
+    tree = quote_identifiers(tree, dialect="e6")
+    tree = ensure_select_from_values(tree)
+    tree = set_cte_names_case_sensitively(tree)
+    # from_dialect=from_sql is what lets e6 honor the source dialect's semantics.
+    out = tree.sql(dialect="e6", from_dialect=from_sql, pretty=pretty)
+    return replace_struct_in_query(out)
+
+
 @app.post("/convert-query")
 async def convert_query(
     query: str = Form(...),
@@ -106,29 +135,80 @@ async def convert_query(
         except json.JSONDecodeError as je:
             return HTTPException(status_code=500, detail=str(je))
 
-    if flags_dict.get("POWERBI_PG_TO_DBR", False):
-        # Two-pass for Power BI queries with a Postgres outer wrapper and inner
-        # Databricks subqueries: transpile the Postgres outer to Databricks while
-        # keeping the inner Databricks subqueries verbatim, producing one uniform
-        # Databricks query. The downstream pipeline below is the Databricks -> e6 step.
-        # On any failure, forward the original query as Databricks.
+    if flags_dict.get("MULTIDIALECT", False):
+        # Multi-dialect BI-tool queries (Power BI / Tableau / ThoughtSpot): a Postgres
+        # outer wrapper ("..." = identifier) wrapping inner subqueries written in another
+        # dialect. The inner dialect is read from the feature flags via INNER_DIALECT
+        # (default "databricks"; e.g. "snowflake"). This branch does its own e6 generation
+        # (via _region_to_e6) and returns directly -- it does NOT fall through to the
+        # shared pipeline below.
+        inner_dialect = flags_dict.get("INNER_DIALECT", "databricks").lower()
+        pretty = flags_dict.get("PRETTY_PRINT", True)
         logger.info(
-            "%s AT %s — POWERBI_PG_TO_DBR: two-pass Postgres -> Databricks (from_sql=%s ignored)",
+            "%s AT %s — MULTIDIALECT flag set: Postgres outer + %s inner "
+            "(INNER_DIALECT=%s, from_sql=%s ignored)",
             query_id,
             timestamp,
+            inner_dialect,
+            inner_dialect,
             from_sql,
         )
         try:
-            query = pg_outer_to_databricks(query)
-            logger.info("%s AT %s — Two-pass (PG -> DBR) result:\n%s", query_id, timestamp, query)
-        except Exception as e:
-            logger.warning(
-                "%s AT %s — Two-pass PG -> DBR failed (%s); forwarding original query as Databricks",
+            # PRIMARY: outer pg -> <inner_dialect> (inner subqueries kept verbatim), then
+            # one <inner_dialect> -> e6 pass over the merged query. For inner_dialect
+            # "snowflake" this is pg -> snowflake -> e6; for "databricks", pg -> dbr -> e6.
+            intermediary = pg_outer_to_inner(query, inner_dialect)
+            logger.info(
+                "%s AT %s — MULTIDIALECT primary intermediary (pg -> %s):\n%s",
                 query_id,
                 timestamp,
-                e,
+                inner_dialect,
+                intermediary,
             )
-        from_sql = "databricks"
+            converted_query = _region_to_e6(intermediary, inner_dialect, pretty)
+            logger.info(
+                "%s AT %s — MULTIDIALECT PRIMARY pass taken (pg -> %s -> e6)",
+                query_id,
+                timestamp,
+                inner_dialect,
+            )
+        except Exception as e:
+            # FALLBACK: the <inner_dialect> -> e6 step failed -- e.g. a Postgres construct
+            # the inner dialect can't re-read (numeric TRUNC, which Databricks/e6 treat as
+            # a date truncation needing a unit). Split the query and run each region
+            # through the SAME e6 pipeline with the dialect rewired: the OUTER as
+            # "postgres" (so e6 applies Postgres rules, e.g. dropping the 1-arg TRUNC) and
+            # each inner subquery as <inner_dialect>, then splice the e6 fragments.
+            logger.warning(
+                "%s AT %s — MULTIDIALECT primary pg -> %s -> e6 failed (%s); "
+                "FALLBACK pass taken (outer pg -> e6, inner %s -> e6)",
+                query_id,
+                timestamp,
+                inner_dialect,
+                e,
+                inner_dialect,
+            )
+            outer, inner_subqueries = split_pg_outer(query)
+            logger.info(
+                "%s AT %s — MULTIDIALECT fallback intermediary outer "
+                "(pg, %d inner subqueries held out):\n%s",
+                query_id,
+                timestamp,
+                len(inner_subqueries),
+                outer,
+            )
+            converted_query = _region_to_e6(outer, "postgres", pretty)
+            for marker, subquery in inner_subqueries.items():
+                converted_query = _splice(
+                    converted_query, marker, _region_to_e6(subquery, inner_dialect, pretty)
+                )
+        logger.info(
+            "%s AT %s — MULTIDIALECT Transpiled Query:\n%s",
+            query_id,
+            timestamp,
+            converted_query,
+        )
+        return {"converted_query": converted_query}
     elif flags_dict.get("POWERBI_SF_TO_DBR", False):
         # Intermediary vanilla Snowflake -> Databricks transpile, run
         # unconditionally whenever the flag is set -- the caller's `from_sql`

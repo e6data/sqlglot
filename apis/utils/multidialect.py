@@ -1,29 +1,33 @@
-"""Two-pass Postgres -> Databricks transpile for Power BI mixed-dialect queries.
+"""Two-pass Postgres-outer / inner-dialect transpile for BI-tool mixed-dialect queries.
 
-A Power BI query has a Postgres outer wrapper (``"..."`` = identifier) wrapping inner
-Databricks subqueries (`` `...` `` = identifier, ``"..."`` = string literal). No single
-dialect can read both correctly. So we transpile the Postgres outer to Databricks and
-keep the inner Databricks subqueries verbatim, producing one uniform Databricks string.
-The caller then runs the normal ``databricks -> e6`` step (where inner ``"x"`` -> ``'x'``
-and `` `id` `` -> ``"id"``).
+Some BI tools (Power BI, Tableau, ThoughtSpot) emit a single SQL string whose **outer
+wrapper is Postgres** (``"..."`` = identifier) wrapping **inner native subqueries** in a
+different dialect -- Databricks (`` `...` `` = identifier, ``"..."`` = string literal) or
+Snowflake. No single dialect can read both correctly. So we transpile the Postgres outer
+to the inner dialect and keep the inner subqueries verbatim, producing one uniform
+inner-dialect string. The caller then runs the normal ``inner -> e6`` step (where, for a
+Databricks inner, ``"x"`` -> ``'x'`` and `` `id` `` -> ``"id"``).
 
 How we find the inner subqueries: try ``postgres -> databricks``; the parse error points
-at a Databricks subquery Postgres can't read. Pull that subquery out (replace it with a
-placeholder), and repeat one error at a time until the outer parses as plain Postgres.
+at an inner-dialect subquery Postgres can't read. (The ``write`` target of the detection
+transpile is irrelevant -- the failure comes from the Postgres *read* side -- so the same
+detection works whether the inner is Databricks or Snowflake.) Pull that subquery out
+(replace it with a placeholder), and repeat one error at a time until the outer parses as
+plain Postgres.
 
 Raises ``ValueError`` when it can't apply (error not inside a subquery, or no
 convergence) so the caller can fall back to the old path.
 
-WORKED EXAMPLE (full flow for ``pg_outer_to_databricks``)::
+WORKED EXAMPLE (full flow for ``pg_outer_to_inner``, inner = databricks)::
 
     input              : SELECT "a" FROM (SELECT `x` FROM `t`) "s"
                          (the parenthesized part is the inner Databricks subquery)
     1. _error_offset   -> 26   (postgres can't read the backtick `x`)
     2. _subquery_span  -> (16, 36) == "(SELECT `x` FROM `t`)"
-       cut into marker : SELECT "a" FROM (SELECT NULL AS __E6PBI_INNER_0__) "s"
-                         raw["__E6PBI_INNER_0__"] = "(SELECT `x` FROM `t`)"
+       cut into marker : SELECT "a" FROM (SELECT NULL AS __E6_INNER_0__) "s"
+                         raw["__E6_INNER_0__"] = "(SELECT `x` FROM `t`)"
     3. loop again      : _error_offset -> None  (residual is clean Postgres)
-    4. PASS 1 pg->dbr  : SELECT `a` FROM (SELECT NULL AS __E6PBI_INNER_0__) AS `s`
+    4. PASS 1 pg->dbr  : SELECT `a` FROM (SELECT NULL AS __E6_INNER_0__) AS `s`
     5. splice raw back : SELECT `a` FROM (SELECT `x` FROM `t`) AS `s`     <-- returned
        caller dbr->e6  : SELECT "a" FROM (SELECT "x" FROM "t") AS "s"
 """
@@ -44,7 +48,7 @@ SUBQUERY_OPENERS = {TokenType.SELECT, TokenType.WITH, TokenType.VALUES, TokenTyp
 # Placeholder name (formatted with the round number) swapped in for each pulled-out
 # subquery; unlikely to collide with a real identifier. MAX_ROUNDS bounds the loop so a
 # query that never converges fails fast instead of spinning.
-MARKER = "__E6PBI_INNER_{}__"
+MARKER = "__E6_INNER_{}__"
 MAX_ROUNDS = 64
 
 
@@ -54,10 +58,12 @@ def _error_offset(text):
 
     Example: for ``SELECT "a" FROM (SELECT `x` FROM `t`) "s"`` Postgres chokes on the
     backtick, so this returns ``26`` (the index of that `` ` ``). For a query with no
-    Databricks-only syntax it returns ``None``.
+    inner-dialect-only syntax it returns ``None``.
     """
     # Try the full postgres->databricks transpile with errors raised. If it succeeds the
-    # text is now clean Postgres (no Databricks-only constructs left) -> signal "done".
+    # text is now clean Postgres (no inner-dialect-only constructs left) -> signal "done".
+    # The "databricks" write target here is arbitrary: the error we key off comes from the
+    # Postgres *read*, so this same probe detects a Snowflake inner subquery just as well.
     try:
         sqlglot.transpile(text, read="postgres", write="databricks", error_level=ErrorLevel.RAISE)
         return None
@@ -66,7 +72,7 @@ def _error_offset(text):
         # out (caller falls back) if there is no usable position to work from.
         errors = getattr(e, "errors", None)
         if not errors or not errors[0].get("line"):
-            raise ValueError("Power BI two-pass: parse error without a position")
+            raise ValueError("Multidialect two-pass: parse error without a position")
         err = errors[0]
         # Convert (line, col) into an absolute character offset into ``text``: sum the
         # lengths of all earlier lines, then add the column. Clamp into range for safety.
@@ -138,8 +144,8 @@ def _splice(text, marker, raw):
     marker.
 
     Example::
-        text   = SELECT `a` FROM (SELECT NULL AS __E6PBI_INNER_0__) AS `s`
-        marker = __E6PBI_INNER_0__
+        text   = SELECT `a` FROM (SELECT NULL AS __E6_INNER_0__) AS `s`
+        marker = __E6_INNER_0__
         raw    = (SELECT `x` FROM `t`)
         result = SELECT `a` FROM (SELECT `x` FROM `t`) AS `s`
     """
@@ -154,25 +160,29 @@ def _splice(text, marker, raw):
     return text[:open_paren] + raw + text[close_paren + 1 :]
 
 
-def pg_outer_to_databricks(query):
-    """Return ``query`` as a uniform Databricks string: the Postgres outer transpiled to
-    Databricks with the inner Databricks subqueries kept verbatim in place.
+def pg_outer_to_inner(query, write="databricks"):
+    """Return ``query`` as a uniform ``write``-dialect string: the Postgres outer
+    transpiled to ``write`` with the inner subqueries (already in that dialect) kept
+    verbatim in place.
 
-    Example::
+    ``write`` is the inner dialect of the query -- "databricks" (default) or "snowflake".
+    The caller then runs one ``write -> e6`` pass over the result.
+
+    Example (write="databricks")::
         in : SELECT "a" FROM (SELECT `x` FROM `t`) "s"
         out: SELECT `a` FROM (SELECT `x` FROM `t`) AS `s`
              (outer "a"/"s" -> backticks via PASS 1; inner `x`/`t` kept verbatim)
     """
     # ``work`` is the text we progressively rewrite; ``raw`` maps each placeholder marker
-    # to the verbatim Databricks subquery it replaced; ``rounds`` counts/labels iterations.
+    # to the verbatim inner subquery it replaced; ``rounds`` counts/labels iterations.
     work = query
     raw = {}
     rounds = 0
 
-    # DETECTION LOOP: peel off one failing (Databricks) subquery per iteration until the
+    # DETECTION LOOP: peel off one failing (inner-dialect) subquery per iteration until the
     # remaining text parses as plain Postgres.
     #   round 0: work = SELECT "a" FROM (SELECT `x` FROM `t`) "s"
-    #            -> cut -> SELECT "a" FROM (SELECT NULL AS __E6PBI_INNER_0__) "s"
+    #            -> cut -> SELECT "a" FROM (SELECT NULL AS __E6_INNER_0__) "s"
     #   round 1: _error_offset == None -> stop
     while True:
         offset = _error_offset(work)
@@ -180,35 +190,95 @@ def pg_outer_to_databricks(query):
             break  # no more Postgres parse errors -> outer is clean, detection is done
         # Guard against a query that never converges (e.g. a genuine syntax error).
         if rounds >= MAX_ROUNDS:
-            raise ValueError("Power BI two-pass: did not converge")
+            raise ValueError("Multidialect two-pass: did not converge")
         # Map the error location to the enclosing subquery; if the error is not inside a
         # subquery we cannot split it -> bail so the caller falls back.
         span = _subquery_span(work, offset)
         if span is None:
-            raise ValueError("Power BI two-pass: parse error not inside a subquery")
+            raise ValueError("Multidialect two-pass: parse error not inside a subquery")
         # Stash the subquery's exact source under a fresh marker, then replace it in-place
         # with a trivial placeholder subquery (valid wherever a subquery may appear, so
         # the residual stays parseable as Postgres).
-        #   raw["__E6PBI_INNER_0__"] = "(SELECT `x` FROM `t`)"
+        #   raw["__E6_INNER_0__"] = "(SELECT `x` FROM `t`)"
         s, e = span
         marker = MARKER.format(rounds)
         raw[marker] = work[s : e + 1]
         work = work[:s] + f"(SELECT NULL AS {marker})" + work[e + 1 :]
         rounds += 1
 
-    # PASS 1: the residual is now clean Postgres -> transpile it to Databricks. The
-    # placeholder subqueries are valid Postgres, so they survive into the Databricks text.
-    #   SELECT "a" FROM (SELECT NULL AS __E6PBI_INNER_0__) "s"
-    #     ->  SELECT `a` FROM (SELECT NULL AS __E6PBI_INNER_0__) AS `s`
-    outer = sqlglot.transpile(work, read="postgres", write="databricks")[0]
+    # PASS 1: the residual is now clean Postgres -> transpile it to the ``write`` dialect.
+    # The placeholder subqueries are valid Postgres, so they survive into that text.
+    #   SELECT "a" FROM (SELECT NULL AS __E6_INNER_0__) "s"
+    #     ->  SELECT `a` FROM (SELECT NULL AS __E6_INNER_0__) AS `s`   (write=databricks)
+    outer = sqlglot.transpile(work, read="postgres", write=write)[0]
 
-    # SPLICE: drop each verbatim Databricks subquery back over its placeholder. Repeat up
+    # SPLICE: drop each verbatim inner subquery back over its placeholder. Repeat up
     # to len(raw)+1 times so a subquery that itself contains an earlier marker (nesting)
     # also gets resolved; stop as soon as no markers remain.
-    #   ...(SELECT NULL AS __E6PBI_INNER_0__)...  ->  ...(SELECT `x` FROM `t`)...
+    #   ...(SELECT NULL AS __E6_INNER_0__)...  ->  ...(SELECT `x` FROM `t`)...
     for _ in range(len(raw) + 1):
         for marker, raw_sql in raw.items():
             outer = _splice(outer, marker, raw_sql)
         if not any(marker in outer for marker in raw):
             break
     return outer
+
+
+def split_pg_outer(query):
+    """Run the same detection loop as ``pg_outer_to_inner`` but return the split
+    ``(outer, raw)`` *without* transpiling anything.
+
+    Why this exists
+    ---------------
+    ``pg_outer_to_inner`` does the split internally and then immediately transpiles
+    the outer pg -> inner and splices the raw subqueries back, returning one inner-dialect
+    string. The pg -> e6 FALLBACK in converter_api needs the split pieces *separately*,
+    because it transpiles each region with a different dialect (outer as "postgres", inner
+    subqueries as the inner dialect) instead of merging them. So this function exposes just
+    the split step.
+
+    What it returns
+    ---------------
+    - ``outer``: ``query`` with every inner subquery replaced by a harmless placeholder
+      subquery ``(SELECT NULL AS <marker>)`` -- so ``outer`` now parses as plain Postgres
+      (no backticks / inner-dialect-only syntax left).
+    - ``raw``: a dict mapping each placeholder ``<marker>`` to the *verbatim* inner
+      subquery text it replaced, so the caller can convert and splice it back later.
+
+    Worked example
+    --------------
+        query = SELECT "a" FROM (SELECT `x` FROM `t`) "s"
+        ->
+        outer = SELECT "a" FROM (SELECT NULL AS __E6_INNER_0__) "s"
+        raw   = {"__E6_INNER_0__": "(SELECT `x` FROM `t`)"}
+
+    Raises ``ValueError`` (so converter_api can fall back / surface the error) if a parse
+    error is not inside a subquery, or if the loop fails to converge within MAX_ROUNDS.
+    """
+    # ``outer`` is the text we progressively rewrite; ``raw`` collects the pulled-out
+    # subqueries; ``rounds`` both bounds the loop and names each placeholder uniquely.
+    outer, raw, rounds = query, {}, 0
+    while True:
+        # Try postgres -> databricks on the current text. _error_offset returns None once
+        # nothing inner-dialect-only remains (the outer is clean Postgres) -> we're done.
+        offset = _error_offset(outer)
+        if offset is None:
+            return outer, raw
+        # Safety valve: a query that never stops erroring (e.g. a genuine syntax error,
+        # not an inner-dialect subquery) must not loop forever.
+        if rounds >= MAX_ROUNDS:
+            raise ValueError("Multidialect two-pass: did not converge")
+        # Turn the error position into the span of the subquery that contains it. If the
+        # error isn't inside a subquery we can't split the query -> bail to the caller.
+        span = _subquery_span(outer, offset)
+        if span is None:
+            raise ValueError("Multidialect two-pass: parse error not inside a subquery")
+        # Record the failing subquery verbatim under a fresh marker, then replace it in
+        # ``outer`` with a trivial placeholder subquery. The placeholder is valid wherever
+        # a subquery can appear, so ``outer`` stays parseable as Postgres; the next loop
+        # iteration then finds the *next* inner subquery (one error at a time).
+        s, e = span
+        marker = MARKER.format(rounds)
+        raw[marker] = outer[s : e + 1]
+        outer = outer[:s] + f"(SELECT NULL AS {marker})" + outer[e + 1 :]
+        rounds += 1

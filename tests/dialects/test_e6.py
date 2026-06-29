@@ -3309,18 +3309,18 @@ class TestE6(Validator):
             'SELECT "ID" FROM t',
         )
 
-    def test_powerbi_pg_to_dbr_two_pass(self):
-        """Power BI PG->DBR->E6 two-pass for a Postgres outer wrapper with inner
-        Databricks subqueries.
+    def test_multidialect_pg_outer_to_inner_two_pass(self):
+        """Multi-dialect (BI-tool) PG->DBR->E6 two-pass for a Postgres outer wrapper
+        with inner Databricks subqueries.
 
         Outer ANSI ``"id"`` identifiers stay identifiers; inner Databricks ``"str"``
         string literals become ``'str'``; inner backtick identifiers become ``"id"``.
         """
         import sqlglot
-        from apis.utils.powerbi_two_pass import pg_outer_to_databricks
+        from apis.utils.multidialect import pg_outer_to_inner
 
         def pg_to_e6(sql):
-            return sqlglot.transpile(pg_outer_to_databricks(sql), read="databricks", write="e6")[0]
+            return sqlglot.transpile(pg_outer_to_inner(sql), read="databricks", write="e6")[0]
 
         # FROM-derived inner subquery: backtick identifiers -> "..." ; outer "a" kept.
         self.assertEqual(
@@ -3336,7 +3336,7 @@ class TestE6(Validator):
                 '(SELECT CASE WHEN `s` = "active" THEN "Y" ELSE "N" END AS flag FROM `t`) "q"'
             ),
             'SELECT "flag" FROM '
-            '(SELECT CASE WHEN "s" = \'active\' THEN \'Y\' ELSE \'N\' END AS flag FROM "t") AS "q"',
+            "(SELECT CASE WHEN \"s\" = 'active' THEN 'Y' ELSE 'N' END AS flag FROM \"t\") AS \"q\"",
         )
 
         # IN-subquery context.
