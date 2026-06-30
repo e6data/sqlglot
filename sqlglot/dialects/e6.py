@@ -3110,6 +3110,95 @@ class E6(Dialect):
                 expression.this,
             )
 
+        @staticmethod
+        def _is_date_type(node: exp.Expression) -> bool:
+            """Check if an expression is known to evaluate to a date/timestamp type.
+
+            Only returns True when the AST makes the type unambiguous — explicit
+            CAST(... AS DATE/TIMESTAMP), DATE literals, or CURRENT_DATE/CURRENT_TIMESTAMP.
+            Bare column references are *not* matched because we cannot know their
+            runtime type from the AST alone.
+            """
+            if isinstance(node, exp.Cast):
+                to_type = node.args.get("to")
+                if to_type and to_type.this in (
+                    exp.DataType.Type.DATE,
+                    exp.DataType.Type.TIMESTAMP,
+                    exp.DataType.Type.TIMESTAMPTZ,
+                    exp.DataType.Type.TIMESTAMPLTZ,
+                    exp.DataType.Type.TIMESTAMPNTZ,
+                ):
+                    return True
+            if isinstance(node, (exp.CurrentDate, exp.CurrentTimestamp)):
+                return True
+
+            if isinstance(node, exp.Paren):
+                return E6.Generator._is_date_type(node.this)
+            return False
+
+        def sub_sql(self, expression: exp.Sub) -> str:
+            """Convert Postgres date/timestamp subtraction to DATE_DIFF.
+
+            In Postgres, ``date1 - date2`` returns an integer (number of days).
+            The e6 engine does not support the ``-`` operator between DATE operands,
+            so we rewrite it as ``DATE_DIFF(date1, date2)`` which has the same
+            semantics (returns days when called with two arguments).
+
+            The transformation only fires when:
+              - ``from_dialect`` is ``postgres`` (other dialects may give ``-`` a
+                different meaning, e.g. numeric subtraction), AND
+              - **both** operands are unambiguously date/timestamp-typed in the AST
+                (explicit CAST, DATE literal, CURRENT_DATE, etc.).
+            """
+            if (
+                self.from_dialect
+                and self.from_dialect == "postgres"
+                and self._is_date_type(expression.this)
+                and self._is_date_type(expression.expression)
+            ):
+                return self.func("DATE_DIFF", expression.this, expression.expression)
+            return self.binary(expression, "-")
+
+        def add_sql(self, expression: exp.Add) -> str:
+            """Convert Postgres date addition to DATE_ADD.
+
+            In Postgres:
+              - ``date + integer`` adds N days to the date.
+              - ``date + interval`` adds the interval to the date.
+
+            The e6 engine does not support the ``+`` operator between DATE and
+            INTEGER/INTERVAL operands.  This rewrites:
+              - ``date + N``        ->  ``DATE_ADD('DAY', N, date)``
+              - ``date + INTERVAL`` ->  ``DATE_ADD(unit, amount, date)``
+            """
+            if not (
+                self.from_dialect
+                and self.from_dialect == "postgres"
+                and self._is_date_type(expression.this)
+            ):
+                return self.binary(expression, "+")
+
+            rhs = expression.expression
+            while isinstance(rhs, exp.Paren):
+                rhs = rhs.this
+
+            if isinstance(rhs, exp.Interval):
+                unit = rhs.args.get("unit")
+                unit_str = unit.name if unit else "DAY"
+                return self.func(
+                    "DATE_ADD",
+                    exp.Literal.string(unit_str),
+                    rhs.this,
+                    expression.this,
+                )
+
+            return self.func(
+                "DATE_ADD",
+                exp.Literal.string("DAY"),
+                expression.expression,
+                expression.this,
+            )
+
         def time_sql(self, expression: exp.Time) -> str:
             """
             Transform TIME(expression) to CONCAT format for E6.
