@@ -37,6 +37,8 @@ from apis.utils.helpers import (
     set_cte_names_case_sensitively,
     fix_quote_escapes,
     restore_quote_escapes,
+    extract_large_in_clauses,
+    restore_large_in_clauses,
 )
 from formatting_utils import preserve_formatting
 
@@ -107,6 +109,9 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     region_sql = normalize_unicode_spaces(region_sql)
     if SKIP_COMMENT.lower() == "true":
         region_sql, _ = strip_comment(region_sql)
+    # Large IN-clause optimization: pull out oversized literal lists before
+    # parsing so sqlglot doesn't build/traverse thousands of AST nodes.
+    region_sql, in_replacements = extract_large_in_clauses(region_sql)
     # Parse with the region's own source dialect, then run the standard e6 steps.
     tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
     tree = quote_identifiers(tree, dialect="e6")
@@ -114,7 +119,9 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     tree = set_cte_names_case_sensitively(tree)
     # from_dialect=from_sql is what lets e6 honor the source dialect's semantics.
     out = tree.sql(dialect="e6", from_dialect=from_sql, pretty=pretty)
-    return replace_struct_in_query(out)
+    out = replace_struct_in_query(out)
+    # Restore original IN-clause values after transpilation.
+    return restore_large_in_clauses(out, in_replacements)
 
 
 @app.post("/convert-query")
@@ -288,6 +295,17 @@ async def convert_query(
             query, comment = strip_comment(query)
             logger.info("%s — SKIP_COMMENT: stripped comments", query_id)
 
+        # Large IN-clause optimization: extract oversized literal-only value
+        # lists before parsing so sqlglot doesn't build/traverse thousands of
+        # AST nodes for values that need no dialect transformation.
+        query, in_replacements = extract_large_in_clauses(query)
+        if in_replacements:
+            logger.info(
+                "%s — Large IN-clause optimization: extracted %d clause(s)",
+                query_id,
+                len(in_replacements),
+            )
+
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
@@ -320,6 +338,11 @@ async def convert_query(
         )
 
         double_quotes_added_query = replace_struct_in_query(double_quotes_added_query)
+
+        # Restore original IN-clause values that were extracted before parsing.
+        double_quotes_added_query = restore_large_in_clauses(
+            double_quotes_added_query, in_replacements
+        )
 
         # Preserve original formatting if enabled via feature flag
         if flags_dict.get("PRESERVE_FORMATTING", False):
