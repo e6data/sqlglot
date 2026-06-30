@@ -3935,6 +3935,130 @@ FROM dual"""
             "SELECT * FROM t PIVOT(SUM(x) AS x, TRY_DIVIDE(SUM(a), SUM(b)) * 100 AS pct FOR col IN ('A', 'B'))",
         )
 
+    def test_postgres_date_subtraction_to_date_diff(self):
+        """Test that Postgres DATE - DATE is transpiled to DATE_DIFF in E6.
+
+        In Postgres, subtracting two dates (DATE - DATE) returns an integer
+        (number of days).  E6 does not support the '-' operator between DATE
+        operands, so the transpiler rewrites it as DATE_DIFF(date1, date2).
+
+        The transformation only fires when:
+          - from_dialect is postgres
+          - both operands are unambiguously date/timestamp-typed in the AST
+        """
+        import sqlglot
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="postgres", write="e6", from_dialect="postgres")[0]
+
+        self.assertEqual(
+            transpile("SELECT CAST(a AS DATE) - CAST(b AS DATE) FROM t"),
+            "SELECT DATE_DIFF(CAST(a AS DATE), CAST(b AS DATE)) FROM t",
+        )
+
+        self.assertEqual(
+            transpile("SELECT DATE '2024-01-01' - DATE '2023-01-01'"),
+            "SELECT DATE_DIFF(CAST('2024-01-01' AS DATE), CAST('2023-01-01' AS DATE))",
+        )
+
+        self.assertEqual(
+            transpile("SELECT CURRENT_DATE - CAST(b AS DATE) FROM t"),
+            "SELECT DATE_DIFF(CURRENT_DATE, CAST(b AS DATE)) FROM t",
+        )
+
+        self.assertEqual(
+            transpile(
+                "SELECT CAST(DATE '9999-12-31' AS date) - CAST(CASE WHEN x > 0 THEN y ELSE z END AS date) FROM t"
+            ),
+            "SELECT DATE_DIFF(CAST(CAST('9999-12-31' AS DATE) AS DATE), CAST(CASE WHEN x > 0 THEN y ELSE z END AS DATE)) FROM t",
+        )
+
+        self.assertEqual(
+            transpile("SELECT CAST(a AS TIMESTAMP) - CAST(b AS TIMESTAMP) FROM t"),
+            "SELECT DATE_DIFF(CAST(a AS TIMESTAMP), CAST(b AS TIMESTAMP)) FROM t",
+        )
+
+        self.assertEqual(
+            transpile("SELECT CAST(a AS DATE) - CAST(b AS DATE), x - y FROM t"),
+            "SELECT DATE_DIFF(CAST(a AS DATE), CAST(b AS DATE)), x - y FROM t",
+        )
+
+        self.assertEqual(
+            transpile("SELECT a - b FROM t"),
+            "SELECT a - b FROM t",
+        )
+
+        self.assertEqual(
+            transpile("SELECT CAST(a AS INT) - CAST(b AS INT) FROM t"),
+            "SELECT CAST(a AS INT) - CAST(b AS INT) FROM t",
+        )
+
+        result = sqlglot.transpile(
+            "SELECT CAST(a AS DATE) - CAST(b AS DATE) FROM t",
+            read="databricks",
+            write="e6",
+            from_dialect="databricks",
+        )[0]
+        self.assertNotIn("DATE_DIFF", result)
+
+    def test_postgres_date_addition_to_date_add(self):
+        """Test that Postgres DATE + integer/interval is transpiled to DATE_ADD in E6.
+
+        In Postgres:
+          - DATE + integer adds N days
+          - DATE + INTERVAL adds the interval
+
+        E6 does not support '+' between DATE and INTEGER/INTERVAL operands,
+        so the transpiler rewrites to DATE_ADD(unit, amount, date).
+        """
+        import sqlglot
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="postgres", write="e6", from_dialect="postgres")[0]
+
+        self.assertEqual(
+            transpile("SELECT DATE '2024-01-01' + 5"),
+            "SELECT DATE_ADD('DAY', 5, CAST('2024-01-01' AS DATE))",
+        )
+
+        self.assertEqual(
+            transpile("SELECT CURRENT_DATE + 7"),
+            "SELECT DATE_ADD('DAY', 7, CURRENT_DATE)",
+        )
+
+        self.assertEqual(
+            transpile("SELECT DATE '2024-01-01' + INTERVAL '5 day'"),
+            "SELECT DATE_ADD('DAY', '5', CAST('2024-01-01' AS DATE))",
+        )
+
+        self.assertEqual(
+            transpile("SELECT CAST(a AS DATE) + INTERVAL '1 month'"),
+            "SELECT DATE_ADD('MONTH', '1', CAST(a AS DATE))",
+        )
+
+        self.assertEqual(
+            transpile("SELECT 10 + 5"),
+            "SELECT 10 + 5",
+        )
+
+        self.assertEqual(
+            transpile("SELECT a + b FROM t"),
+            "SELECT a + b FROM t",
+        )
+
+        self.assertEqual(
+            transpile("SELECT DATE '2024-01-01' + 5, x + y FROM t"),
+            "SELECT DATE_ADD('DAY', 5, CAST('2024-01-01' AS DATE)), x + y FROM t",
+        )
+
+        result = sqlglot.transpile(
+            "SELECT CAST(a AS DATE) + 5 FROM t",
+            read="databricks",
+            write="e6",
+            from_dialect="databricks",
+        )[0]
+        self.assertNotIn("DATE_ADD", result)
+
     def test_fix_quote_escapes(self):
         """Test that '' escape patterns in Databricks are preserved in e6 output
         without being converted to CONCAT, when FIX_QUOTE_ESCAPES is enabled."""
