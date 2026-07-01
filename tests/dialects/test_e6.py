@@ -4001,6 +4001,30 @@ FROM dual"""
         )[0]
         self.assertNotIn("DATE_DIFF", result)
 
+        # Mis-parenthesized BI-tool pattern: (X * DATE1) - DATE2 -> X * DATE_DIFF(DATE1, DATE2)
+        # BI tools sometimes emit "-(1) * DATE - DATE" without parens; since
+        # integer * date is invalid SQL, we infer the intended grouping.
+        self.assertEqual(
+            transpile(
+                "SELECT (-(1) * CAST(DATE '9999-12-31' AS date) - CAST(DATE '1900-01-01' AS date))"
+            ),
+            "SELECT (-(1) * DATE_DIFF(CAST(CAST('9999-12-31' AS DATE) AS DATE), CAST(CAST('1900-01-01' AS DATE) AS DATE)))",
+        )
+
+        # (expr / ...) * DATE - DATE
+        self.assertIn(
+            "DATE_DIFF",
+            transpile(
+                "SELECT (x / NULLIF(y, 0.0)) * CAST(DATE '9999-12-31' AS date) - CAST(DATE '1900-01-01' AS date)"
+            ),
+        )
+
+        # Should NOT restructure when Mul operands are not dates
+        self.assertNotIn(
+            "DATE_DIFF",
+            transpile("SELECT 10 * 5 - 3"),
+        )
+
     def test_postgres_date_addition_to_date_add(self):
         """Test that Postgres DATE + integer/interval is transpiled to DATE_ADD in E6.
 
@@ -4058,6 +4082,56 @@ FROM dual"""
             from_dialect="databricks",
         )[0]
         self.assertNotIn("DATE_ADD", result)
+
+    def test_postgres_age_to_timestamp_diff(self):
+        """Test that Postgres DATE_PART(unit, AGE(a, b)) is transpiled to
+        TIMESTAMP_DIFF-based expressions in E6.
+
+        Postgres AGE(a, b) returns an interval broken into year/month/day
+        components.  e6 does not support AGE(), so we rewrite:
+          DATE_PART('year',  AGE(a,b)) -> FLOOR((corrected_months) / 12)
+          DATE_PART('month', AGE(a,b)) -> MOD((corrected_months), 12)
+        where corrected_months accounts for the day-of-month boundary.
+        """
+        import sqlglot
+
+        def transpile(sql):
+            return sqlglot.transpile(sql, read="postgres", write="e6", from_dialect="postgres")[0]
+
+        # year component
+        result = transpile("SELECT DATE_PART('year', AGE(end_date, DATE '1970-01-01'))")
+        self.assertIn("FLOOR", result)
+        self.assertIn("TIMESTAMP_DIFF", result)
+        self.assertNotIn("AGE", result)
+
+        # month component
+        result = transpile("SELECT DATE_PART('month', AGE(end_date, DATE '1970-01-01'))")
+        self.assertIn("MOD", result)
+        self.assertIn("TIMESTAMP_DIFF", result)
+        self.assertNotIn("AGE", result)
+
+        # Full idiom: year*12 + month (total months)
+        result = transpile(
+            "SELECT DATE_PART('year', AGE(a, b)) * 12 + DATE_PART('month', AGE(a, b))"
+        )
+        self.assertIn("FLOOR", result)
+        self.assertIn("MOD", result)
+        self.assertNotIn("AGE", result)
+
+        # Non-AGE extracts should be untouched
+        result = transpile("SELECT EXTRACT(year FROM some_date)")
+        self.assertIn("EXTRACT", result)
+        self.assertNotIn("TIMESTAMP_DIFF", result)
+
+        # AGE() rewrite fires regardless of source dialect since AGE() is unambiguous
+        result = sqlglot.transpile(
+            "SELECT EXTRACT(year FROM AGE(a, b))",
+            read="databricks",
+            write="e6",
+            from_dialect="databricks",
+        )[0]
+        self.assertIn("TIMESTAMP_DIFF", result)
+        self.assertNotIn("AGE", result)
 
     def test_fix_quote_escapes(self):
         """Test that '' escape patterns in Databricks are preserved in e6 output
