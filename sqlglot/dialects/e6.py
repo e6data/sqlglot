@@ -3167,10 +3167,7 @@ class E6(Dialect):
             if self._is_date_type(lhs) and self._is_date_type(rhs):
                 return self.func("DATE_DIFF", lhs, rhs)
 
-            if (
-                isinstance(lhs, exp.Mul)
-                and self._is_date_type(rhs)
-            ):
+            if isinstance(lhs, exp.Mul) and self._is_date_type(rhs):
                 mul_left = lhs.this
                 mul_right = lhs.expression
                 if self._is_date_type(mul_right):
