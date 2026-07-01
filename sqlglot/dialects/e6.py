@@ -2179,6 +2179,32 @@ class E6(Dialect):
             date_expr = (
                 expression.expression if isinstance(expression, exp.Extract) else expression.this
             )
+
+            # Postgres AGE() rewrite: DATE_PART(unit, AGE(a, b))
+            # AGE(a, b) returns an interval with year/month/day components.
+            # e6 does not support AGE(), so we rewrite using TIMESTAMP_DIFF
+            # with a day-boundary correction:
+            #   corrected_months = TIMESTAMP_DIFF(a, b, 'MONTH') - IFF(DAYS(a) < DAYS(b), 1, 0)
+            #   DATE_PART('year',  AGE(a,b)) -> FLOOR(corrected_months / 12)
+            #   DATE_PART('month', AGE(a,b)) -> MOD(corrected_months, 12)
+            if (
+                isinstance(expression, exp.Extract)
+                and isinstance(date_expr, exp.Anonymous)
+                and date_expr.this.upper() == "AGE"
+                and len(date_expr.expressions) == 2
+            ):
+                arg_a = self.sql(date_expr.expressions[0])
+                arg_b = self.sql(date_expr.expressions[1])
+                corrected = (
+                    f"TIMESTAMP_DIFF({arg_a}, {arg_b}, 'MONTH')"
+                    f" - IFF(DAYS({arg_a}) < DAYS({arg_b}), 1, 0)"
+                )
+                unit_lower = unit.lower()
+                if unit_lower == "year":
+                    return f"FLOOR(({corrected}) / 12)"
+                if unit_lower == "month":
+                    return f"MOD(({corrected}), 12)"
+
             if isinstance(expression, exp.Extract):
                 expression_sql = self.sql(date_expr)
 
@@ -3201,16 +3227,23 @@ class E6(Dialect):
                 return self.binary(expression, "+")
 
             rhs = expression.expression
-            while isinstance(rhs, exp.Paren):
-                rhs = rhs.this
 
-            if isinstance(rhs, exp.Interval):
-                unit = rhs.args.get("unit")
+            # DATE + DATE is invalid in Postgres too — don't transform
+            if self._is_date_type(rhs):
+                return self.binary(expression, "+")
+
+            # Unwrap parentheses for type inspection
+            unwrapped_rhs = rhs
+            while isinstance(unwrapped_rhs, exp.Paren):
+                unwrapped_rhs = unwrapped_rhs.this
+
+            if isinstance(unwrapped_rhs, exp.Interval):
+                unit = unwrapped_rhs.args.get("unit")
                 unit_str = unit.name if unit else "DAY"
                 return self.func(
                     "DATE_ADD",
                     exp.Literal.string(unit_str),
-                    rhs.this,
+                    unwrapped_rhs.this,
                     expression.this,
                 )
 
