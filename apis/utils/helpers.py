@@ -667,6 +667,7 @@ def transform_catalog_schema_only(query: str, from_sql: str) -> str:
         logger.error(f"Error in transform_catalog_schema_only: {e}")
         raise
 
+
 # Minimum number of values before we bother extracting.  Below this the
 # overhead is negligible and not worth the regex cost.
 _LARGE_IN_THRESHOLD = 500

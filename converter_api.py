@@ -207,7 +207,9 @@ async def convert_query(
             converted_query = _region_to_e6(outer, "postgres", pretty)
             for marker, subquery in inner_subqueries.items():
                 converted_query = _splice(
-                    converted_query, marker, _region_to_e6(subquery, inner_dialect, pretty)
+                    converted_query,
+                    marker,
+                    _region_to_e6(subquery, inner_dialect, pretty),
                 )
         logger.info(
             "%s AT %s — MULTIDIALECT Transpiled Query:\n%s",

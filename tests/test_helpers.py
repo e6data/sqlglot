@@ -15,12 +15,14 @@ class TestHelpers(unittest.TestCase):
     def test_normalize_unicode_spaces(self):
         # Basic space normalization
         self.assertEqual(
-            normalize_unicode_spaces("SELECT\u00a0*\u2009FROM\tusers"), "SELECT * FROM users"
+            normalize_unicode_spaces("SELECT\u00a0*\u2009FROM\tusers"),
+            "SELECT * FROM users",
         )
 
         # Preserve quoted literals
         self.assertEqual(
-            normalize_unicode_spaces("SELECT 'a\u00a0b' FROM table"), "SELECT 'a\u00a0b' FROM table"
+            normalize_unicode_spaces("SELECT 'a\u00a0b' FROM table"),
+            "SELECT 'a\u00a0b' FROM table",
         )
 
         # Preserve double quoted identifiers
@@ -37,12 +39,14 @@ class TestHelpers(unittest.TestCase):
 
         # Replacement character (�) replaced with space
         self.assertEqual(
-            normalize_unicode_spaces("SELECT name FROM tab\ufffdle"), "SELECT name FROM tab le"
+            normalize_unicode_spaces("SELECT name FROM tab\ufffdle"),
+            "SELECT name FROM tab le",
         )
 
         # Mix of multiple spaces and newline preserved
         self.assertEqual(
-            normalize_unicode_spaces("SELECT\n\u2028*\u00a0FROM\rusers"), "SELECT\n * FROM\rusers"
+            normalize_unicode_spaces("SELECT\n\u2028*\u00a0FROM\rusers"),
+            "SELECT\n * FROM\rusers",
         )
 
     def test_transform_table_part(self):
@@ -229,7 +233,10 @@ class TestLargeInClauseOptimization(unittest.TestCase):
         """End-to-end: extract -> transpile -> restore produces correct output."""
         import sqlglot
         from sqlglot.optimizer.qualify_columns import quote_identifiers
-        from apis.utils.helpers import replace_struct_in_query, ensure_select_from_values
+        from apis.utils.helpers import (
+            replace_struct_in_query,
+            ensure_select_from_values,
+        )
 
         values_list = [f"'6a{i:06x}'" for i in range(600)]
         values = ",".join(values_list)
