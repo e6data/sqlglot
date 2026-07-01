@@ -667,44 +667,6 @@ def transform_catalog_schema_only(query: str, from_sql: str) -> str:
         logger.error(f"Error in transform_catalog_schema_only: {e}")
         raise
 
-
-# ---------------------------------------------------------------------------
-# Large IN-clause optimization: strip & splice
-# ---------------------------------------------------------------------------
-#
-# Problem
-# -------
-# Queries with huge IN (...) value lists (e.g. 18 000 hex-string IDs) are
-# extremely slow to transpile because sqlglot builds an AST node for every
-# literal, then every pipeline step (quote_identifiers, ensure_select_from_values,
-# set_cte_names_case_sensitively, .sql()) traverses all of them.  A ~480 KB
-# query with 18K values can take over a minute.
-#
-# Insight
-# -------
-# Plain single-quoted string literals ('abc') and bare numeric literals (42,
-# 3.14) are **dialect-neutral** — they never need transformation.  Only
-# identifiers (double-quoted or backticked), function calls, and expressions
-# require dialect-aware transpilation.
-#
-# Approach
-# --------
-# Before parsing, scan the SQL for IN clauses whose value lists consist
-# *entirely* of safe literals (single-quoted strings and/or numbers).  If
-# the list exceeds a size threshold, extract it and replace it with a tiny
-# single-value placeholder.  After transpilation, splice the original values
-# back into the output string.
-#
-# Safety
-# ------
-# - Only single-quoted strings and numeric literals are extracted.  Any IN
-#   clause containing identifiers, expressions, function calls, sub-selects,
-#   or mixed quoting styles is left untouched for the full pipeline.
-# - The placeholder is a unique string unlikely to collide with real data.
-# - Restoration handles any quoting style the transpiler may wrap the
-#   placeholder in (single or double quotes).
-# ---------------------------------------------------------------------------
-
 # Minimum number of values before we bother extracting.  Below this the
 # overhead is negligible and not worth the regex cost.
 _LARGE_IN_THRESHOLD = 500
