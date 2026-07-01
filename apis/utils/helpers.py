@@ -666,3 +666,87 @@ def transform_catalog_schema_only(query: str, from_sql: str) -> str:
     except Exception as e:
         logger.error(f"Error in transform_catalog_schema_only: {e}")
         raise
+
+
+# Minimum number of values before we bother extracting.  Below this the
+# overhead is negligible and not worth the regex cost.
+_LARGE_IN_THRESHOLD = 500
+
+# Matches a "safe" value: either a single-quoted string (possibly containing
+# escaped '' inside) or a bare numeric literal (integer or decimal, with
+# optional leading sign).
+_SAFE_LITERAL = r"""(?:'(?:[^']|'')*'|[+-]?\d+(?:\.\d+)?)"""
+
+# Full pattern: IN ( <safe_literal> [, <safe_literal>]{threshold-1,} )
+# Only fires when the value list is entirely composed of safe literals and
+# has at least _LARGE_IN_THRESHOLD entries.
+_LARGE_IN_RE = re.compile(
+    r"""\bIN\s*\("""
+    r"""(\s*"""
+    + _SAFE_LITERAL
+    + r"""(?:\s*,\s*"""
+    + _SAFE_LITERAL
+    + r"""){"""
+    + str(_LARGE_IN_THRESHOLD - 1)
+    + r""",}"""  # greedy — grab all values
+    r"""\s*)\)""",
+    re.IGNORECASE,
+)
+
+_PLACEHOLDER_PREFIX = "__LARGE_IN_"
+
+
+def extract_large_in_clauses(sql: str) -> tuple:
+    """Extract oversized IN (...) value lists from SQL before transpilation.
+
+    Scans for IN clauses whose values are **all** safe literals (single-quoted
+    strings or numeric literals).  If a clause has >= _LARGE_IN_THRESHOLD
+    values, its value list is replaced with a single placeholder literal so
+    that sqlglot only parses/traverses a tiny AST instead of thousands of
+    nodes.
+
+    Args:
+        sql: The raw SQL query string.
+
+    Returns:
+        A 2-tuple ``(simplified_sql, replacements)`` where *replacements* is a
+        dict mapping placeholder keys to original value-list strings.  If no
+        large IN clauses are found, *replacements* is empty and *sql* is
+        returned unchanged.
+    """
+    replacements: dict = {}
+    counter = 0
+
+    def _replace(m: re.Match) -> str:
+        nonlocal counter
+        key = f"{_PLACEHOLDER_PREFIX}{counter}__"
+        replacements[key] = m.group(1)
+        counter += 1
+        return f"IN ('{key}')"
+
+    simplified = _LARGE_IN_RE.sub(_replace, sql)
+    return simplified, replacements
+
+
+def restore_large_in_clauses(sql: str, replacements: dict) -> str:
+    """Splice original IN-clause value lists back into transpiled SQL.
+
+    After transpilation the placeholder appears as a quoted string literal.
+    This function finds it (regardless of whether the transpiler wrapped it
+    in single or double quotes) and restores the original values.
+
+    Args:
+        sql: The transpiled SQL containing placeholders.
+        replacements: The dict returned by ``extract_large_in_clauses``.
+
+    Returns:
+        The final SQL with original value lists restored.
+    """
+    for key, original_values in replacements.items():
+        # The transpiler may wrap the placeholder in single or double quotes.
+        placeholder_pattern = re.compile(
+            r"""IN\s*\(\s*['"]""" + re.escape(key) + r"""['"]\s*\)""",
+            re.IGNORECASE,
+        )
+        sql = placeholder_pattern.sub(f"IN ({original_values})", sql)
+    return sql
