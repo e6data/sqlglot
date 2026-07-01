@@ -4001,6 +4001,30 @@ FROM dual"""
         )[0]
         self.assertNotIn("DATE_DIFF", result)
 
+        # Mis-parenthesized BI-tool pattern: (X * DATE1) - DATE2 -> X * DATE_DIFF(DATE1, DATE2)
+        # BI tools sometimes emit "-(1) * DATE - DATE" without parens; since
+        # integer * date is invalid SQL, we infer the intended grouping.
+        self.assertEqual(
+            transpile(
+                "SELECT (-(1) * CAST(DATE '9999-12-31' AS date) - CAST(DATE '1900-01-01' AS date))"
+            ),
+            "SELECT (-(1) * DATE_DIFF(CAST(CAST('9999-12-31' AS DATE) AS DATE), CAST(CAST('1900-01-01' AS DATE) AS DATE)))",
+        )
+
+        # (expr / ...) * DATE - DATE
+        self.assertIn(
+            "DATE_DIFF",
+            transpile(
+                "SELECT (x / NULLIF(y, 0.0)) * CAST(DATE '9999-12-31' AS date) - CAST(DATE '1900-01-01' AS date)"
+            ),
+        )
+
+        # Should NOT restructure when Mul operands are not dates
+        self.assertNotIn(
+            "DATE_DIFF",
+            transpile("SELECT 10 * 5 - 3"),
+        )
+
     def test_postgres_date_addition_to_date_add(self):
         """Test that Postgres DATE + integer/interval is transpiled to DATE_ADD in E6.
 

@@ -3149,14 +3149,39 @@ class E6(Dialect):
                 different meaning, e.g. numeric subtraction), AND
               - **both** operands are unambiguously date/timestamp-typed in the AST
                 (explicit CAST, DATE literal, CURRENT_DATE, etc.).
+
+            It also handles a mis-parenthesized pattern from BI tools where
+            ``X * DATE1 - DATE2`` is parsed as ``(X * DATE1) - DATE2`` due to
+            standard operator precedence, but the intended meaning is
+            ``X * (DATE1 - DATE2)``.  Since ``integer * date`` is invalid in
+            Postgres too, the only valid interpretation is the latter.  We
+            restructure it as ``X * DATE_DIFF(DATE1, DATE2)``.
             """
+            if not (self.from_dialect and self.from_dialect == "postgres"):
+                return self.binary(expression, "-")
+
+            lhs = expression.this
+            rhs = expression.expression
+
+            # Standard case: DATE - DATE -> DATE_DIFF(date1, date2)
+            if self._is_date_type(lhs) and self._is_date_type(rhs):
+                return self.func("DATE_DIFF", lhs, rhs)
+
             if (
-                self.from_dialect
-                and self.from_dialect == "postgres"
-                and self._is_date_type(expression.this)
-                and self._is_date_type(expression.expression)
+                isinstance(lhs, exp.Mul)
+                and self._is_date_type(rhs)
             ):
-                return self.func("DATE_DIFF", expression.this, expression.expression)
+                mul_left = lhs.this
+                mul_right = lhs.expression
+                if self._is_date_type(mul_right):
+                    # (X * DATE1) - DATE2 -> X * DATE_DIFF(DATE1, DATE2)
+                    date_diff = self.func("DATE_DIFF", mul_right, rhs)
+                    return f"{self.sql(mul_left)} * {date_diff}"
+                if self._is_date_type(mul_left):
+                    # (DATE1 * X) - DATE2 -> X * DATE_DIFF(DATE1, DATE2)
+                    date_diff = self.func("DATE_DIFF", mul_left, rhs)
+                    return f"{self.sql(mul_right)} * {date_diff}"
+
             return self.binary(expression, "-")
 
         def add_sql(self, expression: exp.Add) -> str:
