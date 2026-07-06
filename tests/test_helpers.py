@@ -137,9 +137,7 @@ class TestStripComment(unittest.TestCase):
 
     def test_line_comment_with_block_comment_inside(self):
         """The exact production failure: -- containing /* ... */ text."""
-        result, _ = strip_comment(
-            "-- /* Bespoke Group by Product With Breakdown*/\nSELECT 1"
-        )
+        result, _ = strip_comment("-- /* Bespoke Group by Product With Breakdown*/\nSELECT 1")
         self.assertIn("SELECT 1", result)
         self.assertNotIn("Bespoke", result)
         self.assertNotIn("/*", result)
