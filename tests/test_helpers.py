@@ -6,6 +6,7 @@ from apis.utils.helpers import (
     transform_catalog_schema_only,
     extract_large_in_clauses,
     restore_large_in_clauses,
+    strip_comment,
 )
 
 from sqlglot import parse_one, exp
@@ -114,6 +115,67 @@ class TestHelpers(unittest.TestCase):
 #             auto_quote_reserved(raw, extra_reserved={"temp"}),
 #             expected,
 #         )
+
+
+class TestStripComment(unittest.TestCase):
+    """Tests for strip_comment — both block (/* */) and line (--) comments."""
+
+    def test_block_comment_stripped(self):
+        result, _ = strip_comment("/* block */ SELECT 1")
+        self.assertIn("SELECT 1", result)
+        self.assertNotIn("/*", result)
+
+    def test_line_comment_stripped(self):
+        result, _ = strip_comment("-- line comment\nSELECT 1")
+        self.assertIn("SELECT 1", result)
+        self.assertNotIn("--", result)
+
+    def test_trailing_line_comment_stripped(self):
+        result, _ = strip_comment("SELECT 1 -- trailing")
+        self.assertIn("SELECT 1", result)
+        self.assertNotIn("trailing", result)
+
+    def test_line_comment_with_block_comment_inside(self):
+        """The exact production failure: -- containing /* ... */ text."""
+        result, _ = strip_comment("-- /* Bespoke Group by Product With Breakdown*/\nSELECT 1")
+        self.assertIn("SELECT 1", result)
+        self.assertNotIn("Bespoke", result)
+        self.assertNotIn("/*", result)
+
+    def test_line_comment_inside_single_quoted_string_preserved(self):
+        result, _ = strip_comment("SELECT 'val--ue' FROM t")
+        self.assertIn("'val--ue'", result)
+
+    def test_line_comment_inside_double_quoted_identifier_preserved(self):
+        result, _ = strip_comment('SELECT a FROM "my--table"')
+        self.assertIn('"my--table"', result)
+
+    def test_line_comment_inside_backtick_identifier_preserved(self):
+        result, _ = strip_comment("SELECT a FROM `my--table`")
+        self.assertIn("`my--table`", result)
+
+    def test_escaped_single_quotes_with_dashes_preserved(self):
+        result, _ = strip_comment("SELECT 'it''s--here' FROM t")
+        self.assertIn("'it''s--here'", result)
+
+    def test_subtraction_not_stripped(self):
+        result, _ = strip_comment("SELECT a - b FROM t")
+        self.assertEqual(result.strip(), "SELECT a - b FROM t")
+
+    def test_negative_number_not_stripped(self):
+        result, _ = strip_comment("SELECT a-(-b) FROM t")
+        self.assertEqual(result.strip(), "SELECT a-(-b) FROM t")
+
+    def test_no_comments_unchanged(self):
+        sql = "SELECT a, b FROM t WHERE x > 0"
+        result, _ = strip_comment(sql)
+        self.assertEqual(result.strip(), sql)
+
+    def test_mixed_line_and_block_comments(self):
+        result, _ = strip_comment("-- line\n/* block */ SELECT 1")
+        self.assertIn("SELECT 1", result)
+        self.assertNotIn("line", result)
+        self.assertNotIn("block", result)
 
 
 class TestCteNamesCaseSensitivity(unittest.TestCase):
