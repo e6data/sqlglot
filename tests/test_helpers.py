@@ -7,6 +7,7 @@ from apis.utils.helpers import (
     extract_large_in_clauses,
     restore_large_in_clauses,
     strip_comment,
+    sanitize_comments,
 )
 
 from sqlglot import parse_one, exp
@@ -118,64 +119,65 @@ class TestHelpers(unittest.TestCase):
 
 
 class TestStripComment(unittest.TestCase):
-    """Tests for strip_comment — both block (/* */) and line (--) comments."""
+    """Tests for strip_comment — strips block comments (/* */) only."""
 
     def test_block_comment_stripped(self):
         result, _ = strip_comment("/* block */ SELECT 1")
         self.assertIn("SELECT 1", result)
-        self.assertNotIn("/*", result)
+        self.assertNotIn("block", result)
 
-    def test_line_comment_stripped(self):
+    def test_line_comment_not_stripped(self):
+        """strip_comment only handles block comments; -- is preserved."""
         result, _ = strip_comment("-- line comment\nSELECT 1")
-        self.assertIn("SELECT 1", result)
-        self.assertNotIn("--", result)
-
-    def test_trailing_line_comment_stripped(self):
-        result, _ = strip_comment("SELECT 1 -- trailing")
-        self.assertIn("SELECT 1", result)
-        self.assertNotIn("trailing", result)
-
-    def test_line_comment_with_block_comment_inside(self):
-        """The exact production failure: -- containing /* ... */ text."""
-        result, _ = strip_comment("-- /* Bespoke Group by Product With Breakdown*/\nSELECT 1")
-        self.assertIn("SELECT 1", result)
-        self.assertNotIn("Bespoke", result)
-        self.assertNotIn("/*", result)
-
-    def test_line_comment_inside_single_quoted_string_preserved(self):
-        result, _ = strip_comment("SELECT 'val--ue' FROM t")
-        self.assertIn("'val--ue'", result)
-
-    def test_line_comment_inside_double_quoted_identifier_preserved(self):
-        result, _ = strip_comment('SELECT a FROM "my--table"')
-        self.assertIn('"my--table"', result)
-
-    def test_line_comment_inside_backtick_identifier_preserved(self):
-        result, _ = strip_comment("SELECT a FROM `my--table`")
-        self.assertIn("`my--table`", result)
-
-    def test_escaped_single_quotes_with_dashes_preserved(self):
-        result, _ = strip_comment("SELECT 'it''s--here' FROM t")
-        self.assertIn("'it''s--here'", result)
-
-    def test_subtraction_not_stripped(self):
-        result, _ = strip_comment("SELECT a - b FROM t")
-        self.assertEqual(result.strip(), "SELECT a - b FROM t")
-
-    def test_negative_number_not_stripped(self):
-        result, _ = strip_comment("SELECT a-(-b) FROM t")
-        self.assertEqual(result.strip(), "SELECT a-(-b) FROM t")
+        self.assertIn("--", result)
 
     def test_no_comments_unchanged(self):
         sql = "SELECT a, b FROM t WHERE x > 0"
         result, _ = strip_comment(sql)
         self.assertEqual(result.strip(), sql)
 
-    def test_mixed_line_and_block_comments(self):
-        result, _ = strip_comment("-- line\n/* block */ SELECT 1")
+    def test_multiple_block_comments(self):
+        result, _ = strip_comment("/* c1 */ SELECT /* c2 */ 1")
+        self.assertIn("SELECT", result)
+        self.assertNotIn("c1", result)
+        self.assertNotIn("c2", result)
+
+
+class TestSanitizeComments(unittest.TestCase):
+    """Tests for sanitize_comments — escapes /* */ inside AST comment nodes."""
+
+    def _parse_and_sanitize(self, sql, dialect="databricks"):
+        import sqlglot
+
+        tree = sqlglot.parse_one(sql, read=dialect, error_level=None)
+        tree = sanitize_comments(tree)
+        return tree.sql(dialect="e6", from_dialect=dialect)
+
+    def test_nested_block_markers_escaped(self):
+        """The production failure: -- /* text */ must not produce /* /* text */ */."""
+        result = self._parse_and_sanitize("-- /* Hey */\nSELECT 1 FROM t")
+        self.assertNotIn("/* /*", result)
+        self.assertNotIn("*/ */", result)
         self.assertIn("SELECT 1", result)
-        self.assertNotIn("line", result)
-        self.assertNotIn("block", result)
+
+    def test_plain_line_comment_preserved(self):
+        result = self._parse_and_sanitize("-- plain comment\nSELECT 1 FROM t")
+        self.assertIn("plain comment", result)
+        self.assertIn("SELECT 1", result)
+
+    def test_block_comment_without_nesting_unchanged(self):
+        result = self._parse_and_sanitize("/* block */ SELECT 1 FROM t")
+        self.assertIn("block", result)
+        self.assertIn("SELECT 1", result)
+
+    def test_production_case(self):
+        result = self._parse_and_sanitize(
+            "-- /* Bespoke Group by Product With Breakdown*/\n"
+            "SELECT user_id FROM t WHERE market_id = 1"
+        )
+        self.assertNotIn("/* /*", result)
+        self.assertIn("Bespoke", result)
+        self.assertIn("SELECT", result)
 
 
 class TestCteNamesCaseSensitivity(unittest.TestCase):

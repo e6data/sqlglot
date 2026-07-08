@@ -294,50 +294,46 @@ def add_comment_to_query(query: str, comment: str) -> str:
         return query
 
 
-# Single regex that matches (in order of priority):
-#   1. Single-quoted strings     ('...' including escaped '')
-#   2. Double-quoted identifiers ("...")
-#   3. Backtick-quoted identifiers (`...`)
-#   4. Block comments            (/* ... */)
-#   5. Line comments             (-- ... \n)
-# Groups 1-3 are captured so the replacer can keep them; 4-5 are not.
-_COMMENT_RE = re.compile(
-    r"""('(?:[^']|'')*')"""  # group 1: single-quoted string
-    r"""|("[^"]*")"""  # group 2: double-quoted identifier
-    r"""|(`[^`]*`)"""  # group 3: backtick-quoted identifier
-    r"""|/\*[\s\S]*?\*/"""  # block comment (no group)
-    r"""|--[^\n]*""",  # line comment  (no group)
-)
-
-
 def strip_comment(query: str) -> tuple:
     """
-    Strip ALL SQL comments from the query: both block comments (`/* ... */`)
-    and line comments (`-- ...`), while preserving ``--`` and ``/* */`` text
-    that appears inside quoted strings or identifiers.
-
-    Uses a single regex pass — quoted strings and identifiers are matched
-    first (and kept), so comment patterns inside them are never reached.
+    Strip ALL block comments (`/* ... */`) from the query.
 
     Returns:
         tuple: (stripped_query, None)
     """
     logger.info("Stripping All Comments!")
     try:
-
-        def _replace(m: re.Match) -> str:
-            # If group 1, 2, or 3 matched, it's a quoted literal/identifier — keep it
-            if m.group(1) or m.group(2) or m.group(3):
-                return m.group(0)
-            # Otherwise it's a comment — replace with a space
-            return " "
-
-        stripped = _COMMENT_RE.sub(_replace, query).strip()
-        logger.info("Successfully stripped all comments")
-        return stripped, None
+        comment_pattern = r"/\*[\s\S]*?\*/"
+        comments = re.findall(comment_pattern, query)
+        if comments:
+            logger.info(f"Found {len(comments)} comment(s) to strip")
+            stripped_query = re.sub(comment_pattern, " ", query).strip()
+            logger.info("Successfully stripped all comments")
+            return stripped_query, None
+        logger.info("No comments found in query")
+        return query, None
     except Exception as e:
         logger.error(f"Failed to strip comments: {e}")
         return query, None
+
+
+def sanitize_comments(tree: exp.Expression) -> exp.Expression:
+    """Escape ``/*`` and ``*/`` inside AST comment nodes to prevent nested
+    block comments.
+
+    sqlglot converts ``--`` line comments to ``/* */`` block comments during
+    generation.  If the original line comment contained block comment markers
+    (e.g. ``-- /* text */``), the output becomes broken ``/* /* text */ */``
+    where the inner ``*/`` prematurely closes the outer comment.
+
+    This function walks the AST and escapes any ``/*`` → ``/ *`` and
+    ``*/`` → ``* /`` inside comment strings, so the generated SQL is always
+    valid regardless of what the original comments contained.
+    """
+    for node in [tree] + list(tree.find_all(exp.Expression)):
+        if hasattr(node, "comments") and node.comments:
+            node.comments = [c.replace("/*", "/ *").replace("*/", "* /") for c in node.comments]
+    return tree
 
 
 def ensure_select_from_values(expression: exp.Expression) -> exp.Expression:

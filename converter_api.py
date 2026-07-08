@@ -20,6 +20,7 @@ from guardrail.main import extract_sql_components_per_table_with_alias, get_tabl
 from guardrail.rules_validator import validate_queries
 from apis.utils.helpers import (
     strip_comment,
+    sanitize_comments,
     unsupported_functionality_identifiers,
     extract_functions_from_query,
     categorize_functions,
@@ -114,6 +115,7 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     region_sql, in_replacements = extract_large_in_clauses(region_sql)
     # Parse with the region's own source dialect, then run the standard e6 steps.
     tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
+    tree = sanitize_comments(tree)
     tree = quote_identifiers(tree, dialect="e6")
     tree = ensure_select_from_values(tree)
     tree = set_cte_names_case_sensitively(tree)
@@ -291,8 +293,6 @@ async def convert_query(
             escape_unicode(query),
         )
 
-        # Always strip comment from query, but only re-add if SKIP_COMMENT is false
-
         if SKIP_COMMENT.lower() == "true":
             query, comment = strip_comment(query)
             logger.info("%s — SKIP_COMMENT: stripped comments", query_id)
@@ -309,6 +309,8 @@ async def convert_query(
             )
 
         tree = sqlglot.parse_one(query, read=from_sql, error_level=None)
+
+        tree = sanitize_comments(tree)
 
         if flags_dict.get("USE_TWO_PHASE_QUALIFICATION_SCHEME", False):
             logger.info("%s — USE_TWO_PHASE_QUALIFICATION_SCHEME: enabled", query_id)
