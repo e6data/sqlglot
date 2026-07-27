@@ -1798,6 +1798,16 @@ class TestE6(Validator):
 
         self.validate_all("SELECT LN(1)", read={"databricks": "SELECT ln(1)"})
 
+        # DBR treats single-argument LOG(x) as natural log (base e); e6 needs an
+        # explicit base, so supply e = 2.718281828459045.
+        self.validate_all("SELECT LOG(2.718281828459045, a)", read={"databricks": "SELECT log(a)"})
+
+        # Two-argument LOG(base, value) is passed through unchanged.
+        self.validate_all("SELECT LOG(2, 8)", read={"databricks": "SELECT log(2, 8)"})
+
+        # A single-argument LOG parsed as an e6 Log node also gets the base.
+        self.validate_identity("SELECT LOG(a)", "SELECT LOG(2.718281828459045, a)")
+
     def test_string(self):
         self.validate_all(
             "SELECT '%SystemDrive%/Users/John' LIKE '/%SystemDrive/%//Users%' ESCAPE '/'",
