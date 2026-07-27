@@ -3381,7 +3381,17 @@ class E6(Dialect):
             exp.LastValue: rename_func("LAST_VALUE"),
             exp.NextDay: _next_day_sql,
             exp.Length: length_sql,
-            exp.Log: lambda self, e: self.func("LOG", e.this, e.expression),
+            exp.Log: lambda self, e: self.func("LOG", e.this, e.expression)
+            if e.expression
+            else self.func("LOG", exp.Literal.number("2.718281828459045"), e.this),
+            # DBR parses single-argument LOG(x) into an Ln node (it treats log as
+            # natural log) that keeps the original name in meta; give it the base
+            # e explicitly. A genuine LN(x) is left as-is.
+            exp.Ln: lambda self, e: self.func(
+                "LOG", exp.Literal.number("2.718281828459045"), e.this
+            )
+            if (e.meta.get("name") or "").lower() == "log"
+            else self.func("LN", e.this),
             exp.Lower: rename_func("LOWER"),
             exp.LogicalOr: rename_func("BOOL_OR"),
             exp.MakeInterval: lambda self, e: make_interval_sql(self, e)
