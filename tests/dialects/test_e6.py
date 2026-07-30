@@ -16,6 +16,21 @@ class TestE6(Validator):
             },
         )
 
+        # E6's colon-path grammar rejects a bare reserved word after ':' (e.g. LIMIT / ORDER /
+        # FROM), so those keys must be double-quoted; non-reserved keys stay bare.
+        self.validate_all(
+            'SELECT properties:"limit" FROM source',
+            read={"databricks": "SELECT properties:limit FROM source"},
+        )
+        self.validate_all(
+            'SELECT properties:"order" FROM source',
+            read={"databricks": "SELECT properties:order FROM source"},
+        )
+        self.validate_all(
+            "SELECT properties:geojson FROM source",
+            read={"databricks": "SELECT properties:geojson FROM source"},
+        )
+
         self.validate_all(
             "SELECT FIRST_VALUE(zone) AS zone FROM filtered_zones",
             read={"databricks": "SELECT FIRST(zone) AS zone FROM filtered_zones"},
