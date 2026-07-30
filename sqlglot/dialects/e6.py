@@ -3010,7 +3010,14 @@ class E6(Dialect):
                     sql += f":[{seg.this}]"
                 elif isinstance(seg, exp.JSONPathKey):
                     key = seg.this
-                    if key in self.RESERVED_DATATYPE_KEYWORDS or seg.args.get("escape"):
+                    # E6's colon-path grammar rejects a bare reserved word after ':', so any
+                    # E6 reserved word (not just a datatype keyword, e.g. LIMIT/FROM/ORDER)
+                    # must be double-quoted: col:"limit".
+                    if (
+                        key in self.RESERVED_DATATYPE_KEYWORDS
+                        or (isinstance(key, str) and key.lower() in self.RESERVED_KEYWORDS)
+                        or seg.args.get("escape")
+                    ):
                         sql += f':"{key}"'
                     else:
                         sql += f":{key}"
@@ -3041,12 +3048,19 @@ class E6(Dialect):
                         and isinstance(path_expressions[1], exp.JSONPathKey)
                     ):
                         path_key = path_expressions[1].this
-                        if path_key in self.RESERVED_DATATYPE_KEYWORDS:
+                        # E6's colon-path grammar rejects a bare reserved word after ':', so
+                        # any E6 reserved word (not just a datatype keyword, e.g.
+                        # LIMIT/FROM/ORDER) must be double-quoted: col:"limit".
+                        if (
+                            path_key in self.RESERVED_DATATYPE_KEYWORDS
+                            or (
+                                isinstance(path_key, str)
+                                and path_key.lower() in self.RESERVED_KEYWORDS
+                            )
+                            or e.expression.args.get("escape")
+                        ):
                             return f'{self.sql(e.this)}:"{path_key}"'
-                        else:
-                            if e.expression.args.get("escape"):
-                                return f'{self.sql(e.this)}:"{path_key}"'
-                            return f"{self.sql(e.this)}:{path_key}"
+                        return f"{self.sql(e.this)}:{path_key}"
                 # Fallback if not JSONPath format
                 elif isinstance(e.expression, exp.Literal):
                     return f"{self.sql(e.this)}:{e.expression.this}"
