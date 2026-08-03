@@ -420,6 +420,18 @@ def _is_variant_colon_extract(node):
     )
 
 
+def _final_variant_segment(node):
+    # Databricks names an unaliased colon/variant projection after the final path
+    # segment (Properties:a:b -> b). Return that segment's key, or None if the path
+    # does not end in a key (e.g. a subscript) and so has no implicit column name.
+    path = node.expression
+    if isinstance(path, exp.JSONPath) and path.expressions:
+        last = path.expressions[-1]
+        if isinstance(last, exp.JSONPathKey):
+            return last.this
+    return None
+
+
 def add_single_quotes(expression) -> str:
     quoted_str = f"'{expression}'"
     return quoted_str
@@ -1787,6 +1799,24 @@ class E6(Dialect):
                     in_quote = not in_quote
 
             return "\n".join(result)
+
+        def select_sql(self, expression: exp.Select) -> str:
+            # Databricks derives an implicit column name from the final segment of an
+            # unaliased colon/variant access (Properties:metrics_per_level ->
+            # metrics_per_level). E6 has no such rule, so make the alias explicit for
+            # top-level projections; this keeps an outer query that references the column
+            # by that name resolvable. Iterating the select's own expressions restricts
+            # this to direct projections, so colon access inside WHERE / GROUP BY / a
+            # function arg / a CAST (or one already aliased) is left untouched.
+            if self.from_dialect == "databricks":
+                for projection in list(expression.expressions):
+                    if isinstance(projection, exp.JSONExtract) and projection.args.get(
+                        "variant_extract"
+                    ):
+                        segment = _final_variant_segment(projection)
+                        if segment:
+                            projection.replace(exp.alias_(projection, segment))
+            return super().select_sql(expression)
 
         def alias_sql(self, expression: exp.Alias) -> str:
             """
