@@ -2876,6 +2876,12 @@ class E6(Dialect):
                 name = alias.name if alias else ""
                 return self.seg(f"LATERAL {flatten} AS {name}" if name else f"LATERAL {flatten}")
 
+            # A plain "LATERAL (subquery)" is a standard SQL correlated derived table, not
+            # Spark's "LATERAL VIEW <generator>". Only the latter is a view; a subquery must
+            # emit plain LATERAL (the base generator branches on the `view` flag correctly).
+            if not expression.args.get("view") and isinstance(expression.this, exp.Subquery):
+                return super().lateral_sql(expression)
+
             expression.set("view", True)
             this = self.sql(expression, "this")
 
