@@ -43,6 +43,20 @@ class TestE6(Validator):
             },
         )
 
+        # A plain "LATERAL (subquery)" is a standard SQL correlated derived table, not a
+        # Spark "LATERAL VIEW <generator>" -- it must emit plain LATERAL, never the invalid
+        # "LATERAL VIEW (subquery)". Both LEFT JOIN LATERAL and comma/CROSS LATERAL forms.
+        self.validate_all(
+            "SELECT * FROM t1 LEFT JOIN LATERAL (SELECT x FROM t2 WHERE t2.a = t1.a) AS s ON TRUE",
+            read={
+                "databricks": "SELECT * FROM t1 LEFT JOIN LATERAL (SELECT x FROM t2 WHERE t2.a = t1.a) s ON TRUE"
+            },
+        )
+        self.validate_all(
+            "SELECT * FROM t1 CROSS JOIN LATERAL (SELECT x FROM t2 WHERE t2.a = t1.a) AS s",
+            read={"databricks": "SELECT * FROM t1, LATERAL (SELECT x FROM t2 WHERE t2.a = t1.a) s"},
+        )
+
         self.validate_all(
             "SELECT TRIM(v) AS du_id FROM (SELECT EXPLODE(SPLIT('VZ_05690013012,VZ_05690013048', ',')) AS v) AS g",
             read={
