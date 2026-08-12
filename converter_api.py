@@ -14,6 +14,7 @@ import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks
+from sqlglot.dialects.e6 import subtract_one_from_dow
 from apis.utils.multidialect import pg_outer_to_inner, split_pg_outer, _splice
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
@@ -115,6 +116,9 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     region_sql, in_replacements = extract_large_in_clauses(region_sql)
     # Parse with the region's own source dialect, then run the standard e6 steps.
     tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
+    # MULTIDIALECT-only (this helper runs only under the flag): e6 EXTRACT(DOW) is
+    # 1-7 vs Postgres' 0-6, so subtract 1 so the value matches the Postgres source.
+    tree = tree.transform(subtract_one_from_dow)
     tree = sanitize_comments(tree)
     tree = quote_identifiers(tree, dialect="e6")
     tree = ensure_select_from_values(tree)

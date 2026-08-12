@@ -3400,6 +3400,27 @@ class TestE6(Validator):
             'JOIN (SELECT "y" FROM "t2") AS "q" ON "p"."x" = "q"."y"',
         )
 
+    def test_subtract_one_from_dow(self):
+        """e6 EXTRACT(DOW) is 1-7 vs Postgres' 0-6, so subtract 1. The BI-tool
+        idiom `1 + EXTRACT(DOW)` becomes `1 + (EXTRACT(DOW) - 1)` = 1-7; a bare
+        EXTRACT(DOW) becomes 0-6. Non-DOW extracts are untouched."""
+        import sqlglot
+        from sqlglot.dialects.e6 import subtract_one_from_dow
+
+        def apply(sql):
+            tree = sqlglot.parse_one(sql, read="postgres").transform(subtract_one_from_dow)
+            return tree.sql(dialect="e6", from_dialect="postgres")
+
+        self.assertEqual(
+            apply("SELECT 1 + CAST(EXTRACT(DOW FROM d) AS INTEGER)"),
+            "SELECT 1 + CAST(EXTRACT(DOW FROM d) - 1 AS INT)",
+        )
+        self.assertEqual(apply("SELECT EXTRACT(DOW FROM d)"), "SELECT EXTRACT(DOW FROM d) - 1")
+        self.assertEqual(
+            apply("SELECT 1 + EXTRACT(MONTH FROM d)"),
+            "SELECT 1 + EXTRACT(MONTH FROM d)",
+        )
+
     def test_make_interval(self):
         """Test make_interval transpilation from Databricks to E6."""
 

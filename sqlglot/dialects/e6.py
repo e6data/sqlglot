@@ -38,6 +38,23 @@ def epoch_cast_to_ts_e6(expression: exp.Expression) -> exp.Expression:
     return expression
 
 
+def subtract_one_from_dow(node: exp.Expression) -> exp.Expression:
+    """Subtract 1 from every ``EXTRACT(DOW ..)`` so e6 matches Postgres numbering.
+
+    Postgres ``EXTRACT(DOW)`` is 0-6 (Sun=0); e6's is 1-7 (Sun=1). Rewriting
+    ``EXTRACT(DOW ..)`` -> ``EXTRACT(DOW ..) - 1`` makes e6 reproduce the Postgres
+    value in every context: the BI-tool idiom ``1 + EXTRACT(DOW)`` becomes
+    ``1 + (EXTRACT(DOW) - 1)`` = 1-7, and a bare ``EXTRACT(DOW)`` becomes 0-6.
+    """
+    if (
+        isinstance(node, exp.Extract)
+        and isinstance(node.this, exp.Var)
+        and node.this.name.upper() == "DOW"
+    ):
+        return exp.Sub(this=node, expression=exp.Literal.number(1))
+    return node
+
+
 def _to_int(expression: exp.Expression) -> exp.Expression:
     if not expression.type:
         from sqlglot.optimizer.annotate_types import annotate_types
