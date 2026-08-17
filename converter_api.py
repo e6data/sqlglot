@@ -15,7 +15,7 @@ from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks
 from sqlglot.dialects.e6 import subtract_one_from_dow
-from apis.utils.multidialect import pg_outer_to_inner, split_pg_outer, _splice
+from apis.utils.multidialect import split_pg_outer, _splice
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
@@ -149,78 +149,28 @@ async def convert_query(
             return HTTPException(status_code=500, detail=str(je))
 
     if flags_dict.get("MULTIDIALECT", False):
-        # Multi-dialect BI-tool queries (Power BI / Tableau / ThoughtSpot): a Postgres
-        # outer wrapper ("..." = identifier) wrapping inner subqueries written in another
-        # dialect. The inner dialect is read from the feature flags via INNER_DIALECT
-        # (default "databricks"; e.g. "snowflake"). This branch does its own e6 generation
-        # (via _region_to_e6) and returns directly -- it does NOT fall through to the
-        # shared pipeline below.
+        # Multi-dialect BI-tool query: a Postgres outer wrapper around inner subqueries
+        # written in another dialect (INNER_DIALECT, default "databricks"). Rule:
+        #   - a subquery that FAILS the Postgres parse is inner-dialect  -> INNER_DIALECT -> e6
+        #   - everything else is the Postgres wrapper                    -> postgres      -> e6
+        # then splice the pieces back. We never merge into the inner dialect first (that
+        # mis-reads Postgres constructs, e.g. numeric TRUNC -> date truncation).
         inner_dialect = flags_dict.get("INNER_DIALECT", "databricks").lower()
         pretty = flags_dict.get("PRETTY_PRINT", True)
+
+        outer, inner_subqueries = split_pg_outer(query)
+        converted_query = _region_to_e6(outer, "postgres", pretty)
+        for marker, subquery in inner_subqueries.items():
+            converted_query = _splice(
+                converted_query, marker, _region_to_e6(subquery, inner_dialect, pretty)
+            )
+
         logger.info(
-            "%s AT %s — MULTIDIALECT flag set: Postgres outer + %s inner "
-            "(INNER_DIALECT=%s, from_sql=%s ignored)",
+            "%s AT %s — MULTIDIALECT: %d inner subquery(s) via %s, outer via postgres:\n%s",
             query_id,
             timestamp,
+            len(inner_subqueries),
             inner_dialect,
-            inner_dialect,
-            from_sql,
-        )
-        try:
-            # PRIMARY: outer pg -> <inner_dialect> (inner subqueries kept verbatim), then
-            # one <inner_dialect> -> e6 pass over the merged query. For inner_dialect
-            # "snowflake" this is pg -> snowflake -> e6; for "databricks", pg -> dbr -> e6.
-            intermediary = pg_outer_to_inner(query, inner_dialect)
-            logger.info(
-                "%s AT %s — MULTIDIALECT primary intermediary (pg -> %s):\n%s",
-                query_id,
-                timestamp,
-                inner_dialect,
-                intermediary,
-            )
-            converted_query = _region_to_e6(intermediary, inner_dialect, pretty)
-            logger.info(
-                "%s AT %s — MULTIDIALECT PRIMARY pass taken (pg -> %s -> e6)",
-                query_id,
-                timestamp,
-                inner_dialect,
-            )
-        except Exception as e:
-            # FALLBACK: the <inner_dialect> -> e6 step failed -- e.g. a Postgres construct
-            # the inner dialect can't re-read (numeric TRUNC, which Databricks/e6 treat as
-            # a date truncation needing a unit). Split the query and run each region
-            # through the SAME e6 pipeline with the dialect rewired: the OUTER as
-            # "postgres" (so e6 applies Postgres rules, e.g. dropping the 1-arg TRUNC) and
-            # each inner subquery as <inner_dialect>, then splice the e6 fragments.
-            logger.warning(
-                "%s AT %s — MULTIDIALECT primary pg -> %s -> e6 failed (%s); "
-                "FALLBACK pass taken (outer pg -> e6, inner %s -> e6)",
-                query_id,
-                timestamp,
-                inner_dialect,
-                e,
-                inner_dialect,
-            )
-            outer, inner_subqueries = split_pg_outer(query)
-            logger.info(
-                "%s AT %s — MULTIDIALECT fallback intermediary outer "
-                "(pg, %d inner subqueries held out):\n%s",
-                query_id,
-                timestamp,
-                len(inner_subqueries),
-                outer,
-            )
-            converted_query = _region_to_e6(outer, "postgres", pretty)
-            for marker, subquery in inner_subqueries.items():
-                converted_query = _splice(
-                    converted_query,
-                    marker,
-                    _region_to_e6(subquery, inner_dialect, pretty),
-                )
-        logger.info(
-            "%s AT %s — MULTIDIALECT Transpiled Query:\n%s",
-            query_id,
-            timestamp,
             converted_query,
         )
         return {"converted_query": converted_query}

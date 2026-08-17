@@ -160,68 +160,12 @@ def _splice(text, marker, raw):
     return text[:open_paren] + raw + text[close_paren + 1 :]
 
 
-def pg_outer_to_inner(query, write="databricks"):
-    """Return ``query`` as a uniform ``write``-dialect string: the Postgres outer
-    transpiled to ``write`` with the inner subqueries (already in that dialect) kept
-    verbatim in place.
-
-    ``write`` is the inner dialect of the query -- "databricks" (default) or "snowflake".
-    The caller then runs one ``write -> e6`` pass over the result.
-
-    Example (write="databricks")::
-        in : SELECT "a" FROM (SELECT `x` FROM `t`) "s"
-        out: SELECT `a` FROM (SELECT `x` FROM `t`) AS `s`
-             (outer "a"/"s" -> backticks via PASS 1; inner `x`/`t` kept verbatim)
-    """
-    # ``work`` is the text we progressively rewrite; ``raw`` maps each placeholder marker
-    # to the verbatim inner subquery it replaced; ``rounds`` counts/labels iterations.
-    work = query
-    raw = {}
-    rounds = 0
-
-    # DETECTION LOOP: peel off one failing (inner-dialect) subquery per iteration until the
-    # remaining text parses as plain Postgres.
-    #   round 0: work = SELECT "a" FROM (SELECT `x` FROM `t`) "s"
-    #            -> cut -> SELECT "a" FROM (SELECT NULL AS __E6_INNER_0__) "s"
-    #   round 1: _error_offset == None -> stop
-    while True:
-        offset = _error_offset(work)
-        if offset is None:
-            break  # no more Postgres parse errors -> outer is clean, detection is done
-        # Guard against a query that never converges (e.g. a genuine syntax error).
-        if rounds >= MAX_ROUNDS:
-            raise ValueError("Multidialect two-pass: did not converge")
-        # Map the error location to the enclosing subquery; if the error is not inside a
-        # subquery we cannot split it -> bail so the caller falls back.
-        span = _subquery_span(work, offset)
-        if span is None:
-            raise ValueError("Multidialect two-pass: parse error not inside a subquery")
-        # Stash the subquery's exact source under a fresh marker, then replace it in-place
-        # with a trivial placeholder subquery (valid wherever a subquery may appear, so
-        # the residual stays parseable as Postgres).
-        #   raw["__E6_INNER_0__"] = "(SELECT `x` FROM `t`)"
-        s, e = span
-        marker = MARKER.format(rounds)
-        raw[marker] = work[s : e + 1]
-        work = work[:s] + f"(SELECT NULL AS {marker})" + work[e + 1 :]
-        rounds += 1
-
-    # PASS 1: the residual is now clean Postgres -> transpile it to the ``write`` dialect.
-    # The placeholder subqueries are valid Postgres, so they survive into that text.
-    #   SELECT "a" FROM (SELECT NULL AS __E6_INNER_0__) "s"
-    #     ->  SELECT `a` FROM (SELECT NULL AS __E6_INNER_0__) AS `s`   (write=databricks)
-    outer = sqlglot.transpile(work, read="postgres", write=write)[0]
-
-    # SPLICE: drop each verbatim inner subquery back over its placeholder. Repeat up
-    # to len(raw)+1 times so a subquery that itself contains an earlier marker (nesting)
-    # also gets resolved; stop as soon as no markers remain.
-    #   ...(SELECT NULL AS __E6_INNER_0__)...  ->  ...(SELECT `x` FROM `t`)...
-    for _ in range(len(raw) + 1):
-        for marker, raw_sql in raw.items():
-            outer = _splice(outer, marker, raw_sql)
-        if not any(marker in outer for marker in raw):
-            break
-    return outer
+# pg_outer_to_inner (removed / dead code): it merged the mixed query into one
+# <inner_dialect> string (pg outer -> databricks) before a single -> e6 pass. That merge
+# mis-read Postgres constructs (numeric TRUNC -> date-truncation crash; literal SPLIT
+# delimiter -> regex \Q..\E). Superseded by the split-per-region path in converter_api:
+# split_pg_outer() + _region_to_e6() + _splice() — each region transpiled to e6 in its
+# own dialect, no inner-dialect merge.
 
 
 def split_pg_outer(query):

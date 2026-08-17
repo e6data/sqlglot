@@ -3348,18 +3348,29 @@ class TestE6(Validator):
             'SELECT "ID" FROM t',
         )
 
-    def test_multidialect_pg_outer_to_inner_two_pass(self):
-        """Multi-dialect (BI-tool) PG->DBR->E6 two-pass for a Postgres outer wrapper
-        with inner Databricks subqueries.
+    def test_multidialect_split_per_region(self):
+        """Multi-dialect (BI-tool) transpile: a Postgres outer wrapper around inner
+        Databricks subqueries. Each subquery that FAILS the Postgres parse is transpiled
+        Databricks -> e6; the rest is transpiled Postgres -> e6; then the pieces are
+        spliced. No merge into Databricks first.
 
-        Outer ANSI ``"id"`` identifiers stay identifiers; inner Databricks ``"str"``
-        string literals become ``'str'``; inner backtick identifiers become ``"id"``.
+        Outer ``"id"`` identifiers stay identifiers; inner Databricks ``"str"`` string
+        literals become ``'str'``; inner backtick identifiers become ``"id"``.
         """
         import sqlglot
-        from apis.utils.multidialect import pg_outer_to_inner
+        from apis.utils.multidialect import split_pg_outer, _splice
+
+        def _region(sql, dialect):
+            return sqlglot.parse_one(sql, read=dialect, error_level=None).sql(
+                dialect="e6", from_dialect=dialect
+            )
 
         def pg_to_e6(sql):
-            return sqlglot.transpile(pg_outer_to_inner(sql), read="databricks", write="e6")[0]
+            outer, inner = split_pg_outer(sql)
+            out = _region(outer, "postgres")
+            for marker, subquery in inner.items():
+                out = _splice(out, marker, _region(subquery, "databricks"))
+            return out
 
         # FROM-derived inner subquery: backtick identifiers -> "..." ; outer "a" kept.
         self.assertEqual(
@@ -3398,6 +3409,26 @@ class TestE6(Validator):
             ),
             'SELECT "a" FROM (SELECT "x" FROM "t1") AS "p" '
             'JOIN (SELECT "y" FROM "t2") AS "q" ON "p"."x" = "q"."y"',
+        )
+
+        # A numeric TRUNC in the OUTER stays Postgres (no "date truncation needs a unit"
+        # crash) — the reason we don't merge into Databricks first.
+        self.assertEqual(
+            pg_to_e6('SELECT TRUNC("x") AS n FROM (SELECT `x` FROM `t`) "q"'),
+            'SELECT "x" AS n FROM (SELECT "x" FROM "t") AS "q"',
+        )
+
+        # An inner Databricks SPLIT stays a plain SPLIT (no \\Q..\\E regex-quoting that a
+        # Postgres literal-split would add and that e6 can't evaluate).
+        self.assertEqual(
+            pg_to_e6("SELECT arr FROM (SELECT split('1,2', ',') AS arr FROM `t`) \"q\""),
+            'SELECT arr FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM "t") AS "q"',
+        )
+
+        # No inner subquery to hold out -> the whole query is transpiled as Postgres.
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM tbl WHERE "a" = 1'),
+            'SELECT "a" FROM tbl WHERE "a" = 1',
         )
 
     def test_subtract_one_from_dow(self):
