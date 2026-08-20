@@ -21,6 +21,22 @@ from sqlglot.tokens import TokenType
 from sqlglot.helper import seq_get
 from sqlglot.optimizer.annotate_types import TypeAnnotator
 
+# Reading ANSI double-quoted identifiers on the Databricks parse path (a source cluster
+# with ``spark.sql.doubleQuotedIdentifiers=true``) has two independent opt-in flags:
+#
+#   * DBR_DOUBLE_QUOTED_IDENTIFIERS (this flag) -- the SAFE, tree-level path. Turns on
+#     ``STRING_ALIASES`` so a ``"..."`` in an alias slot (``expr "Date"``) parses as a
+#     quoted identifier instead of a string. It never touches a ``"..."`` where a string
+#     literal is legal, so genuine strings are preserved. Qualifier chains such as
+#     ``"a"."b"`` are already emitted as identifiers by the e6 generator (unflagged).
+#
+#   * PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR (see the Tokenizer) -- the aggressive
+#     lexer path: treats EVERY ``"..."`` as an identifier, so bare references work too,
+#     but it cannot tell an identifier from a double-quoted string (false positives).
+DBR_DOUBLE_QUOTED_IDENTIFIERS = (
+    os.getenv("DBR_DOUBLE_QUOTED_IDENTIFIERS", "false").lower() == "true"
+)
+
 
 def _build_json_extract(args: t.List) -> exp.JSONExtract:
     # Transform GET_JSON_OBJECT(expr, '$.<path>') -> expr:<path>
@@ -132,6 +148,12 @@ class Databricks(Spark):
         COLON_IS_VARIANT_EXTRACT = True
         VALUES_FOLLOWED_BY_PAREN = True
 
+        # Opt-in (DBR_DOUBLE_QUOTED_IDENTIFIERS): let a ``"..."`` in an alias slot
+        # (``expr "Date"``, ``AS "Month"``) parse as a quoted identifier rather than a
+        # string literal. Only the alias position is affected, so genuine ``"..."``
+        # string literals elsewhere are left untouched.
+        STRING_ALIASES = DBR_DOUBLE_QUOTED_IDENTIFIERS
+
         FUNCTIONS = {
             **Spark.Parser.FUNCTIONS,
             "MAKE_INTERVAL": _build_make_interval,
@@ -206,6 +228,27 @@ class Databricks(Spark):
                 (adjacent strings become Concat). The rest of _parse_primary
                 (DOT+NUMBER, ODBC datetime, _parse_paren) is unchanged from base.
             """
+            # ANSI qualifier slot (opt-in via DBR_DOUBLE_QUOTED_IDENTIFIERS): a
+            # double-quoted token adjacent to a ``.`` -- ``"x".col`` or ``t."x"`` -- is a
+            # qualifier, where a string literal is grammatically impossible, so build it
+            # as a quoted identifier. ``self.sql[start] == '"'`` distinguishes a
+            # double-quoted token from a single-quoted one after the tokenizer erased the
+            # quotes. Any ``"..."`` NOT next to a ``.`` is left untouched, so a genuine
+            # ``"..."`` string literal is never misread as a column.
+            cur = self._curr
+            if (
+                DBR_DOUBLE_QUOTED_IDENTIFIERS
+                and cur is not None
+                and cur.token_type == TokenType.STRING
+                and cur.start < len(self.sql)
+                and self.sql[cur.start] == '"'
+            ):
+                next_type = self._next.token_type if self._next else None
+                prev_type = self._prev.token_type if self._prev else None
+                if TokenType.DOT in (next_type, prev_type):
+                    self._advance()
+                    return exp.to_identifier(cur.text, quoted=True)
+
             if os.getenv("FIX_QUOTE_ESCAPES", "False").lower() != "true":
                 return super()._parse_primary()
 

@@ -3301,6 +3301,67 @@ class TestE6(Validator):
             },
         )
 
+        # ANSI double-quoted identifiers from a Databricks source running with
+        # spark.sql.doubleQuotedIdentifiers=true. With the flag on, "..." reads as an
+        # identifier; otherwise as a string literal. These mirror real BI-tool queries
+        # that reference double-quoted CTE aliases bare in the outer SELECT.
+        preserve_dq = (
+            os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower() == "true"
+        )
+        # bare double-quoted column references in the projection
+        self.validate_all(
+            'SELECT "Date", "user" FROM t' if preserve_dq else "SELECT 'Date', 'user' FROM t",
+            read={"databricks": 'SELECT "Date", "user" FROM t'},
+        )
+        # bare double-quoted reference inside COUNT(DISTINCT ...)
+        self.validate_all(
+            'SELECT COUNT(DISTINCT "user") AS uv FROM t'
+            if preserve_dq
+            else "SELECT COUNT(DISTINCT 'user') AS uv FROM t",
+            read={"databricks": 'SELECT COUNT(DISTINCT "user") AS uv FROM t'},
+        )
+        # multi-arg COUNT(DISTINCT ...) with a bare double-quoted reference
+        self.validate_all(
+            'SELECT COUNT(DISTINCT url, "session") AS upv FROM t'
+            if preserve_dq
+            else "SELECT COUNT(DISTINCT url, 'session') AS upv FROM t",
+            read={"databricks": 'SELECT COUNT(DISTINCT url, "session") AS upv FROM t'},
+        )
+        # double-quoted qualifier in a JOIN condition
+        self.validate_all(
+            'SELECT a.b FROM x JOIN y ON x.id = y."session"'
+            if preserve_dq
+            else "SELECT a.b FROM x JOIN y ON x.id = y.'session'",
+            read={"databricks": 'SELECT a.b FROM x JOIN y ON x.id = y."session"'},
+        )
+
+    def test_dbr_double_quoted_identifier_aliases(self):
+        """DBR_DOUBLE_QUOTED_IDENTIFIERS turns on STRING_ALIASES so a double-quoted alias
+        from an ANSI-quoted Databricks source (spark.sql.doubleQuotedIdentifiers=true)
+        parses as an identifier instead of a string. Off by default, where an implicit
+        ``expr "alias"`` is a parse error. A genuine ``"..."`` string literal in a value
+        position is untouched either way, so it is never misread as a column.
+        """
+        import sqlglot
+        from sqlglot.errors import ParseError
+
+        if os.getenv("DBR_DOUBLE_QUOTED_IDENTIFIERS", "false").lower() == "true":
+            # implicit double-quoted alias parses as an identifier
+            self.validate_all(
+                'SELECT c "Date" FROM t',
+                read={"databricks": 'SELECT c "Date" FROM t'},
+            )
+        else:
+            # default: an implicit string alias is a parse error
+            with self.assertRaises(ParseError):
+                sqlglot.transpile('SELECT c "Date" FROM t', read="databricks")
+
+        # a genuine double-quoted string in a value position stays a string, both ways
+        self.validate_all(
+            "SELECT * FROM t WHERE c = 'web'",
+            read={"databricks": 'SELECT * FROM t WHERE c = "web"'},
+        )
+
     def test_powerbi_mixed_quote_sf_to_dbr(self):
         """Power BI SF->DBR->E6 path for mixed-quote queries.
 
