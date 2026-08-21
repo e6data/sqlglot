@@ -2358,17 +2358,35 @@ class E6(Dialect):
 
         def format_date_sql(self: E6.Generator, expression: exp.TimeToStr) -> str:
             date_expr = expression.this
-            format_expr = self.convert_format_time(expression)
-            format_expr_quoted = f"'{format_expr}'"
-
-            time_format_tokens = {"h", "hh", "s", "ss", "H", "HH", "m", "mm", "S", "SS"}
-            requires_timestamp = any(token in format_expr for token in time_format_tokens)
 
             # On native executor, map DATE_FORMAT as-is (native implements DATE_FORMAT,
             # not the FORMAT_DATE/FORMAT_TIMESTAMP pair). On java executor (default),
             # keep the existing FORMAT_DATE/FORMAT_TIMESTAMP split. Argument order is
             # unchanged in both cases; only the function name differs.
             is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+
+            # On the native executor, preserve the source format string verbatim for
+            # Databricks queries: native uses Java SimpleDateFormat (same as Databricks),
+            # so reconstruct the original Databricks tokens instead of running the lossy
+            # e6 conversion (which rewrites e.g. ``yyyy`` -> ``y`` and round-trips the
+            # ``a`` AM/PM token through strftime ``%p``). Non-Databricks sources
+            # (Snowflake, Presto, ...) use different format tokens, so those keep the
+            # e6 conversion.
+            fmt_node = expression.args.get("format")
+            if is_native and self.from_dialect == "databricks" and fmt_node is not None:
+                from sqlglot.dialects.databricks import Databricks
+                from sqlglot.time import format_time
+
+                format_expr = format_time(
+                    fmt_node.name, Databricks.INVERSE_TIME_MAPPING, Databricks.INVERSE_TIME_TRIE
+                )
+            else:
+                format_expr = self.convert_format_time(expression)
+            format_expr_quoted = f"'{format_expr}'"
+
+            time_format_tokens = {"h", "hh", "s", "ss", "H", "HH", "m", "mm", "S", "SS"}
+            requires_timestamp = any(token in format_expr for token in time_format_tokens)
+
             func_name = (
                 "DATE_FORMAT"
                 if is_native
