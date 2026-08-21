@@ -562,6 +562,7 @@ class E6(Dialect):
         "m": "%-M",  # Single-digit minute
         "ss": "%S",  # Two-digit second
         "s": "%-S",  # Single-digit second
+        "a": "%p",  # AM/PM marker
         "EEEE": "%A",  # Full weekday name
         "EEE": "%a",  # Abbreviated weekday name
         "EE": "%a",  # Abbreviated weekday name

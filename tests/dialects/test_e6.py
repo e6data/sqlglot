@@ -2325,6 +2325,14 @@ class TestE6(Validator):
             read={"databricks": "select DATE_FORMAT(current_timestamp, 'dd MMM, EEE')"},
         )
 
+        # 'a' (AM/PM marker) should map to the E6 'a' token, not leak as strftime %p
+        self.validate_all(
+            "SELECT FORMAT_TIMESTAMP(CAST('2024-03-06 13:27:25' AS TIMESTAMP), 'M/d/y h:mm:ss a')",
+            read={
+                "databricks": "SELECT DATE_FORMAT(CAST('2024-03-06 13:27:25' AS TIMESTAMP), 'M/d/yyyy h:mm:ss a')"
+            },
+        )
+
     def test_next_day(self):
         """Test NEXT_DAY transpilation from Databricks to E6."""
         import sqlglot
