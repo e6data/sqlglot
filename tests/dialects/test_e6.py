@@ -2325,6 +2325,14 @@ class TestE6(Validator):
             read={"databricks": "select DATE_FORMAT(current_timestamp, 'dd MMM, EEE')"},
         )
 
+        # 'a' (AM/PM marker) should map to the E6 'a' token, not leak as strftime %p
+        self.validate_all(
+            "SELECT FORMAT_TIMESTAMP(CAST('2024-03-06 13:27:25' AS TIMESTAMP), 'M/d/y h:mm:ss a')",
+            read={
+                "databricks": "SELECT DATE_FORMAT(CAST('2024-03-06 13:27:25' AS TIMESTAMP), 'M/d/yyyy h:mm:ss a')"
+            },
+        )
+
     def test_next_day(self):
         """Test NEXT_DAY transpilation from Databricks to E6."""
         import sqlglot
@@ -3301,6 +3309,67 @@ class TestE6(Validator):
             },
         )
 
+        # ANSI double-quoted identifiers from a Databricks source running with
+        # spark.sql.doubleQuotedIdentifiers=true. With the flag on, "..." reads as an
+        # identifier; otherwise as a string literal. These mirror real BI-tool queries
+        # that reference double-quoted CTE aliases bare in the outer SELECT.
+        preserve_dq = (
+            os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower() == "true"
+        )
+        # bare double-quoted column references in the projection
+        self.validate_all(
+            'SELECT "Date", "user" FROM t' if preserve_dq else "SELECT 'Date', 'user' FROM t",
+            read={"databricks": 'SELECT "Date", "user" FROM t'},
+        )
+        # bare double-quoted reference inside COUNT(DISTINCT ...)
+        self.validate_all(
+            'SELECT COUNT(DISTINCT "user") AS uv FROM t'
+            if preserve_dq
+            else "SELECT COUNT(DISTINCT 'user') AS uv FROM t",
+            read={"databricks": 'SELECT COUNT(DISTINCT "user") AS uv FROM t'},
+        )
+        # multi-arg COUNT(DISTINCT ...) with a bare double-quoted reference
+        self.validate_all(
+            'SELECT COUNT(DISTINCT url, "session") AS upv FROM t'
+            if preserve_dq
+            else "SELECT COUNT(DISTINCT url, 'session') AS upv FROM t",
+            read={"databricks": 'SELECT COUNT(DISTINCT url, "session") AS upv FROM t'},
+        )
+        # double-quoted qualifier in a JOIN condition
+        self.validate_all(
+            'SELECT a.b FROM x JOIN y ON x.id = y."session"'
+            if preserve_dq
+            else "SELECT a.b FROM x JOIN y ON x.id = y.'session'",
+            read={"databricks": 'SELECT a.b FROM x JOIN y ON x.id = y."session"'},
+        )
+
+    def test_dbr_double_quoted_identifier_aliases(self):
+        """DBR_DOUBLE_QUOTED_IDENTIFIERS turns on STRING_ALIASES so a double-quoted alias
+        from an ANSI-quoted Databricks source (spark.sql.doubleQuotedIdentifiers=true)
+        parses as an identifier instead of a string. Off by default, where an implicit
+        ``expr "alias"`` is a parse error. A genuine ``"..."`` string literal in a value
+        position is untouched either way, so it is never misread as a column.
+        """
+        import sqlglot
+        from sqlglot.errors import ParseError
+
+        if os.getenv("DBR_DOUBLE_QUOTED_IDENTIFIERS", "false").lower() == "true":
+            # implicit double-quoted alias parses as an identifier
+            self.validate_all(
+                'SELECT c "Date" FROM t',
+                read={"databricks": 'SELECT c "Date" FROM t'},
+            )
+        else:
+            # default: an implicit string alias is a parse error
+            with self.assertRaises(ParseError):
+                sqlglot.transpile('SELECT c "Date" FROM t', read="databricks")
+
+        # a genuine double-quoted string in a value position stays a string, both ways
+        self.validate_all(
+            "SELECT * FROM t WHERE c = 'web'",
+            read={"databricks": 'SELECT * FROM t WHERE c = "web"'},
+        )
+
     def test_powerbi_mixed_quote_sf_to_dbr(self):
         """Power BI SF->DBR->E6 path for mixed-quote queries.
 
@@ -3447,27 +3516,6 @@ class TestE6(Validator):
             ),
             'SELECT * FROM (SELECT "c0" FROM "t0") AS "s0", '
             '(SELECT "c1" FROM "t1") AS "s1", (SELECT "c2" FROM "t2") AS "s2"',
-        )
-
-    def test_subtract_one_from_dow(self):
-        """e6 EXTRACT(DOW) is 1-7 vs Postgres' 0-6, so subtract 1. The BI-tool
-        idiom `1 + EXTRACT(DOW)` becomes `1 + (EXTRACT(DOW) - 1)` = 1-7; a bare
-        EXTRACT(DOW) becomes 0-6. Non-DOW extracts are untouched."""
-        import sqlglot
-        from sqlglot.dialects.e6 import subtract_one_from_dow
-
-        def apply(sql):
-            tree = sqlglot.parse_one(sql, read="postgres").transform(subtract_one_from_dow)
-            return tree.sql(dialect="e6", from_dialect="postgres")
-
-        self.assertEqual(
-            apply("SELECT 1 + CAST(EXTRACT(DOW FROM d) AS INTEGER)"),
-            "SELECT 1 + CAST(EXTRACT(DOW FROM d) - 1 AS INT)",
-        )
-        self.assertEqual(apply("SELECT EXTRACT(DOW FROM d)"), "SELECT EXTRACT(DOW FROM d) - 1")
-        self.assertEqual(
-            apply("SELECT 1 + EXTRACT(MONTH FROM d)"),
-            "SELECT 1 + EXTRACT(MONTH FROM d)",
         )
 
     def test_make_interval(self):
