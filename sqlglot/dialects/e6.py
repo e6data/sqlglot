@@ -2382,6 +2382,9 @@ class E6(Dialect):
                 )
             else:
                 format_expr = self.convert_format_time(expression)
+            # Both branches return Optional[str]; coalesce so the quoting and token
+            # membership check below always operate on a str.
+            format_expr = format_expr or ""
             format_expr_quoted = f"'{format_expr}'"
 
             time_format_tokens = {"h", "hh", "s", "ss", "H", "HH", "m", "mm", "S", "SS"}
