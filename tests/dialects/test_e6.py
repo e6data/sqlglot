@@ -2696,10 +2696,16 @@ class TestE6(Validator):
                 "SELECT DATE_FORMAT(d, 'yyyy-MM-dd')",
                 read={"presto": "SELECT DATE_FORMAT(d, 'yyyy-MM-dd')"},
             )
-            # timestamp format (time tokens) also maps to DATE_FORMAT on native
+            # For a Databricks source on native, the format is preserved verbatim
+            # (native uses Java SimpleDateFormat, same as Databricks): yyyy stays yyyy
+            # and the AM/PM 'a' is kept, rather than the lossy e6 conversion.
             self.validate_all(
-                "SELECT DATE_FORMAT(CAST(d AS TIMESTAMP), 'y-MM-dd HH:mm:ss')",
+                "SELECT DATE_FORMAT(CAST(d AS TIMESTAMP), 'yyyy-MM-dd HH:mm:ss')",
                 read={"databricks": "SELECT DATE_FORMAT(d, 'yyyy-MM-dd HH:mm:ss')"},
+            )
+            self.validate_all(
+                "SELECT DATE_FORMAT(CAST(d AS TIMESTAMP), 'M/d/yyyy h:mm:ss a')",
+                read={"databricks": "SELECT DATE_FORMAT(d, 'M/d/yyyy h:mm:ss a')"},
             )
         finally:
             os.environ.pop("E6_EXECUTOR_TYPE", None)
