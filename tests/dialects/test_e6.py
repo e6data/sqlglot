@@ -3422,7 +3422,7 @@ class TestE6(Validator):
         # Postgres literal-split would add and that e6 can't evaluate).
         self.assertEqual(
             pg_to_e6("SELECT arr FROM (SELECT split('1,2', ',') AS arr FROM `t`) \"q\""),
-            'SELECT arr FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM "t") AS "q"',
+            "SELECT arr FROM (SELECT SPLIT('1,2', ',') AS arr FROM \"t\") AS \"q\"",
         )
 
         # No inner subquery to hold out -> the whole query is transpiled as Postgres.
