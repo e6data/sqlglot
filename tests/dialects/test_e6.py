@@ -3431,6 +3431,24 @@ class TestE6(Validator):
             'SELECT "a" FROM tbl WHERE "a" = 1',
         )
 
+        # A nested scalar subquery inside an inner subquery's projection: the whole inner
+        # subquery is pulled out as ONE region (never the scalar separately), so no
+        # placeholder marker can leak into the output.
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM (SELECT `x`, (SELECT `y` FROM `u`) AS sub FROM `t`) "s"'),
+            'SELECT "a" FROM (SELECT "x", (SELECT "y" FROM "u") AS sub FROM "t") AS "s"',
+        )
+
+        # Many sibling inner subqueries are all pulled in a single tokenize pass.
+        self.assertEqual(
+            pg_to_e6(
+                'SELECT * FROM (SELECT `c0` FROM `t0`) "s0", '
+                '(SELECT `c1` FROM `t1`) "s1", (SELECT `c2` FROM `t2`) "s2"'
+            ),
+            'SELECT * FROM (SELECT "c0" FROM "t0") AS "s0", '
+            '(SELECT "c1" FROM "t1") AS "s1", (SELECT "c2" FROM "t2") AS "s2"',
+        )
+
     def test_subtract_one_from_dow(self):
         """e6 EXTRACT(DOW) is 1-7 vs Postgres' 0-6, so subtract 1. The BI-tool
         idiom `1 + EXTRACT(DOW)` becomes `1 + (EXTRACT(DOW) - 1)` = 1-7; a bare

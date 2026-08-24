@@ -8,12 +8,14 @@ to the inner dialect and keep the inner subqueries verbatim, producing one unifo
 inner-dialect string. The caller then runs the normal ``inner -> e6`` step (where, for a
 Databricks inner, ``"x"`` -> ``'x'`` and `` `id` `` -> ``"id"``).
 
-How we find the inner subqueries: try ``postgres -> databricks``; the parse error points
-at an inner-dialect subquery Postgres can't read. (The ``write`` target of the detection
-transpile is irrelevant -- the failure comes from the Postgres *read* side -- so the same
-detection works whether the inner is Databricks or Snowflake.) Pull that subquery out
-(replace it with a placeholder), and repeat one error at a time until the outer parses as
-plain Postgres.
+How we find the inner subqueries: a Databricks inner subquery carries backtick identifiers
+(Postgres emits each as an UNKNOWN "`" token), so one tokenize pass pulls out every backtick
+subquery, reusing ``_subquery_span`` to find each one's enclosing subquery. A fallback loop
+then catches anything the backtick scan can't see (a non-backtick inner, or a Snowflake
+inner): try ``postgres -> databricks``; the parse error points at an inner-dialect subquery
+Postgres can't read; pull it out and repeat one error at a time until the outer parses as
+plain Postgres. (The ``write`` target is irrelevant -- the failure comes from the Postgres
+*read* side -- so the same detection works whether the inner is Databricks or Snowflake.)
 
 Raises ``ValueError`` when it can't apply (error not inside a subquery, or no
 convergence) so the caller can fall back to the old path.
@@ -82,12 +84,13 @@ def _error_offset(text):
         return max(0, min(offset, len(text) - 1))
 
 
-def _subquery_span(text, offset):
+def _subquery_span(text, offset, toks=None):
     """Find the innermost ``( ... )`` subquery that contains ``offset``.
 
     Balances parens on the token stream (so parens inside strings/comments don't count)
     and only accepts a "(" that actually opens a subquery. Returns the inclusive
-    (start, end) char span, or None if ``offset`` is not inside a subquery.
+    (start, end) char span, or None if ``offset`` is not inside a subquery. Pass ``toks``
+    (a pre-tokenized ``text``) to reuse one tokenization across many calls.
 
     Example 1 -- simple::
         text   = SELECT "a" FROM (SELECT `x` FROM `t`) "s"
@@ -100,7 +103,8 @@ def _subquery_span(text, offset):
     """
     # Tokenize as Postgres so each "(" / ")" is a real paren token (parens inside string
     # literals or comments become part of a single STRING/comment token and are ignored).
-    toks = tokenize(text, dialect="postgres")
+    if toks is None:
+        toks = tokenize(text, dialect="postgres")
     # Locate the token at/just before the error offset -- our starting point to scan out.
     start = [i for i, tok in enumerate(toks) if tok.start <= offset]
     if not start:
@@ -169,17 +173,14 @@ def _splice(text, marker, raw):
 
 
 def split_pg_outer(query):
-    """Run the same detection loop as ``pg_outer_to_inner`` but return the split
-    ``(outer, raw)`` *without* transpiling anything.
+    """Split ``query`` into a plain-Postgres ``outer`` and a ``raw`` map of the inner
+    subqueries it replaced, *without* transpiling anything.
 
     Why this exists
     ---------------
-    ``pg_outer_to_inner`` does the split internally and then immediately transpiles
-    the outer pg -> inner and splices the raw subqueries back, returning one inner-dialect
-    string. The pg -> e6 FALLBACK in converter_api needs the split pieces *separately*,
-    because it transpiles each region with a different dialect (outer as "postgres", inner
-    subqueries as the inner dialect) instead of merging them. So this function exposes just
-    the split step.
+    The pg -> e6 path in converter_api transpiles each region with a different dialect
+    (outer as "postgres", inner subqueries as the inner dialect) instead of merging them,
+    so it needs the split pieces *separately*. This function exposes just the split step.
 
     What it returns
     ---------------
@@ -199,30 +200,45 @@ def split_pg_outer(query):
     Raises ``ValueError`` (so converter_api can fall back / surface the error) if a parse
     error is not inside a subquery, or if the loop fails to converge within MAX_ROUNDS.
     """
-    # ``outer`` is the text we progressively rewrite; ``raw`` collects the pulled-out
-    # subqueries; ``rounds`` both bounds the loop and names each placeholder uniquely.
-    outer, raw, rounds = query, {}, 0
-    while True:
-        # Try postgres -> databricks on the current text. _error_offset returns None once
-        # nothing inner-dialect-only remains (the outer is clean Postgres) -> we're done.
+    # Fast path: pull every Databricks (backtick) inner subquery in a single tokenize pass.
+    # Postgres emits each backtick as an UNKNOWN "`" token; for each one not already inside
+    # a subquery we've pulled, reuse _subquery_span to take its enclosing subquery. This is
+    # the common multidialect case, and avoids re-parsing the whole query once per subquery.
+    toks = tokenize(query, dialect="postgres")
+    spans, covered = [], -1
+    for tok in toks:
+        if tok.token_type == TokenType.UNKNOWN and tok.text == "`" and tok.start > covered:
+            span = _subquery_span(query, tok.start, toks)
+            if span:
+                spans.append(span)
+                covered = span[1]  # skip the other backticks inside this same subquery
+    # Keep only the outermost subqueries: a backtick in a projection scalar finds that
+    # scalar, but a later backtick may find the enclosing subquery too -- drop the nested
+    # one so the placeholder swaps below never overlap and no pulled region hides another.
+    spans.sort()
+    outermost = []
+    for s, e in spans:
+        if not outermost or s > outermost[-1][1]:
+            outermost.append((s, e))
+    outer, raw = query, {}
+    for s, e in reversed(outermost):  # right-to-left so earlier offsets stay valid
+        marker = MARKER.format(len(raw))
+        raw[marker] = query[s : e + 1]
+        outer = outer[:s] + f"(SELECT NULL AS {marker})" + outer[e + 1 :]
+
+    # Fallback: catch any inner subquery the backtick scan can't see (a non-backtick inner,
+    # or a Snowflake inner), one parse error at a time. For a pure Databricks query the fast
+    # path already removed everything, so this just confirms the outer is clean and returns.
+    # Bounded by MAX_ROUNDS so a query that never converges fails fast instead of spinning.
+    for _ in range(MAX_ROUNDS + 1):
         offset = _error_offset(outer)
         if offset is None:
             return outer, raw
-        # Safety valve: a query that never stops erroring (e.g. a genuine syntax error,
-        # not an inner-dialect subquery) must not loop forever.
-        if rounds >= MAX_ROUNDS:
-            raise ValueError("Multidialect two-pass: did not converge")
-        # Turn the error position into the span of the subquery that contains it. If the
-        # error isn't inside a subquery we can't split the query -> bail to the caller.
         span = _subquery_span(outer, offset)
         if span is None:
             raise ValueError("Multidialect two-pass: parse error not inside a subquery")
-        # Record the failing subquery verbatim under a fresh marker, then replace it in
-        # ``outer`` with a trivial placeholder subquery. The placeholder is valid wherever
-        # a subquery can appear, so ``outer`` stays parseable as Postgres; the next loop
-        # iteration then finds the *next* inner subquery (one error at a time).
         s, e = span
-        marker = MARKER.format(rounds)
+        marker = MARKER.format(len(raw))
         raw[marker] = outer[s : e + 1]
         outer = outer[:s] + f"(SELECT NULL AS {marker})" + outer[e + 1 :]
-        rounds += 1
+    raise ValueError("Multidialect two-pass: did not converge")
