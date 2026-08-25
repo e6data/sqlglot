@@ -3450,7 +3450,17 @@ class E6(Dialect):
             exp.Quarter: lambda self, e: self.extract_sql(
                 exp.Extract(this=exp.Var(this="QUARTER"), expression=e.this)
             ),
-            exp.RegexpExtract: rename_func("REGEXP_EXTRACT"),
+            # Databricks REGEXP_SUBSTR and REGEXP_EXTRACT both parse to RegexpExtract, but
+            # only REGEXP_EXTRACT sets `group`. On the native executor, keep a Databricks
+            # REGEXP_SUBSTR (no `group`) as REGEXP_SUBSTR rather than rewriting it to
+            # REGEXP_EXTRACT -- they are different functions. Everything else is unchanged.
+            exp.RegexpExtract: lambda self, e: rename_func(
+                "REGEXP_SUBSTR"
+                if os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+                and self.from_dialect == "databricks"
+                and not e.args.get("group")
+                else "REGEXP_EXTRACT"
+            )(self, e),
             exp.RegexpLike: lambda self, e: self.func("REGEXP_LIKE", e.this, e.expression),
             # here I handled replacement arg carefully because, sometimes if replacement arg is not provided/extracted then it is getting None there overriding in E6
             exp.RegexpReplace: rename_func("REGEXP_REPLACE"),
