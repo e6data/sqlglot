@@ -3524,6 +3524,32 @@ class TestE6(Validator):
             '(SELECT "c1" FROM "t1") AS "s1", (SELECT "c2" FROM "t2") AS "s2"',
         )
 
+    def test_regexp_substr_native(self):
+        """On the native executor, a Databricks REGEXP_SUBSTR (no `group`) stays
+        REGEXP_SUBSTR; REGEXP_EXTRACT (has `group`) is untouched. The default (java)
+        executor keeps the existing REGEXP_SUBSTR -> REGEXP_EXTRACT rewrite."""
+        import os
+        import sqlglot
+        from unittest import mock
+
+        def e6(sql):
+            return sqlglot.parse_one(sql, read="databricks").sql(
+                dialect="e6", from_dialect="databricks"
+            )
+
+        with mock.patch.dict(os.environ, {"E6_EXECUTOR_TYPE": "native"}):
+            self.assertEqual(e6("SELECT REGEXP_SUBSTR(x, 'p')"), "SELECT REGEXP_SUBSTR(x, 'p')")
+            self.assertEqual(
+                e6("SELECT REGEXP_SUBSTR(x, 'p', 2)"), "SELECT REGEXP_SUBSTR(x, 'p', 2)"
+            )
+            # REGEXP_EXTRACT (sets `group`) must NOT be renamed
+            self.assertEqual(
+                e6("SELECT REGEXP_EXTRACT(x, 'p')"), "SELECT REGEXP_EXTRACT(x, 'p', 1)"
+            )
+
+        with mock.patch.dict(os.environ, {"E6_EXECUTOR_TYPE": "java"}):
+            self.assertEqual(e6("SELECT REGEXP_SUBSTR(x, 'p')"), "SELECT REGEXP_EXTRACT(x, 'p')")
+
     def test_make_interval(self):
         """Test make_interval transpilation from Databricks to E6."""
 
