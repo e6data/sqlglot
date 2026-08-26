@@ -3534,20 +3534,26 @@ class TestE6(Validator):
         # alias is what pulls it onto the Databricks path, so its SPLIT stays literal (no \\Q..\\E
         # a Postgres split would add).
         self.assertEqual(
-            alias_to_e6('SELECT "a" FROM (SELECT split(\'1,2\', \',\') AS arr FROM dlt.s.t) "Custom SQL Query"'),
-            'SELECT "a" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
+            alias_to_e6(
+                "SELECT \"a\" FROM (SELECT split('1,2', ',') AS arr FROM dlt.s.t) \"Custom SQL Query\""
+            ),
+            "SELECT \"a\" FROM (SELECT SPLIT('1,2', ',') AS arr FROM dlt.s.t) AS \"Custom SQL Query\"",
         )
 
         # Same, with an explicit AS before the alias.
         self.assertEqual(
-            alias_to_e6('SELECT "a" FROM (SELECT split(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"'),
-            'SELECT "a" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
+            alias_to_e6(
+                "SELECT \"a\" FROM (SELECT split('1,2', ',') AS arr FROM dlt.s.t) AS \"Custom SQL Query\""
+            ),
+            "SELECT \"a\" FROM (SELECT SPLIT('1,2', ',') AS arr FROM dlt.s.t) AS \"Custom SQL Query\"",
         )
 
         # "Custom SQL Query" also appears as a projection qualifier ("Custom SQL Query"."arr");
         # only the table-alias occurrence is pulled, never the "."-qualified reference.
         self.assertEqual(
-            alias_to_e6('SELECT "Custom SQL Query"."arr" FROM (SELECT split(\'1,2\', \',\') AS arr FROM dlt.s.t) "Custom SQL Query"'),
+            alias_to_e6(
+                'SELECT "Custom SQL Query"."arr" FROM (SELECT split(\'1,2\', \',\') AS arr FROM dlt.s.t) "Custom SQL Query"'
+            ),
             'SELECT "Custom SQL Query"."arr" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
         )
 
