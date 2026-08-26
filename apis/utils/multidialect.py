@@ -53,6 +53,13 @@ SUBQUERY_OPENERS = {TokenType.SELECT, TokenType.WITH, TokenType.VALUES, TokenTyp
 MARKER = "__E6_INNER_{}__"
 MAX_ROUNDS = 64
 
+# Tableau aliases the native custom-SQL subquery ``"Custom SQL Query"``. Postgres tokenizes
+# that ``"..."`` as an IDENTIFIER whose text is the unquoted alias. This alias alone locates
+# the native subquery -- even one that has no backticks and parses cleanly as Postgres, which
+# neither the backtick scan nor the parse-error probe can see -- so ``split_custom_sql_alias``
+# uses it as the sole signal.
+CUSTOM_SQL_ALIAS = "Custom SQL Query"
+
 
 def _error_offset(text):
     """Return the char offset of the first ``postgres -> databricks`` error, or None
@@ -170,6 +177,37 @@ def _splice(text, marker, raw):
 # delimiter -> regex \Q..\E). Superseded by the split-per-region path in converter_api:
 # split_pg_outer() + _region_to_e6() + _splice() — each region transpiled to e6 in its
 # own dialect, no inner-dialect merge.
+
+
+def split_custom_sql_alias(query):
+    """Split a Tableau BI query by its ``"Custom SQL Query"`` alias into ``(outer, raw)`` -- the
+    native subquery(ies) pulled into ``(SELECT NULL AS <marker>)`` placeholders, same shape as
+    :func:`split_pg_outer`. Alias-only: no backtick scan, no parse-error fallback.
+    """
+    toks = tokenize(query, dialect="postgres")
+    spans = []
+    for i, tok in enumerate(toks):
+        if tok.token_type != TokenType.IDENTIFIER or tok.text != CUSTOM_SQL_ALIAS:
+            continue
+        # keep the table alias, skip the projection ref "Custom SQL Query"."col" (followed by ".")
+        if i + 1 < len(toks) and toks[i + 1].token_type == TokenType.DOT:
+            continue
+        j = i - 1
+        if toks[j].text.upper() == "AS":  # optional AS before the alias
+            j -= 1
+        # the alias closes a ")"; _subquery_span returns a span only if that "(" opens a real
+        # subquery, so a lookalike like "(a + b) \"Custom SQL Query\"" is rejected.
+        if toks[j].token_type == TokenType.R_PAREN:
+            span = _subquery_span(query, toks[j].start - 1, toks)
+            if span:
+                spans.append(span)
+
+    outer, raw = query, {}
+    for s, e in sorted(spans, reverse=True):  # right-to-left so earlier offsets stay valid
+        marker = MARKER.format(len(raw))
+        raw[marker] = query[s : e + 1]
+        outer = outer[:s] + f"(SELECT NULL AS {marker})" + outer[e + 1 :]
+    return outer, raw
 
 
 def split_pg_outer(query):

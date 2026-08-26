@@ -3433,19 +3433,24 @@ class TestE6(Validator):
         literals become ``'str'``; inner backtick identifiers become ``"id"``.
         """
         import sqlglot
-        from apis.utils.multidialect import split_pg_outer, _splice
+        from apis.utils.multidialect import split_pg_outer, split_custom_sql_alias, _splice
 
         def _region(sql, dialect):
             return sqlglot.parse_one(sql, read=dialect, error_level=None).sql(
                 dialect="e6", from_dialect=dialect
             )
 
-        def pg_to_e6(sql):
-            outer, inner = split_pg_outer(sql)
+        def _pieces_to_e6(outer, inner):
             out = _region(outer, "postgres")
             for marker, subquery in inner.items():
                 out = _splice(out, marker, _region(subquery, "databricks"))
             return out
+
+        def pg_to_e6(sql):
+            return _pieces_to_e6(*split_pg_outer(sql))
+
+        def alias_to_e6(sql):  # the SAMSUNG_TABLEAU_DASHBOARD path
+            return _pieces_to_e6(*split_custom_sql_alias(sql))
 
         # FROM-derived inner subquery: backtick identifiers -> "..." ; outer "a" kept.
         self.assertEqual(
@@ -3522,6 +3527,28 @@ class TestE6(Validator):
             ),
             'SELECT * FROM (SELECT "c0" FROM "t0") AS "s0", '
             '(SELECT "c1" FROM "t1") AS "s1", (SELECT "c2" FROM "t2") AS "s2"',
+        )
+
+        # SAMSUNG_TABLEAU_DASHBOARD path (split_custom_sql_alias): a no-backtick native subquery
+        # is invisible to the backtick scan and parses cleanly as Postgres; its "Custom SQL Query"
+        # alias is what pulls it onto the Databricks path, so its SPLIT stays literal (no \\Q..\\E
+        # a Postgres split would add).
+        self.assertEqual(
+            alias_to_e6('SELECT "a" FROM (SELECT split(\'1,2\', \',\') AS arr FROM dlt.s.t) "Custom SQL Query"'),
+            'SELECT "a" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
+        )
+
+        # Same, with an explicit AS before the alias.
+        self.assertEqual(
+            alias_to_e6('SELECT "a" FROM (SELECT split(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"'),
+            'SELECT "a" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
+        )
+
+        # "Custom SQL Query" also appears as a projection qualifier ("Custom SQL Query"."arr");
+        # only the table-alias occurrence is pulled, never the "."-qualified reference.
+        self.assertEqual(
+            alias_to_e6('SELECT "Custom SQL Query"."arr" FROM (SELECT split(\'1,2\', \',\') AS arr FROM dlt.s.t) "Custom SQL Query"'),
+            'SELECT "Custom SQL Query"."arr" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
         )
 
     def test_regexp_substr_native(self):

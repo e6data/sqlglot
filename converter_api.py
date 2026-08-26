@@ -14,7 +14,7 @@ import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks
-from apis.utils.multidialect import split_pg_outer, _splice
+from apis.utils.multidialect import split_pg_outer, split_custom_sql_alias, _splice
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
@@ -56,6 +56,9 @@ FIX_QUOTE_ESCAPES = os.getenv("FIX_QUOTE_ESCAPES", "False")  # Fix '' inside sin
 E6_EXECUTOR_TYPE = os.getenv(
     "E6_EXECUTOR_TYPE", "java"
 )  # "java" divides TO_UNIX_TIMESTAMP by 1000; "native" does not
+# Samsung Tableau dashboards: detect the native subquery by its "Custom SQL Query" alias
+# (multidialect split_custom_sql_alias) instead of the backtick scan / parse-error fallback.
+SAMSUNG_TABLEAU_DASHBOARD = os.getenv("SAMSUNG_TABLEAU_DASHBOARD", "False")
 
 storage_service_client = None
 
@@ -73,11 +76,13 @@ if ENABLE_GUARDRAIL.lower() == "true":
 logger.info("Storage Service Client is created")
 logger.info(
     "Environment flags — ENABLE_GUARDRAIL: %s, SKIP_COMMENT: %s, FIX_QUOTE_ESCAPES: %s, "
-    "E6_EXECUTOR_TYPE: %s, STORAGE_ENGINE_URL: %s, STORAGE_ENGINE_PORT: %s",
+    "E6_EXECUTOR_TYPE: %s, SAMSUNG_TABLEAU_DASHBOARD: %s, STORAGE_ENGINE_URL: %s, "
+    "STORAGE_ENGINE_PORT: %s",
     ENABLE_GUARDRAIL,
     SKIP_COMMENT,
     FIX_QUOTE_ESCAPES,
     E6_EXECUTOR_TYPE,
+    SAMSUNG_TABLEAU_DASHBOARD,
     STORAGE_ENGINE_URL,
     STORAGE_ENGINE_PORT,
 )
@@ -144,7 +149,8 @@ async def convert_query(
         except json.JSONDecodeError as je:
             return HTTPException(status_code=500, detail=str(je))
 
-    if flags_dict.get("MULTIDIALECT", False):
+    samsung = SAMSUNG_TABLEAU_DASHBOARD.lower() == "true"
+    if flags_dict.get("MULTIDIALECT", False) or samsung:
         # Multi-dialect BI-tool query: a Postgres outer wrapper around inner subqueries
         # written in another dialect (INNER_DIALECT, default "databricks"). Rule:
         #   - a subquery that FAILS the Postgres parse is inner-dialect  -> INNER_DIALECT -> e6
@@ -154,7 +160,12 @@ async def convert_query(
         inner_dialect = flags_dict.get("INNER_DIALECT", "databricks").lower()
         pretty = flags_dict.get("PRETTY_PRINT", True)
 
-        outer, inner_subqueries = split_pg_outer(query)
+        # Samsung Tableau dashboards always alias the native subquery "Custom SQL Query", so we
+        # detect it by that alias alone (no backtick scan / parse-error fallback).
+        if samsung:
+            outer, inner_subqueries = split_custom_sql_alias(query)
+        else:
+            outer, inner_subqueries = split_pg_outer(query)
         converted_query = _region_to_e6(outer, "postgres", pretty)
         for marker, subquery in inner_subqueries.items():
             converted_query = _splice(
