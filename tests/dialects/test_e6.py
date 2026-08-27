@@ -10,7 +10,7 @@ class TestE6(Validator):
 
     def test_E6(self):
         self.validate_all(
-            'SELECT status_change_event:"location" FROM silver_postgres_v2.dms.delivery',
+            'SELECT status_change_event:"location" "location" FROM silver_postgres_v2.dms.delivery',
             read={
                 "databricks": "select status_change_event:location from silver_postgres_v2.dms.delivery"
             },
@@ -19,16 +19,26 @@ class TestE6(Validator):
         # E6's colon-path grammar rejects a bare reserved word after ':' (e.g. LIMIT / ORDER /
         # FROM), so those keys must be double-quoted; non-reserved keys stay bare.
         self.validate_all(
-            'SELECT properties:"limit" FROM source',
+            'SELECT properties:"limit" AS "limit" FROM source',
             read={"databricks": "SELECT properties:limit FROM source"},
         )
         self.validate_all(
-            'SELECT properties:"order" FROM source',
+            'SELECT properties:"order" AS "order" FROM source',
             read={"databricks": "SELECT properties:order FROM source"},
         )
         self.validate_all(
-            "SELECT properties:geojson FROM source",
+            "SELECT properties:geojson AS geojson FROM source",
             read={"databricks": "SELECT properties:geojson FROM source"},
+        )
+
+        # Column-not-found fix: an unaliased colon projection inside a subquery gets an
+        # explicit alias from its final path segment (Databricks' implicit column name), so
+        # an outer reference to that column resolves in E6 (which has no such naming rule).
+        self.validate_all(
+            "SELECT metrics_per_level FROM (SELECT deep_dives:metrics_per_level AS metrics_per_level FROM silver) AS t",
+            read={
+                "databricks": "SELECT metrics_per_level FROM (SELECT deep_dives:metrics_per_level FROM silver) AS t"
+            },
         )
 
         self.validate_all(
@@ -737,17 +747,17 @@ class TestE6(Validator):
             read={"databricks": "SELECT GET_JSON_OBJECT(c1, '$.item[1].price')"},
         )
         self.validate_all(
-            "SELECT JSON_EXTRACT(c1, '$.box[1].price')",
+            "SELECT JSON_EXTRACT(c1, '$.box[1].price') AS price",
             read={"databricks": "SELECT c1:box[1].price"},
         )
 
         self.validate_all(
-            "SELECT meta:bincounttaskmeta FROM silver_mongo.tms.tasks",
+            "SELECT meta:bincounttaskmeta AS bincounttaskmeta FROM silver_mongo.tms.tasks",
             read={"databricks": "SELECT meta:bincounttaskmeta FROM silver_mongo.tms.tasks "},
         )
 
         self.validate_all(
-            'SELECT meta:"bincounttaskmeta" FROM silver_mongo.tms.tasks',
+            'SELECT meta:"bincounttaskmeta" AS bincounttaskmeta FROM silver_mongo.tms.tasks',
             read={"databricks": "SELECT meta:`bincounttaskmeta` FROM silver_mongo.tms.tasks "},
         )
 
