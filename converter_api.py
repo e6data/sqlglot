@@ -4,6 +4,7 @@ import typing as t
 import uvicorn
 import re
 import os
+import time
 import json
 import sqlglot
 import logging
@@ -119,16 +120,31 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     # parsing so sqlglot doesn't build/traverse thousands of AST nodes.
     region_sql, in_replacements = extract_large_in_clauses(region_sql)
     # Parse with the region's own source dialect, then run the standard e6 steps.
+    _t = time.perf_counter()
     tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
+    _parse_ms = (time.perf_counter() - _t) * 1000
+    # AST transforms (comment sanitize, identifier quoting, VALUES/CTE fixes).
+    _t = time.perf_counter()
     tree = sanitize_comments(tree)
     tree = quote_identifiers(tree, dialect="e6")
     tree = ensure_select_from_values(tree)
     tree = set_cte_names_case_sensitively(tree)
+    _transform_ms = (time.perf_counter() - _t) * 1000
     # from_dialect=from_sql is what lets e6 honor the source dialect's semantics.
+    _t = time.perf_counter()
     out = tree.sql(dialect="e6", from_dialect=from_sql, pretty=pretty)
+    _generate_ms = (time.perf_counter() - _t) * 1000
     out = replace_struct_in_query(out)
     # Restore original IN-clause values after transpilation.
-    return restore_large_in_clauses(out, in_replacements)
+    out = restore_large_in_clauses(out, in_replacements)
+    logger.info(
+        "[TRANSPILE-TIMING] region=%s: parse=%.1f ms, transforms=%.1f ms, generate=%.1f ms",
+        from_sql,
+        _parse_ms,
+        _transform_ms,
+        _generate_ms,
+    )
+    return out
 
 
 @app.post("/convert-query")
@@ -160,17 +176,49 @@ async def convert_query(
         inner_dialect = flags_dict.get("INNER_DIALECT", "databricks").lower()
         pretty = flags_dict.get("PRETTY_PRINT", True)
 
+        # --- Stage-by-stage transpile timing ---
+        _t_arrival = time.perf_counter()
+        logger.info(
+            "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars)",
+            query_id,
+            len(query),
+        )
+
         # Samsung Tableau dashboards always alias the native subquery "Custom SQL Query", so we
         # detect it by that alias alone (no backtick scan / parse-error fallback).
+        _t = time.perf_counter()
         if samsung:
             outer, inner_subqueries = split_custom_sql_alias(query)
         else:
             outer, inner_subqueries = split_pg_outer(query)
+        _tokenize_ms = (time.perf_counter() - _t) * 1000
+        logger.info(
+            "[TRANSPILE-TIMING] %s — tokenize+subquery-detection=%.1f ms (%d inner subquery(s))",
+            query_id,
+            _tokenize_ms,
+            len(inner_subqueries),
+        )
+
+        # Outer wrapper: postgres -> e6 (logs its own parse/generate times).
         converted_query = _region_to_e6(outer, "postgres", pretty)
+
+        # Each inner subquery: <inner_dialect> -> e6, then splice it back into the outer.
+        _splice_ms = 0.0
         for marker, subquery in inner_subqueries.items():
-            converted_query = _splice(
-                converted_query, marker, _region_to_e6(subquery, inner_dialect, pretty)
-            )
+            inner_e6 = _region_to_e6(subquery, inner_dialect, pretty)
+            _t = time.perf_counter()
+            converted_query = _splice(converted_query, marker, inner_e6)
+            _splice_ms += (time.perf_counter() - _t) * 1000
+        logger.info(
+            "[TRANSPILE-TIMING] %s — reconstruct/splice=%.1f ms", query_id, _splice_ms
+        )
+
+        _total_ms = (time.perf_counter() - _t_arrival) * 1000
+        logger.info(
+            "[TRANSPILE-TIMING] %s — TOTAL=%.1f ms — sending transpiled query away",
+            query_id,
+            _total_ms,
+        )
 
         logger.info(
             "%s AT %s — MULTIDIALECT: %d inner subquery(s) via %s, outer via postgres:\n%s",
