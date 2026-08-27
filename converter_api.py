@@ -145,9 +145,7 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     # from_dialect=from_sql is what lets e6 honor the source dialect's semantics.
     # quote_reserved_keywords=True folds the old quote_identifiers walk into generation.
     _t = time.perf_counter()
-    out = tree.sql(
-        dialect="e6", from_dialect=from_sql, pretty=pretty, quote_reserved_keywords=True
-    )
+    out = tree.sql(dialect="e6", from_dialect=from_sql, pretty=pretty, quote_reserved_keywords=True)
     _generate_ms = (time.perf_counter() - _t) * 1000
     out = replace_struct_in_query(out)
     # Restore original IN-clause values after transpilation.

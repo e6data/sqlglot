@@ -567,9 +567,7 @@ def apply_e6_ast_transforms(tree: exp.Expression) -> exp.Expression:
     total_list = list(set(names))
     if total_list:
         for table in tree.find_all(exp.Table):
-            cte_name = next(
-                (n for n in total_list if n.lower() == table.name.lower()), None
-            )
+            cte_name = next((n for n in total_list if n.lower() == table.name.lower()), None)
             if cte_name is not None and not table.db:
                 table.this.set("this", cte_name)
     return tree
