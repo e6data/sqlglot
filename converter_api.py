@@ -209,9 +209,7 @@ async def convert_query(
             _t = time.perf_counter()
             converted_query = _splice(converted_query, marker, inner_e6)
             _splice_ms += (time.perf_counter() - _t) * 1000
-        logger.info(
-            "[TRANSPILE-TIMING] %s — reconstruct/splice=%.1f ms", query_id, _splice_ms
-        )
+        logger.info("[TRANSPILE-TIMING] %s — reconstruct/splice=%.1f ms", query_id, _splice_ms)
 
         _total_ms = (time.perf_counter() - _t_arrival) * 1000
         logger.info(
