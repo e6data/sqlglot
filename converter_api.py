@@ -6,6 +6,10 @@ import re
 import os
 import time
 import json
+
+# Default to the pure-Python tokenizer; set SQLGLOTRS_TOKENIZER=1 to enable the faster Rust
+# tokenizer (sqlglotrs). Must run BEFORE `import sqlglot`, which reads this at import time.
+os.environ.setdefault("SQLGLOTRS_TOKENIZER", "0")
 import sqlglot
 import logging
 from datetime import datetime
@@ -37,6 +41,7 @@ from apis.utils.helpers import (
     transform_table_part,
     transform_catalog_schema_only,
     set_cte_names_case_sensitively,
+    apply_e6_ast_transforms,
     fix_quote_escapes,
     restore_quote_escapes,
     extract_large_in_clauses,
@@ -60,6 +65,9 @@ E6_EXECUTOR_TYPE = os.getenv(
 # Samsung Tableau dashboards: detect the native subquery by its "Custom SQL Query" alias
 # (multidialect split_custom_sql_alias) instead of the backtick scan / parse-error fallback.
 SAMSUNG_TABLEAU_DASHBOARD = os.getenv("SAMSUNG_TABLEAU_DASHBOARD", "False")
+# Rust tokenizer flag ("0" default -> pure-Python; "1" -> sqlglotrs). Defaulted before the sqlglot
+# import above; read here only for visibility/logging.
+SQLGLOTRS_TOKENIZER = os.getenv("SQLGLOTRS_TOKENIZER", "0")
 
 storage_service_client = None
 
@@ -86,6 +94,11 @@ logger.info(
     SAMSUNG_TABLEAU_DASHBOARD,
     STORAGE_ENGINE_URL,
     STORAGE_ENGINE_PORT,
+)
+logger.info(
+    "Tokenizer — SQLGLOTRS_TOKENIZER: %s, Rust tokenizer active: %s",
+    SQLGLOTRS_TOKENIZER,
+    sqlglot.tokens.USE_RS_TOKENIZER,
 )
 
 
@@ -123,16 +136,16 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     _t = time.perf_counter()
     tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
     _parse_ms = (time.perf_counter() - _t) * 1000
-    # AST transforms (comment sanitize, identifier quoting, VALUES/CTE fixes).
+    # AST transforms folded into one combined walk (sanitize comments + VALUES/CTE fixes +
+    # case-sensitive CTE table renaming). Identifier quoting is no longer a separate walk here:
+    # the e6 Generator quotes reserved-keyword identifiers at emit time.
     _t = time.perf_counter()
-    tree = sanitize_comments(tree)
-    tree = quote_identifiers(tree, dialect="e6")
-    tree = ensure_select_from_values(tree)
-    tree = set_cte_names_case_sensitively(tree)
+    tree = apply_e6_ast_transforms(tree)
     _transform_ms = (time.perf_counter() - _t) * 1000
     # from_dialect=from_sql is what lets e6 honor the source dialect's semantics.
+    # quote_reserved_keywords=True folds the old quote_identifiers walk into generation.
     _t = time.perf_counter()
-    out = tree.sql(dialect="e6", from_dialect=from_sql, pretty=pretty)
+    out = tree.sql(dialect="e6", from_dialect=from_sql, pretty=pretty, quote_reserved_keywords=True)
     _generate_ms = (time.perf_counter() - _t) * 1000
     out = replace_struct_in_query(out)
     # Restore original IN-clause values after transpilation.

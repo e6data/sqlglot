@@ -1703,6 +1703,21 @@ class E6(Dialect):
             exp.DataType.Type.VARBINARY: "VARBINARY",
         }
 
+        # Opt-in e6 reserved-keyword identifier quoting, folded into generation. Off by default
+        # so plain e6 generation is unchanged; the converter turns it on per call via
+        # ``.sql(..., quote_reserved_keywords=True)`` to replace the separate quote_identifiers walk.
+        quote_reserved_keywords = False
+
+        def __init__(self, *args, quote_reserved_keywords: bool = False, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.quote_reserved_keywords = quote_reserved_keywords
+
+        def identifier_sql(self, expression: exp.Identifier) -> str:
+            if self.quote_reserved_keywords:
+                # Same rule the quote_identifiers optimizer pass applied, now at emit time.
+                self.dialect.quote_identifier(expression)
+            return super().identifier_sql(expression)
+
         # TODO:: Adithya, why there was need to override this method.
         # So what was happening was this method will get called internally while .transpile is called. They have written this method with respect to other dialects.
         # But whenever we pass a normal query, by default parts like `NULLS LAST` etc were getting by defaults in order by clause which will differs the sequence of results displayed in original dialect and ours.
