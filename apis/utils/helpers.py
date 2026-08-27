@@ -318,21 +318,17 @@ def strip_comment(query: str) -> tuple:
 
 
 def sanitize_comments(tree: exp.Expression) -> exp.Expression:
-    """Escape ``/*`` and ``*/`` inside AST comment nodes to prevent nested
-    block comments.
+    """Remove all comments from the AST so none are emitted in the e6 output.
 
-    sqlglot converts ``--`` line comments to ``/* */`` block comments during
-    generation.  If the original line comment contained block comment markers
-    (e.g. ``-- /* text */``), the output becomes broken ``/* /* text */ */``
-    where the inner ``*/`` prematurely closes the outer comment.
-
-    This function walks the AST and escapes any ``/*`` → ``/ *`` and
-    ``*/`` → ``* /`` inside comment strings, so the generated SQL is always
-    valid regardless of what the original comments contained.
+    sqlglot converts ``--`` line comments to inline ``/* */`` blocks during
+    generation and can place them mid-clause (e.g. ``period_dates /* .. */ AS``),
+    which the e6 parser rejects.  The e6 engine SKIPs ``--``/``//`` comments in
+    its lexer anyway, so they never survive to execution -- dropping them here
+    produces the same end state without the misplaced-comment breakage.
     """
     for node in [tree] + list(tree.find_all(exp.Expression)):
         if hasattr(node, "comments") and node.comments:
-            node.comments = [c.replace("/*", "/ *").replace("*/", "* /") for c in node.comments]
+            node.comments = None
     return tree
 
 
