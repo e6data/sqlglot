@@ -889,18 +889,47 @@ async def guardstats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-if __name__ == "__main__":
-    import multiprocessing
+def _effective_cpus():
+    """Cores this process may actually use — the cgroup CPU limit, not the host.
 
-    # Calculate optimal workers based on CPU cores
-    cpu_cores = multiprocessing.cpu_count()
-    # Formula: (2 × CPU_cores) + 1, with min 2 and max 20
-    optimal_workers = min(max((2 * cpu_cores) + 1, 2), 20)
+    multiprocessing.cpu_count() reports the HOST/node cores, ignoring the
+    Kubernetes CPU limit (enforced via cgroup cfs_quota). On a pod limited to N
+    cores it still returns the node's cores, so the worker math over-provisions.
+    Read the real quota instead.
+    """
+    # cgroup v2 (k8s default): /sys/fs/cgroup/cpu.max -> "<quota> <period>"
+    try:
+        quota, period = open("/sys/fs/cgroup/cpu.max").read().split()
+        if quota != "max":
+            return max(1.0, int(quota) / int(period))
+    except (OSError, ValueError):
+        pass
+    # cgroup v1: cpu.cfs_quota_us / cpu.cfs_period_us
+    try:
+        q = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+        p = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+        if q > 0:
+            return max(1.0, q / p)
+    except (OSError, ValueError):
+        pass
+    # no CPU limit set: fall back to affinity, then host count
+    try:
+        return float(len(os.sched_getaffinity(0)))
+    except AttributeError:
+        return float(os.cpu_count() or 1)
+
+
+if __name__ == "__main__":
+    cpu_cores = _effective_cpus()
+    # Transpiling is CPU-bound (pins a core), NOT I/O-bound, so run ~1 worker
+    # per core (+1 to overlap the small per-request I/O). The old (2*cores)+1
+    # rule is for I/O-bound servers and here just oversubscribes the cores.
+    optimal_workers = max(2, round(cpu_cores) + 1)
 
     # Allow override via environment variable
     workers = int(os.getenv("UVICORN_WORKERS", optimal_workers))
 
-    logger.info(f"Detected {cpu_cores} CPU cores, using {workers} workers")
+    logger.info(f"Detected {cpu_cores:.2f} effective CPU cores, using {workers} workers")
 
     uvicorn.run(
         "converter_api:app",
