@@ -3157,6 +3157,15 @@ class E6(Dialect):
                 return f"{this}"
             return rename_func("SPLIT")(self, expression)
 
+        def concatws_sql(self, expression: exp.ConcatWs) -> str:
+            # E6's native CONCAT_WS already skips NULL arguments (like Databricks and
+            # Postgres). The base generator wraps each arg in COALESCE(x, '') when the
+            # source tags the node coalesce=True (the Postgres reader does) -- which is wrong
+            # for CONCAT_WS: it turns a skipped NULL into an included empty string, so
+            # CONCAT_WS('~', a, b) with a NULL becomes 'a~~b' instead of 'a~b'. Emit the
+            # separator and arguments verbatim so E6's native NULL-skipping applies.
+            return self.func("CONCAT_WS", *expression.expressions)
+
         def double_colon_interval_sql(self, expression: exp.Cast) -> str:
             """
             Handle ::INTERVAL casting for column concatenation patterns.
