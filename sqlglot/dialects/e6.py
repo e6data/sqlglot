@@ -2468,6 +2468,22 @@ class E6(Dialect):
                     _variant_root_value(expression.this), _bracket_path_segments(expression)
                 )
 
+            # SPLIT(...) is a Databricks/Spark 0-based array function. In the multidialect
+            # flow the postgres reader (1-based arrays) normalizes the subscript by its own
+            # index offset, so a 0-based SPLIT(x, d)[0] parses to ELEMENT_AT(..., 0), which
+            # the e6 engine rejects ("element_at index must be > 0 or < 0, got 0"). Preserve
+            # the author's 0-based bracket by undoing the postgres offset.
+            if self.from_dialect == "postgres" and isinstance(
+                expression.this, (exp.Split, exp.RegexpSplit)
+            ):
+                idx = seq_get(
+                    apply_index_offset(
+                        expression.this, [e.copy() for e in expression.expressions], 1
+                    ),
+                    0,
+                )
+                return f"{self.sql(expression.this)}[{self.sql(idx)}]"
+
             # Inside a VALUES clause, map[...] bracket syntax should be preserved
             # as-is. In Databricks MAP() with parens is the constructor; map[...]
             # in VALUES is a literal value that must not be rewritten to ELEMENT_AT.

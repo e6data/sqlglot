@@ -43,6 +43,22 @@ class TestE6(Validator):
             },
         )
 
+        # SPLIT is a Databricks/Spark 0-based array function. In the multidialect flow the
+        # postgres outer region parses a 0-based SPLIT(x, d)[0] with postgres 1-based array
+        # semantics; without the guard e6 emits ELEMENT_AT(SPLIT(...), 0), an out-of-range
+        # index the engine rejects ("element_at index must be > 0 or < 0, got 0"). Preserve
+        # the author's 0-based bracket instead.
+        self.validate_all(
+            "SELECT LENGTH(SPLIT(fm.entity_id, '~')[0]) + 2 AS content_age FROM t AS fm",
+            read={
+                "postgres": "SELECT LENGTH(SPLIT(fm.entity_id, '~')[0]) + 2 AS content_age FROM t fm"
+            },
+        )
+        self.validate_all(
+            "SELECT SPLIT(fm.entity_id, '~')[2] AS x FROM t AS fm",
+            read={"postgres": "SELECT SPLIT(fm.entity_id, '~')[2] AS x FROM t fm"},
+        )
+
         # A plain "LATERAL (subquery)" is a standard SQL correlated derived table, not a
         # Spark "LATERAL VIEW <generator>" -- it must emit plain LATERAL, never the invalid
         # "LATERAL VIEW (subquery)". Both LEFT JOIN LATERAL and comma/CROSS LATERAL forms.
