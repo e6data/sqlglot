@@ -2070,6 +2070,17 @@ class TestE6(Validator):
             read={"databricks": "SELECT concat_ws(',', 'Spark', array('S', 'Q', NULL, 'L'), NULL)"},
         )
 
+        # A Postgres-read CONCAT_WS must NOT wrap args in COALESCE(x, '') -- e6's native
+        # CONCAT_WS already skips NULLs, so the wrapping would turn a skipped NULL into an
+        # included empty string (a~b -> a~~b). Both readers must produce the same output.
+        self.validate_all(
+            "SELECT CONCAT_WS('~', subscription_key, sku_key) AS entity_id",
+            read={
+                "postgres": "SELECT concat_ws('~', subscription_key, sku_key) AS entity_id",
+                "databricks": "SELECT concat_ws('~', subscription_key, sku_key) AS entity_id",
+            },
+        )
+
     def test_to_utf(self):
         self.validate_all(
             "TO_UTF8(x)",
