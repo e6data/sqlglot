@@ -21,6 +21,11 @@ pipeline {
         SERVERLESS_PROD_ROLE_ARN = credentials('SERVERLESS_PROD_ROLE_ARN')
         SERVERLESS_BETA_IMAGE = "908027423391.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
         SERVERLESS_PROD_IMAGE = "390844744777.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
+
+        // Uniphi push target (added). Jenkins itself runs in the uniphi account
+        // (jenkins:jenkins IRSA role, which already holds ecr:PutImage), so unlike
+        // beta/prod this needs no cross-account role — the pod's own creds suffice.
+        UNIPHI_IMAGE = "298655976287.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
     }
 
     options {
@@ -115,6 +120,12 @@ pipeline {
                     env.GIT_COMMIT_HASH = sh(script: 'git rev-parse --short HEAD', returnStdout: true)
                     env.TAG_VALUE = "${IMAGE_TAG_PREFIX}${GIT_COMMIT_HASH}"
                     env.GCP_DOCKER_TOKEN = sh(returnStdout: true, script: "gcloud auth print-access-token").trim() 
+
+                    // Uniphi ECR token (added) — read from the agent's own IRSA
+                    // credentials, which are already in the uniphi account. Must be taken
+                    // FIRST: the serverless captures below scope their creds inline, but
+                    // the dev assume further down replaces the ambient ones for good.
+                    env.UNIPHI_ECR_TOKEN = sh(returnStdout: true, script: 'aws ecr get-login-password --region ${AWS_REGION} --output text').trim()
 
                     // Serverless beta/prod ECR tokens (added) — assumed by the OIDC role BEFORE
                     // the dev assume below overwrites AWS_ACCESS_KEY_ID/SECRET/SESSION.
@@ -213,6 +224,10 @@ pipeline {
                 // Push to Serverless Prod ECR (added)
                 sh 'skopeo login --username AWS --password ${SERVERLESS_PROD_ECR_TOKEN} 390844744777.dkr.ecr.us-east-1.amazonaws.com'
                 sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${SERVERLESS_PROD_IMAGE}:${TAG_VALUE}'
+
+                // Push to Uniphi ECR (added)
+                sh 'skopeo login --username AWS --password ${UNIPHI_ECR_TOKEN} 298655976287.dkr.ecr.us-east-1.amazonaws.com'
+                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${UNIPHI_IMAGE}:${TAG_VALUE}'
             }
         }
     }
