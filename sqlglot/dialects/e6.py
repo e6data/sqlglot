@@ -23,6 +23,12 @@ from sqlglot.tokens import TokenType
 from sqlglot.parser import build_coalesce
 from typing import Any, Optional
 
+# Opt-in hybrid multidialect path (see converter_api._hybrid / HYBRID_MULTIDIALECT). When on,
+# a function Postgres didn't recognize (exp.Anonymous) on the postgres path is treated as a
+# Databricks tell: the anonymous_sql generator reparses it in the Databricks dialect and emits
+# it with from_dialect="databricks" so its args/semantics are Databricks-correct.
+HYBRID_MULTIDIALECT = os.getenv("HYBRID_MULTIDIALECT", "false").lower() == "true"
+
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
@@ -2644,6 +2650,37 @@ class E6(Dialect):
                         arg.set("this", arg.this.replace("value:", "`value`:"))
 
             return self.func(function_name, *expression.expressions, normalize=not is_qualified)
+
+        def subquery_sql(self, expression: exp.Subquery, sep: str = " AS ") -> str:
+            # HYBRID_MULTIDIALECT: if a subquery on the postgres path contains an Anonymous node
+            # (a function Postgres couldn't resolve, e.g. TIMESTAMPADD/DATEADD -- a Databricks
+            # tell), reparse the WHOLE subquery body in the Databricks dialect so every construct
+            # in it (SPLIT indexing, CONCAT_WS null-handling, unit args, ...) keeps Databricks
+            # semantics. The re-dialected body is reparsed as e6 and spliced back in, so the outer
+            # generator still renders the subquery's alias/pivots (Postgres side) unchanged. If the
+            # Databricks parse still yields an Anonymous node the function is unknown to both
+            # dialects -> raise so it surfaces.
+            if (
+                HYBRID_MULTIDIALECT
+                and self.from_dialect == "postgres"
+                and expression.this is not None
+                and expression.this.find(exp.Anonymous)
+            ):
+                import sqlglot
+
+                reparsed = sqlglot.parse_one(
+                    expression.this.sql(dialect="postgres"), read="databricks"
+                )
+                if reparsed.find(exp.Anonymous):
+                    raise ValueError(
+                        "HYBRID_MULTIDIALECT: subquery has a function unknown to both Postgres "
+                        "and Databricks"
+                    )
+                body_e6 = reparsed.sql(dialect="e6", from_dialect="databricks")
+                expression = expression.copy()
+                expression.set("this", sqlglot.parse_one(body_e6, read="e6"))
+
+            return super().subquery_sql(expression, sep)
 
         def dot_sql(self, expression: exp.Dot) -> str:
             # In Databricks (default), `"X"` lexes as a string Literal, so an

@@ -68,6 +68,11 @@ SAMSUNG_TABLEAU_DASHBOARD = os.getenv("SAMSUNG_TABLEAU_DASHBOARD", "False")
 # Rust tokenizer flag ("0" default -> pure-Python; "1" -> sqlglotrs). Defaulted before the sqlglot
 # import above; read here only for visibility/logging.
 SQLGLOTRS_TOKENIZER = os.getenv("SQLGLOTRS_TOKENIZER", "0")
+# Opt-in hybrid multidialect path. When on, the multidialect branch rewrites Databricks
+# backtick identifiers to Postgres double-quoted identifiers up front (so the whole query
+# parses as Postgres), and the e6 generator reparses any Anonymous-node function it finds on
+# the postgres path in the Databricks dialect (see e6.anonymous_sql). Read here and in e6.py.
+HYBRID_MULTIDIALECT = os.getenv("HYBRID_MULTIDIALECT", "False").lower() == "true"
 
 storage_service_client = None
 
@@ -196,6 +201,28 @@ async def convert_query(
             query_id,
             len(query),
         )
+
+        # HYBRID_MULTIDIALECT: rewrite Databricks backtick identifiers to Postgres double-quoted
+        # identifiers up front, so the whole query (outer identifiers included) parses as
+        # Postgres. Databricks functions Postgres can't resolve surface as Anonymous nodes and
+        # are reparsed as Databricks in the e6 generator (see e6.anonymous_sql).
+        #
+        # Token-aware (not a blind regex): only the backticks the Postgres tokenizer emits as
+        # UNKNOWN are identifier delimiters -- a backtick inside a '...' string is part of one
+        # STRING token, so it is left untouched. `` ` `` and ``"`` are both one char, so swapping
+        # in place preserves every offset.
+        if HYBRID_MULTIDIALECT:
+            _toks = sqlglot.tokenize(query, dialect="postgres")
+            _bt = [
+                tok.start
+                for tok in _toks
+                if tok.token_type == sqlglot.tokens.TokenType.UNKNOWN and tok.text == "`"
+            ]
+            if _bt:
+                _chars = list(query)
+                for _pos in _bt:
+                    _chars[_pos] = '"'
+                query = "".join(_chars)
 
         # Samsung Tableau dashboards always alias the native subquery "Custom SQL Query", so we
         # detect it by that alias alone (no backtick scan / parse-error fallback).
