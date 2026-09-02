@@ -3356,12 +3356,20 @@ class Parser(metaclass=_Parser):
 
             this = self._parse_query_modifiers(this)
         elif (table or nested) and self._match(TokenType.L_PAREN):
+            lparen = self._prev
             this = self._parse_wrapped_select(table=table)
 
             # We return early here so that the UNION isn't attached to the subquery by the
             # following call to _parse_set_operations, but instead becomes the parent node
             self._match_r_paren()
-            return self._parse_subquery(this, parse_alias=parse_subquery_alias)
+            rparen = self._prev
+            subquery = self._parse_subquery(this, parse_alias=parse_subquery_alias)
+            # Record the raw "( ... )" source text on the Subquery so a consumer can reparse the
+            # original tokens in another dialect instead of regenerating them (e.g. the e6
+            # HYBRID_MULTIDIALECT path reparsing a held-out Databricks subquery).
+            if subquery is not None and lparen is not None and rparen is not None:
+                subquery.meta["raw_sql"] = self._find_sql(lparen, rparen)
+            return subquery
         elif self._match(TokenType.VALUES, advance=False):
             this = self._parse_derived_table_values()
         elif from_:
