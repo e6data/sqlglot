@@ -3,11 +3,19 @@
 #
 # Uniphi is the only push target: it is the one registry this repo holds
 # credentials for. The other five registries the Jenkinsfile fans out to
-# (main ECR, GCR, ACR, serverless beta/prod) need org-level secrets that are
+# (main ECR, GCR, ACR, serverless beta/prod) read org-level secrets that are
 # scoped to e6-query-engine and not shared with this repo, so wiring them here
-# only produced an empty account id and an "Request ARN is invalid" failure at
-# the first assume-role. Add a registry back only once its secret is actually
-# readable from e6data/sqlglot.
+# only produced an empty account id and "Request ARN is invalid" at the first
+# assume-role. Add a registry back only once its secret is readable from
+# e6data/sqlglot.
+#
+# Each architecture is built on a runner of that architecture and the two are
+# merged into one manifest afterwards, exactly as the Jenkinsfile did. Do NOT
+# collapse this into a single `--platform linux/amd64,linux/arm64` build: the
+# sqlglotrs Rust extension is compiled during the image build, and cargo dies
+# under QEMU on Alpine ("Scudo ERROR: CHECK failed @ primary32.h:183" ->
+# "qemu: uncaught target signal 6") because musl's hardened allocator does not
+# survive user-mode emulation.
 name: Build - Transpiler
 
 on:
@@ -29,8 +37,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: runs-on=${{ github.run_id }}/runner=8cpu-linux-arm64/extras=s3-cache
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: 8cpu-linux-x64
+          - arch: arm64
+            platform: linux/arm64
+            runner: 8cpu-linux-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=${{ matrix.runner }}/extras=s3-cache
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -52,6 +70,54 @@ jobs:
             exit 1
           fi
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+
+      - name: Setup Uniphi AWS Creds
+        uses: aws-actions/configure-aws-credentials@90a7a1fb1ee4e8d6a99f60d2fd22287e1657e51e # v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.UNIPHI_AWS_ACCOUNT_ID }}:role/GHActionsECRPush
+          aws-region: us-east-1
+
+      - name: Login to Uniphi ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.UNIPHI_ECR_REGISTRY }}
+
+      # Push by digest only; the merge job attaches the human-readable tags to
+      # the combined manifest so a half-finished matrix never moves `latest`.
+      - name: Build and push ${{ matrix.arch }} by digest
+        id: build
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.UNIPHI_ECR_REGISTRY }}/${{ env.UNIPHI_ECR_REPOSITORY }}"
+
+          docker buildx build \
+            --platform ${{ matrix.platform }} \
+            --cache-from type=gha,scope=${{ matrix.arch }} \
+            --cache-to type=gha,mode=max,scope=${{ matrix.arch }} \
+            --provenance=mode=max \
+            --sbom=true \
+            --output type=image,name=$IMAGE,push-by-digest=true,push=true \
+            --metadata-file meta.json \
+            -f Dockerfile .
+
+          DIGEST=$(jq -r '."containerimage.digest"' meta.json)
+          echo "Built ${{ matrix.arch }} -> $DIGEST"
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: runs-on=${{ github.run_id }}/runner=2cpu-linux-arm64/extras=s3-cache
+    steps:
       - name: Generate production tags
         id: tags
         run: |
@@ -71,8 +137,12 @@ jobs:
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Production tags: $TAGS"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - name: Download digests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
@@ -87,28 +157,27 @@ jobs:
         run: |
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.UNIPHI_ECR_REGISTRY }}
 
-      - name: Build and push multi-arch image
-        id: build-push
+      - name: Create multi-arch manifest
+        id: manifest
         run: |
-          IFS=',' read -ra TAG_ARRAY <<< "${{ steps.tags.outputs.tags }}"
+          set -euo pipefail
+          IMAGE="${{ env.UNIPHI_ECR_REGISTRY }}/${{ env.UNIPHI_ECR_REPOSITORY }}"
+
           TAG_ARGS=""
+          IFS=',' read -ra TAG_ARRAY <<< "${{ steps.tags.outputs.tags }}"
           for tag in "${TAG_ARRAY[@]}"; do
-            TAG_ARGS="$TAG_ARGS -t ${{ env.UNIPHI_ECR_REGISTRY }}/${{ env.UNIPHI_ECR_REPOSITORY }}:$tag"
+            TAG_ARGS="$TAG_ARGS -t $IMAGE:$tag"
           done
 
-          echo "Building and pushing image with ${#TAG_ARRAY[@]} tags to Uniphi ECR"
+          SRC_ARGS=""
+          for d in /tmp/digests/*; do
+            SRC_ARGS="$SRC_ARGS $IMAGE@sha256:$(basename "$d")"
+          done
+          echo "Merging:$SRC_ARGS"
 
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            --provenance=mode=max \
-            --sbom=true \
-            $TAG_ARGS \
-            --push \
-            -f Dockerfile .
+          docker buildx imagetools create $TAG_ARGS $SRC_ARGS
 
-          DIGEST=$(docker buildx imagetools inspect ${{ env.UNIPHI_ECR_REGISTRY }}/${{ env.UNIPHI_ECR_REPOSITORY }}:latest --format '{{json .}}' | jq -r '.manifest.digest')
+          DIGEST=$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{json .}}' | jq -r '.manifest.digest')
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
       - name: Summary
@@ -116,7 +185,7 @@ jobs:
           echo "Release Complete!"
           echo "Version: ${{ env.VERSION }}"
           echo "Git SHA: ${{ steps.tags.outputs.short_sha }}"
-          echo "Digest:  ${{ steps.build-push.outputs.digest }}"
+          echo "Digest:  ${{ steps.manifest.outputs.digest }}"
           echo ""
           echo "Pushed tags: ${{ steps.tags.outputs.tags }}"
           echo "Registry:"
