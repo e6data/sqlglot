@@ -1,11 +1,13 @@
 # Build and Release for Transpiler (sqlglot converter API)
-# Builds the multi-arch transpiler image and pushes to all 6 registries.
-# Mirrors the legacy Jenkinsfile build; registry/login/push pattern follows
-# core-platform ci-operator.yml. No security scans (build + push only).
+# Builds the multi-arch transpiler image and pushes it to the uniphi ECR.
 #
-# BOOTSTRAP COPY: trigger is workflow_dispatch-only so merging this to main
-# registers the workflow in the Actions tab WITHOUT firing a build/push.
-# PR #258 replaces this with the full version (adds the push-to-main trigger).
+# Uniphi is the only push target: it is the one registry this repo holds
+# credentials for. The other five registries the Jenkinsfile fans out to
+# (main ECR, GCR, ACR, serverless beta/prod) need org-level secrets that are
+# scoped to e6-query-engine and not shared with this repo, so wiring them here
+# only produced an empty account id and an "Request ARN is invalid" failure at
+# the first assume-role. Add a registry back only once its secret is actually
+# readable from e6data/sqlglot.
 name: Build - Transpiler
 
 on:
@@ -19,18 +21,8 @@ env:
   RELEASE_NAME: transpiler
   # Preserve the legacy Jenkins versioning scheme: 3.0.<build>
   VERSION: 3.0.${{ github.run_number }}
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-  ECR_REPOSITORY: transpiler
   UNIPHI_ECR_REGISTRY: ${{ secrets.UNIPHI_AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
   UNIPHI_ECR_REPOSITORY: transpiler
-  GCR_REGISTRY: us-docker.pkg.dev/${{ vars.GCR_PROJECT_ID }}/e6data
-  GCR_REPOSITORY: transpiler
-  ACR_REGISTRY: e6labs.azurecr.io
-  ACR_REPOSITORY: e6data/transpiler
-  SERVERLESS_BETA_ECR_REGISTRY: ${{ secrets.SERVERLESS_BETA_AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-  SERVERLESS_BETA_ECR_REPOSITORY: transpiler
-  SERVERLESS_PROD_ECR_REGISTRY: ${{ secrets.SERVERLESS_PROD_AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-  SERVERLESS_PROD_ECR_REPOSITORY: transpiler
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -47,6 +39,18 @@ jobs:
 
       - name: Setup RunsOn Magic Cache
         uses: runs-on/action@v2
+
+      # An unset secret interpolates to the empty string, which yields the
+      # nonsense role arn "arn:aws:iam:::role/..." and a bare ".dkr.ecr..."
+      # registry. Fail here with a readable message instead of at assume-role.
+      - name: Check uniphi credentials are present
+        env:
+          UNIPHI_AWS_ACCOUNT_ID: ${{ secrets.UNIPHI_AWS_ACCOUNT_ID }}
+        run: |
+          if [ -z "${UNIPHI_AWS_ACCOUNT_ID:-}" ]; then
+            echo "::error::UNIPHI_AWS_ACCOUNT_ID is unset — cannot push the transpiler image."
+            exit 1
+          fi
 
       - name: Generate production tags
         id: tags
@@ -73,20 +77,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
 
-      # ----- Registry authentication (one docker login per registry) -----
-      # AWS creds are rotated per account; each ECR login is captured into the
-      # docker config before switching to the next account's credentials.
-
-      - name: Setup AWS Creds (main)
-        uses: aws-actions/configure-aws-credentials@90a7a1fb1ee4e8d6a99f60d2fd22287e1657e51e # v2
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GHActionsECRPush
-          aws-region: us-east-1
-
-      - name: Login to ECR (main)
-        run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
-
       - name: Setup Uniphi AWS Creds
         uses: aws-actions/configure-aws-credentials@90a7a1fb1ee4e8d6a99f60d2fd22287e1657e51e # v2
         with:
@@ -97,57 +87,16 @@ jobs:
         run: |
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.UNIPHI_ECR_REGISTRY }}
 
-      - name: Setup Serverless Beta AWS Creds
-        uses: aws-actions/configure-aws-credentials@90a7a1fb1ee4e8d6a99f60d2fd22287e1657e51e # v2
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.SERVERLESS_BETA_AWS_ACCOUNT_ID }}:role/GHActionsECRPush
-          aws-region: us-east-1
-
-      - name: Login to Serverless Beta ECR
-        run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.SERVERLESS_BETA_ECR_REGISTRY }}
-
-      - name: Setup Serverless Prod AWS Creds
-        uses: aws-actions/configure-aws-credentials@90a7a1fb1ee4e8d6a99f60d2fd22287e1657e51e # v2
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.SERVERLESS_PROD_AWS_ACCOUNT_ID }}:role/GHActionsECRPush
-          aws-region: us-east-1
-
-      - name: Login to Serverless Prod ECR
-        run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.SERVERLESS_PROD_ECR_REGISTRY }}
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
-        with:
-          credentials_json: ${{ secrets.GCR_PUSH_SA }}
-
-      - name: Login to GCR
-        run: |
-          echo '${{ secrets.GCR_PUSH_SA }}' | docker login -u _json_key --password-stdin us-docker.pkg.dev
-
-      - name: Login to ACR
-        run: |
-          echo ${{ secrets.ACR_TOKEN }} | docker login --username e6labs --password-stdin e6labs.azurecr.io
-          echo "Successfully authenticated to Azure ACR (e6labs)"
-
       - name: Build and push multi-arch image
         id: build-push
         run: |
-          # Build and push multi-arch image with all tags to all 6 registries
-          # (ECR, Uniphi ECR, GCR, ACR, Serverless Beta, Serverless Prod)
           IFS=',' read -ra TAG_ARRAY <<< "${{ steps.tags.outputs.tags }}"
           TAG_ARGS=""
           for tag in "${TAG_ARRAY[@]}"; do
-            TAG_ARGS="$TAG_ARGS -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$tag"
             TAG_ARGS="$TAG_ARGS -t ${{ env.UNIPHI_ECR_REGISTRY }}/${{ env.UNIPHI_ECR_REPOSITORY }}:$tag"
-            TAG_ARGS="$TAG_ARGS -t ${{ env.GCR_REGISTRY }}/${{ env.GCR_REPOSITORY }}:$tag"
-            TAG_ARGS="$TAG_ARGS -t ${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}:$tag"
-            TAG_ARGS="$TAG_ARGS -t ${{ env.SERVERLESS_BETA_ECR_REGISTRY }}/${{ env.SERVERLESS_BETA_ECR_REPOSITORY }}:$tag"
-            TAG_ARGS="$TAG_ARGS -t ${{ env.SERVERLESS_PROD_ECR_REGISTRY }}/${{ env.SERVERLESS_PROD_ECR_REPOSITORY }}:$tag"
           done
 
-          echo "Building and pushing image with ${#TAG_ARRAY[@]} tags to 6 registries (ECR, Uniphi ECR, GCR, ACR, Serverless Beta, Serverless Prod)"
+          echo "Building and pushing image with ${#TAG_ARRAY[@]} tags to Uniphi ECR"
 
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
@@ -159,8 +108,7 @@ jobs:
             --push \
             -f Dockerfile .
 
-          # Get digest (same across all registries)
-          DIGEST=$(docker buildx imagetools inspect ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest --format '{{json .}}' | jq -r '.manifest.digest')
+          DIGEST=$(docker buildx imagetools inspect ${{ env.UNIPHI_ECR_REGISTRY }}/${{ env.UNIPHI_ECR_REPOSITORY }}:latest --format '{{json .}}' | jq -r '.manifest.digest')
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
       - name: Summary
@@ -171,10 +119,5 @@ jobs:
           echo "Digest:  ${{ steps.build-push.outputs.digest }}"
           echo ""
           echo "Pushed tags: ${{ steps.tags.outputs.tags }}"
-          echo "Registries:"
-          echo "  - ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}"
+          echo "Registry:"
           echo "  - ${{ env.UNIPHI_ECR_REGISTRY }}/${{ env.UNIPHI_ECR_REPOSITORY }}"
-          echo "  - ${{ env.GCR_REGISTRY }}/${{ env.GCR_REPOSITORY }}"
-          echo "  - ${{ env.ACR_REGISTRY }}/${{ env.ACR_REPOSITORY }}"
-          echo "  - ${{ env.SERVERLESS_BETA_ECR_REGISTRY }}/${{ env.SERVERLESS_BETA_ECR_REPOSITORY }}"
-          echo "  - ${{ env.SERVERLESS_PROD_ECR_REGISTRY }}/${{ env.SERVERLESS_PROD_ECR_REPOSITORY }}"
