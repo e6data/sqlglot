@@ -92,6 +92,23 @@ jobs:
       - name: Setup RunsOn Magic Cache
         uses: runs-on/action@v2
 
+      # uniphi and ACR are required targets: these are the registries people
+      # actually pull the transpiler from, so a missing credential for either is
+      # a hard error rather than a silent skip. The other four are optional and
+      # drop out on their own when their org secret is not shared with this repo.
+      - name: Check required registry credentials
+        run: |
+          # `run:` executes under `bash -e`, so a bare `[ ... ] && x=y` would abort
+          # the step whenever the test is false. Use if-blocks.
+          missing=""
+          if [ -z "${UNIPHI_AWS_ACCOUNT_ID:-}" ]; then missing="$missing UNIPHI_AWS_ACCOUNT_ID"; fi
+          if [ -z "${ACR_ENABLED:-}" ]; then missing="$missing ACR_TOKEN"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::Required registry credentials are missing or empty:$missing"
+            exit 1
+          fi
+          echo "Required registries (uniphi, ACR) are configured."
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
 
@@ -207,6 +224,23 @@ jobs:
 
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Production tags: $TAGS"
+
+      # uniphi and ACR are required targets: these are the registries people
+      # actually pull the transpiler from, so a missing credential for either is
+      # a hard error rather than a silent skip. The other four are optional and
+      # drop out on their own when their org secret is not shared with this repo.
+      - name: Check required registry credentials
+        run: |
+          # `run:` executes under `bash -e`, so a bare `[ ... ] && x=y` would abort
+          # the step whenever the test is false. Use if-blocks.
+          missing=""
+          if [ -z "${UNIPHI_AWS_ACCOUNT_ID:-}" ]; then missing="$missing UNIPHI_AWS_ACCOUNT_ID"; fi
+          if [ -z "${ACR_ENABLED:-}" ]; then missing="$missing ACR_TOKEN"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::Required registry credentials are missing or empty:$missing"
+            exit 1
+          fi
+          echo "Required registries (uniphi, ACR) are configured."
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
