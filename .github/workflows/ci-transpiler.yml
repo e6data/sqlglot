@@ -83,10 +83,12 @@ jobs:
         run: |
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.UNIPHI_ECR_REGISTRY }}
 
-      # Push by digest only; the merge job attaches the human-readable tags to
-      # the combined manifest so a half-finished matrix never moves `latest`.
-      - name: Build and push ${{ matrix.arch }} by digest
-        id: build
+      # Push a per-arch staging tag rather than uploading digests as artifacts:
+      # RunsOn points ACTIONS_RESULTS_URL at its own cache proxy, which does not
+      # implement the artifacts v4 ListArtifacts API (it answers with HTML, so
+      # download-artifact dies on "not valid JSON"). The merge job reads these
+      # two tags instead. They are staging only — reaped by the ECR lifecycle.
+      - name: Build and push ${{ matrix.arch }}
         run: |
           set -euo pipefail
           IMAGE="${{ env.UNIPHI_ECR_REGISTRY }}/${{ env.UNIPHI_ECR_REPOSITORY }}"
@@ -97,22 +99,9 @@ jobs:
             --cache-to type=gha,mode=max,scope=${{ matrix.arch }} \
             --provenance=mode=max \
             --sbom=true \
-            --output type=image,name=$IMAGE,push-by-digest=true,push=true \
-            --metadata-file meta.json \
+            -t "$IMAGE:stage-${{ github.run_id }}-${{ matrix.arch }}" \
+            --push \
             -f Dockerfile .
-
-          DIGEST=$(jq -r '."containerimage.digest"' meta.json)
-          echo "Built ${{ matrix.arch }} -> $DIGEST"
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${DIGEST#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: digest-${{ matrix.arch }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
 
   merge:
     needs: build
@@ -136,13 +125,6 @@ jobs:
 
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Production tags: $TAGS"
-
-      - name: Download digests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          path: /tmp/digests
-          pattern: digest-*
-          merge-multiple: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
@@ -170,8 +152,8 @@ jobs:
           done
 
           SRC_ARGS=""
-          for d in /tmp/digests/*; do
-            SRC_ARGS="$SRC_ARGS $IMAGE@sha256:$(basename "$d")"
+          for arch in amd64 arm64; do
+            SRC_ARGS="$SRC_ARGS $IMAGE:stage-${{ github.run_id }}-$arch"
           done
           echo "Merging:$SRC_ARGS"
 
