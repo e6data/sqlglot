@@ -36,8 +36,11 @@ class TestE6(Validator):
             read={"databricks": "SELECT FIRST(zone) AS zone FROM filtered_zones"},
         )
 
+        # SPLIT(...)[i] is preserved as e6's 0-based array-index bracket (the e6 engine indexes
+        # SPLIT brackets 0-based, so [0] is the first token) rather than rewritten to a 1-based
+        # ELEMENT_AT -- same element, and the index stays identical to the source.
         self.validate_all(
-            "SELECT store_name, sku_id, TRIM(ELEMENT_AT(SPLIT(cause, ':'), 1)) AS dispersion_cause FROM gold.control_tower.inventory_dispersion_loss_tree LATERAL VIEW EXPLODE(SPLIT(dispersion_cause_txn, ',')) AS cause WHERE dispersion_cause_txn IS NOT NULL",
+            "SELECT store_name, sku_id, TRIM(SPLIT(cause, ':')[0]) AS dispersion_cause FROM gold.control_tower.inventory_dispersion_loss_tree LATERAL VIEW EXPLODE(SPLIT(dispersion_cause_txn, ',')) AS cause WHERE dispersion_cause_txn IS NOT NULL",
             read={
                 "databricks": "SELECT store_name, sku_id, TRIM(SPLIT(cause, ':') [0]) AS dispersion_cause FROM gold.control_tower.inventory_dispersion_loss_tree LATERAL VIEW explode(SPLIT(dispersion_cause_txn, ',')) AS cause WHERE dispersion_cause_txn IS NOT NULL"
             },

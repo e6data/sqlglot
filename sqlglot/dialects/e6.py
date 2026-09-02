@@ -2474,17 +2474,21 @@ class E6(Dialect):
                     _variant_root_value(expression.this), _bracket_path_segments(expression)
                 )
 
-            # SPLIT(...) is a Databricks/Spark 0-based array function. In the multidialect
-            # flow the postgres reader (1-based arrays) normalizes the subscript by its own
-            # index offset, so a 0-based SPLIT(x, d)[0] parses to ELEMENT_AT(..., 0), which
-            # the e6 engine rejects ("element_at index must be > 0 or < 0, got 0"). Preserve
-            # the author's 0-based bracket by undoing the postgres offset.
-            if self.from_dialect == "postgres" and isinstance(
+            # SPLIT(...) is a Databricks/Spark 0-based array function, and the e6 engine indexes
+            # the SPLIT bracket 0-based too (verified: SPLIT('10~ABC~XYZ','~')[0] -> '10'), so
+            # preserve the author's array-index bracket instead of rewriting it to a 1-based
+            # ELEMENT_AT. Do it for both readers so a SPLIT renders identically whether it stayed
+            # on the postgres path or was re-dialected to databricks in a subquery. The stored
+            # subscript differs by reader (postgres 1-based normalizes [0] to -1, databricks
+            # 0-based keeps 0), so undo it with the reader's own index offset to land back on [0].
+            # (Without this the postgres path emits ELEMENT_AT(..., 0), which the engine rejects.)
+            if self.from_dialect in ("postgres", "databricks") and isinstance(
                 expression.this, (exp.Split, exp.RegexpSplit)
             ):
+                from_offset = 0 if self.from_dialect == "databricks" else 1
                 idx = seq_get(
                     apply_index_offset(
-                        expression.this, [e.copy() for e in expression.expressions], 1
+                        expression.this, [e.copy() for e in expression.expressions], from_offset
                     ),
                     0,
                 )
@@ -2652,33 +2656,38 @@ class E6(Dialect):
             return self.func(function_name, *expression.expressions, normalize=not is_qualified)
 
         def subquery_sql(self, expression: exp.Subquery, sep: str = " AS ") -> str:
-            # HYBRID_MULTIDIALECT: if a subquery on the postgres path contains an Anonymous node
-            # (a function Postgres couldn't resolve, e.g. TIMESTAMPADD/DATEADD -- a Databricks
-            # tell), reparse the WHOLE subquery body in the Databricks dialect so every construct
-            # in it (SPLIT indexing, CONCAT_WS null-handling, unit args, ...) keeps Databricks
-            # semantics. The re-dialected body is reparsed as e6 and spliced back in, so the outer
-            # generator still renders the subquery's alias/pivots (Postgres side) unchanged. If the
-            # Databricks parse still yields an Anonymous node the function is unknown to both
+            # HYBRID_MULTIDIALECT: a postgres-path subquery holding an Anonymous node (a function
+            # Postgres can't resolve, e.g. TIMESTAMPADD -- a Databricks tell) is Databricks SQL.
+            # Reparse its verbatim source (meta["raw_sql"]) as Databricks, with STRING_ALIASES set
+            # to the DBR_DOUBLE_QUOTED_IDENTIFIERS flag so an implicit `expr "alias"` parses as an
+            # identifier alias, and emit it from_dialect="databricks" so its constructs (SPLIT
+            # indexing, CONCAT_WS null-handling, unit args, ...) keep Databricks semantics. If a
+            # function is still Anonymous after the Databricks reparse it is unknown to both
             # dialects -> raise so it surfaces.
+            raw = expression.meta.get("raw_sql")
             if (
                 HYBRID_MULTIDIALECT
                 and self.from_dialect == "postgres"
+                and raw
                 and expression.this is not None
                 and expression.this.find(exp.Anonymous)
             ):
-                import sqlglot
+                from sqlglot.dialects.databricks import Databricks, DBR_DOUBLE_QUOTED_IDENTIFIERS
 
-                reparsed = sqlglot.parse_one(
-                    expression.this.sql(dialect="postgres"), read="databricks"
-                )
-                if reparsed.find(exp.Anonymous):
-                    raise ValueError(
-                        "HYBRID_MULTIDIALECT: subquery has a function unknown to both Postgres "
-                        "and Databricks"
+                dbr = Databricks()
+                parser = dbr.parser()
+                parser.STRING_ALIASES = DBR_DOUBLE_QUOTED_IDENTIFIERS  # type: ignore[misc]
+                reparsed = parser.parse(dbr.tokenize(raw[1:-1]), raw[1:-1])[0]
+                if reparsed is not None:
+                    if reparsed.find(exp.Anonymous):
+                        raise ValueError(
+                            "HYBRID_MULTIDIALECT: function unknown to both Postgres and Databricks"
+                        )
+                    alias = self.sql(expression, "alias")
+                    inner_e6 = reparsed.sql(
+                        dialect="e6", from_dialect="databricks", pretty=self.pretty
                     )
-                body_e6 = reparsed.sql(dialect="e6", from_dialect="databricks")
-                expression = expression.copy()
-                expression.set("this", sqlglot.parse_one(body_e6, read="e6"))
+                    return f"({inner_e6}){sep}{alias}" if alias else f"({inner_e6})"
 
             return super().subquery_sql(expression, sep)
 
