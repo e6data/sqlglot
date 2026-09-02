@@ -31,8 +31,13 @@ permissions:
 
 env:
   RELEASE_NAME: transpiler
-  # Preserve the legacy Jenkins versioning scheme: 3.0.<build>
-  VERSION: 3.0.${{ github.run_number }}
+  # Preserve the legacy Jenkins versioning scheme: 3.0.<build>. github.run_number
+  # restarts at 1 for this workflow while Jenkins is already at 3.0.195, so it is
+  # offset past the Jenkins series — otherwise the first GHA runs would publish
+  # 3.0.6/3.0.7 on top of a registry that already holds 3.0.6-* from years ago and
+  # version numbers would appear to run backwards. Raise the 1000 below if Jenkins
+  # ever catches up to it.
+  VERSION: 3.0.${{ 1000 + github.run_number }}
 
   # Account ids double as the "is this registry configured?" flag; the guards
   # below test these rather than the secrets context, which is not available
@@ -52,7 +57,10 @@ env:
   GCR_REGISTRY: us-docker.pkg.dev/${{ vars.GCR_PROJECT_ID }}/e6data
   GCR_REPOSITORY: transpiler
   ACR_REGISTRY: e6labs.azurecr.io
-  ACR_REPOSITORY: e6data/transpiler
+  # The live path: e6labs.azurecr.io/transpiler holds 159 tags and is what the
+  # Jenkinsfile pushes to (AZURE_IMAGE). e6data/transpiler does not exist, and
+  # e6-engine/transpiler has been stale since 2026-05.
+  ACR_REPOSITORY: transpiler
   SERVERLESS_BETA_ECR_REGISTRY: ${{ secrets.SERVERLESS_BETA_AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
   SERVERLESS_BETA_ECR_REPOSITORY: transpiler
   SERVERLESS_PROD_ECR_REGISTRY: ${{ secrets.SERVERLESS_PROD_AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
