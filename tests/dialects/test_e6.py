@@ -3406,6 +3406,69 @@ class TestE6(Validator):
             read={"databricks": 'SELECT * FROM t WHERE c = "web"'},
         )
 
+    def test_hybrid_multidialect_databricks_function_mappings(self):
+        """HYBRID_MULTIDIALECT: Databricks scalar functions that Postgres parses into a
+        confident (but wrong) node -- with no Anonymous/backtick tell -- must still emit
+        Databricks-correct E6 when from_dialect="postgres". These were transpiling to a
+        wrong/failing E6 form (verified on the engine): DATEDIFF/DATE_DIFF (args
+        reordered -> NULL), TIMESTAMPDIFF (args scrambled -> error), TO_TIMESTAMP
+        (epoch conversion instead of a cast -> error).
+        """
+        import sqlglot
+        from sqlglot.dialects import e6 as e6_module
+
+        def pg_to_e6(sql):
+            return sqlglot.parse_one(sql, read="postgres").sql(
+                dialect="e6", from_dialect="postgres"
+            )
+
+        original = e6_module.HYBRID_MULTIDIALECT
+        e6_module.HYBRID_MULTIDIALECT = True
+        try:
+            # DATEDIFF/DATE_DIFF: Databricks order (end, start, unit), not PG (unit, start, end)
+            self.assertEqual(
+                pg_to_e6("SELECT DATEDIFF(d_end, d_start)"),
+                "SELECT DATE_DIFF(d_end, d_start, 'DAY')",
+            )
+            self.assertEqual(
+                pg_to_e6("SELECT DATE_DIFF(d_end, d_start)"),
+                "SELECT DATE_DIFF(d_end, d_start, 'DAY')",
+            )
+            # TIMESTAMPDIFF: PG scrambles (unit, start, end) -> reassemble (end, start, 'unit').
+            # A bare-column end-arg is captured as a Var, so it renders upper-cased
+            # (harmless: the engine folds unquoted identifiers case-insensitively).
+            self.assertEqual(
+                pg_to_e6("SELECT TIMESTAMPDIFF(MONTH, ts_start, ts_end)"),
+                "SELECT TIMESTAMP_DIFF(TS_END, ts_start, 'MONTH')",
+            )
+            # TO_TIMESTAMP is a cast in Databricks, not FROM_UNIXTIME (epoch -> ts)
+            self.assertEqual(pg_to_e6("SELECT TO_TIMESTAMP(x)"), "SELECT CAST(x AS TIMESTAMP)")
+        finally:
+            e6_module.HYBRID_MULTIDIALECT = original
+
+        # Without the flag the Postgres path is unchanged (overrides only fire under HYBRID)
+        self.assertEqual(pg_to_e6("SELECT TO_TIMESTAMP(x)"), "SELECT FROM_UNIXTIME(x)")
+        self.assertEqual(
+            pg_to_e6("SELECT DATEDIFF(d_end, d_start)"),
+            "SELECT DATE_DIFF('DAY', d_start, d_end)",
+        )
+
+        # Regression: the Databricks path already emitted the correct form and is unchanged
+        def dbr_to_e6(sql):
+            return sqlglot.parse_one(sql, read="databricks").sql(
+                dialect="e6", from_dialect="databricks"
+            )
+
+        self.assertEqual(
+            dbr_to_e6("SELECT DATEDIFF(d_end, d_start)"),
+            "SELECT DATE_DIFF(d_end, d_start, 'DAY')",
+        )
+        self.assertEqual(
+            dbr_to_e6("SELECT TIMESTAMPDIFF(MONTH, ts_start, ts_end)"),
+            "SELECT TIMESTAMP_DIFF(ts_end, ts_start, 'MONTH')",
+        )
+        self.assertEqual(dbr_to_e6("SELECT TO_TIMESTAMP(x)"), "SELECT CAST(x AS TIMESTAMP)")
+
     def test_powerbi_mixed_quote_sf_to_dbr(self):
         """Power BI SF->DBR->E6 path for mixed-quote queries.
 

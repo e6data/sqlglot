@@ -2670,7 +2670,12 @@ class E6(Dialect):
                 and self.from_dialect == "postgres"
                 and raw
                 and expression.this is not None
-                and expression.this.find(exp.Anonymous)
+                # nearest subquery only: prune nested subqueries so an outer wrapper
+                # doesn't catch on an Anonymous buried in an inner subquery
+                and any(
+                    isinstance(n, exp.Anonymous)
+                    for n in expression.this.walk(prune=lambda n: isinstance(n, exp.Subquery))
+                )
             ):
                 from sqlglot.dialects.databricks import Databricks, DBR_DOUBLE_QUOTED_IDENTIFIERS
 
@@ -3056,6 +3061,18 @@ class E6(Dialect):
             format_expr = expression.args.get("format")
             scale_expr = expression.args.get("scale")
 
+            # Databricks TO_TIMESTAMP(x) is a cast, but Postgres parses it as UnixToTime
+            # (epoch->timestamp) -> wrong on E6. In the hybrid path a Postgres UnixToTime
+            # only comes from TO_TIMESTAMP, so emit the Databricks cast.
+            if (
+                HYBRID_MULTIDIALECT
+                and self.from_dialect == "postgres"
+                and isinstance(expression, exp.UnixToTime)
+                and not format_expr
+                and not scale_expr
+            ):
+                return f"CAST({self.sql(unix_expr)} AS TIMESTAMP)"
+
             # If scale is seconds, use FROM_UNIXTIME_WITHUNIT
             if scale_expr and scale_expr.this == "seconds":
                 return self.func("FROM_UNIXTIME_WITHUNIT", unix_expr, scale_expr)
@@ -3084,6 +3101,19 @@ class E6(Dialect):
             return f"CAST({self.sql(expression.this)} AS timestamp_tz)"
 
         def timestamp_diff_sql(self, expression: exp.TimestampDiff) -> str:
+            # Databricks TIMESTAMPDIFF(unit, start, end) mis-parses under Postgres as
+            # this=unit, expression=start, unit=end (the end arg lands in the unit slot --
+            # a Var for a bare column). In the hybrid path reassemble the Databricks form
+            # TIMESTAMP_DIFF(end, start, 'unit').
+            if HYBRID_MULTIDIALECT and self.from_dialect == "postgres":
+                end = expression.args.get("unit")
+                end = exp.column(end.name) if isinstance(end, exp.Var) else end
+                return self.func(
+                    "TIMESTAMP_DIFF",
+                    end,
+                    expression.expression,
+                    exp.Literal.string(expression.this.name),
+                )
             return self.func(
                 "TIMESTAMP_DIFF", expression.this, expression.expression, unit_to_str(expression)
             )
@@ -3253,7 +3283,12 @@ class E6(Dialect):
             return super().cast_sql(expression)
 
         def date_diff_sql(self, expression: exp.DateDiff) -> str:
-            if self.from_dialect and self.from_dialect.lower() in ["databricks", "dbr"]:
+            # Databricks DATEDIFF(end, start) mis-parsed as Postgres in the hybrid path
+            # keeps E6's Databricks arg order (end, start, unit) instead of the Postgres
+            # order (unit, start, end), which E6 reads with unit as the first date -> NULL.
+            if (self.from_dialect and self.from_dialect.lower() == "databricks") or (
+                HYBRID_MULTIDIALECT and self.from_dialect == "postgres"
+            ):
                 return self.func(
                     "DATE_DIFF", expression.this, expression.expression, unit_to_str(expression)
                 )
