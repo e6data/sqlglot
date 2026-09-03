@@ -37,7 +37,10 @@ env:
   # 3.0.6/3.0.7 on top of a registry that already holds 3.0.6-* from years ago and
   # version numbers would appear to run backwards. Raise the 1000 below if Jenkins
   # ever catches up to it.
-  VERSION: 3.0.${{ 1000 + github.run_number }}
+  # NOTE: the offset is applied in the tags step below, not here — GitHub
+  # Actions expressions have no arithmetic operators, so `${{ 1000 + ... }}`
+  # is a workflow parse error rather than a value.
+  VERSION_OFFSET: 1000
 
   # Account ids double as the "is this registry configured?" flag; the guards
   # below test these rather than the secrets context, which is not available
@@ -211,6 +214,9 @@ jobs:
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
           DATE_TAG=$(date +%Y.%m.%d)
+          VERSION="3.0.$(( VERSION_OFFSET + GITHUB_RUN_NUMBER ))"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
           echo "date_tag=$DATE_TAG" >> $GITHUB_OUTPUT
@@ -219,8 +225,8 @@ jobs:
           TAGS="latest"
           TAGS="$TAGS,sha-$SHORT_SHA"
           TAGS="$TAGS,$DATE_TAG-$SHORT_SHA"
-          TAGS="$TAGS,${{ env.VERSION }}"
-          TAGS="$TAGS,${{ env.VERSION }}-$SHORT_SHA"
+          TAGS="$TAGS,$VERSION"
+          TAGS="$TAGS,$VERSION-$SHORT_SHA"
 
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Production tags: $TAGS"
@@ -339,7 +345,7 @@ jobs:
       - name: Summary
         run: |
           echo "Release Complete!"
-          echo "Version: ${{ env.VERSION }}"
+          echo "Version: ${{ steps.tags.outputs.version }}"
           echo "Git SHA: ${{ steps.tags.outputs.short_sha }}"
           echo "Digest:  ${{ steps.manifest.outputs.digest }}"
           echo ""
