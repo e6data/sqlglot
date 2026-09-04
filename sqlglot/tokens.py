@@ -675,6 +675,13 @@ class Tokenizer(metaclass=_Tokenizer):
     # Whether string escape characters function as such when placed within raw strings
     STRING_ESCAPES_ALLOWED_IN_RAW_STRINGS = True
 
+    # Opt-in: apply the Databricks/Spark default rule that a string escape before an
+    # otherwise-unrecognized character drops the escape (``\<other>`` -> ``<other>``),
+    # e.g. ``'\"'`` -> ``"``. Off by default (sqlglot keeps the backslash, matching the
+    # legacy spark.sql.parser.escapedStringLiterals=true behavior). ``%`` and ``_`` are
+    # excluded so LIKE patterns (``\%``, ``\_``) keep their backslash.
+    STRING_ESCAPE_SKIP_UNKNOWN = False
+
     NESTED_COMMENTS = True
 
     HINT_START = "/*+"
@@ -1524,6 +1531,21 @@ class Tokenizer(metaclass=_Tokenizer):
                     self._advance(2)
                 else:
                     raise TokenError(f"Missing {delimiter} from {self._line}:{self._current}")
+            elif (
+                self.STRING_ESCAPE_SKIP_UNKNOWN
+                and not raw_string
+                and self._char in self._STRING_ESCAPES
+                and self._peek
+                and self._peek not in ("%", "_")
+                and self._peek != delimiter
+                and self._peek not in self._STRING_ESCAPES
+            ):
+                # Databricks/Spark default: a backslash before an otherwise-unrecognized
+                # character drops the backslash (\<other> -> <other>), e.g. '\"' -> ".
+                # Gated on the string-escape char (not the generic `escapes`, which also
+                # holds identifier delimiters), so identifier scanning is untouched. Skip
+                # the escape char; the next character is appended on the next pass.
+                self._advance()
             else:
                 if self._chars(delim_size) == delimiter:
                     if delim_size > 1:

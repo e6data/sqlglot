@@ -137,6 +137,13 @@ class Databricks(Spark):
             if os.getenv("PRESERVE_DOUBLE_QUOTES_AROUND_IDENTIFIERS_DBR", "false").lower() == "true"
             else ["`"]
         )
+        # Databricks default string-literal semantics: a backslash before an otherwise-
+        # unrecognized character drops the backslash (`\<other>` -> `<other>`, e.g.
+        # `'\"'` -> `"`), per the STRING type docs. Without this sqlglot keeps the backslash
+        # (legacy spark.sql.parser.escapedStringLiterals=true) and the E6 generator then
+        # re-escapes it to `\\`, doubling it. (Python tokenizer only; the Rust tokenizer
+        # does not honor this yet.)
+        STRING_ESCAPE_SKIP_UNKNOWN = True
         KEYWORDS = {
             **Spark.Tokenizer.KEYWORDS,
             "VOID": TokenType.VOID,
