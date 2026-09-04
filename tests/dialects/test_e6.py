@@ -3469,6 +3469,34 @@ class TestE6(Validator):
         )
         self.assertEqual(dbr_to_e6("SELECT TO_TIMESTAMP(x)"), "SELECT CAST(x AS TIMESTAMP)")
 
+    def test_dbr_default_string_escapes(self):
+        """Databricks default string literals drop the backslash before an otherwise-
+        unrecognized character (\\<other> -> <other>), e.g. '\\"' -> ". The known sequences
+        (\\n \\t ...) become control chars and \\% / \\_ keep the slash (LIKE). Previously
+        sqlglot kept the backslash (legacy spark.sql.parser.escapedStringLiterals=true) and
+        the E6 generator re-escaped it to \\\\, doubling it. The fix is in the Python
+        tokenizer, so the test forces it -- the Rust tokenizer does not honor it yet.
+        """
+        from unittest import mock
+
+        import sqlglot
+        from sqlglot import tokens as tok
+
+        def to_e6(sql):
+            return sqlglot.transpile(sql, read="databricks", write="e6", from_dialect="databricks")[
+                0
+            ]
+
+        with mock.patch.object(tok, "USE_RS_TOKENIZER", False):
+            # \<other> drops the slash (no doubling)
+            self.assertEqual(to_e6(r"""SELECT '\"x\"'"""), "SELECT '\"x\"'")
+            # \% and \_ keep the backslash (LIKE patterns)
+            self.assertEqual(to_e6(r"SELECT '\%a'"), r"SELECT '\\%a'")
+            self.assertEqual(to_e6(r"SELECT '\_a'"), r"SELECT '\\_a'")
+            # a literal backslash and an escaped quote are preserved
+            self.assertEqual(to_e6(r"SELECT '\\a'"), r"SELECT '\\a'")
+            self.assertEqual(to_e6(r"SELECT 'O\'Connell'"), r"SELECT 'O\'Connell'")
+
     def test_powerbi_mixed_quote_sf_to_dbr(self):
         """Power BI SF->DBR->E6 path for mixed-quote queries.
 
