@@ -113,6 +113,28 @@ def _trim_sql(self: Databricks.Generator, expression: exp.Trim) -> str:
         return trim_sql(self, expression)
 
 
+# Databricks-only functions sqlglot has no dedicated node for. Defined here (not in
+# expressions.py) on purpose: a Func subclass in expressions.py auto-registers in every
+# dialect's parser, which would make Postgres parse these too and stop them from surfacing
+# as exp.Anonymous -- the tell the hybrid multidialect path uses to reparse a subquery as
+# Databricks (see e6.subquery_sql). Keeping them out of the global registry preserves the
+# Postgres-Anonymous behaviour while the Databricks parser (below) builds the typed node, so
+# the reparse both fires and stops rejecting these as "unknown to both dialects". Generation
+# is a plain pass-through via the default function fallback (name derived from the class).
+class ArrayDistinct(exp.Func):
+    pass
+
+
+class Stack(exp.Func):
+    arg_types = {"this": True, "expressions": False}
+    is_var_len_args = True
+
+
+class FormatString(exp.Func):
+    arg_types = {"this": True, "expressions": False}
+    is_var_len_args = True
+
+
 class Databricks(Spark):
     SAFE_DIVISION = False
     COPY_PARAMS_ARE_CSV = False
@@ -156,6 +178,9 @@ class Databricks(Spark):
 
         FUNCTIONS = {
             **Spark.Parser.FUNCTIONS,
+            "ARRAY_DISTINCT": ArrayDistinct.from_arg_list,
+            "FORMAT_STRING": FormatString.from_arg_list,
+            "STACK": Stack.from_arg_list,
             "MAKE_INTERVAL": _build_make_interval,
             # default_unit=None preserves the 2-arg vs 3-arg distinction:
             # 2-arg DATE_ADD(date, n) -> unit=None (returns DATE in DBR);
