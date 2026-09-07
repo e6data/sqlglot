@@ -3535,7 +3535,9 @@ class TestE6(Validator):
                 "LATERAL VIEW STACK(2, 'a', c1, 'b', c2) lv AS m, v) AS \"s\"",
             )
             self.assertEqual(
-                pg_to_e6('SELECT "s".a FROM (SELECT format_string(\'%s-%d\', n, i) AS a FROM t) "s"'),
+                pg_to_e6(
+                    'SELECT "s".a FROM (SELECT format_string(\'%s-%d\', n, i) AS a FROM t) "s"'
+                ),
                 'SELECT "s".a FROM (SELECT FORMAT_STRING(\'%s-%d\', n, i) AS a FROM t) AS "s"',
             )
 
