@@ -1859,8 +1859,13 @@ class E6(Dialect):
             # Initialize null ordering as an empty string
             nulls_sort_change = ""
 
-            # Apply NULLS FIRST/LAST only if supported by the dialect
-            if self.NULL_ORDERING_SUPPORTED and is_desc is not None:
+            # Emit NULLS FIRST/LAST when there is an explicit ASC/DESC direction (existing
+            # behavior, preserved) OR when the source explicitly wrote a NULLS clause. The
+            # latter keeps e.g. `ORDER BY 1 NULLS LAST` (no direction), which was previously
+            # dropped, while a bare `ORDER BY 1` still emits nothing.
+            if self.NULL_ORDERING_SUPPORTED and (
+                is_desc is not None or expression.meta.get("explicitly_null_ordered")
+            ):
                 nulls_first = expression.args.get("nulls_first")
                 if nulls_first is True:
                     nulls_sort_change = " NULLS FIRST"
