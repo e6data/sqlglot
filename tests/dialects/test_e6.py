@@ -2513,6 +2513,62 @@ class TestE6(Validator):
             read={"databricks": "SELECT * FROM table WHERE `Date` IN ('2025-11-08 to 2025-11-14')"},
         )
 
+    def test_order_by_nulls_preserved(self):
+        """ORDER BY null handling. Existing behavior is preserved -- an explicit ASC/DESC still
+        renders its (normalized) NULLS placement -- and, additionally, an explicit NULLS
+        FIRST/LAST written with no ASC/DESC is now kept instead of dropped (the reported bug).
+        A bare ORDER BY with no NULLS clause still emits none. This relies on the parser
+        recording, via meta["explicitly_null_ordered"], whether the source actually wrote a
+        NULLS clause (nulls_first alone is normalized to the dialect default).
+        """
+        import sqlglot
+
+        def to_e6(sql, read="databricks"):
+            return sqlglot.transpile(sql, read=read, write="e6", from_dialect=read)[0]
+
+        # the reported case: explicit NULLS LAST on ordinal keys, no direction -> preserved
+        self.assertEqual(
+            to_e6("SELECT v, tie FROM t ORDER BY 1 NULLS LAST, 2 NULLS LAST"),
+            "SELECT v, tie FROM t ORDER BY 1 NULLS LAST, 2 NULLS LAST",
+        )
+        # explicit NULLS LAST kept for ordinal and column keys
+        self.assertEqual(
+            to_e6("SELECT v FROM t ORDER BY 1 NULLS LAST"), "SELECT v FROM t ORDER BY 1 NULLS LAST"
+        )
+        self.assertEqual(
+            to_e6("SELECT v FROM t ORDER BY v NULLS LAST"), "SELECT v FROM t ORDER BY v NULLS LAST"
+        )
+        # an explicit NULLS FIRST with no direction is likewise kept
+        self.assertEqual(
+            to_e6("SELECT v FROM t ORDER BY v NULLS FIRST"),
+            "SELECT v FROM t ORDER BY v NULLS FIRST",
+        )
+        # a plain ORDER BY (incl. a window) gains no NULLS clause
+        self.assertEqual(to_e6("SELECT v FROM t ORDER BY 1"), "SELECT v FROM t ORDER BY 1")
+        self.assertEqual(
+            to_e6("SELECT a, b, LAG(b) OVER (ORDER BY b) FROM t"),
+            "SELECT a, b, LAG(b) OVER (ORDER BY b) FROM t",
+        )
+        # existing behavior preserved: an explicit ASC/DESC still renders its NULLS placement
+        self.assertEqual(
+            to_e6("SELECT v FROM t ORDER BY 1 ASC"), "SELECT v FROM t ORDER BY 1 ASC NULLS FIRST"
+        )
+        self.assertEqual(
+            to_e6("SELECT v FROM t ORDER BY 1 DESC"), "SELECT v FROM t ORDER BY 1 DESC NULLS LAST"
+        )
+        self.assertEqual(
+            to_e6("SELECT v FROM t ORDER BY 1 DESC NULLS FIRST"),
+            "SELECT v FROM t ORDER BY 1 DESC NULLS FIRST",
+        )
+        # postgres source: no NULLS added to a plain ORDER BY; an explicit one is preserved
+        self.assertEqual(
+            to_e6("SELECT c FROM t ORDER BY c", "postgres"), "SELECT c FROM t ORDER BY c"
+        )
+        self.assertEqual(
+            to_e6("SELECT c FROM t ORDER BY c NULLS FIRST", "postgres"),
+            "SELECT c FROM t ORDER BY c NULLS FIRST",
+        )
+
     def test_statistical_funcs(self):
         self.validate_all(
             "SELECT STDDEV(DISTINCT col) FROM (VALUES (1), (2), (3), (3)) AS tab(col)",

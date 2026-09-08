@@ -4761,13 +4761,19 @@ class Parser(metaclass=_Parser):
         else:
             with_fill = None
 
-        return self.expression(
+        ordered = self.expression(
             exp.Ordered,
             this=this,
             desc=desc,
             nulls_first=nulls_first,
             with_fill=with_fill,
         )
+        # Record whether the source actually wrote a NULLS FIRST/LAST clause. `nulls_first`
+        # above is normalized to the dialect default even when absent, which loses that fact;
+        # a generator can read this to emit a NULLS clause only when the source had one.
+        if explicitly_null_ordered:
+            ordered.meta["explicitly_null_ordered"] = True
+        return ordered
 
     def _parse_limit_options(self) -> exp.LimitOptions:
         percent = self._match(TokenType.PERCENT)
