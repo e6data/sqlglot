@@ -3497,6 +3497,91 @@ class TestE6(Validator):
             self.assertEqual(to_e6(r"SELECT '\\a'"), r"SELECT '\\a'")
             self.assertEqual(to_e6(r"SELECT 'O\'Connell'"), r"SELECT 'O\'Connell'")
 
+    def test_databricks_passthrough_functions(self):
+        """ARRAY_DISTINCT, STACK and FORMAT_STRING are valid Databricks functions sqlglot has no
+        dedicated node for. They are typed only in the Databricks parser (databricks.py), so they
+        stay exp.Anonymous under Postgres -- the tell the hybrid multidialect path uses to reparse
+        a subquery as Databricks -- while becoming typed nodes in that reparse (which stops the
+        guard rejecting them as "unknown to both dialects"). E6 preserves the Databricks spelling.
+        """
+        import sqlglot
+        from sqlglot import exp
+
+        # Databricks -> E6: pass through unchanged
+        self.validate_all(
+            "SELECT ARRAY_DISTINCT(a)", read={"databricks": "SELECT array_distinct(a)"}
+        )
+        self.validate_all(
+            "SELECT STACK(2, 'a', x, 'b', y)",
+            read={"databricks": "SELECT stack(2, 'a', x, 'b', y)"},
+        )
+        self.validate_all(
+            "SELECT FORMAT_STRING('%s-%d', a, b)",
+            read={"databricks": "SELECT format_string('%s-%d', a, b)"},
+        )
+
+        # Typed under Databricks, but Anonymous under Postgres (so the reparse still fires).
+        for sql in (
+            "SELECT array_distinct(a)",
+            "SELECT stack(2, 'a', x, 'b', y)",
+            "SELECT format_string('%s-%d', a, b)",
+        ):
+            self.assertIsNone(sqlglot.parse_one(sql, read="databricks").find(exp.Anonymous))
+            self.assertIsNotNone(sqlglot.parse_one(sql, read="postgres").find(exp.Anonymous))
+
+    def test_hybrid_multidialect_passthrough_functions(self):
+        """HYBRID_MULTIDIALECT end-to-end: a Postgres outer wrapper around a Databricks subquery
+        using ARRAY_DISTINCT / STACK / FORMAT_STRING. Each function is Anonymous under Postgres, so
+        the subquery is reparsed as Databricks; it must transpile (not raise the "unknown to both
+        dialects" ValueError) and preserve the Databricks spelling.
+        """
+        import os
+        import sqlglot
+        from sqlglot.dialects import e6 as e6_module
+        from sqlglot.dialects import databricks as dbr_module
+
+        def pg_to_e6(sql):
+            return sqlglot.parse_one(sql, read="postgres").sql(
+                dialect="e6", from_dialect="postgres"
+            )
+
+        orig_hybrid = e6_module.HYBRID_MULTIDIALECT
+        orig_dbr = dbr_module.DBR_DOUBLE_QUOTED_IDENTIFIERS
+        e6_module.HYBRID_MULTIDIALECT = True
+        dbr_module.DBR_DOUBLE_QUOTED_IDENTIFIERS = True
+        try:
+            self.assertEqual(
+                pg_to_e6('SELECT "s".a FROM (SELECT array_distinct(x) AS a FROM t) "s"'),
+                'SELECT "s".a FROM (SELECT ARRAY_DISTINCT(x) AS a FROM t) AS "s"',
+            )
+            self.assertEqual(
+                pg_to_e6(
+                    'SELECT "s".m FROM (SELECT m, v FROM t '
+                    "LATERAL VIEW stack(2, 'a', c1, 'b', c2) lv AS m, v) \"s\""
+                ),
+                'SELECT "s".m FROM (SELECT m, v FROM t '
+                "LATERAL VIEW STACK(2, 'a', c1, 'b', c2) lv AS m, v) AS \"s\"",
+            )
+            self.assertEqual(
+                pg_to_e6(
+                    'SELECT "s".a FROM (SELECT format_string(\'%s-%d\', n, i) AS a FROM t) "s"'
+                ),
+                'SELECT "s".a FROM (SELECT FORMAT_STRING(\'%s-%d\', n, i) AS a FROM t) AS "s"',
+            )
+
+            # Regression: the real customer queries (masked) that failed the hybrid guard with
+            # "function unknown to both Postgres and Databricks" -- Q487693-170 (ARRAY_DISTINCT)
+            # and Q487693-139 (STACK). They must now transpile and keep the function. Fixtures
+            # store the post-rewrite form (backticks -> double quotes, as HYBRID does up front).
+            fixtures = os.path.join(os.path.dirname(__file__), "..", "fixtures")
+            with open(os.path.join(fixtures, "e6_hybrid_array_distinct.sql")) as f:
+                self.assertIn("ARRAY_DISTINCT(", pg_to_e6(f.read().strip()))
+            with open(os.path.join(fixtures, "e6_hybrid_stack.sql")) as f:
+                self.assertIn("STACK(", pg_to_e6(f.read().strip()))
+        finally:
+            e6_module.HYBRID_MULTIDIALECT = orig_hybrid
+            dbr_module.DBR_DOUBLE_QUOTED_IDENTIFIERS = orig_dbr
+
     def test_powerbi_mixed_quote_sf_to_dbr(self):
         """Power BI SF->DBR->E6 path for mixed-quote queries.
 
@@ -3624,6 +3709,19 @@ class TestE6(Validator):
         self.assertEqual(
             pg_to_e6("SELECT arr FROM (SELECT split('1,2', ',') AS arr FROM `t`) \"q\""),
             "SELECT arr FROM (SELECT SPLIT('1,2', ',') AS arr FROM \"t\") AS \"q\"",
+        )
+
+        # Digit-leading map keys (e.g. `additional_properties_json.1st_priority...`) are invalid
+        # Postgres ("trailing junk after numeric literal"), so the inner subquery fails the
+        # Postgres parse and is pulled out as a Databricks region -- where it lexes as a quoted
+        # dot-member, not silently corrupted into `.1 AS st_col` by the Postgres number rule.
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM (SELECT x.1st_col FROM t x) "s"'),
+            'SELECT "a" FROM (SELECT x."1st_col" FROM t AS x) AS "s"',
+        )
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM (SELECT x.1st_col, x.2nd_col FROM t x) "s"'),
+            'SELECT "a" FROM (SELECT x."1st_col", x."2nd_col" FROM t AS x) AS "s"',
         )
 
         # No inner subquery to hold out -> the whole query is transpiled as Postgres.

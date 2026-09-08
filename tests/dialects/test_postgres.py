@@ -1210,6 +1210,15 @@ FROM json_data, field_ids""",
                 read="postgres",
             )
 
+    def test_digit_leading_member(self):
+        # A digit-leading member after a `.` (e.g. `x.1st_col`) is invalid Postgres: real
+        # Postgres rejects it as "trailing junk after numeric literal" rather than silently
+        # parsing it as `x.1 AS st_col`. The quoted form and a bare numeric member are fine.
+        with self.assertRaises(ParseError):
+            self.parse_one("SELECT x.1st_col FROM t")
+        self.validate_identity('SELECT x."1st_col" FROM t')
+        self.parse_one("SELECT x.1 FROM t")
+
     def test_unnest(self):
         self.validate_identity(
             "SELECT * FROM UNNEST(ARRAY[1, 2], ARRAY['foo', 'bar', 'baz']) AS x(a, b)"

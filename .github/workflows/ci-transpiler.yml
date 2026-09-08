@@ -183,12 +183,15 @@ jobs:
 
           TAG_ARGS=""
           add() { if [ -n "$1" ]; then TAG_ARGS="$TAG_ARGS -t $2:$STAGE"; echo "  will push $2:$STAGE"; fi; }
-          add "${AWS_ACCOUNT_ID:-}"                    "${ECR_REGISTRY}/${ECR_REPOSITORY}"
+          # PLT-9751: non-Uniphi AWS ECR target retired.
+          # add "${AWS_ACCOUNT_ID:-}"                    "${ECR_REGISTRY}/${ECR_REPOSITORY}"
           add "${UNIPHI_AWS_ACCOUNT_ID:-}"             "${UNIPHI_ECR_REGISTRY}/${UNIPHI_ECR_REPOSITORY}"
           add "${GCR_PROJECT_ID:-}"                    "${GCR_REGISTRY}/${GCR_REPOSITORY}"
           add "${ACR_ENABLED:-}"                       "${ACR_REGISTRY}/${ACR_REPOSITORY}"
-          add "${SERVERLESS_BETA_AWS_ACCOUNT_ID:-}"    "${SERVERLESS_BETA_ECR_REGISTRY}/${SERVERLESS_BETA_ECR_REPOSITORY}"
-          add "${SERVERLESS_PROD_AWS_ACCOUNT_ID:-}"    "${SERVERLESS_PROD_ECR_REGISTRY}/${SERVERLESS_PROD_ECR_REPOSITORY}"
+          # PLT-9751: non-Uniphi AWS ECR target retired.
+          # add "${SERVERLESS_BETA_AWS_ACCOUNT_ID:-}"    "${SERVERLESS_BETA_ECR_REGISTRY}/${SERVERLESS_BETA_ECR_REPOSITORY}"
+          # PLT-9751: non-Uniphi AWS ECR target retired.
+          # add "${SERVERLESS_PROD_AWS_ACCOUNT_ID:-}"    "${SERVERLESS_PROD_ECR_REGISTRY}/${SERVERLESS_PROD_ECR_REPOSITORY}"
 
           if [ -z "$TAG_ARGS" ]; then
             echo "::error::No registry credentials are configured — nothing to push."
@@ -314,12 +317,15 @@ jobs:
 
           TARGETS=""
           add() { if [ -n "$1" ]; then TARGETS="$TARGETS $2"; fi; }
-          add "${AWS_ACCOUNT_ID:-}"                    "${ECR_REGISTRY}/${ECR_REPOSITORY}"
+          # PLT-9751: non-Uniphi AWS ECR target retired.
+          # add "${AWS_ACCOUNT_ID:-}"                    "${ECR_REGISTRY}/${ECR_REPOSITORY}"
           add "${UNIPHI_AWS_ACCOUNT_ID:-}"             "${UNIPHI_ECR_REGISTRY}/${UNIPHI_ECR_REPOSITORY}"
           add "${GCR_PROJECT_ID:-}"                    "${GCR_REGISTRY}/${GCR_REPOSITORY}"
           add "${ACR_ENABLED:-}"                       "${ACR_REGISTRY}/${ACR_REPOSITORY}"
-          add "${SERVERLESS_BETA_AWS_ACCOUNT_ID:-}"    "${SERVERLESS_BETA_ECR_REGISTRY}/${SERVERLESS_BETA_ECR_REPOSITORY}"
-          add "${SERVERLESS_PROD_AWS_ACCOUNT_ID:-}"    "${SERVERLESS_PROD_ECR_REGISTRY}/${SERVERLESS_PROD_ECR_REPOSITORY}"
+          # PLT-9751: non-Uniphi AWS ECR target retired.
+          # add "${SERVERLESS_BETA_AWS_ACCOUNT_ID:-}"    "${SERVERLESS_BETA_ECR_REGISTRY}/${SERVERLESS_BETA_ECR_REPOSITORY}"
+          # PLT-9751: non-Uniphi AWS ECR target retired.
+          # add "${SERVERLESS_PROD_AWS_ACCOUNT_ID:-}"    "${SERVERLESS_PROD_ECR_REGISTRY}/${SERVERLESS_PROD_ECR_REPOSITORY}"
 
           IFS=',' read -ra TAG_ARRAY <<< "${{ steps.tags.outputs.tags }}"
           PUSHED=""
