@@ -460,6 +460,33 @@ class Postgres(Dialect):
             )([this, path]),
         }
 
+        def _parse_field(
+            self,
+            any_token: bool = False,
+            tokens: t.Optional[t.Collection[TokenType]] = None,
+            anonymous_func: bool = False,
+        ) -> t.Optional[exp.Expression]:
+            # A digit-leading member name (e.g. `x.1st_col`) lexes as NUMBER(1) followed by an
+            # adjacent VAR(st_col) -- Postgres identifiers can't start with a digit -- which would
+            # otherwise be built silently as `x.1 AS st_col`. Real Postgres rejects this as
+            # "trailing junk after numeric literal"; do the same with a positioned error so the
+            # malformed SQL never escapes (and the multidialect two-pass can reparse the region in
+            # a dialect that allows the name).
+            if (
+                self._prev
+                and self._prev.token_type == TokenType.DOT
+                and self._curr
+                and self._curr.token_type == TokenType.NUMBER
+                and self._next
+                and self._next.token_type == TokenType.VAR
+                and self._next.start == self._curr.end + 1
+            ):
+                self.raise_error("trailing junk after numeric literal", self._curr)
+
+            return super()._parse_field(
+                any_token=any_token, tokens=tokens, anonymous_func=anonymous_func
+            )
+
         def _parse_query_parameter(self) -> t.Optional[exp.Expression]:
             this = (
                 self._parse_wrapped(self._parse_id_var)

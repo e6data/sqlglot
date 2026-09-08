@@ -3683,6 +3683,19 @@ class TestE6(Validator):
             "SELECT arr FROM (SELECT SPLIT('1,2', ',') AS arr FROM \"t\") AS \"q\"",
         )
 
+        # Digit-leading map keys (e.g. `additional_properties_json.1st_priority...`) are invalid
+        # Postgres ("trailing junk after numeric literal"), so the inner subquery fails the
+        # Postgres parse and is pulled out as a Databricks region -- where it lexes as a quoted
+        # dot-member, not silently corrupted into `.1 AS st_col` by the Postgres number rule.
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM (SELECT x.1st_col FROM t x) "s"'),
+            'SELECT "a" FROM (SELECT x."1st_col" FROM t AS x) AS "s"',
+        )
+        self.assertEqual(
+            pg_to_e6('SELECT "a" FROM (SELECT x.1st_col, x.2nd_col FROM t x) "s"'),
+            'SELECT "a" FROM (SELECT x."1st_col", x."2nd_col" FROM t AS x) AS "s"',
+        )
+
         # No inner subquery to hold out -> the whole query is transpiled as Postgres.
         self.assertEqual(
             pg_to_e6('SELECT "a" FROM tbl WHERE "a" = 1'),
