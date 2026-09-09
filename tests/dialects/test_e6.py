@@ -3462,6 +3462,62 @@ class TestE6(Validator):
             read={"databricks": 'SELECT * FROM t WHERE c = "web"'},
         )
 
+    def test_postgres_jsonb_map_access(self):
+        """HYBRID_MULTIDIALECT: Postgres ::jsonb on a column that is a Databricks MAP in E6
+        has no E6 target, so the cast is dropped; arrow access (-> / ->>) on it is map-key
+        lookup, so it becomes E6 colon syntax map:key. jsonb_typeof is left for the planner."""
+        import sqlglot
+        from sqlglot.dialects import e6 as e6_module
+
+        def pg_to_e6(sql):
+            return sqlglot.parse_one(sql, read="postgres").sql(
+                dialect="e6", from_dialect="postgres"
+            )
+
+        original = e6_module.HYBRID_MULTIDIALECT
+        e6_module.HYBRID_MULTIDIALECT = True
+        try:
+            # ::jsonb cast is stripped everywhere (CAST and TRY_CAST)
+            self.assertEqual(pg_to_e6("SELECT x::jsonb FROM t"), "SELECT x FROM t")
+            self.assertEqual(pg_to_e6("SELECT CAST(x AS JSONB) FROM t"), "SELECT x FROM t")
+            self.assertEqual(pg_to_e6("SELECT TRY_CAST(x AS JSONB) FROM t"), "SELECT x FROM t")
+            self.assertEqual(
+                pg_to_e6("SELECT jsonb_typeof(x::jsonb) FROM t"), "SELECT JSONB_TYPEOF(x) FROM t"
+            )
+            # a non-JSONB cast is untouched
+            self.assertEqual(pg_to_e6("SELECT x::int FROM t"), "SELECT CAST(x AS INT) FROM t")
+
+            # arrow key access -> E6 colon syntax map:key (with/without the cast, -> and ->>)
+            self.assertEqual(pg_to_e6("SELECT (x::jsonb) ->> 'k' FROM t"), "SELECT x:k FROM t")
+            self.assertEqual(pg_to_e6("SELECT (x::jsonb) -> 'k' FROM t"), "SELECT x:k FROM t")
+            self.assertEqual(pg_to_e6("SELECT x ->> 'k' FROM t"), "SELECT x:k FROM t")
+            # chained arrows -> colon path; a reserved key is double-quoted
+            self.assertEqual(pg_to_e6("SELECT x -> 'a' ->> 'b' FROM t"), "SELECT x:a:b FROM t")
+            self.assertEqual(pg_to_e6("SELECT x ->> 'limit' FROM t"), 'SELECT x:"limit" FROM t')
+            # a non-key arrow (integer subscript) is left as JSON_EXTRACT
+            self.assertEqual(
+                pg_to_e6("SELECT x -> 0 FROM t"), "SELECT JSON_EXTRACT(x, '$[0]') FROM t"
+            )
+            # ONLY the arrow is rewritten: the JSON_EXTRACT / json_extract_path[_text]
+            # functions parse into the same node (no only_json_types) and must stay JSON_EXTRACT
+            self.assertEqual(
+                pg_to_e6("SELECT JSON_EXTRACT(x, '$.k') FROM t"),
+                "SELECT JSON_EXTRACT(x, '$.k') FROM t",
+            )
+            self.assertEqual(
+                pg_to_e6("SELECT json_extract_path_text(x, 'k') FROM t"),
+                "SELECT JSON_EXTRACT(x, '$.k') FROM t",
+            )
+        finally:
+            e6_module.HYBRID_MULTIDIALECT = original
+
+        # Without the flag the Postgres path is unchanged (overrides only fire under HYBRID)
+        self.assertEqual(
+            pg_to_e6("SELECT (x::jsonb) ->> 'k' FROM t"),
+            "SELECT JSON_EXTRACT((CAST(x AS JSONB)), '$.k') FROM t",
+        )
+        self.assertEqual(pg_to_e6("SELECT x::jsonb FROM t"), "SELECT CAST(x AS JSONB) FROM t")
+
     def test_hybrid_multidialect_databricks_function_mappings(self):
         """HYBRID_MULTIDIALECT: Databricks scalar functions that Postgres parses into a
         confident (but wrong) node -- with no Anonymous/backtick tell -- must still emit
