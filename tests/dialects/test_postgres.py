@@ -1219,6 +1219,32 @@ FROM json_data, field_ids""",
         self.validate_identity('SELECT x."1st_col" FROM t')
         self.parse_one("SELECT x.1 FROM t")
 
+    def test_hybrid_digit_leading_member(self):
+        # Under HYBRID_MULTIDIALECT the Postgres dialect turns on IDENTIFIERS_CAN_START_WITH_DIGIT,
+        # so a digit-leading member (a Databricks map field surfaced through the Postgres-facing
+        # gateway, e.g. `additional_properties_json.1st_priority_abm_accounts_flag`) is tokenized
+        # as a single identifier and round-trips as a quoted member instead of failing the parse.
+        from sqlglot.dialects.postgres import Postgres
+
+        original = Postgres.IDENTIFIERS_CAN_START_WITH_DIGIT
+        Postgres.IDENTIFIERS_CAN_START_WITH_DIGIT = True
+        try:
+            self.assertEqual(
+                transpile("SELECT x.1st_col FROM t", read="postgres", write="e6")[0],
+                'SELECT x."1st_col" FROM t',
+            )
+            # a bare numeric member is still a number, not folded into an identifier
+            self.assertEqual(
+                transpile("SELECT x.1 FROM t", read="postgres", write="e6")[0],
+                "SELECT x.1 FROM t",
+            )
+        finally:
+            Postgres.IDENTIFIERS_CAN_START_WITH_DIGIT = original
+
+        # With the flag off (default) a plain Postgres parse stays strict.
+        with self.assertRaises(ParseError):
+            self.parse_one("SELECT x.1st_col FROM t")
+
     def test_unnest(self):
         self.validate_identity(
             "SELECT * FROM UNNEST(ARRAY[1, 2], ARRAY['foo', 'bar', 'baz']) AS x(a, b)"

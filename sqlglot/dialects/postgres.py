@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
@@ -269,6 +270,14 @@ class Postgres(Dialect):
     INDEX_OFFSET = 1
     TYPED_DIVISION = True
     CONCAT_COALESCE = True
+    # HYBRID_MULTIDIALECT: the Postgres-facing gateway carries Databricks cube SQL, which can
+    # reference members whose names start with a digit (from unaliased map access, e.g.
+    # `additional_properties_json.1st_priority_abm_accounts_flag`). Real Postgres forbids a
+    # digit-leading identifier, so it would lex `.1st_col` as NUMBER(1)+VAR(st_col). Under the
+    # hybrid flag, tokenize a digit-leading word as a single identifier -- the same behavior
+    # Hive/Spark/Databricks use -- so it round-trips as `."1st_col"` instead of failing. Off by
+    # default, so a plain Postgres parse stays strict (see the _parse_field guard below).
+    IDENTIFIERS_CAN_START_WITH_DIGIT = os.getenv("HYBRID_MULTIDIALECT", "false").lower() == "true"
     NULL_ORDERING = "nulls_are_large"
     TIME_FORMAT = "'YYYY-MM-DD HH24:MI:SS'"
     TABLESAMPLE_SIZE_IS_PERCENT = True
