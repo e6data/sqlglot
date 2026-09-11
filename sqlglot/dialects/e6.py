@@ -1928,6 +1928,16 @@ class E6(Dialect):
             Returns:
                 str: The SQL string for the CAST operation.
             """
+            # E6 has no JSONB type, so a Postgres ::jsonb cast (CAST(x AS JSONB), and the
+            # TryCast that routes here) has no target to cast to -- drop it and emit the
+            # operand. The underlying value (typically a Databricks MAP) is read directly.
+            if (
+                HYBRID_MULTIDIALECT
+                and self.from_dialect == "postgres"
+                and expression.is_type(exp.DataType.Type.JSONB)
+            ):
+                return self.sql(expression.this)
+
             # Check for ::INTERVAL pattern first
             if expression.is_type(exp.DataType.Type.INTERVAL):
                 return self.double_colon_interval_sql(expression)
@@ -3164,6 +3174,44 @@ class E6(Dialect):
             return sql
 
         def json_extract_sql(self, e: exp.JSONExtract | exp.JSONExtractScalar):
+            # Postgres arrow access (-> / ->>) reaches the transpiler only from the
+            # Postgres-facing client layer pulling a field out of a column that is a
+            # Databricks MAP in E6 (the cube model itself accesses that map by dot key).
+            # On a map, `->`/`->>` is key lookup, not JSON navigation, so render it with E6
+            # colon syntax map:key and drop the Postgres-only ::jsonb cast on the operand
+            # (CAST(x AS JSONB) -> x): E6 has no JSONB type and the colon path reads the map
+            # directly. Only a single top-level key is rewritten; anything else falls through
+            # to JSON_EXTRACT below. only_json_types=True marks the Postgres `->`/`->>` arrow
+            # specifically (set by the ARROW/DARROW builders); the JSON_EXTRACT /
+            # JSON_EXTRACT_PATH[_TEXT] functions parse into the same node without it, so this
+            # guard keeps the colon rewrite to the arrow alone.
+            if (
+                HYBRID_MULTIDIALECT
+                and self.from_dialect == "postgres"
+                and e.args.get("only_json_types")
+                and isinstance(e.expression, exp.JSONPath)
+            ):
+                path_expressions = e.expression.expressions
+                if (
+                    len(path_expressions) == 2
+                    and isinstance(path_expressions[0], exp.JSONPathRoot)
+                    and isinstance(path_expressions[1], exp.JSONPathKey)
+                ):
+                    operand = e.this.this if isinstance(e.this, exp.Paren) else e.this
+                    if isinstance(operand, exp.Cast) and operand.is_type(exp.DataType.Type.JSONB):
+                        operand = operand.this
+                    key = path_expressions[1].this
+                    # E6's colon-path grammar rejects a bare reserved word after ':', so any
+                    # E6 reserved word (e.g. LIMIT/FROM/ORDER, or a datatype keyword) must be
+                    # double-quoted: map:"limit".
+                    if (
+                        key in self.RESERVED_DATATYPE_KEYWORDS
+                        or (isinstance(key, str) and key.lower() in self.RESERVED_KEYWORDS)
+                        or e.expression.args.get("escape")
+                    ):
+                        return f'{self.sql(operand)}:"{key}"'
+                    return f"{self.sql(operand)}:{key}"
+
             # Check if this is Databricks colon syntax (marked with variant_extract=True)
             variant_extract_flag = getattr(e, "variant_extract", False) or e.args.get(
                 "variant_extract", False
@@ -3621,8 +3669,12 @@ class E6(Dialect):
             exp.ToChar: tochar_sql,
             # WE REMOVE ONLY WHITE SPACES IN TRIM FUNCTION
             exp.Trim: _trim_sql,
-            exp.TryCast: lambda self, e: self.func(
-                "TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}"
+            exp.TryCast: lambda self, e: (
+                self.sql(e.this)
+                if HYBRID_MULTIDIALECT
+                and self.from_dialect == "postgres"
+                and e.is_type(exp.DataType.Type.JSONB)
+                else self.func("TRY_CAST", f"{self.sql(e.this)} AS {self.sql(e.to)}")
             ),
             exp.TsOrDsAdd: lambda self, e: self.func(
                 "DATE_ADD",
