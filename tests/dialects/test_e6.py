@@ -491,6 +491,16 @@ class TestE6(Validator):
             },
         )
 
+        # Databricks DATE_DIFF written with the unit LAST -- date_diff(start, end, unit) -- is
+        # normalized to the documented date_diff(unit, start, end) order, so the leading date
+        # column is preserved instead of being misread as the unit (rendered as a string).
+        self.validate_all(
+            "SELECT DATE_DIFF(original_pub_date, published_date, 'DAY')",
+            read={
+                "databricks": "SELECT DATE_DIFF(published_date, original_pub_date, 'DAY')",
+            },
+        )
+
         self.validate_all(
             "SELECT TIMESTAMP_ADD('HOUR', 1, CAST('2003-01-02 11:59:59' AS TIMESTAMP))",
             read={
