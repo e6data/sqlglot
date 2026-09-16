@@ -485,7 +485,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT DATE_DIFF(CAST('2024-11-09' AS DATE), CAST('2024-11-11' AS DATE), 'DAY')",
+            "SELECT DATE_DIFF('DAY', CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             read={
                 "databricks": "SELECT DATEDIFF(SQL_TSI_DAY, CAST('2024-11-11' AS DATE), CAST('2024-11-09' AS DATE))",
             },
@@ -1759,8 +1759,8 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF(due_date, payment_date, 'DAY'))), "
-            "1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATE_DIFF(due_date, payment_date, 'DAY'))), "
+            "SELECT customer_id, COUNT(*) AS invoices, ROUND(AVG(ABS(DATE_DIFF('DAY', payment_date, due_date))), "
+            "1) AS avg_days_deviation, ROUND(STDDEV(ABS(DATE_DIFF('DAY', payment_date, due_date))), "
             "1) AS stddev_days_deviation, SUM(CASE WHEN payment_date > due_date THEN 1 ELSE 0 END) AS late_payments, "
             "SUM(CASE WHEN payment_date < due_date THEN 1 ELSE 0 END) AS early_payments, ROUND(100.0 * SUM(CASE WHEN "
             "payment_date > due_date THEN 1 ELSE 0 END) / COUNT(*), 1) AS late_payment_rate FROM invoices WHERE "
@@ -2253,12 +2253,12 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT DATE_DIFF('2022-03-28', '2021-01-01', 'YEAR')",
+            "SELECT DATE_DIFF('YEAR', '2021-01-01', '2022-03-28')",
             read={"databricks": """SELECT date_diff("YEAR", '2021-01-01', '2022-03-28')"""},
         )
 
         self.validate_all(
-            "SELECT DATE_DIFF('2009-07-31', '2009-07-30', 'DAY')",
+            "SELECT DATE_DIFF('DAY', '2009-07-30', '2009-07-31')",
             read={"databricks": "SELECT datediff('2009-07-31', '2009-07-30')"},
         )
 
@@ -3565,7 +3565,7 @@ class TestE6(Validator):
             "SELECT DATE_DIFF('DAY', d_start, d_end)",
         )
 
-        # Regression: the Databricks path already emitted the correct form and is unchanged
+        # The Databricks path now emits E6's documented unit-first DATE_DIFF(unit, start, end).
         def dbr_to_e6(sql):
             return sqlglot.parse_one(sql, read="databricks").sql(
                 dialect="e6", from_dialect="databricks"
@@ -3573,7 +3573,7 @@ class TestE6(Validator):
 
         self.assertEqual(
             dbr_to_e6("SELECT DATEDIFF(d_end, d_start)"),
-            "SELECT DATE_DIFF(d_end, d_start, 'DAY')",
+            "SELECT DATE_DIFF('DAY', d_start, d_end)",
         )
         self.assertEqual(
             dbr_to_e6("SELECT TIMESTAMPDIFF(MONTH, ts_start, ts_end)"),
