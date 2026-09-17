@@ -231,6 +231,8 @@ class Spark2(Hive):
     class Parser(Hive.Parser):
         TRIM_PATTERN_FIRST = True
 
+        FUNC_TOKENS = {*Hive.Parser.FUNC_TOKENS, TokenType.AND, TokenType.OR}
+
         FUNCTIONS = {
             **Hive.Parser.FUNCTIONS,
             "AGGREGATE": exp.Reduce.from_arg_list,
@@ -297,10 +299,12 @@ class Spark2(Hive):
 
         FUNCTION_PARSERS = {
             **Hive.Parser.FUNCTION_PARSERS,
+            "AND": lambda self: self._parse_connector_function(exp.and_),
             "BROADCAST": lambda self: self._parse_join_hint("BROADCAST"),
             "BROADCASTJOIN": lambda self: self._parse_join_hint("BROADCASTJOIN"),
             "MAPJOIN": lambda self: self._parse_join_hint("MAPJOIN"),
             "MERGE": lambda self: self._parse_join_hint("MERGE"),
+            "OR": lambda self: self._parse_connector_function(exp.or_),
             "SHUFFLEMERGE": lambda self: self._parse_join_hint("SHUFFLEMERGE"),
             "MERGEJOIN": lambda self: self._parse_join_hint("MERGEJOIN"),
             "SHUFFLE_HASH": lambda self: self._parse_join_hint("SHUFFLE_HASH"),

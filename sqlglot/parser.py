@@ -5907,6 +5907,14 @@ class Parser(metaclass=_Parser):
 
         return func
 
+    def _parse_connector_function(self, connector: t.Callable[..., exp.Condition]) -> exp.Paren:
+        args = self._parse_csv(lambda: self._parse_lambda(alias=False))
+        if not args:
+            self.raise_error("Expected at least one argument")
+
+        # Wrapped so the connector keeps its precedence in the parent context
+        return exp.Paren(this=connector(*args, copy=False))
+
     def _parse_function_call(
         self,
         functions: t.Optional[t.Dict[str, t.Callable]] = None,
