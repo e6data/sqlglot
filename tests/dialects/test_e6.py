@@ -3914,6 +3914,58 @@ class TestE6(Validator):
         with mock.patch.dict(os.environ, {"E6_EXECUTOR_TYPE": "java"}):
             self.assertEqual(e6("SELECT REGEXP_SUBSTR(x, 'p')"), "SELECT REGEXP_EXTRACT(x, 'p')")
 
+    def test_lateral_explode_native_executor(self):
+        # With E6_EXECUTOR_TYPE=native, an ANSI "t s, LATERAL explode(...)" (a Join wrapping the
+        # lateral) emits a bare "LATERAL VIEW EXPLODE(...)" clause: the E6 planner rejects the
+        # "CROSS JOIN LATERAL VIEW ..." the join operator would otherwise prepend. A
+        # "LATERAL (subquery)" stays a real join operand. Default (java) keeps the CROSS JOIN.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            # comma-join and CROSS JOIN LATERAL both collapse to a bare LATERAL VIEW clause
+            self.validate_all(
+                "SELECT s.id, t.detail FROM tbl AS s LATERAL VIEW EXPLODE(s.arr) t AS detail",
+                read={
+                    "databricks": "SELECT s.id, t.detail FROM tbl s, LATERAL explode(s.arr) AS t(detail)"
+                },
+            )
+            self.validate_all(
+                "SELECT s.id, t.detail FROM tbl AS s LATERAL VIEW EXPLODE(s.arr) t AS detail",
+                read={
+                    "databricks": "SELECT s.id, t.detail FROM tbl s CROSS JOIN LATERAL explode(s.arr) AS t(detail)"
+                },
+            )
+            # posexplode (an exp.Explode subclass) is handled the same way
+            self.validate_all(
+                "SELECT t.p, t.c FROM tbl AS s LATERAL VIEW POSEXPLODE(s.arr) t AS p, c",
+                read={
+                    "databricks": "SELECT t.p, t.c FROM tbl s, LATERAL posexplode(s.arr) AS t(p, c)"
+                },
+            )
+            # the exploded column may be reused / wrapped freely (single generator, valid)
+            self.validate_all(
+                "SELECT t.detail AS d1, UPPER(t.detail) AS d2 FROM tbl AS s LATERAL VIEW EXPLODE(s.arr) t AS detail",
+                read={
+                    "databricks": "SELECT t.detail AS d1, UPPER(t.detail) AS d2 FROM tbl s, LATERAL explode(s.arr) AS t(detail)"
+                },
+            )
+            # a LATERAL (subquery) is a real join operand -- keep the CROSS JOIN, plain LATERAL
+            self.validate_all(
+                "SELECT * FROM t1 CROSS JOIN LATERAL (SELECT x FROM t2 WHERE t2.a = t1.a) AS s",
+                read={
+                    "databricks": "SELECT * FROM t1, LATERAL (SELECT x FROM t2 WHERE t2.a = t1.a) s"
+                },
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (java): the join operator is still emitted
+        self.validate_all(
+            "SELECT s.id, t.detail FROM tbl AS s CROSS JOIN  LATERAL VIEW EXPLODE(s.arr) t AS detail",
+            read={
+                "databricks": "SELECT s.id, t.detail FROM tbl s, LATERAL explode(s.arr) AS t(detail)"
+            },
+        )
+
     def test_make_interval(self):
         """Test make_interval transpilation from Databricks to E6."""
 

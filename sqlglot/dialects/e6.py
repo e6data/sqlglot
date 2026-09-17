@@ -2978,6 +2978,24 @@ class E6(Dialect):
                 return self.sql(to_unix_expr)
             return self.sql(exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000")))
 
+        def join_sql(self, expression: exp.Join) -> str:
+            # Native E6 rejects a join operator before a Spark "LATERAL VIEW <generator>": the
+            # LATERAL VIEW is a FROM-clause, not a join operand, so "CROSS JOIN LATERAL VIEW ..."
+            # / ", LATERAL VIEW ..." fail to parse. An ANSI "t s, LATERAL explode(...)" reaches
+            # here as a Join wrapping that lateral (lateral_sql renders it as LATERAL VIEW), so
+            # emit the lateral bare and drop the CROSS JOIN / comma operator.
+            is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+            this = expression.this
+            if (
+                is_native
+                and self.from_dialect != "snowflake"
+                and isinstance(this, exp.Lateral)
+                and isinstance(this.this, exp.Explode)
+            ):
+                return self.sql(this)
+
+            return super().join_sql(expression)
+
         def lateral_sql(self, expression: exp.Lateral) -> str:
             # Keep Snowflake LATERAL FLATTEN(...) as native FLATTEN so the E6 planner
             # expands it, instead of converting to LATERAL VIEW EXPLODE. The default
