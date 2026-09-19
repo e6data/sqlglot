@@ -3844,6 +3844,7 @@ class Parser(metaclass=_Parser):
             return cross_join
 
         index = self._index
+        join_start = self._curr
         method, side, kind = self._parse_join_parts()
         hint = self._prev.text if self._match_texts(self.JOIN_HINTS) else None
         join = self._match(TokenType.JOIN) or (kind and kind.token_type == TokenType.STRAIGHT_JOIN)
@@ -3905,7 +3906,13 @@ class Parser(metaclass=_Parser):
 
         comments = [c for token in (method, side, kind) if token for c in token.comments]
         comments = (join_comments or []) + comments
-        return self.expression(exp.Join, comments=comments, **kwargs)
+        join = self.expression(exp.Join, comments=comments, **kwargs)
+        # Record the verbatim "JOIN ... ON ..." source on the Join so a consumer can reparse the
+        # original tokens in another dialect instead of regenerating them (e.g. the e6
+        # HYBRID_MULTIDIALECT path reparsing a held-out Databricks join next to a subquery).
+        if join_start is not None and self._prev is not None:
+            join.meta["raw_sql"] = self._find_sql(join_start, self._prev)
+        return join
 
     def _parse_opclass(self) -> t.Optional[exp.Expression]:
         this = self._parse_assignment()
