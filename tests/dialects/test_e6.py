@@ -3694,6 +3694,75 @@ class TestE6(Validator):
             e6_module.HYBRID_MULTIDIALECT = orig_hybrid
             dbr_module.DBR_DOUBLE_QUOTED_IDENTIFIERS = orig_dbr
 
+    def test_hybrid_multidialect_join_condition_tell(self):
+        """HYBRID_MULTIDIALECT: a Databricks tell (an Anonymous, e.g. TIMESTAMPADD) in a join's
+        ON is reparsed as Databricks in place (join_sql), and the FROM-base subquery that ON
+        links to is reparsed as Databricks too (subquery_sql via the adjacent join condition).
+        The outer Postgres wrapper must NOT over-capture -- its implicit-alias projections stay
+        aliases (they would otherwise collapse to CONCAT once reparsed as Databricks).
+
+        ``arr[1]`` is the probe: it renders ELEMENT_AT(arr, 1) on the postgres path but
+        ELEMENT_AT(arr, 2) on the databricks path (0-based indexing), so it shows exactly which
+        regions were reparsed as Databricks.
+        """
+        import sqlglot
+        from sqlglot.dialects import e6 as e6_module
+        from sqlglot.dialects import databricks as dbr_module
+
+        def pg_to_e6(sql):
+            return sqlglot.parse_one(sql, read="postgres").sql(
+                dialect="e6", from_dialect="postgres"
+            )
+
+        orig_hybrid = e6_module.HYBRID_MULTIDIALECT
+        orig_dbr = dbr_module.DBR_DOUBLE_QUOTED_IDENTIFIERS
+        e6_module.HYBRID_MULTIDIALECT = True
+        dbr_module.DBR_DOUBLE_QUOTED_IDENTIFIERS = True
+        try:
+            # A join ON tell reparses the join in place (TIMESTAMP_ADD), and the adjacent FROM-base
+            # subquery it links to is reparsed as Databricks too (arr[1] -> ELEMENT_AT(arr, 2)).
+            self.assertEqual(
+                pg_to_e6(
+                    'SELECT "s".x "x" FROM (SELECT arr[1] AS x, k, ts FROM t) AS "s" '
+                    'LEFT JOIN dim AS "b" ON "s".k = "b".k '
+                    'AND timestampadd(MICROSECOND, -1, "s".ts) >= "b".eff'
+                ),
+                'SELECT "s".x AS "x" FROM (SELECT ELEMENT_AT(arr, 2) AS x, k, ts FROM t) AS "s" '
+                'LEFT JOIN dim AS "b" ON "s".k = "b".k '
+                'AND TIMESTAMP_ADD(\'MICROSECOND\', -1, "s".ts) >= "b".eff',
+            )
+
+            # No tell in the join ON -> older behavior: the subquery stays on the postgres path
+            # (arr[1] -> ELEMENT_AT(arr, 1)) and the join is unchanged.
+            self.assertEqual(
+                pg_to_e6(
+                    'SELECT "s".x "x" FROM (SELECT arr[1] AS x, k FROM t) AS "s" '
+                    'LEFT JOIN dim AS "b" ON "s".k = "b".k'
+                ),
+                'SELECT "s".x AS "x" FROM (SELECT ELEMENT_AT(arr, 1) AS x, k FROM t) AS "s" '
+                'LEFT JOIN dim AS "b" ON "s".k = "b".k',
+            )
+
+            # Over-capture guard: the tell is in a nested join, so only that join and the inner
+            # subquery "c" it links to reparse as Databricks (TIMESTAMP_ADD, ELEMENT_AT(arr, 2)).
+            # The outer wrapper "o" does NOT reparse -- its implicit-alias projections stay
+            # aliases (no CONCAT) and arr[1] is shifted once, not twice.
+            self.assertEqual(
+                pg_to_e6(
+                    'SELECT "o".a "a" FROM (SELECT "c".k "a", "c".z "b" '
+                    'FROM (SELECT k, arr[1] z, ts FROM t) AS "c" '
+                    'LEFT JOIN dim AS "d" ON "c".k = "d".k '
+                    'AND timestampadd(MICROSECOND, -1, "c".ts) >= "d".eff) AS "o"'
+                ),
+                'SELECT "o".a AS "a" FROM (SELECT "c".k AS "a", "c".z AS "b" '
+                'FROM (SELECT k, ELEMENT_AT(arr, 2) AS z, ts FROM t) AS "c" '
+                'LEFT JOIN dim AS "d" ON "c".k = "d".k '
+                'AND TIMESTAMP_ADD(\'MICROSECOND\', -1, "c".ts) >= "d".eff) AS "o"',
+            )
+        finally:
+            e6_module.HYBRID_MULTIDIALECT = orig_hybrid
+            dbr_module.DBR_DOUBLE_QUOTED_IDENTIFIERS = orig_dbr
+
     def test_powerbi_mixed_quote_sf_to_dbr(self):
         """Power BI SF->DBR->E6 path for mixed-quote queries.
 

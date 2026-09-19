@@ -2665,6 +2665,34 @@ class E6(Dialect):
 
             return self.func(function_name, *expression.expressions, normalize=not is_qualified)
 
+        def _reparse_databricks(self, sql: str) -> t.Optional[exp.Expression]:
+            # HYBRID_MULTIDIALECT: parse verbatim source as Databricks, with STRING_ALIASES set to
+            # the DBR_DOUBLE_QUOTED_IDENTIFIERS flag so an implicit `expr "alias"` parses as an
+            # identifier alias. Shared by subquery_sql (a held-out Databricks subquery) and
+            # join_sql (a held-out Databricks join sitting next to such a subquery).
+            from sqlglot.dialects.databricks import Databricks, DBR_DOUBLE_QUOTED_IDENTIFIERS
+
+            dbr = Databricks()
+            parser = dbr.parser()
+            parser.STRING_ALIASES = DBR_DOUBLE_QUOTED_IDENTIFIERS  # type: ignore[misc]
+            return parser.parse(dbr.tokenize(sql), sql)[0]
+
+        def _adjacent_join_tell(self, expression: exp.Subquery) -> bool:
+            # The join condition next to a FROM-base subquery: when a sibling join's ON carries a
+            # Databricks tell (an Anonymous), that ON links the subquery to Databricks-only syntax
+            # (e.g. TIMESTAMPADD), so the subquery is Databricks too and must be reparsed as such.
+            from_ = expression.parent
+            if not isinstance(from_, exp.From):
+                return False
+            select = from_.parent
+            if select is None:
+                return False
+            for join in select.args.get("joins") or []:
+                on = join.args.get("on")
+                if on is not None and on.find(exp.Anonymous):
+                    return True
+            return False
+
         def subquery_sql(self, expression: exp.Subquery, sep: str = " AS ") -> str:
             # HYBRID_MULTIDIALECT: a postgres-path subquery holding an Anonymous node (a function
             # Postgres can't resolve, e.g. TIMESTAMPADD -- a Databricks tell) is Databricks SQL.
@@ -2680,19 +2708,20 @@ class E6(Dialect):
                 and self.from_dialect == "postgres"
                 and raw
                 and expression.this is not None
-                # nearest subquery only: prune nested subqueries so an outer wrapper
-                # doesn't catch on an Anonymous buried in an inner subquery
-                and any(
-                    isinstance(n, exp.Anonymous)
-                    for n in expression.this.walk(prune=lambda n: isinstance(n, exp.Subquery))
+                # a tell either in the subquery's own body (prune nested subqueries AND joins so an
+                # outer wrapper doesn't catch one buried deeper), OR in an adjacent join's ON that
+                # links to this subquery -- that join condition makes the subquery Databricks too
+                and (
+                    any(
+                        isinstance(n, exp.Anonymous)
+                        for n in expression.this.walk(
+                            prune=lambda n: isinstance(n, (exp.Subquery, exp.Join))
+                        )
+                    )
+                    or self._adjacent_join_tell(expression)
                 )
             ):
-                from sqlglot.dialects.databricks import Databricks, DBR_DOUBLE_QUOTED_IDENTIFIERS
-
-                dbr = Databricks()
-                parser = dbr.parser()
-                parser.STRING_ALIASES = DBR_DOUBLE_QUOTED_IDENTIFIERS  # type: ignore[misc]
-                reparsed = parser.parse(dbr.tokenize(raw[1:-1]), raw[1:-1])[0]
+                reparsed = self._reparse_databricks(raw[1:-1])
                 if reparsed is not None:
                     if reparsed.find(exp.Anonymous):
                         raise ValueError(
@@ -2979,6 +3008,41 @@ class E6(Dialect):
             return self.sql(exp.Div(this=to_unix_expr, expression=exp.Literal.number("1000")))
 
         def join_sql(self, expression: exp.Join) -> str:
+            # HYBRID_MULTIDIALECT: a postgres-path join whose ON holds an Anonymous node (a
+            # function Postgres can't resolve, e.g. TIMESTAMPADD -- a Databricks tell) is
+            # Databricks SQL. Reparse the join's verbatim source (meta["raw_sql"]) as Databricks
+            # and emit it from_dialect="databricks", in place -- the subquery it sits next to
+            # stays on the (dialect-agnostic) postgres path while this join renders as Databricks.
+            raw = expression.meta.get("raw_sql")
+            on = expression.args.get("on")
+            if (
+                HYBRID_MULTIDIALECT
+                and self.from_dialect == "postgres"
+                and raw
+                and on is not None
+                and any(
+                    isinstance(n, exp.Anonymous)
+                    for n in on.walk(prune=lambda n: isinstance(n, exp.Subquery))
+                )
+            ):
+                wrapped = self._reparse_databricks(f"SELECT 1 FROM t {raw}")
+                joins = wrapped.args.get("joins") if wrapped is not None else None
+                if joins:
+                    reparsed = joins[0]
+                    if reparsed.find(exp.Anonymous):
+                        raise ValueError(
+                            "HYBRID_MULTIDIALECT: function unknown to both Postgres and Databricks"
+                        )
+                    # Render the reparsed join through this generator (not a fresh .sql()) so its
+                    # leading separator and ON indentation match the surrounding query; flip
+                    # from_dialect to databricks for the span so the ON keeps Databricks semantics.
+                    prev = self.from_dialect
+                    self.from_dialect = "databricks"
+                    try:
+                        return super().join_sql(reparsed)
+                    finally:
+                        self.from_dialect = prev
+
             # Native E6 rejects a join operator before a Spark "LATERAL VIEW <generator>": the
             # LATERAL VIEW is a FROM-clause, not a join operand, so "CROSS JOIN LATERAL VIEW ..."
             # / ", LATERAL VIEW ..." fail to parse. An ANSI "t s, LATERAL explode(...)" reaches
