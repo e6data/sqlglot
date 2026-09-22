@@ -1402,6 +1402,32 @@ class TestE6(Validator):
             },
         )
 
+    def test_from_json_schema_newlines(self):
+        # A view's FROM_JSON schema is frequently written multi-line for readability. The e6
+        # engine re-parses that 2nd arg as a TYPE (a JsonSchema() sub-parser over the string
+        # body) whose lexer skips whitespace but has no rule for a backslash -- so emitting the
+        # real newlines as "\n" (backslash-n) fails with "Lexical error ... Encountered \".
+        # Whitespace is insignificant in a type descriptor, so it is flattened to keep the emitted
+        # descriptor backslash-free (and still parse to the same type).
+        self.validate_all(
+            "SELECT EXPLODE(FROM_JSON(qa, 'array<struct< id:string, answer:string >>')) FROM t",
+            read={
+                "databricks": (
+                    "SELECT EXPLODE(FROM_JSON(qa, 'array<struct<\n"
+                    "  id:string,\n"
+                    "  answer:string\n"
+                    ">>')) FROM t"
+                ),
+            },
+        )
+        # An already single-line schema is left untouched (the flatten is idempotent).
+        self.validate_all(
+            "SELECT FROM_JSON(x, 'array<struct<id:string, answer:string>>') FROM t",
+            read={
+                "databricks": "SELECT FROM_JSON(x, 'array<struct<id:string, answer:string>>') FROM t",
+            },
+        )
+
     def test_variant_bracket_json_path(self):
         # A leading array index on a PARSE_JSON/variant root is variant navigation, not
         # array ELEMENT_AT (which the planner rejects for the {metadata, value} variant

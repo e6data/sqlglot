@@ -2660,8 +2660,21 @@ class E6(Dialect):
 
             if function_name.lower() == "from_json":
                 for arg in expression.expressions:
-                    if isinstance(arg, exp.Literal) and arg.is_string and "value:" in arg.this:
-                        arg.set("this", arg.this.replace("value:", "`value`:"))
+                    if isinstance(arg, exp.Literal) and arg.is_string:
+                        val = arg.this
+                        if "value:" in val:
+                            val = val.replace("value:", "`value`:")
+                        # The schema arg is a TYPE descriptor: the engine re-parses this string's
+                        # raw contents with its JsonSchema() type grammar (a sub-parser over the
+                        # string body). That lexer skips whitespace but has no rule for a
+                        # backslash, so a multi-line source schema -- whose real newlines are
+                        # emitted as "\n" (backslash-n) -- dies with "Lexical error ...
+                        # Encountered \". Whitespace is insignificant in a type descriptor, so
+                        # collapse it (dropping the newlines) to keep the descriptor backslash-free.
+                        if "<" in val:
+                            val = " ".join(val.split())
+                        if val != arg.this:
+                            arg.set("this", val)
 
             return self.func(function_name, *expression.expressions, normalize=not is_qualified)
 
