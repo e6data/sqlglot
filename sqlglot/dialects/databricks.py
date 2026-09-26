@@ -135,6 +135,37 @@ class FormatString(exp.Func):
     is_var_len_args = True
 
 
+# Databricks DATE_DIFF is unit-first: date_diff(unit, start, end) (docs). The unit is one of these.
+DATE_DIFF_UNITS = {
+    "MICROSECOND",
+    "MILLISECOND",
+    "SECOND",
+    "MINUTE",
+    "HOUR",
+    "DAY",
+    "WEEK",
+    "MONTH",
+    "QUARTER",
+    "YEAR",
+}
+
+
+def _build_date_diff(args: t.List) -> exp.DateDiff:
+    # Databricks documents DATE_DIFF as date_diff(unit, start, end). Some client SQL emits the
+    # unit LAST instead -- date_diff(start, end, unit) -- and the standard unit-first builder
+    # then reads the first argument (a date column) as the unit and renders it as a quoted
+    # string (e.g. published_date -> 'PUBLISHED_DATE'). When the first argument is not a unit but
+    # the last one is, normalize the AST to the documented order by moving the unit to the front
+    # (start and end keep their relative positions).
+    if (
+        len(args) == 3
+        and args[0].name.upper() not in DATE_DIFF_UNITS
+        and args[2].name.upper() in DATE_DIFF_UNITS
+    ):
+        args = [args[2], args[0], args[1]]
+    return build_date_delta(exp.DateDiff)(args)
+
+
 class Databricks(Spark):
     SAFE_DIVISION = False
     COPY_PARAMS_ARE_CSV = False
@@ -194,8 +225,8 @@ class Databricks(Spark):
             # 3-arg DATE_ADD(unit, n, ts) -> unit=Var(unit) (returns TIMESTAMP).
             "DATEADD": build_date_delta(exp.DateAdd, default_unit=None),
             "DATE_ADD": build_date_delta(exp.DateAdd, default_unit=None),
-            "DATEDIFF": build_date_delta(exp.DateDiff),
-            "DATE_DIFF": build_date_delta(exp.DateDiff),
+            "DATEDIFF": _build_date_diff,
+            "DATE_DIFF": _build_date_diff,
             "FIND_IN_SET": exp.FindInSet.from_arg_list,
             "NEXT_DAY": exp.NextDay.from_arg_list,
             "GETDATE": exp.CurrentTimestamp.from_arg_list,
