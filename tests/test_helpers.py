@@ -144,7 +144,7 @@ class TestStripComment(unittest.TestCase):
 
 
 class TestSanitizeComments(unittest.TestCase):
-    """Tests for sanitize_comments — escapes /* */ inside AST comment nodes."""
+    """Tests for sanitize_comments — removes all comments from the AST."""
 
     def _parse_and_sanitize(self, sql, dialect="databricks"):
         import sqlglot
@@ -153,21 +153,23 @@ class TestSanitizeComments(unittest.TestCase):
         tree = sanitize_comments(tree)
         return tree.sql(dialect="e6", from_dialect=dialect)
 
-    def test_nested_block_markers_escaped(self):
-        """The production failure: -- /* text */ must not produce /* /* text */ */."""
+    def test_nested_block_markers_removed(self):
+        """The production failure: -- /* text */ must not leak into the output at all."""
         result = self._parse_and_sanitize("-- /* Hey */\nSELECT 1 FROM t")
-        self.assertNotIn("/* /*", result)
-        self.assertNotIn("*/ */", result)
+        self.assertNotIn("/*", result)
+        self.assertNotIn("Hey", result)
         self.assertIn("SELECT 1", result)
 
-    def test_plain_line_comment_preserved(self):
+    def test_plain_line_comment_removed(self):
         result = self._parse_and_sanitize("-- plain comment\nSELECT 1 FROM t")
-        self.assertIn("plain comment", result)
+        self.assertNotIn("plain comment", result)
+        self.assertNotIn("/*", result)
         self.assertIn("SELECT 1", result)
 
-    def test_block_comment_without_nesting_unchanged(self):
+    def test_block_comment_removed(self):
         result = self._parse_and_sanitize("/* block */ SELECT 1 FROM t")
-        self.assertIn("block", result)
+        self.assertNotIn("block", result)
+        self.assertNotIn("/*", result)
         self.assertIn("SELECT 1", result)
 
     def test_production_case(self):
@@ -175,8 +177,8 @@ class TestSanitizeComments(unittest.TestCase):
             "-- /* Bespoke Group by Product With Breakdown*/\n"
             "SELECT user_id FROM t WHERE market_id = 1"
         )
-        self.assertNotIn("/* /*", result)
-        self.assertIn("Bespoke", result)
+        self.assertNotIn("/*", result)
+        self.assertNotIn("Bespoke", result)
         self.assertIn("SELECT", result)
 
 
