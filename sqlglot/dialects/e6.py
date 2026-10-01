@@ -1618,7 +1618,7 @@ class E6(Dialect):
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "TIMESTAMP_DIFF": lambda args: exp.TimestampDiff(
-                this=seq_get(args, 0), expression=seq_get(args, 1), unit=seq_get(args, 2)
+                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "TO_CHAR": lambda args: exp.ToChar(
                 this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
@@ -2791,6 +2791,15 @@ class E6(Dialect):
 
         def to_timestamp_sql(self: E6.Generator, expression: exp.StrToTime) -> str:
             date_expr = expression.this
+            # On the native executor, keep the Databricks format as written (same as
+            # format_date_sql) and double its inner quotes.
+            is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+            if is_native and self.from_dialect == "databricks":
+                from sqlglot.dialects.databricks import Databricks
+
+                format_expr = Databricks().generator().format_time(expression)
+                if format_expr:
+                    return self.func("TO_TIMESTAMP", date_expr, format_expr.replace("\\'", "''"))
             format_expr = self.convert_format_time(expression)
             format_str = f"'{format_expr}'"
             return self.func("TO_TIMESTAMP", date_expr, format_str)
@@ -2969,7 +2978,11 @@ class E6(Dialect):
             is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
 
             if is_native and unit is None:
-                return self.func("DATE_ADD", expression.this, _to_int(expression.expression))
+                # E6's 2-arg DATE_ADD(date, n) rejects a BIGINT count, so cast it to INT.
+                n = expression.expression
+                return self.func(
+                    "DATE_ADD", expression.this, n if n.is_number else exp.cast(n, "INT")
+                )
 
             return self.func(
                 "DATE_ADD", unit_to_str(expression), _to_int(expression.expression), expression.this
@@ -3219,8 +3232,9 @@ class E6(Dialect):
                     expression.expression,
                     exp.Literal.string(expression.this.name),
                 )
+            # E6 only accepts the unit-first form TIMESTAMP_DIFF(unit, start, end).
             return self.func(
-                "TIMESTAMP_DIFF", expression.this, expression.expression, unit_to_str(expression)
+                "TIMESTAMP_DIFF", unit_to_str(expression), expression.expression, expression.this
             )
 
         def attimezone_sql(self, expression: exp.AtTimeZone) -> str:

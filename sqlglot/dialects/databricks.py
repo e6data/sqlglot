@@ -205,9 +205,7 @@ class Databricks(Spark):
             "REGEXP_SUBSTR": exp.RegexpExtract.from_arg_list,
             "RTRIM": lambda args: build_trim(args, is_left=False),
             "SPLIT_PART": exp.SplitPart.from_arg_list,
-            "TIMEDIFF": lambda args: exp.TimestampDiff(
-                unit=seq_get(args, 0), this=seq_get(args, 1), expression=seq_get(args, 2)
-            ),
+            "TIMEDIFF": build_date_delta(exp.TimestampDiff),
             "TIMESTAMP_MILLIS": lambda args: exp.UnixToTime(
                 this=seq_get(args, 0), scale=exp.UnixToTime.MILLIS
             ),
@@ -224,6 +222,7 @@ class Databricks(Spark):
 
         FACTOR = {
             **Spark.Parser.FACTOR,
+            TokenType.MOD: exp.Mod,
         }
 
         def _parse_primary(self) -> t.Optional[exp.Expression]:
