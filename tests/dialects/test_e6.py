@@ -849,7 +849,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TIMESTAMP_DIFF(CAST('1900-03-28' AS DATE), CAST('2021-01-01' AS DATE), 'YEAR')",
+            "SELECT TIMESTAMP_DIFF('YEAR', CAST('2021-01-01' AS DATE), CAST('1900-03-28' AS DATE))",
             read={
                 "databricks": "SELECT timestampdiff(SQL_TSI_YEAR, DATE'2021-01-01', DATE'1900-03-28')"
             },
@@ -873,41 +873,42 @@ class TestE6(Validator):
         )
         for unit in ["SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH", "YEAR"]:
             self.validate_all(
-                f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                f"SELECT TIMESTAMP_DIFF('{unit}', date1, date2)",
                 read={
                     "databricks": f"SELECT TIMEDIFF('{unit}', date1, date2)",
+                    "e6": f"SELECT TIMESTAMP_DIFF('{unit}', date1, date2)",
                 },
                 write={
-                    "e6": f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                    "e6": f"SELECT TIMESTAMP_DIFF('{unit}', date1, date2)",
                 },
             )
 
             self.validate_all(
-                "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                "SELECT TIMESTAMP_DIFF('HOUR', start1, end1), TIMESTAMP_DIFF('MINUTE', start2, end2)",
                 read={
                     "databricks": "SELECT TIMEDIFF('HOUR', start1, end1), TIMEDIFF('MINUTE', start2, end2)",
                 },
                 write={
-                    "e6": "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                    "e6": "SELECT TIMESTAMP_DIFF('HOUR', start1, end1), TIMESTAMP_DIFF('MINUTE', start2, end2)",
                 },
             )
 
             self.validate_all(
-                "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                "SELECT ABS(TIMESTAMP_DIFF('MINUTE', start_time, end_time))",
                 read={
                     "databricks": "SELECT ABS(TIMEDIFF('MINUTE', start_time, end_time))",
                 },
                 write={
-                    "e6": "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                    "e6": "SELECT ABS(TIMESTAMP_DIFF('MINUTE', start_time, end_time))",
                 },
             )
             self.validate_all(
-                "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                "SELECT AVG(TIMESTAMP_DIFF('HOUR', start_time, end_time)) FROM sessions",
                 read={
                     "databricks": "SELECT AVG(TIMEDIFF('HOUR', start_time, end_time)) FROM sessions",
                 },
                 write={
-                    "e6": "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                    "e6": "SELECT AVG(TIMESTAMP_DIFF('HOUR', start_time, end_time)) FROM sessions",
                 },
             )
 
@@ -2294,7 +2295,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TIMESTAMP_DIFF(CAST('1900-03-28' AS DATE), CAST('2021-01-01' AS DATE), 'YEAR')",
+            "SELECT TIMESTAMP_DIFF('YEAR', CAST('2021-01-01' AS DATE), CAST('1900-03-28' AS DATE))",
             read={"databricks": "SELECT timestampdiff(YEAR, DATE'2021-01-01', DATE'1900-03-28')"},
         )
 
@@ -2768,6 +2769,28 @@ class TestE6(Validator):
             read={"databricks": "SELECT UNIX_TIMESTAMP(A)"},
         )
 
+    def test_to_timestamp_native_executor(self):
+        # With E6_EXECUTOR_TYPE=native, a Databricks TO_TIMESTAMP format is kept verbatim
+        # and its inner quotes are doubled.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            self.assertEqual(
+                parse_one(
+                    """SELECT to_timestamp(d, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS")""", read="databricks"
+                ).sql(dialect="e6", from_dialect="databricks"),
+                "SELECT TO_TIMESTAMP(d, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSS')",
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+    def test_databricks_mod_precedence(self):
+        # Databricks binds % like * and /: tighter than + and -, left to right with * and /
+        self.validate_all("SELECT a - MOD(b, 7)", read={"databricks": "SELECT a - b % 7"})
+        self.validate_all("SELECT a + MOD(b, 7) = 0", read={"databricks": "SELECT a + b % 7 = 0"})
+        self.validate_all("SELECT MOD(a * b, 7)", read={"databricks": "SELECT a * b % 7"})
+        self.validate_all("SELECT MOD(a, 7) * b", read={"databricks": "SELECT a % 7 * b"})
+        self.validate_all("SELECT MOD((a - b), 7)", read={"databricks": "SELECT (a - b) % 7"})
+
     def test_date_add_native_executor(self):
         # With E6_EXECUTOR_TYPE=native, preserve DBR DATE_ADD arity:
         # 2-arg DATE_ADD(date, n) returns DATE -> emit e6 2-arg form;
@@ -2786,6 +2809,20 @@ class TestE6(Validator):
             self.validate_all(
                 "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)",
                 read={"databricks": "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)"},
+            )
+            # 2-arg DATE_ADD(date, n) rejects a BIGINT count on e6 -> cast to INT
+            self.validate_all(
+                "SELECT DATE_ADD(d, CAST(MOD(x, 7) AS INT))",
+                read={"databricks": "SELECT DATE_ADD(d, x % 7)"},
+            )
+            self.validate_all(
+                "SELECT DATE_ADD(d, CAST(n AS INT))",
+                read={"databricks": "SELECT DATE_ADD(d, n)"},
+            )
+            # a literal count needs no cast
+            self.validate_all("SELECT DATE_ADD(d, 2)", read={"databricks": "SELECT DATE_ADD(d, 2)"})
+            self.validate_all(
+                "SELECT DATE_ADD(d, -3)", read={"databricks": "SELECT DATE_ADD(d, -3)"}
             )
         finally:
             os.environ.pop("E6_EXECUTOR_TYPE", None)
@@ -3603,7 +3640,7 @@ class TestE6(Validator):
         )
         self.assertEqual(
             dbr_to_e6("SELECT TIMESTAMPDIFF(MONTH, ts_start, ts_end)"),
-            "SELECT TIMESTAMP_DIFF(ts_end, ts_start, 'MONTH')",
+            "SELECT TIMESTAMP_DIFF('MONTH', ts_start, ts_end)",
         )
         self.assertEqual(dbr_to_e6("SELECT TO_TIMESTAMP(x)"), "SELECT CAST(x AS TIMESTAMP)")
 
