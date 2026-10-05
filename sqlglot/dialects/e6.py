@@ -1812,6 +1812,12 @@ class E6(Dialect):
             """
             alias = expression.args.get("alias")
 
+            # E6 rejects an empty identifier, so on the native executor drop an empty alias
+            # (e.g. Databricks count(*) AS ``) and let the engine name the column.
+            is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+            if is_native and isinstance(alias, exp.Identifier) and not alias.this:
+                return self.sql(expression, "this")
+
             # Check if alias is a reserved keyword (case-insensitive)
             if alias and isinstance(alias, exp.Identifier):
                 if alias.this.lower() in self.RESERVED_DATATYPE_KEYWORDS:
