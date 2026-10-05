@@ -2932,6 +2932,15 @@ class E6(Dialect):
         #     return f"{struct_expr}"
 
         def group_sql_modified(self, expression: exp.Group) -> str:
+            # E6 has no GROUP BY a, b WITH ROLLUP / WITH CUBE; on the native executor emit the
+            # equivalent GROUP BY ROLLUP(a, b) / CUBE(a, b) (same rows).
+            if os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native" and expression.expressions:
+                for key, kind in (("rollup", exp.Rollup), ("cube", exp.Cube)):
+                    if any(not g.expressions for g in expression.args.get(key) or []):
+                        expression = expression.copy()
+                        expression.set(key, [kind(expressions=expression.expressions)])
+                        expression.set("expressions", [])
+                        break
             if os.getenv("IGNORE_DECIMAL_GROUP_BY", False) or (
                 self.from_dialect and self.from_dialect.lower() == Dialect.get("databricks")
             ):
