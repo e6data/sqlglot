@@ -2834,13 +2834,18 @@ class TestE6(Validator):
         )
 
     def test_empty_alias_native_executor(self):
-        # e6 rejects an empty identifier: with E6_EXECUTOR_TYPE=native an empty alias
-        # (Databricks AS ``) is dropped and the engine names the column.
+        # e6 rejects an empty identifier: with E6_EXECUTOR_TYPE=native every empty
+        # identifier (Databricks ``) becomes empty_alias, so an alias and the references
+        # to it stay linked.
         os.environ["E6_EXECUTOR_TYPE"] = "native"
         try:
             self.validate_all(
-                "SELECT domain, COUNT(*) FROM d GROUP BY domain",
+                "SELECT domain, COUNT(*) AS empty_alias FROM d GROUP BY domain",
                 read={"databricks": "SELECT domain, count(*) AS `` FROM d GROUP BY domain"},
+            )
+            self.validate_all(
+                "SELECT empty_alias FROM (SELECT COUNT(*) AS empty_alias FROM d) AS s ORDER BY empty_alias",
+                read={"databricks": "SELECT `` FROM (SELECT count(*) AS `` FROM d) s ORDER BY ``"},
             )
             self.validate_all(
                 "SELECT COUNT(*) AS n FROM d", read={"databricks": "SELECT count(*) AS n FROM d"}
