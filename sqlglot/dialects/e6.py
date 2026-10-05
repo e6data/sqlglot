@@ -1714,6 +1714,11 @@ class E6(Dialect):
             self.quote_reserved_keywords = quote_reserved_keywords
 
         def identifier_sql(self, expression: exp.Identifier) -> str:
+            # E6 rejects an empty identifier (Databricks ``), so on the native executor emit
+            # one fixed name for every empty identifier: an alias and the references to it
+            # stay linked, e.g. SELECT `` FROM (SELECT count(*) AS `` ...).
+            if not expression.this and os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native":
+                return "empty_alias"
             if self.quote_reserved_keywords:
                 # Same rule the quote_identifiers optimizer pass applied, now at emit time.
                 self.dialect.quote_identifier(expression)

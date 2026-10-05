@@ -2833,6 +2833,31 @@ class TestE6(Validator):
             read={"databricks": "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)"},
         )
 
+    def test_empty_alias_native_executor(self):
+        # e6 rejects an empty identifier: with E6_EXECUTOR_TYPE=native every empty
+        # identifier (Databricks ``) becomes empty_alias, so an alias and the references
+        # to it stay linked.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            self.validate_all(
+                "SELECT domain, COUNT(*) AS empty_alias FROM d GROUP BY domain",
+                read={"databricks": "SELECT domain, count(*) AS `` FROM d GROUP BY domain"},
+            )
+            self.validate_all(
+                "SELECT empty_alias FROM (SELECT COUNT(*) AS empty_alias FROM d) AS s ORDER BY empty_alias",
+                read={"databricks": "SELECT `` FROM (SELECT count(*) AS `` FROM d) s ORDER BY ``"},
+            )
+            self.validate_all(
+                "SELECT COUNT(*) AS n FROM d", read={"databricks": "SELECT count(*) AS n FROM d"}
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (java): the alias is kept as is
+        self.validate_all(
+            'SELECT COUNT(*) AS "" FROM d', read={"databricks": "SELECT count(*) AS `` FROM d"}
+        )
+
     def test_date_format_native_executor(self):
         # With E6_EXECUTOR_TYPE=native, TimeToStr is emitted as DATE_FORMAT
         # (native implements DATE_FORMAT, not FORMAT_DATE/FORMAT_TIMESTAMP).
