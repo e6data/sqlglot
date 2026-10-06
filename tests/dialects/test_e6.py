@@ -2833,6 +2833,37 @@ class TestE6(Validator):
             read={"databricks": "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)"},
         )
 
+    def test_with_rollup_native_executor(self):
+        # e6 has no GROUP BY ... WITH ROLLUP / WITH CUBE: with E6_EXECUTOR_TYPE=native they
+        # become the equivalent ROLLUP(...) / CUBE(...) over the group-by columns.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            self.validate_all(
+                "SELECT a, b, COUNT(*) FROM t GROUP BY ROLLUP (a, b)",
+                read={"databricks": "SELECT a, b, count(*) FROM t GROUP BY a, b WITH ROLLUP"},
+            )
+            self.validate_all(
+                "SELECT a, b, COUNT(*) FROM t GROUP BY CUBE (a, b)",
+                read={"databricks": "SELECT a, b, count(*) FROM t GROUP BY a, b WITH CUBE"},
+            )
+            self.validate_all(
+                "SELECT a, COUNT(*) FROM t GROUP BY ROLLUP (1)",
+                read={"databricks": "SELECT a, count(*) FROM t GROUP BY 1 WITH ROLLUP"},
+            )
+            # already-valid forms are unchanged
+            self.validate_all(
+                "SELECT a, b, COUNT(*) FROM t GROUP BY a, ROLLUP (b)",
+                read={"databricks": "SELECT a, b, count(*) FROM t GROUP BY a, ROLLUP(b)"},
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (java): unchanged
+        self.validate_all(
+            "SELECT a, COUNT(*) FROM t GROUP BY a WITH ROLLUP",
+            read={"databricks": "SELECT a, count(*) FROM t GROUP BY a WITH ROLLUP"},
+        )
+
     def test_date_format_native_executor(self):
         # With E6_EXECUTOR_TYPE=native, TimeToStr is emitted as DATE_FORMAT
         # (native implements DATE_FORMAT, not FORMAT_DATE/FORMAT_TIMESTAMP).
