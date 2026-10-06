@@ -217,14 +217,6 @@ pipeline {
                 sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://670514002493.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}:${TAG_VALUE}'
                 sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${AZURE_IMAGE}:${TAG_VALUE}'
 
-                // Push to Serverless Beta ECR (added)
-                sh 'skopeo login --username AWS --password ${SERVERLESS_BETA_ECR_TOKEN} 908027423391.dkr.ecr.us-east-1.amazonaws.com'
-                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${SERVERLESS_BETA_IMAGE}:${TAG_VALUE}'
-
-                // Push to Serverless Prod ECR (added)
-                sh 'skopeo login --username AWS --password ${SERVERLESS_PROD_ECR_TOKEN} 390844744777.dkr.ecr.us-east-1.amazonaws.com'
-                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${SERVERLESS_PROD_IMAGE}:${TAG_VALUE}'
-
                 // Push to Uniphi ECR (added)
                 sh 'skopeo login --username AWS --password ${UNIPHI_ECR_TOKEN} 298655976287.dkr.ecr.us-east-1.amazonaws.com'
                 sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${UNIPHI_IMAGE}:${TAG_VALUE}'
