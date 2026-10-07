@@ -3812,6 +3812,18 @@ class Generator(metaclass=_Generator):
 
         return self.function_fallback_sql(expression)
 
+    def getjsonobject_sql(self, expression: exp.JSONExtract) -> str:
+        # A Databricks GET_JSON_OBJECT is written as the JSONExtract it was before GetJsonObject
+        # existed; a dialect that supports GET_JSON_OBJECT maps GetJsonObject in its TRANSFORMS.
+        node = exp.JSONExtract(**expression.args)
+        node._meta = expression._meta
+        node.parent, node.arg_key, node.index = (
+            expression.parent,
+            expression.arg_key,
+            expression.index,
+        )
+        return self.sql(node)
+
     def function_fallback_sql(self, expression: exp.Func) -> str:
         args = []
 

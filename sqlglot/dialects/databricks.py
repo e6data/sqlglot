@@ -38,11 +38,20 @@ DBR_DOUBLE_QUOTED_IDENTIFIERS = (
 )
 
 
+class GetJsonObject(exp.JSONExtract):
+    """GET_JSON_OBJECT(expr, path) as written in Databricks.
+
+    Generated as a plain JSONExtract (see Generator.getjsonobject_sql), so every dialect keeps
+    its output; a dialect that supports GET_JSON_OBJECT maps this class in its TRANSFORMS.
+    Defined here rather than in expressions.py so no other dialect parses into it.
+    """
+
+
 def _build_json_extract(args: t.List) -> exp.JSONExtract:
     # Transform GET_JSON_OBJECT(expr, '$.<path>') -> expr:<path>
     this = args[0]
     path = args[1].name.lstrip("$.")
-    return exp.JSONExtract(this=this, expression=path)
+    return GetJsonObject(this=this, expression=path)
 
 
 def _jsonextract_sql(
