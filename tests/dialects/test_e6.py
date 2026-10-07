@@ -2864,6 +2864,37 @@ class TestE6(Validator):
             read={"databricks": "SELECT a, count(*) FROM t GROUP BY a WITH ROLLUP"},
         )
 
+    def test_get_json_object_native_executor(self):
+        # E6 supports GET_JSON_OBJECT with Databricks' results, while its JSON_EXTRACT returns
+        # JSON text (quoted strings): with E6_EXECUTOR_TYPE=native a Databricks
+        # get_json_object is kept as is. Nothing else changes.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            self.validate_all(
+                "SELECT GET_JSON_OBJECT(j, '$.status') FROM t WHERE GET_JSON_OBJECT(j, '$.status') = 'ok'",
+                read={
+                    "databricks": "SELECT get_json_object(j, '$.status') FROM t WHERE get_json_object(j, '$.status') = 'ok'"
+                },
+            )
+            self.validate_all(
+                "SELECT GET_JSON_OBJECT(j, '$.arr[2].x')",
+                read={"databricks": "SELECT get_json_object(j, '$.arr[2].x')"},
+            )
+            # only a source GET_JSON_OBJECT is kept
+            self.validate_all(
+                "SELECT JSON_EXTRACT(j, '$.a')",
+                read={"databricks": "SELECT json_extract(j, '$.a')"},
+            )
+            self.validate_all("SELECT j:status", read={"databricks": "SELECT j:status"})
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (java): unchanged
+        self.validate_all(
+            "SELECT JSON_EXTRACT(j, '$.status')",
+            read={"databricks": "SELECT get_json_object(j, '$.status')"},
+        )
+
     def test_date_format_native_executor(self):
         # With E6_EXECUTOR_TYPE=native, TimeToStr is emitted as DATE_FORMAT
         # (native implements DATE_FORMAT, not FORMAT_DATE/FORMAT_TIMESTAMP).

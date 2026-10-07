@@ -3382,6 +3382,15 @@ class E6(Dialect):
                     else:
                         path = path_sql
 
+            # On the native executor, keep a Databricks GET_JSON_OBJECT as is: E6 supports it
+            # with the same results, whereas its JSON_EXTRACT returns JSON text (quoted strings),
+            # so e.g. JSON_EXTRACT(j, '$.s') = 'ok' never matches.
+            if (
+                isinstance(e, databricks.GetJsonObject)
+                and os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+            ):
+                return self.func("GET_JSON_OBJECT", e.this, path)
+
             return self.func("JSON_EXTRACT", e.this, path)
 
         def split_sql(self, expression: exp.Split | exp.RegexpSplit):
@@ -3701,6 +3710,7 @@ class E6(Dialect):
             exp.Hex: rename_func("TO_HEX"),
             exp.Interval: interval_sql,
             exp.JSONExtract: json_extract_sql,
+            databricks.GetJsonObject: json_extract_sql,
             exp.JSONExtractScalar: json_extract_sql,
             exp.JSONFormat: json_format_sql,
             exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),
