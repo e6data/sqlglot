@@ -214,6 +214,8 @@ jobs:
     steps:
       - name: Generate production tags
         id: tags
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
           DATE_TAG=$(date +%Y.%m.%d)
@@ -225,11 +227,13 @@ jobs:
           echo "date_tag=$DATE_TAG" >> $GITHUB_OUTPUT
 
           # Generate all tag variations
-          TAGS="latest"
-          TAGS="$TAGS,sha-$SHORT_SHA"
+          TAGS="sha-$SHORT_SHA"
           TAGS="$TAGS,$DATE_TAG-$SHORT_SHA"
           TAGS="$TAGS,$VERSION"
           TAGS="$TAGS,$VERSION-$SHORT_SHA"
+          if [ "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" ]; then
+            TAGS="latest,$TAGS"
+          fi
 
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Production tags: $TAGS"
@@ -344,7 +348,7 @@ jobs:
 
           # Same content everywhere, so any target's manifest digest will do.
           FIRST=$(echo $TARGETS | awk '{print $1}')
-          DIGEST=$(docker buildx imagetools inspect "$FIRST:latest" --format '{{json .}}' | jq -r '.manifest.digest')
+          DIGEST=$(docker buildx imagetools inspect "$FIRST:${{ steps.tags.outputs.version }}-${{ steps.tags.outputs.short_sha }}" --format '{{json .}}' | jq -r '.manifest.digest')
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
           echo "pushed=$PUSHED" >> $GITHUB_OUTPUT
 
