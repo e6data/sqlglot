@@ -8,6 +8,31 @@ from tests.dialects.test_dialect import Validator
 class TestSpark(Validator):
     dialect = "spark"
 
+    def test_element_at_roundtrip(self):
+        # The collection type may be unknown: an integer can be a map key or an
+        # array index. Explicit calls must not become zero-based bracket access.
+        for dialect in ("spark", "databricks"):
+            for function in ("ELEMENT_AT", "TRY_ELEMENT_AT"):
+                for collection, key in (
+                    ("a", "-1"),
+                    ("a", "1"),
+                    ("a", "0"),
+                    ("a", "999"),
+                    ("m", "1"),
+                    ("m", "'1'"),
+                    ("m", "'key'"),
+                    ("m", "NULL"),
+                    ("m", "?"),
+                    ("SPLIT(a, '~')", "-1"),
+                ):
+                    sql = f"SELECT {function}({collection}, {key})"
+                    with self.subTest(dialect=dialect, sql=sql):
+                        self.assertEqual(parse_one(sql, read=dialect).sql(dialect=dialect), sql)
+
+            for sql in ("SELECT a[0]", "SELECT a[-1]", "SELECT m[1]", "SELECT m['key']"):
+                with self.subTest(dialect=dialect, raw_bracket=sql):
+                    self.assertEqual(parse_one(sql, read=dialect).sql(dialect=dialect), sql)
+
     def test_ddl(self):
         self.validate_identity("DAYOFWEEK(TO_DATE(x))")
         self.validate_identity("DAYOFMONTH(TO_DATE(x))")

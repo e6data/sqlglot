@@ -147,6 +147,12 @@ class Spark(Spark2):
             "TIMESTAMP_SECONDS": lambda args: exp.UnixToTime(
                 this=seq_get(args, 0), scale=exp.Literal.string("seconds")
             ),
+            "ELEMENT_AT": lambda args: exp.Bracket(
+                this=seq_get(args, 0),
+                expressions=ensure_list(seq_get(args, 1)),
+                offset=1,
+                safe=False,
+            ),
             "TRY_ELEMENT_AT": lambda args: exp.Bracket(
                 this=seq_get(args, 0),
                 expressions=ensure_list(seq_get(args, 1)),
@@ -236,6 +242,11 @@ class Spark(Spark2):
             if expression.args.get("safe"):
                 key = seq_get(self.bracket_offset_expressions(expression, index_offset=1), 0)
                 return self.func("TRY_ELEMENT_AT", expression.this, key)
+
+            if expression.meta.get("name", "").upper() == "ELEMENT_AT":
+                # Preserve explicit 1-based lookup, including negative array indices
+                # and integer map keys whose collection type is not known here.
+                return self.func("ELEMENT_AT", expression.this, seq_get(expression.expressions, 0))
 
             return super().bracket_sql(expression)
 

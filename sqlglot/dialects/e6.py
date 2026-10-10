@@ -2492,8 +2492,12 @@ class E6(Dialect):
             # subscript differs by reader (postgres 1-based normalizes [0] to -1, databricks
             # 0-based keeps 0), so undo it with the reader's own index offset to land back on [0].
             # (Without this the postgres path emits ELEMENT_AT(..., 0), which the engine rejects.)
-            if self.from_dialect in ("postgres", "databricks") and isinstance(
-                expression.this, (exp.Split, exp.RegexpSplit)
+            if (
+                self.from_dialect in ("postgres", "databricks")
+                and isinstance(expression.this, (exp.Split, exp.RegexpSplit))
+                # Explicit ELEMENT_AT / TRY_ELEMENT_AT already carry their 1-based
+                # contract; only source bracket subscripts use this SPLIT exception.
+                and expression.meta.get("name", "").upper() not in ("ELEMENT_AT", "TRY_ELEMENT_AT")
             ):
                 from_offset = 0 if self.from_dialect == "databricks" else 1
                 idx = seq_get(

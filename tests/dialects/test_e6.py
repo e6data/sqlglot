@@ -3720,6 +3720,81 @@ class TestE6(Validator):
             e6_module.HYBRID_MULTIDIALECT = orig_hybrid
             dbr_module.DBR_DOUBLE_QUOTED_IDENTIFIERS = orig_dbr
 
+    def test_hybrid_multidialect_element_at(self):
+        """Recognize Spark ELEMENT_AT before the hybrid unknown-function guard."""
+        from unittest.mock import patch
+        from sqlglot import exp
+        from sqlglot.dialects import e6 as e6_module
+        from sqlglot.dialects import databricks as dbr_module
+
+        with patch.object(e6_module, "HYBRID_MULTIDIALECT", True), patch.object(
+            dbr_module, "DBR_DOUBLE_QUOTED_IDENTIFIERS", True
+        ):
+            for key in ("'k'", "'1'", "1", "-1", "0", "999", "NULL", "?"):
+                with self.subTest(key=key):
+                    sql = f"SELECT * FROM (SELECT ELEMENT_AT(m, {key}) AS v FROM x) s"
+                    self.assertEqual(
+                        parse_one(sql, read="postgres").sql(dialect="e6", from_dialect="postgres"),
+                        f"SELECT * FROM (SELECT ELEMENT_AT(m, {key}) AS v FROM x) AS s",
+                    )
+
+            self.assertEqual(
+                parse_one(
+                    "SELECT * FROM x JOIN y ON ELEMENT_AT(x.m, 'k') = y.k", read="postgres"
+                ).sql(dialect="e6", from_dialect="postgres"),
+                "SELECT * FROM x JOIN y ON ELEMENT_AT(x.m, 'k') = y.k",
+            )
+            self.assertEqual(
+                parse_one(
+                    "SELECT TRUNC(s.n), s.v FROM " "(SELECT ELEMENT_AT(m, 'k') AS v, n FROM x) s",
+                    read="postgres",
+                ).sql(dialect="e6", from_dialect="postgres"),
+                "SELECT s.n, s.v FROM (SELECT ELEMENT_AT(m, 'k') AS v, n FROM x) AS s",
+            )
+            self.assertEqual(
+                parse_one(
+                    "SELECT * FROM (SELECT TRY_ELEMENT_AT(SPLIT(a, '~'), 1) AS v FROM x) s",
+                    read="postgres",
+                ).sql(dialect="e6", from_dialect="postgres"),
+                "SELECT * FROM (SELECT TRY_ELEMENT_AT(SPLIT(a, '~'), 1) AS v FROM x) AS s",
+            )
+            for sql in (
+                "SELECT * FROM (SELECT NO_SUCH_FN(m) FROM x) s",
+                "SELECT * FROM x JOIN y ON NO_SUCH_FN(x.m) = y.k",
+                "SELECT * FROM (SELECT ELEMENT_AT(m, 'k'), NO_SUCH_FN(m) FROM x) s",
+            ):
+                with self.subTest(unknown=sql), self.assertRaisesRegex(
+                    ValueError, "function unknown to both Postgres and Databricks"
+                ):
+                    parse_one(sql, read="postgres").sql(dialect="e6", from_dialect="postgres")
+
+        for dialect in ("spark", "databricks"):
+            for function, safe in (("ELEMENT_AT", False), ("TRY_ELEMENT_AT", True)):
+                with self.subTest(dialect=dialect, function=function):
+                    tree = parse_one(f"SELECT {function}(a, 1)", read=dialect)
+                    self.assertIsNone(tree.find(exp.Anonymous))
+                    bracket = tree.find(exp.Bracket)
+                    self.assertIsNotNone(bracket)
+                    self.assertEqual(bracket.args.get("offset"), 1)
+                    self.assertEqual(bracket.args.get("safe"), safe)
+
+                    # Explicit element lookup stays 1-based, including on SPLIT. Raw SPLIT
+                    # subscripts have a separate 0-based E6 contract and must remain brackets.
+                    for key in ("1", "-1", "0", "999", "NULL"):
+                        sql = f"SELECT {function}(SPLIT(a, '~'), {key})"
+                        self.assertEqual(
+                            parse_one(sql, read=dialect).sql(dialect="e6", from_dialect=dialect),
+                            sql,
+                        )
+            self.assertEqual(
+                parse_one("SELECT SPLIT(a, '~')[0]", read=dialect).sql(
+                    dialect="e6", from_dialect=dialect
+                ),
+                "SELECT SPLIT(a, '~')[0]"
+                if dialect == "databricks"
+                else "SELECT ELEMENT_AT(SPLIT(a, '~'), 1)",
+            )
+
     def test_hybrid_multidialect_join_condition_tell(self):
         """HYBRID_MULTIDIALECT: a Databricks tell (an Anonymous, e.g. TIMESTAMPADD) in a join's
         ON is reparsed as Databricks in place (join_sql), and the FROM-base subquery that ON
