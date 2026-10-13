@@ -17,6 +17,7 @@ from sqlglot.dialects.dialect import (
     trim_sql,
 )
 from sqlglot.dialects.spark import Spark
+from sqlglot.errors import ParseError
 from sqlglot.tokens import TokenType
 from sqlglot.helper import seq_get
 from sqlglot.optimizer.annotate_types import TypeAnnotator
@@ -45,6 +46,20 @@ class GetJsonObject(exp.JSONExtract):
     its output; a dialect that supports GET_JSON_OBJECT maps this class in its TRANSFORMS.
     Defined here rather than in expressions.py so no other dialect parses into it.
     """
+
+
+class Explain(exp.Command):
+    """EXPLAIN [EXTENDED|CODEGEN|COST|FORMATTED] <statement> as written in Databricks.
+
+    A Command that also holds the parsed statement, so the statement is part of the AST and a
+    dialect that supports EXPLAIN maps this class in its TRANSFORMS; every other dialect writes it
+    back verbatim like any Command. Defined here so no other dialect parses into it.
+    """
+
+    arg_types = {"this": True, "expression": False, "statement": False}
+
+
+Explain.key = exp.Command.key
 
 
 def _build_json_extract(args: t.List) -> exp.JSONExtract:
@@ -191,6 +206,22 @@ class Databricks(Spark):
         # string literal. Only the alias position is affected, so genuine ``"..."``
         # string literals elsewhere are left untouched.
         STRING_ALIASES = DBR_DOUBLE_QUOTED_IDENTIFIERS
+
+        def _parse_command(self) -> exp.Command:
+            command = super()._parse_command()
+            sql = command.text("expression")
+            if command.this != "EXPLAIN" or not sql.strip():
+                return command
+
+            # The tokenizer swallows everything after EXPLAIN into one string; parse it so the
+            # statement is part of the AST (see Explain)
+            style, *rest = sql.split(None, 1)
+            if style.upper() in ("EXTENDED", "CODEGEN", "COST", "FORMATTED") and rest:
+                sql = rest[0]
+            try:
+                return Explain(**command.args, statement=self.dialect.parse(sql)[0])
+            except ParseError:
+                return command
 
         FUNCTIONS = {
             **Spark.Parser.FUNCTIONS,
