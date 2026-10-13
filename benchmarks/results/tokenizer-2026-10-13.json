@@ -1,0 +1,223 @@
+{
+  "commit": "5de8561741bd28902d6d670b4479eb8faccf7140",
+  "python": "3.11.6 (main, Nov  2 2023, 04:39:40) [Clang 14.0.0 (clang-1400.0.29.202)]",
+  "platform": "macOS-26.5.1-arm64-arm-64bit",
+  "date": "2026-10-13",
+  "full_corpus": {
+    "subtree": {
+      "output_or_status_differences": [],
+      "error_detail_differences": [],
+      "groups": {
+        "samsung": {
+          "cases": 704,
+          "paired_successes": 704,
+          "python": {
+            "successes": 704,
+            "mean_ms": 239.99986642560214,
+            "p50_ms": 67.62406253255904,
+            "p95_ms": 1143.8905829563737
+          },
+          "rust": {
+            "successes": 704,
+            "mean_ms": 155.7953830904973,
+            "p50_ms": 48.38945786468685,
+            "p95_ms": 798.0162079911679
+          }
+        },
+        "condenast": {
+          "cases": 924,
+          "paired_successes": 906,
+          "python": {
+            "successes": 906,
+            "mean_ms": 4.892312133146109,
+            "p50_ms": 3.0375419883057475,
+            "p95_ms": 15.183000126853585
+          },
+          "rust": {
+            "successes": 906,
+            "mean_ms": 3.841499907476519,
+            "p50_ms": 2.213062485679984,
+            "p95_ms": 11.45675010047853
+          }
+        }
+      }
+    },
+    "vanilla": {
+      "output_or_status_differences": [
+        [
+          "condenast",
+          "Condenast::1024beaeb9eb05dbb1a2e0327bd212bc46805e66319445963f082da2656add08#1"
+        ],
+        [
+          "condenast",
+          "Condenast::50806637ef5c3deb3b91b533bee835d504b9563d512412a986e89faccfb7906a#1"
+        ],
+        [
+          "condenast",
+          "Condenast::5fe4b36996d3aedb3df90094ccfeefbff1f71684d4067a08a8942ca9e732ec5f#1"
+        ],
+        [
+          "condenast",
+          "Condenast::4c4f8d86cef4b2ff671bea519bd5cd8c3d788068a51a8de8f90696874f80ee9e#1"
+        ],
+        [
+          "condenast",
+          "Condenast::a86186192e23e9395e8961782a18eec249df9f69d899cd7a161f6796d14ab743#1"
+        ],
+        [
+          "condenast",
+          "Condenast::c93fc875a6c20bb4c94a4f48866f30cc737efa4718299f55d8718b794cfe9877#1"
+        ],
+        [
+          "condenast",
+          "Condenast::e423f3150017c929bd867203765eb93ef6f2acbcf2fd15f91a791a2195e4aeb7#1"
+        ],
+        [
+          "condenast",
+          "Condenast::6860f3e65a4c1d71d26213999b3b8e6e37c8808541de4659a2cb5fc865d186fa#1"
+        ],
+        [
+          "condenast",
+          "Condenast::160a307a5059ddf3b3bbcd89221c49be3de7c9a1502a4cda33620611b589486a#1"
+        ],
+        [
+          "condenast",
+          "Condenast::31270316ad6bcf48d3869f9cb188667e0a45e6b07e5928dc86b3e1330a2c2d46#2"
+        ],
+        [
+          "condenast",
+          "Condenast::230d5388db62dc5da3f0bd28f12f953870c54331c92e9d13e5aaf4d6b09b1ee3#2"
+        ]
+      ],
+      "error_detail_differences": [],
+      "groups": {
+        "samsung": {
+          "cases": 704,
+          "paired_successes": 250,
+          "python": {
+            "successes": 250,
+            "mean_ms": 10.688586147502065,
+            "p50_ms": 2.7417914243415,
+            "p95_ms": 83.6719588842243
+          },
+          "rust": {
+            "successes": 250,
+            "mean_ms": 9.862179031595588,
+            "p50_ms": 2.5996664771810174,
+            "p95_ms": 77.90137501433492
+          }
+        },
+        "condenast": {
+          "cases": 924,
+          "paired_successes": 901,
+          "python": {
+            "successes": 901,
+            "mean_ms": 4.622514847796266,
+            "p50_ms": 2.836667001247406,
+            "p95_ms": 14.729709131643176
+          },
+          "rust": {
+            "successes": 901,
+            "mean_ms": 10.670503223889593,
+            "p50_ms": 6.183041026815772,
+            "p95_ms": 32.485040836036205
+          }
+        }
+      }
+    }
+  },
+  "repeat_sample": {
+    "subtree": {
+      "output_or_status_differences": [],
+      "error_detail_differences": [],
+      "groups": {
+        "samsung": {
+          "cases": 12,
+          "paired_successes": 12,
+          "python": {
+            "successes": 12,
+            "mean_ms": 230.8285659722363,
+            "p50_ms": 66.90102152060717,
+            "p95_ms": 1045.4496659804136
+          },
+          "rust": {
+            "successes": 12,
+            "mean_ms": 170.61463531960422,
+            "p50_ms": 50.52220856305212,
+            "p95_ms": 756.7336659412831
+          }
+        },
+        "condenast": {
+          "cases": 12,
+          "paired_successes": 11,
+          "python": {
+            "successes": 11,
+            "mean_ms": 5.672689442607489,
+            "p50_ms": 2.4902080185711384,
+            "p95_ms": 24.596583796665072
+          },
+          "rust": {
+            "successes": 11,
+            "mean_ms": 4.076238573444161,
+            "p50_ms": 1.6572920139878988,
+            "p95_ms": 17.905416898429394
+          }
+        }
+      }
+    },
+    "vanilla": {
+      "output_or_status_differences": [],
+      "error_detail_differences": [],
+      "groups": {
+        "samsung": {
+          "cases": 12,
+          "paired_successes": 4,
+          "python": {
+            "successes": 4,
+            "mean_ms": 5.557666707318276,
+            "p50_ms": 2.8263124404475093,
+            "p95_ms": 14.95579187758267
+          },
+          "rust": {
+            "successes": 4,
+            "mean_ms": 4.904177039861679,
+            "p50_ms": 2.5005205534398556,
+            "p95_ms": 13.18816700950265
+          }
+        },
+        "condenast": {
+          "cases": 12,
+          "paired_successes": 11,
+          "python": {
+            "successes": 11,
+            "mean_ms": 5.599450722167438,
+            "p50_ms": 2.417417010292411,
+            "p95_ms": 24.80516699142754
+          },
+          "rust": {
+            "successes": 11,
+            "mean_ms": 4.899454493583604,
+            "p50_ms": 2.076999982818961,
+            "p95_ms": 21.491082850843668
+          }
+        }
+      }
+    }
+  },
+  "rust_stage_profile": {
+    "backend": "rust",
+    "active": true,
+    "query_id": "Q611055-99-20260825.085440.746",
+    "chars": 333705,
+    "fixture_equal": true,
+    "medians": {
+      "total_ms": 786.7558330763131,
+      "discovery_tokenize_ms": 81.83862501755357,
+      "discovery_parse_ms": 27.492749970406294,
+      "cleanup_ms": 44.8043760843575,
+      "region_parse_ms": 454.6022501308471,
+      "transforms_ms": 56.13216711208224,
+      "generate_ms": 106.89229192212224
+    }
+  }
+}
