@@ -2864,6 +2864,30 @@ class TestE6(Validator):
             read={"databricks": "SELECT a, count(*) FROM t GROUP BY a WITH ROLLUP"},
         )
 
+    def test_databricks_explain(self):
+        # A Databricks EXPLAIN [EXTENDED|CODEGEN|COST|FORMATTED] <query> keeps its query in the
+        # AST, so the query is transpiled like on its own; the Databricks-only style is dropped
+        self.validate_all(
+            "EXPLAIN SELECT DATE_TRUNC('DAY', TO_TIMESTAMP(date, 'MM/dd/y')) \"time\" FROM t GROUP BY 1",
+            read={
+                "databricks": "EXPLAIN SELECT date_trunc('day', to_timestamp(date, 'MM/dd/yyyy')) AS time FROM t GROUP BY 1"
+            },
+        )
+        self.validate_all(
+            'EXPLAIN WITH x AS (SELECT DATE_DIFF(\'DAY\', s, e) AS d FROM "db"."t") SELECT d FROM x',
+            read={
+                "databricks": "explain formatted WITH x AS (SELECT datediff(day, s, e) AS d FROM `db`.`t`) SELECT d FROM x"
+            },
+        )
+
+        # Other dialects still write it back verbatim, and a bare or unparseable EXPLAIN stays a Command
+        query = "EXPLAIN EXTENDED SELECT a AS time FROM `db`.`t`"
+        self.assertEqual(parse_one(query, read="databricks").sql("databricks"), query)
+        self.assertEqual(parse_one("EXPLAIN", read="databricks").sql("e6"), "EXPLAIN")
+        self.assertEqual(
+            parse_one("EXPLAIN SELECT (", read="databricks").sql("e6"), "EXPLAIN SELECT ("
+        )
+
     def test_get_json_object_native_executor(self):
         # E6 supports GET_JSON_OBJECT with Databricks' results, while its JSON_EXTRACT returns
         # JSON text (quoted strings): with E6_EXECUTOR_TYPE=native a Databricks

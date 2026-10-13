@@ -3711,6 +3711,7 @@ class E6(Dialect):
             exp.Interval: interval_sql,
             exp.JSONExtract: json_extract_sql,
             databricks.GetJsonObject: json_extract_sql,
+            databricks.Explain: lambda self, e: f"EXPLAIN {self.sql(e, 'statement')}",
             exp.JSONExtractScalar: json_extract_sql,
             exp.JSONFormat: json_format_sql,
             exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),
