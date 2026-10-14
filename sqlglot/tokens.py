@@ -26,6 +26,10 @@ except ImportError:
 
 
 class TokenType(AutoName):
+    # Enum members compare by identity. Use the matching C-level hash instead of
+    # calling Python Enum.__hash__ for every parser set/dictionary lookup.
+    __hash__ = object.__hash__
+
     L_PAREN = auto()
     R_PAREN = auto()
     L_BRACKET = auto()

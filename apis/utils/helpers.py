@@ -526,8 +526,8 @@ def set_cte_names_case_sensitively(sql_query_ast):
 def apply_e6_ast_transforms(tree: exp.Expression) -> exp.Expression:
     """sanitize_comments + ensure_select_from_values + set_cte_names_case_sensitively, folded
     into ONE ``tree.transform`` walk (escape comment markers, rewrite VALUES-only CTEs, collect
-    CTE/subquery/VALUES aliases) plus one pass to case-sensitively rename tables that match a
-    collected alias -- 5 walks down to 2. Byte-identical to running the three separately
+    CTE/subquery/VALUES aliases and table references), then rename only collected tables.
+    This avoids a second full-tree walk. Byte-identical to running the three separately
     (verified on 704 production queries).
 
     Identifier quoting is intentionally NOT done here: the e6 Generator quotes reserved-keyword
@@ -535,8 +535,11 @@ def apply_e6_ast_transforms(tree: exp.Expression) -> exp.Expression:
     full-tree walk is no longer needed.
     """
     names: list = []
+    tables: list = []
 
     def _visit(node: exp.Expression) -> exp.Expression:
+        if isinstance(node, exp.Table):
+            tables.append(node)
         # sanitize_comments: escape /* */ inside comment strings
         if node.comments:
             node.comments = [c.replace("/*", "/ *").replace("*/", "* /") for c in node.comments]
@@ -566,7 +569,7 @@ def apply_e6_ast_transforms(tree: exp.Expression) -> exp.Expression:
 
     total_list = list(set(names))
     if total_list:
-        for table in tree.find_all(exp.Table):
+        for table in tables:
             cte_name = next((n for n in total_list if n.lower() == table.name.lower()), None)
             if cte_name is not None and not table.db:
                 table.this.set("this", cte_name)
