@@ -85,6 +85,17 @@ Size is SQL character count, including the wrapper. All outcomes remain included
 | 20k–100k | 295 | 38.40 | 245.59 | 148.70 | 125.96 |
 | ≥100k | 107 | 214.30 | 1658.06 | 934.18 | 794.24 |
 
+Successful conversions in those same buckets (all inputs above remain included):
+
+| Characters | Queries | Vanilla | MULTIDIALECT | SUBQUERY_TREE | Our branch |
+|---|---:|---:|---:|---:|---:|
+| <5k | 1092 | 1013 | 1030 | 1076 | 1076 |
+| 5k–20k | 134 | 123 | 130 | 132 | 132 |
+| 20k–100k | 295 | 15 | 295 | 295 | 295 |
+| ≥100k | 107 | 0 | 107 | 107 | 107 |
+
+Vanilla fails on every ≥100k input in this corpus. Its latency in that bucket measures failed attempts, not completed conversions, so the ratio does not establish removable SUBQUERY_TREE overhead.
+
 ## 4. Successful and failed attempts, separately
 
 These are diagnostic breakdowns; each method may have a different successful subset. Do not compare these means as if they represented identical workloads.

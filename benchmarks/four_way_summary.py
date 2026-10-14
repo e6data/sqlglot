@@ -75,6 +75,7 @@ def summarize(directory):
                          ("20k–100k", 20000, 100000), ("≥100k", 100000, float("inf"))):
         selected = [k for k in keys if lo <= indexed["vanilla"][k]["chars"] < hi]
         bins.append({"characters": name, "queries": len(selected),
+                     "successes": {m: sum("sha256" in indexed[m][k] for k in selected) for m in METHODS},
                      "methods": {m: stats(indexed[m][k]["wall_ms"] for k in selected) for m in METHODS}})
 
     def outcome(row):
@@ -171,6 +172,14 @@ def report(runs, summary):
                   "|---|---:|---:|---:|---:|---:|"])
     for row in summary["size_bins"]:
         lines.append(f"| {row['characters']} | {row['queries']} | " + " | ".join(f"{row['methods'][m]['mean']:.2f}" for m in METHODS) + " |")
+    lines.extend(["", "Successful conversions in those same buckets (all inputs above remain included):", "",
+                  "| Characters | Queries | Vanilla | MULTIDIALECT | SUBQUERY_TREE | Our branch |",
+                  "|---|---:|---:|---:|---:|---:|"])
+    for row in summary["size_bins"]:
+        lines.append(f"| {row['characters']} | {row['queries']} | " + " | ".join(str(row['successes'][m]) for m in METHODS) + " |")
+    lines.extend(["", "Vanilla fails on every ≥100k input in this corpus. Its latency in that bucket "
+                  "measures failed attempts, not completed conversions, so the ratio does not establish "
+                  "removable SUBQUERY_TREE overhead."])
     lines.extend(["", "## 4. Successful and failed attempts, separately", "",
                   "These are diagnostic breakdowns; each method may have a different successful subset. "
                   "Do not compare these means as if they represented identical workloads.", "",

@@ -595,6 +595,12 @@
     {
       "characters": "<5k",
       "queries": 1092,
+      "successes": {
+        "vanilla": 1013,
+        "multidialect": 1030,
+        "subquery_tree": 1076,
+        "our_branch": 1076
+      },
       "methods": {
         "vanilla": {
           "mean": 3.3337927234432234,
@@ -633,6 +639,12 @@
     {
       "characters": "5k\u201320k",
       "queries": 134,
+      "successes": {
+        "vanilla": 123,
+        "multidialect": 130,
+        "subquery_tree": 132,
+        "our_branch": 132
+      },
       "methods": {
         "vanilla": {
           "mean": 16.678290716417912,
@@ -671,6 +683,12 @@
     {
       "characters": "20k\u2013100k",
       "queries": 295,
+      "successes": {
+        "vanilla": 15,
+        "multidialect": 295,
+        "subquery_tree": 295,
+        "our_branch": 295
+      },
       "methods": {
         "vanilla": {
           "mean": 38.40404675593221,
@@ -709,6 +727,12 @@
     {
       "characters": "\u2265100k",
       "queries": 107,
+      "successes": {
+        "vanilla": 0,
+        "multidialect": 107,
+        "subquery_tree": 107,
+        "our_branch": 107
+      },
       "methods": {
         "vanilla": {
           "mean": 214.29649957943926,

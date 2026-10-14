@@ -7,6 +7,7 @@ input is measured, including failures. Output contains hashes, never SQL text.
 import argparse
 import asyncio
 import csv
+import gc
 import gzip
 import hashlib
 import json
@@ -15,6 +16,7 @@ import os
 from pathlib import Path
 import platform
 import random
+import resource
 import statistics
 import sys
 import time
@@ -30,13 +32,16 @@ FLAGS = {
 
 
 async def run(args):
-    os.environ.update(FLAGS)
+    if args.gc_threshold0 is not None:
+        gc.set_threshold(args.gc_threshold0, *gc.get_threshold()[1:])
+    runtime_flags = dict(FLAGS, SQLGLOTRS_TOKENIZER="1" if args.tokenizer == "rust" else "0")
+    os.environ.update(runtime_flags)
     sys.path.insert(0, str(args.root.resolve()))
     logging.disable(logging.CRITICAL)
     import converter_api as api
     from sqlglot.tokens import USE_RS_TOKENIZER
 
-    assert not USE_RS_TOKENIZER
+    assert USE_RS_TOKENIZER == (args.tokenizer == "rust"), "Requested tokenizer is unavailable"
     assert Path(api.__file__).resolve() == (args.root / "converter_api.py").resolve()
     api.SUBQUERY_TREE = args.variant in ("subquery_tree", "our_branch")
     api.SAMSUNG_TABLEAU_DASHBOARD = "false"
@@ -66,6 +71,9 @@ async def run(args):
             rows.extend(dict(row, corpus=corpus) for row in csv.DictReader(stream))
     # Fixed randomized order prevents query size from tracking sustained CPU load.
     random.Random(20261014).shuffle(rows)
+    if args.large_sample:
+        large = sorted((r for r in rows if len(r["sql"]) >= 100000), key=lambda r: len(r["sql"]))
+        rows = large[::10]
     if args.limit:
         rows = rows[:args.limit]
     assert len({(r["corpus"], r["query_id"]) for r in rows}) == len(rows)
@@ -107,11 +115,15 @@ async def run(args):
         results.append(dict(corpus=row["corpus"], id=row["query_id"], group=row["group"],
                             chars=len(row["sql"]), wall_ms=statistics.median(r["wall_ms"] for r in values),
                             cpu_ms=statistics.median(r["cpu_ms"] for r in values), **outcomes[0]))
-    source_files = ["converter_api.py", "sqlglot/parser.py", "apis/utils/subquery_tree.py",
-                    "apis/utils/lite_parser.py", "apis/utils/multidialect.py"]
+    source_files = ["converter_api.py", "sqlglot/parser.py", "sqlglot/tokens.py",
+                    "apis/utils/subquery_tree.py", "apis/utils/region_tokens.py",
+                    "apis/utils/helpers.py", "apis/utils/lite_parser.py", "apis/utils/multidialect.py"]
     evidence = dict(variant=args.variant, commit=args.commit, repeats=args.repeats,
                     python=sys.version, platform=platform.platform(), machine=platform.machine(),
-                    logical_cpus=os.cpu_count(), flags=FLAGS, feature_flags=flags,
+                    logical_cpus=os.cpu_count(), flags=runtime_flags, feature_flags=flags,
+                    gc_thresholds=gc.get_threshold(),
+                    max_rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                    max_rss_unit="bytes" if sys.platform == "darwin" else "KiB",
                     corpus_hashes=corpus_hashes, started_unix=started, finished_unix=time.time(),
                     source_hashes={f: hashlib.sha256((args.root / f).read_bytes()).hexdigest() for f in source_files},
                     results=results)
@@ -126,7 +138,12 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--limit", type=int, default=0, help="Smoke check only; omit for a full run")
+    parser.add_argument("--large-sample", action="store_true", help="Every tenth query in the >=100k bucket")
+    parser.add_argument("--tokenizer", choices=("python", "rust"), default="python")
+    parser.add_argument("--gc-threshold0", type=int, help="Benchmark-only GC threshold override; production is unchanged")
     args = parser.parse_args()
     if args.repeats < 1 or args.limit < 0:
         parser.error("repeats must be positive; limit cannot be negative")
+    if args.gc_threshold0 is not None and args.gc_threshold0 < 1:
+        parser.error("GC threshold must be positive")
     asyncio.run(run(args))

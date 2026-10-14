@@ -1,0 +1,27 @@
+{
+  "implementation_commit": "236f29e81e6d33a4b4928d45bd77c8db28b7b754",
+  "sqlglotrs_version": "0.6.2",
+  "wheel_filename": "sqlglotrs-0.6.2-cp311-cp311-macosx_11_0_arm64.whl",
+  "wheel_sha256": "15d29129c1f42f1ce5d19cc146e90ea177db50b0666f3b845d2567eba9797a50",
+  "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)",
+  "source_sha256": {
+    "sqlglot/tokens.py": "3977c96ba7cd031c334c6707f91e52657769fd25d401f8696b1d0f3a4b066df8",
+    "sqlglotrs/Cargo.toml": "45d1eaa8c70d9371f2bf2bc0ba7d78fe5e37d34ec07a4a7c453a7b93ade03a89",
+    "sqlglotrs/Cargo.lock": "66866f6882f0c77dcbb44310bdde7cb380939b99fa98096c57882cf7c6ad492c",
+    "sqlglotrs/src/settings.rs": "082cf826c4377d0110f43ffa01139748addb09c194b133be3debc5d0db169e1e",
+    "sqlglotrs/src/tokenizer.rs": "da8f04cdb2ad58dbcf2761024e86f5542c4558e8e0369f488daefcf5488416c8"
+  },
+  "parser_allocations": {
+    "query_id": "Q611055-99-20260825.085440.746",
+    "chars": 333705,
+    "created": 50173,
+    "live": 50157,
+    "discarded": {
+      "Identifier": 9,
+      "Literal": 1,
+      "Column": 2,
+      "Var": 2,
+      "DataTypeParam": 2
+    }
+  }
+}
