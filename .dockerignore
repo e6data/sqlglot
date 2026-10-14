@@ -1,0 +1,50 @@
+# The build context is COPY'd wholesale by `COPY . .` in the Dockerfile, so
+# anything not needed at runtime ends up in the image and is pulled onto every
+# node. Keep this file in sync with what the Dockerfile actually needs:
+# requirements.txt, sqlglotrs/ (built by maturin), and the runtime Python.
+
+# Version control. Jenkins checks out full history, which is by far the largest
+# single item in the context.
+.git
+.gitignore
+.gitpod.yml
+.pre-commit-config.yaml
+
+# Generated documentation.
+docs/
+pdoc/
+
+# Blog posts, benchmarks and tests: not used at runtime.
+posts/
+benchmarks/
+tests/
+
+# CI / tooling config.
+.github/
+Jenkinsfile
+sonar-project.properties
+Makefile
+CONTRIBUTING.md
+CHANGELOG.md
+
+# Images used by the README.
+*.png
+*.gif
+
+# Local scratch output.
+output.txt
+
+# Python build and cache artifacts.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Rust build output — sqlglotrs is compiled inside the image.
+sqlglotrs/target/
