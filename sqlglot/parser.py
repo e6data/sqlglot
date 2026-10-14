@@ -3369,6 +3369,8 @@ class Parser(metaclass=_Parser):
             # HYBRID_MULTIDIALECT path reparsing a held-out Databricks subquery).
             if subquery is not None and lparen is not None and rparen is not None:
                 subquery.meta["raw_sql"] = self._find_sql(lparen, rparen)
+                subquery.meta["raw_start"] = lparen.start
+                subquery.meta["raw_end"] = rparen.end + 1
             return subquery
         elif self._match(TokenType.VALUES, advance=False):
             this = self._parse_derived_table_values()
@@ -5547,14 +5549,14 @@ class Parser(metaclass=_Parser):
             this = exp.DataType(this=exp.DataType.Type.NULL)
 
         if maybe_func and check_func:
-            index2 = self._index
-            peek = self._parse_string()
-
-            if not peek:
-                self._retreat(index)
-                return None
-
-            self._retreat(index2)
+            # Only look ahead: the literal is parsed by _parse_type after this
+            # returns. Building and discarding an AST here duplicates that work.
+            if not self._match_set(self.STRING_PARSERS, advance=False):
+                index2 = self._index
+                if not self._parse_placeholder():
+                    self._retreat(index)
+                    return None
+                self._retreat(index2)
 
         if not this:
             if self._match_text_seq("UNSIGNED"):
@@ -5780,14 +5782,15 @@ class Parser(metaclass=_Parser):
             if op:
                 this = op(self, this, field)
             elif isinstance(this, exp.Column) and not this.args.get("catalog"):
-                this = self.expression(
-                    exp.Column,
-                    comments=this.comments,
-                    this=field,
-                    table=this.this,
-                    db=this.args.get("table"),
-                    catalog=this.args.get("db"),
-                )
+                # The column has not escaped the parser yet. Extend it in place
+                # instead of allocating and discarding a Column for every dot.
+                this.set("catalog", this.args.get("db"))
+                this.set("db", this.args.get("table"))
+                this.set("table", this.this)
+                this.set("this", field)
+                if not this.comments:
+                    self._add_comments(this)
+                self.validate_expression(this)
             elif isinstance(field, exp.Window):
                 # Move the exp.Dot's to the window's function
                 window_func = self.expression(exp.Dot, this=this, expression=field.this)
@@ -6107,6 +6110,18 @@ class Parser(metaclass=_Parser):
 
             if not self._match(TokenType.R_PAREN):
                 self._retreat(index)
+        elif (
+            self._curr
+            and self._curr.token_type in (TokenType.VAR, TokenType.IDENTIFIER)
+            and self._next
+            and self._next.token_type not in self.LAMBDAS
+            and self.__class__._parse_lambda_arg is Parser._parse_lambda_arg
+        ):
+            # A single identifier can only start a lambda when followed by its
+            # operator. Avoid allocating an Identifier merely to retreat and
+            # parse it again as a normal function argument. Dialects with richer
+            # lambda argument grammars retain their existing speculative path.
+            expressions = []
         else:
             expressions = [self._parse_lambda_arg()]
 

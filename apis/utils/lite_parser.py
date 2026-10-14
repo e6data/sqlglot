@@ -94,12 +94,13 @@ class LiteParser(Parser):
         return this
 
 
-def lite_parse(query: str) -> exp.Expression:
+def lite_parse(query: str, tokens=None) -> exp.Expression:
     """Parse ``query`` with :class:`LiteParser` and return the AST. Every subquery in
     it carries ``meta["raw_sql"]`` (its verbatim source)."""
     dialect = Dialect()
     _t = time.perf_counter()
-    tokens = dialect.tokenize(query)
+    if tokens is None:
+        tokens = dialect.tokenize(query)
     _tokenize_ms = (time.perf_counter() - _t) * 1000
     _t = time.perf_counter()
     ast = LiteParser(dialect=dialect).parse(tokens, query)[0]

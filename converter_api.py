@@ -121,7 +121,7 @@ def escape_unicode(s: str) -> str:
     return s.encode("unicode_escape").decode("ascii")
 
 
-def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
+def _region_to_e6(region_sql: str, from_sql: str, pretty: bool, tokens=None) -> str:
     """Transpile ONE region of a multi-dialect BI-tool query to e6.
 
     This deliberately runs the SAME steps as the main /convert-query pipeline
@@ -140,6 +140,7 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     """
     # Same input cleanup the main path does before parsing.
     _t = time.perf_counter()
+    original_region_sql = region_sql
     region_sql = normalize_unicode_spaces(region_sql)
     if SKIP_COMMENT.lower() == "true":
         region_sql, _ = strip_comment(region_sql)
@@ -151,7 +152,9 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     # from_sql=None (subquery tree): parse_region decides the dialect and its parse is reused.
     _t = time.perf_counter()
     if from_sql is None:
-        from_sql, tree = parse_region(region_sql)
+        from_sql, tree = parse_region(
+            region_sql, tokens=tokens if region_sql == original_region_sql else None
+        )
     else:
         tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
     _parse_ms = (time.perf_counter() - _t) * 1000
@@ -224,7 +227,7 @@ async def convert_query(
             converted_query = subquery_tree_transpile(
                 query,
                 pretty,
-                emit=lambda region, p: _region_to_e6(region, None, p),
+                emit_tokens=lambda region, p, tokens: _region_to_e6(region, None, p, tokens),
             )
             logger.info(
                 "%s AT %s — MULTIDIALECT via subquery_tree:\n%s",

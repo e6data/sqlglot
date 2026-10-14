@@ -1,0 +1,892 @@
+{
+  "date": "2026-10-14",
+  "baseline_commit": "8a4435a39",
+  "source_sha256": {
+    "apis/utils/lite_parser.py": "972ad187fc7d7993f89336425f30341f68876f5e9eaaa040f49b63476b063ec0",
+    "apis/utils/subquery_tree.py": "cbd0b616d90f68403f9bf8e004c81ce242de9336a666136d289cffba033f2eff",
+    "apis/utils/region_tokens.py": "b896bdd5fc111b8c62c814356194a85124e06d4d885c4eb0df6c50d51b2c03d2",
+    "converter_api.py": "3a40797ea32399a8865b0a4ed011be0c6c22d6f7dbb07b34c8e2ba157aa3e48e",
+    "sqlglot/parser.py": "a2a3729ac991d042dd2944f62514eb01b40bf38d0e6cd03c888e72149c4bf977"
+  },
+  "method": "Actual converter handler; 12 length-stratified inputs per corpus; median of 5 warmed repetitions per input; mean over successes. Separate sequential backend/variant processes. No HTTP or log IO. Baseline from git archive 8a4435a39. After measured uncommitted source: runner commit field alone does not identify it.",
+  "summary_ms": {
+    "python": {
+      "samsung": {
+        "before": 230.42095481650904,
+        "after": 204.19180922908708,
+        "reduction_percent": 11.383142478646956
+      },
+      "condenast": {
+        "before": 5.6844279593364755,
+        "after": 5.6505341463806955,
+        "reduction_percent": 0.596257234645936
+      }
+    },
+    "rust": {
+      "samsung": {
+        "before": 167.96730189040923,
+        "after": 174.12502792042991,
+        "reduction_percent": -3.666026637754949
+      },
+      "condenast": {
+        "before": 4.160840953276916,
+        "after": 4.662477305497635,
+        "reduction_percent": -12.056128985791915
+      }
+    }
+  },
+  "full_corpus_parity": {
+    "cases": 1628,
+    "successes": 1610,
+    "existing_failures": 18,
+    "output_status_or_error_detail_differences": 0
+  },
+  "ast_allocations": {
+    "before": {
+      "created": 56826,
+      "live": 50157,
+      "discarded": {
+        "Identifier": 2321,
+        "Column": 4343,
+        "Literal": 1,
+        "Var": 2,
+        "DataTypeParam": 2
+      },
+      "output_sha256": "f7fd91e54d662708db9cdbe9e1ecb95dbd384251a4ed40021742e79ef0478802"
+    },
+    "after": {
+      "created": 50173,
+      "live": 50157,
+      "discarded": {
+        "Identifier": 9,
+        "Column": 2,
+        "Literal": 1,
+        "Var": 2,
+        "DataTypeParam": 2
+      },
+      "output_sha256": "f7fd91e54d662708db9cdbe9e1ecb95dbd384251a4ed40021742e79ef0478802"
+    }
+  },
+  "sample_runs": {
+    "python_before": {
+      "backend": "python",
+      "mode": "subtree",
+      "rust_active": false,
+      "python": "3.11.6 (main, Nov  2 2023, 04:39:40) [Clang 14.0.0 (clang-1400.0.29.202)]",
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "commit": "8a4435a395f73d543afd7f19f7ea48a9bb322b04",
+      "repeats": 5,
+      "samples": 12,
+      "results": [
+        {
+          "corpus": "samsung",
+          "id": "Q611055-585-20260825.100853.775",
+          "group": "backtick",
+          "chars": 319,
+          "ms": 2.0944999996572733,
+          "sha256": "8958bbf6e99882bbcc6a0d1065df586025a98bc1cd53d04585351c0cfd3d011b"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-586-20260825.100911.678",
+          "group": "backtick",
+          "chars": 673,
+          "ms": 3.331208135932684,
+          "sha256": "8ccb059c75923bf22e453dd29b42976f3f622390e50a94a19ecf11813a6ed123"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-231-20260825.091149.404",
+          "group": "backtick",
+          "chars": 876,
+          "ms": 3.707916010171175,
+          "sha256": "eabaf2bc6abc214c90cc5048edc9483517cce9aabfe286a772e887a0498d3919"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-173-20260825.090640.803",
+          "group": "backtick",
+          "chars": 1207,
+          "ms": 3.8602501153945923,
+          "sha256": "4acec0ffa8bd89b0defd015491513375ca2a9125c5f9f685203f46212ad05711"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-516-20260825.095646.508",
+          "group": "backtick",
+          "chars": 5646,
+          "ms": 13.21324985474348,
+          "sha256": "2c62dea8105ab46f7bb6ce54e4ce57efe66d06c1eb2713f7de25b494a418face"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-472-20260825.094937.823",
+          "group": "backtick",
+          "chars": 24868,
+          "ms": 64.69608400948346,
+          "sha256": "be6245536e7cd83f0424f8c779c16988fe8254077322005e7f974bfb92a8001d"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-406-20260825.093034.323",
+          "group": "backtick",
+          "chars": 25834,
+          "ms": 67.3400410450995,
+          "sha256": "e090add302e2aaa341a1d40b75994ff14d7bb22e661715d0e51b3540425edc8f"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-309-20260825.092440.814",
+          "group": "backtick",
+          "chars": 30111,
+          "ms": 75.70024998858571,
+          "sha256": "7aefc2bae053c9f8a5d6add099b9eabb8b040c97e23b437e75319c180921d7c4"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-670-20260825.102240.949",
+          "group": "backtick",
+          "chars": 81580,
+          "ms": 236.2902918830514,
+          "sha256": "e32ba7f9186edbada07ef01e48b5382398174bfd9484379949ab0fb63c114a06"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-662-20260825.102125.860",
+          "group": "backtick",
+          "chars": 83844,
+          "ms": 241.18470796383917,
+          "sha256": "d03586bd1b06688e008b35c19b510e8908890e4645acd09aa547759823d4a925"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-91-20260825.085336.482",
+          "group": "no_backtick",
+          "chars": 333695,
+          "ms": 1020.159208914265,
+          "sha256": "7fde737fa99b18c7e4cee080d0ea00eedbcdd005393df6d1399bf581e65a8a7b"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-46-20260825.083810.452",
+          "group": "no_backtick",
+          "chars": 342654,
+          "ms": 1033.473749877885,
+          "sha256": "f4fb0748f74b96346c59ba0ab4d739ecd8cec3104433dee0d39949afbd3c5f01"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::a414e56f838da0ceff4f54cf57316b3c90242065266fb98d45823e524fbf774b#1",
+          "group": "no_backtick",
+          "chars": 140,
+          "ms": 0.41212490759789944,
+          "sha256": "319d10388325e4471a8564494ed85ce42e409407f60b25d01fe567333831a0e6"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::cd307db7db1908338d6551caafb0917f1cbc7482d3a52eb453c0977b2b1bf52f#2",
+          "group": "no_backtick",
+          "chars": 213,
+          "ms": 0.599707942456007,
+          "sha256": "da7375535a0c2dfd4a62169fd3ebab793ee22718421cc08f68043a2c5558dbcc"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::021336a1b1931b5fe8485b51b3aca7280dfddf78967690f866fc3009f3cda8d8#2",
+          "group": "no_backtick",
+          "chars": 372,
+          "ms": 1.129915937781334,
+          "sha256": "c3729b8221f7b35fe468d93e94477e58aa0301eae02ba162d72ade23ec793a1e"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::0b4770d454be05c8935f2cceddd42bba62bccf8a9b1be67b6d5ad3b3d33b7114#2",
+          "group": "no_backtick",
+          "chars": 547,
+          "ms": 1.1816669721156359,
+          "sha256": "bb3e236d583d1360bac992e09900fe6f52343677a378f7cb94f68fa0a365bc87"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::432ea6cf875b5b9d21eb7179ceeecc17fa08ab3fe116a600eb5a505cd1af2046#2",
+          "group": "no_backtick",
+          "chars": 806,
+          "ms": 2.011291915550828,
+          "sha256": "3d2cce01c08e9fb62016607a0b06a7210cf69e4f2ad6c202fa20bac1f90fcea0"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::664119655600dd36d03c32b006c045d992b70049c824532403542fb02b0a7988#2",
+          "group": "no_backtick",
+          "chars": 1095,
+          "ms": 4.025832982733846,
+          "sha256": "102659a5dc72f9f11a7db7e22fc0387f3d020140f984765528dd09ce48430d28"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::00be25b5d50b5b05709547a93abfcd8736f759e3ee4b00f2fe01fbb1c76f4bdf#2",
+          "group": "no_backtick",
+          "chars": 1361,
+          "ms": 2.4987920187413692,
+          "sha256": "d16859ff538244200aac8c7a782ba764a654ff1377d5612fb66e65ae42c43b4c"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::1c479ad44444fdffe8dfdbc725299c8793b04d28514ac1cec07c47373ffe6843#2",
+          "group": "no_backtick",
+          "chars": 1681,
+          "ms": 3.140500048175454,
+          "error": "ParseError",
+          "detail_sha256": "0b3b2edbffcb406033e63cfd4b7cc970f68e4344f2f910f5c80a61f21c8c238a"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::0c37aecdb256b8ed2a03a33aae29dea7816e8b83eb13285afe5b736ae05ac200#1",
+          "group": "no_backtick",
+          "chars": 1995,
+          "ms": 6.003167014569044,
+          "sha256": "448d67dede3711e75f5e32f1714ecd3c0b0c3ffb4754580e21ebf1c88903bd9c"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::10e6cc59bbfa0460914a4de1a869b02e9155cc1de79cb732592087c2815aeabb#2",
+          "group": "no_backtick",
+          "chars": 2723,
+          "ms": 8.478916948661208,
+          "sha256": "5763b5fde58435ef2e1c3add3c88365238b7884ac84f030e00f078bbc816ff30"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::58c1f77fbc95b9211cd892e615792cf36314ce9be3fa3a0f1d2ae92a6c9f2dac#1",
+          "group": "no_backtick",
+          "chars": 5023,
+          "ms": 11.623082915320992,
+          "sha256": "5ee5b8a4bf3023d6fe84b053c410081038128daf676f4e6d28fbc6de99da6e89"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::2a84b8d9444601376c947886d5756609c1546d13272ccd67ccdae674a01aeb16#2",
+          "group": "no_backtick",
+          "chars": 11261,
+          "ms": 24.56420799717307,
+          "sha256": "abf66366e1e552f64833d006f0eec2b8639b9dff0435941b4add29db225e65d2"
+        }
+      ]
+    },
+    "python_after": {
+      "backend": "python",
+      "mode": "subtree",
+      "rust_active": false,
+      "python": "3.11.6 (main, Nov  2 2023, 04:39:40) [Clang 14.0.0 (clang-1400.0.29.202)]",
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "commit": "8a4435a395f73d543afd7f19f7ea48a9bb322b04",
+      "repeats": 5,
+      "samples": 12,
+      "results": [
+        {
+          "corpus": "samsung",
+          "id": "Q611055-585-20260825.100853.775",
+          "group": "backtick",
+          "chars": 319,
+          "ms": 1.9328747875988483,
+          "sha256": "8958bbf6e99882bbcc6a0d1065df586025a98bc1cd53d04585351c0cfd3d011b"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-586-20260825.100911.678",
+          "group": "backtick",
+          "chars": 673,
+          "ms": 3.0275420285761356,
+          "sha256": "8ccb059c75923bf22e453dd29b42976f3f622390e50a94a19ecf11813a6ed123"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-231-20260825.091149.404",
+          "group": "backtick",
+          "chars": 876,
+          "ms": 3.3452091738581657,
+          "sha256": "eabaf2bc6abc214c90cc5048edc9483517cce9aabfe286a772e887a0498d3919"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-173-20260825.090640.803",
+          "group": "backtick",
+          "chars": 1207,
+          "ms": 3.6106249317526817,
+          "sha256": "4acec0ffa8bd89b0defd015491513375ca2a9125c5f9f685203f46212ad05711"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-516-20260825.095646.508",
+          "group": "backtick",
+          "chars": 5646,
+          "ms": 11.409667087718844,
+          "sha256": "2c62dea8105ab46f7bb6ce54e4ce57efe66d06c1eb2713f7de25b494a418face"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-472-20260825.094937.823",
+          "group": "backtick",
+          "chars": 24868,
+          "ms": 59.45370905101299,
+          "sha256": "be6245536e7cd83f0424f8c779c16988fe8254077322005e7f974bfb92a8001d"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-406-20260825.093034.323",
+          "group": "backtick",
+          "chars": 25834,
+          "ms": 58.8430839125067,
+          "sha256": "e090add302e2aaa341a1d40b75994ff14d7bb22e661715d0e51b3540425edc8f"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-309-20260825.092440.814",
+          "group": "backtick",
+          "chars": 30111,
+          "ms": 62.80949991196394,
+          "sha256": "7aefc2bae053c9f8a5d6add099b9eabb8b040c97e23b437e75319c180921d7c4"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-670-20260825.102240.949",
+          "group": "backtick",
+          "chars": 81580,
+          "ms": 215.49462503753603,
+          "sha256": "e32ba7f9186edbada07ef01e48b5382398174bfd9484379949ab0fb63c114a06"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-662-20260825.102125.860",
+          "group": "backtick",
+          "chars": 83844,
+          "ms": 226.10833286307752,
+          "sha256": "d03586bd1b06688e008b35c19b510e8908890e4645acd09aa547759823d4a925"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-91-20260825.085336.482",
+          "group": "no_backtick",
+          "chars": 333695,
+          "ms": 869.0372090786695,
+          "sha256": "7fde737fa99b18c7e4cee080d0ea00eedbcdd005393df6d1399bf581e65a8a7b"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-46-20260825.083810.452",
+          "group": "no_backtick",
+          "chars": 342654,
+          "ms": 935.2293328847736,
+          "sha256": "f4fb0748f74b96346c59ba0ab4d739ecd8cec3104433dee0d39949afbd3c5f01"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::a414e56f838da0ceff4f54cf57316b3c90242065266fb98d45823e524fbf774b#1",
+          "group": "no_backtick",
+          "chars": 140,
+          "ms": 0.4277080297470093,
+          "sha256": "319d10388325e4471a8564494ed85ce42e409407f60b25d01fe567333831a0e6"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::cd307db7db1908338d6551caafb0917f1cbc7482d3a52eb453c0977b2b1bf52f#2",
+          "group": "no_backtick",
+          "chars": 213,
+          "ms": 0.6162500940263271,
+          "sha256": "da7375535a0c2dfd4a62169fd3ebab793ee22718421cc08f68043a2c5558dbcc"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::021336a1b1931b5fe8485b51b3aca7280dfddf78967690f866fc3009f3cda8d8#2",
+          "group": "no_backtick",
+          "chars": 372,
+          "ms": 1.235458068549633,
+          "sha256": "c3729b8221f7b35fe468d93e94477e58aa0301eae02ba162d72ade23ec793a1e"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::0b4770d454be05c8935f2cceddd42bba62bccf8a9b1be67b6d5ad3b3d33b7114#2",
+          "group": "no_backtick",
+          "chars": 547,
+          "ms": 1.2962499167770147,
+          "sha256": "bb3e236d583d1360bac992e09900fe6f52343677a378f7cb94f68fa0a365bc87"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::432ea6cf875b5b9d21eb7179ceeecc17fa08ab3fe116a600eb5a505cd1af2046#2",
+          "group": "no_backtick",
+          "chars": 806,
+          "ms": 2.061625011265278,
+          "sha256": "3d2cce01c08e9fb62016607a0b06a7210cf69e4f2ad6c202fa20bac1f90fcea0"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::664119655600dd36d03c32b006c045d992b70049c824532403542fb02b0a7988#2",
+          "group": "no_backtick",
+          "chars": 1095,
+          "ms": 3.778833197429776,
+          "sha256": "102659a5dc72f9f11a7db7e22fc0387f3d020140f984765528dd09ce48430d28"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::00be25b5d50b5b05709547a93abfcd8736f759e3ee4b00f2fe01fbb1c76f4bdf#2",
+          "group": "no_backtick",
+          "chars": 1361,
+          "ms": 2.514749998226762,
+          "sha256": "d16859ff538244200aac8c7a782ba764a654ff1377d5612fb66e65ae42c43b4c"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::1c479ad44444fdffe8dfdbc725299c8793b04d28514ac1cec07c47373ffe6843#2",
+          "group": "no_backtick",
+          "chars": 1681,
+          "ms": 3.157875034958124,
+          "error": "ParseError",
+          "detail_sha256": "0b3b2edbffcb406033e63cfd4b7cc970f68e4344f2f910f5c80a61f21c8c238a"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::0c37aecdb256b8ed2a03a33aae29dea7816e8b83eb13285afe5b736ae05ac200#1",
+          "group": "no_backtick",
+          "chars": 1995,
+          "ms": 5.187709117308259,
+          "sha256": "448d67dede3711e75f5e32f1714ecd3c0b0c3ffb4754580e21ebf1c88903bd9c"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::10e6cc59bbfa0460914a4de1a869b02e9155cc1de79cb732592087c2815aeabb#2",
+          "group": "no_backtick",
+          "chars": 2723,
+          "ms": 8.153000148013234,
+          "sha256": "5763b5fde58435ef2e1c3add3c88365238b7884ac84f030e00f078bbc816ff30"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::58c1f77fbc95b9211cd892e615792cf36314ce9be3fa3a0f1d2ae92a6c9f2dac#1",
+          "group": "no_backtick",
+          "chars": 5023,
+          "ms": 11.897708056494594,
+          "sha256": "5ee5b8a4bf3023d6fe84b053c410081038128daf676f4e6d28fbc6de99da6e89"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::2a84b8d9444601376c947886d5756609c1546d13272ccd67ccdae674a01aeb16#2",
+          "group": "no_backtick",
+          "chars": 11261,
+          "ms": 24.986583972349763,
+          "sha256": "abf66366e1e552f64833d006f0eec2b8639b9dff0435941b4add29db225e65d2"
+        }
+      ]
+    },
+    "rust_before": {
+      "backend": "rust",
+      "mode": "subtree",
+      "rust_active": true,
+      "python": "3.11.6 (main, Nov  2 2023, 04:39:40) [Clang 14.0.0 (clang-1400.0.29.202)]",
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "commit": "8a4435a395f73d543afd7f19f7ea48a9bb322b04",
+      "repeats": 5,
+      "samples": 12,
+      "results": [
+        {
+          "corpus": "samsung",
+          "id": "Q611055-585-20260825.100853.775",
+          "group": "backtick",
+          "chars": 319,
+          "ms": 1.526207895949483,
+          "sha256": "8958bbf6e99882bbcc6a0d1065df586025a98bc1cd53d04585351c0cfd3d011b"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-586-20260825.100911.678",
+          "group": "backtick",
+          "chars": 673,
+          "ms": 2.302875043824315,
+          "sha256": "8ccb059c75923bf22e453dd29b42976f3f622390e50a94a19ecf11813a6ed123"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-231-20260825.091149.404",
+          "group": "backtick",
+          "chars": 876,
+          "ms": 2.5551661383360624,
+          "sha256": "eabaf2bc6abc214c90cc5048edc9483517cce9aabfe286a772e887a0498d3919"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-173-20260825.090640.803",
+          "group": "backtick",
+          "chars": 1207,
+          "ms": 2.6259159203618765,
+          "sha256": "4acec0ffa8bd89b0defd015491513375ca2a9125c5f9f685203f46212ad05711"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-516-20260825.095646.508",
+          "group": "backtick",
+          "chars": 5646,
+          "ms": 9.004791965708137,
+          "sha256": "2c62dea8105ab46f7bb6ce54e4ce57efe66d06c1eb2713f7de25b494a418face"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-472-20260825.094937.823",
+          "group": "backtick",
+          "chars": 24868,
+          "ms": 46.575749991461635,
+          "sha256": "be6245536e7cd83f0424f8c779c16988fe8254077322005e7f974bfb92a8001d"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-406-20260825.093034.323",
+          "group": "backtick",
+          "chars": 25834,
+          "ms": 48.44512487761676,
+          "sha256": "e090add302e2aaa341a1d40b75994ff14d7bb22e661715d0e51b3540425edc8f"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-309-20260825.092440.814",
+          "group": "backtick",
+          "chars": 30111,
+          "ms": 53.93958301283419,
+          "sha256": "7aefc2bae053c9f8a5d6add099b9eabb8b040c97e23b437e75319c180921d7c4"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-670-20260825.102240.949",
+          "group": "backtick",
+          "chars": 81580,
+          "ms": 177.25229216739535,
+          "sha256": "e32ba7f9186edbada07ef01e48b5382398174bfd9484379949ab0fb63c114a06"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-662-20260825.102125.860",
+          "group": "backtick",
+          "chars": 83844,
+          "ms": 177.43983282707632,
+          "sha256": "d03586bd1b06688e008b35c19b510e8908890e4645acd09aa547759823d4a925"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-91-20260825.085336.482",
+          "group": "no_backtick",
+          "chars": 333695,
+          "ms": 725.578999845311,
+          "sha256": "7fde737fa99b18c7e4cee080d0ea00eedbcdd005393df6d1399bf581e65a8a7b"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-46-20260825.083810.452",
+          "group": "no_backtick",
+          "chars": 342654,
+          "ms": 768.3610829990357,
+          "sha256": "f4fb0748f74b96346c59ba0ab4d739ecd8cec3104433dee0d39949afbd3c5f01"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::a414e56f838da0ceff4f54cf57316b3c90242065266fb98d45823e524fbf774b#1",
+          "group": "no_backtick",
+          "chars": 140,
+          "ms": 0.4111670423299074,
+          "sha256": "319d10388325e4471a8564494ed85ce42e409407f60b25d01fe567333831a0e6"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::cd307db7db1908338d6551caafb0917f1cbc7482d3a52eb453c0977b2b1bf52f#2",
+          "group": "no_backtick",
+          "chars": 213,
+          "ms": 0.5261250771582127,
+          "sha256": "da7375535a0c2dfd4a62169fd3ebab793ee22718421cc08f68043a2c5558dbcc"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::021336a1b1931b5fe8485b51b3aca7280dfddf78967690f866fc3009f3cda8d8#2",
+          "group": "no_backtick",
+          "chars": 372,
+          "ms": 0.8781251963227987,
+          "sha256": "c3729b8221f7b35fe468d93e94477e58aa0301eae02ba162d72ade23ec793a1e"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::0b4770d454be05c8935f2cceddd42bba62bccf8a9b1be67b6d5ad3b3d33b7114#2",
+          "group": "no_backtick",
+          "chars": 547,
+          "ms": 0.858791870996356,
+          "sha256": "bb3e236d583d1360bac992e09900fe6f52343677a378f7cb94f68fa0a365bc87"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::432ea6cf875b5b9d21eb7179ceeecc17fa08ab3fe116a600eb5a505cd1af2046#2",
+          "group": "no_backtick",
+          "chars": 806,
+          "ms": 1.4190829824656248,
+          "sha256": "3d2cce01c08e9fb62016607a0b06a7210cf69e4f2ad6c202fa20bac1f90fcea0"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::664119655600dd36d03c32b006c045d992b70049c824532403542fb02b0a7988#2",
+          "group": "no_backtick",
+          "chars": 1095,
+          "ms": 2.92200013063848,
+          "sha256": "102659a5dc72f9f11a7db7e22fc0387f3d020140f984765528dd09ce48430d28"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::00be25b5d50b5b05709547a93abfcd8736f759e3ee4b00f2fe01fbb1c76f4bdf#2",
+          "group": "no_backtick",
+          "chars": 1361,
+          "ms": 1.7003330867737532,
+          "sha256": "d16859ff538244200aac8c7a782ba764a654ff1377d5612fb66e65ae42c43b4c"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::1c479ad44444fdffe8dfdbc725299c8793b04d28514ac1cec07c47373ffe6843#2",
+          "group": "no_backtick",
+          "chars": 1681,
+          "ms": 1.874457811936736,
+          "error": "ParseError",
+          "detail_sha256": "0b3b2edbffcb406033e63cfd4b7cc970f68e4344f2f910f5c80a61f21c8c238a"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::0c37aecdb256b8ed2a03a33aae29dea7816e8b83eb13285afe5b736ae05ac200#1",
+          "group": "no_backtick",
+          "chars": 1995,
+          "ms": 4.334666999056935,
+          "sha256": "448d67dede3711e75f5e32f1714ecd3c0b0c3ffb4754580e21ebf1c88903bd9c"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::10e6cc59bbfa0460914a4de1a869b02e9155cc1de79cb732592087c2815aeabb#2",
+          "group": "no_backtick",
+          "chars": 2723,
+          "ms": 6.3982920255512,
+          "sha256": "5763b5fde58435ef2e1c3add3c88365238b7884ac84f030e00f078bbc816ff30"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::58c1f77fbc95b9211cd892e615792cf36314ce9be3fa3a0f1d2ae92a6c9f2dac#1",
+          "group": "no_backtick",
+          "chars": 5023,
+          "ms": 8.006874937564135,
+          "sha256": "5ee5b8a4bf3023d6fe84b053c410081038128daf676f4e6d28fbc6de99da6e89"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::2a84b8d9444601376c947886d5756609c1546d13272ccd67ccdae674a01aeb16#2",
+          "group": "no_backtick",
+          "chars": 11261,
+          "ms": 18.313791137188673,
+          "sha256": "abf66366e1e552f64833d006f0eec2b8639b9dff0435941b4add29db225e65d2"
+        }
+      ]
+    },
+    "rust_after": {
+      "backend": "rust",
+      "mode": "subtree",
+      "rust_active": true,
+      "python": "3.11.6 (main, Nov  2 2023, 04:39:40) [Clang 14.0.0 (clang-1400.0.29.202)]",
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "commit": "8a4435a395f73d543afd7f19f7ea48a9bb322b04",
+      "repeats": 5,
+      "samples": 12,
+      "results": [
+        {
+          "corpus": "samsung",
+          "id": "Q611055-585-20260825.100853.775",
+          "group": "backtick",
+          "chars": 319,
+          "ms": 1.5240830834954977,
+          "sha256": "8958bbf6e99882bbcc6a0d1065df586025a98bc1cd53d04585351c0cfd3d011b"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-586-20260825.100911.678",
+          "group": "backtick",
+          "chars": 673,
+          "ms": 2.3535420186817646,
+          "sha256": "8ccb059c75923bf22e453dd29b42976f3f622390e50a94a19ecf11813a6ed123"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-231-20260825.091149.404",
+          "group": "backtick",
+          "chars": 876,
+          "ms": 2.6247920468449593,
+          "sha256": "eabaf2bc6abc214c90cc5048edc9483517cce9aabfe286a772e887a0498d3919"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-173-20260825.090640.803",
+          "group": "backtick",
+          "chars": 1207,
+          "ms": 2.70874984562397,
+          "sha256": "4acec0ffa8bd89b0defd015491513375ca2a9125c5f9f685203f46212ad05711"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-516-20260825.095646.508",
+          "group": "backtick",
+          "chars": 5646,
+          "ms": 9.229041868820786,
+          "sha256": "2c62dea8105ab46f7bb6ce54e4ce57efe66d06c1eb2713f7de25b494a418face"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-472-20260825.094937.823",
+          "group": "backtick",
+          "chars": 24868,
+          "ms": 48.622375121340156,
+          "sha256": "be6245536e7cd83f0424f8c779c16988fe8254077322005e7f974bfb92a8001d"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-406-20260825.093034.323",
+          "group": "backtick",
+          "chars": 25834,
+          "ms": 50.445792032405734,
+          "sha256": "e090add302e2aaa341a1d40b75994ff14d7bb22e661715d0e51b3540425edc8f"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-309-20260825.092440.814",
+          "group": "backtick",
+          "chars": 30111,
+          "ms": 57.41850007325411,
+          "sha256": "7aefc2bae053c9f8a5d6add099b9eabb8b040c97e23b437e75319c180921d7c4"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-670-20260825.102240.949",
+          "group": "backtick",
+          "chars": 81580,
+          "ms": 184.87400002777576,
+          "sha256": "e32ba7f9186edbada07ef01e48b5382398174bfd9484379949ab0fb63c114a06"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-662-20260825.102125.860",
+          "group": "backtick",
+          "chars": 83844,
+          "ms": 188.33466689102352,
+          "sha256": "d03586bd1b06688e008b35c19b510e8908890e4645acd09aa547759823d4a925"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-91-20260825.085336.482",
+          "group": "no_backtick",
+          "chars": 333695,
+          "ms": 732.648208970204,
+          "sha256": "7fde737fa99b18c7e4cee080d0ea00eedbcdd005393df6d1399bf581e65a8a7b"
+        },
+        {
+          "corpus": "samsung",
+          "id": "Q611055-46-20260825.083810.452",
+          "group": "no_backtick",
+          "chars": 342654,
+          "ms": 808.7165830656886,
+          "sha256": "f4fb0748f74b96346c59ba0ab4d739ecd8cec3104433dee0d39949afbd3c5f01"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::a414e56f838da0ceff4f54cf57316b3c90242065266fb98d45823e524fbf774b#1",
+          "group": "no_backtick",
+          "chars": 140,
+          "ms": 0.4233748186379671,
+          "sha256": "319d10388325e4471a8564494ed85ce42e409407f60b25d01fe567333831a0e6"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::cd307db7db1908338d6551caafb0917f1cbc7482d3a52eb453c0977b2b1bf52f#2",
+          "group": "no_backtick",
+          "chars": 213,
+          "ms": 0.536083010956645,
+          "sha256": "da7375535a0c2dfd4a62169fd3ebab793ee22718421cc08f68043a2c5558dbcc"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::021336a1b1931b5fe8485b51b3aca7280dfddf78967690f866fc3009f3cda8d8#2",
+          "group": "no_backtick",
+          "chars": 372,
+          "ms": 0.9649170096963644,
+          "sha256": "c3729b8221f7b35fe468d93e94477e58aa0301eae02ba162d72ade23ec793a1e"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::0b4770d454be05c8935f2cceddd42bba62bccf8a9b1be67b6d5ad3b3d33b7114#2",
+          "group": "no_backtick",
+          "chars": 547,
+          "ms": 0.8921250700950623,
+          "sha256": "bb3e236d583d1360bac992e09900fe6f52343677a378f7cb94f68fa0a365bc87"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::432ea6cf875b5b9d21eb7179ceeecc17fa08ab3fe116a600eb5a505cd1af2046#2",
+          "group": "no_backtick",
+          "chars": 806,
+          "ms": 1.7303340137004852,
+          "sha256": "3d2cce01c08e9fb62016607a0b06a7210cf69e4f2ad6c202fa20bac1f90fcea0"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::664119655600dd36d03c32b006c045d992b70049c824532403542fb02b0a7988#2",
+          "group": "no_backtick",
+          "chars": 1095,
+          "ms": 3.3384577836841345,
+          "sha256": "102659a5dc72f9f11a7db7e22fc0387f3d020140f984765528dd09ce48430d28"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::00be25b5d50b5b05709547a93abfcd8736f759e3ee4b00f2fe01fbb1c76f4bdf#2",
+          "group": "no_backtick",
+          "chars": 1361,
+          "ms": 1.8556248396635056,
+          "sha256": "d16859ff538244200aac8c7a782ba764a654ff1377d5612fb66e65ae42c43b4c"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::1c479ad44444fdffe8dfdbc725299c8793b04d28514ac1cec07c47373ffe6843#2",
+          "group": "no_backtick",
+          "chars": 1681,
+          "ms": 2.175708068534732,
+          "error": "ParseError",
+          "detail_sha256": "0b3b2edbffcb406033e63cfd4b7cc970f68e4344f2f910f5c80a61f21c8c238a"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::0c37aecdb256b8ed2a03a33aae29dea7816e8b83eb13285afe5b736ae05ac200#1",
+          "group": "no_backtick",
+          "chars": 1995,
+          "ms": 4.988666856661439,
+          "sha256": "448d67dede3711e75f5e32f1714ecd3c0b0c3ffb4754580e21ebf1c88903bd9c"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::10e6cc59bbfa0460914a4de1a869b02e9155cc1de79cb732592087c2815aeabb#2",
+          "group": "no_backtick",
+          "chars": 2723,
+          "ms": 7.1074580773711205,
+          "sha256": "5763b5fde58435ef2e1c3add3c88365238b7884ac84f030e00f078bbc816ff30"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast-New_qlik::58c1f77fbc95b9211cd892e615792cf36314ce9be3fa3a0f1d2ae92a6c9f2dac#1",
+          "group": "no_backtick",
+          "chars": 5023,
+          "ms": 9.056875016540289,
+          "sha256": "5ee5b8a4bf3023d6fe84b053c410081038128daf676f4e6d28fbc6de99da6e89"
+        },
+        {
+          "corpus": "condenast",
+          "id": "Condenast::2a84b8d9444601376c947886d5756609c1546d13272ccd67ccdae674a01aeb16#2",
+          "group": "no_backtick",
+          "chars": 11261,
+          "ms": 20.393333863466978,
+          "sha256": "abf66366e1e552f64833d006f0eec2b8639b9dff0435941b4add29db225e65d2"
+        }
+      ]
+    }
+  }
+}
