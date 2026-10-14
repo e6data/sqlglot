@@ -84,3 +84,32 @@ requires the rebuilt extension; no service configuration has been changed.
 Final native suite: 197 tests run, two expected skips. Cargo test target builds
 successfully but contains zero Rust unit tests; behavior is covered by Python
 integration tests and full-corpus comparisons. See `native_followup_report.md`.
+
+## Native scanner and token reuse pass
+
+User authorized continued optimization, explicitly excluding caching. Baseline is
+066f8569a and repaired native wheel 0.6.2. Preserve dialect selection and GC defaults.
+Plan: demonstrate and eliminate scanner lookahead allocations, test bulk native
+token relocation without copying token objects, and retain only measured wins.
+Validate all 1,628 inputs, repeat latency measurements, and record peak memory.
+Workflow: Vibe and clean-slice-rust, with request-owned state and no global caches.
+
+Failure-first evidence: long Unicode string scanner produced 7,001 allocating
+lookaheads before the change, zero after (Rust regression passes). Native region
+reuse tests first showed two PG retokenizations and copied tokens; both pass with
+bulk relocation. Focused token/reuse/escape suite: 23 tests, one expected skip.
+Baseline 0.6.2 full-corpus three-pass run completed. Candidate 0.6.3 three-pass run
+in progress; scanner-only attribution will use the baseline Python snapshot with
+0.6.3. No concurrent compilation or test runs during timed measurements.
+
+Completed: all three configurations ran three passes over all 1,628 queries.
+Validated 14,652 attempts: identical 1,610 successful output hashes and 18 error
+hashes across configurations. Baseline mean 70.47 ms; scanner-only 66.74 ms;
+scanner + native reuse 63.95 ms (9.3% combined reduction). >=100k mean
+707.14 -> 654.60 ms (7.4%). Peak RSS 353.6 -> 322.3 MiB. Both changes retained.
+Code commit: c2ecee77c; native version 0.6.3. No caching or GC/service changes.
+
+Verification: 215 tests on each backend, native one expected skip, Python four.
+Rust allocation regression passes; release build succeeds. Clippy passes with
+five existing unrelated warnings. Full evidence and per-query CSV are linked
+from native_allocation_report.md. Changes committed locally, not pushed.

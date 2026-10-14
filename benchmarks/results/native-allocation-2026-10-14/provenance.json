@@ -1,0 +1,10 @@
+{
+  "code_commit": "c2ecee77ce5040e0694b3402681e60d1e7348579",
+  "baseline_commit": "066f8569a",
+  "benchmarked_wheels": {
+    "0.6.2": "15d29129c1f42f1ce5d19cc146e90ea177db50b0666f3b845d2567eba9797a50",
+    "0.6.3": "158df58eaf8a90289920ab64832b2243a5de6fb03548201570798afa071938a8"
+  },
+  "note": "Candidate wheel was built before rustfmt and a lint-only annotation; no subsequent runtime code changes. Final source is the code commit above.",
+  "final_wheel_sha256": "3e90eaf6f71bca112f2b013e08882f764a96b81e1635c95a59485585702e1b2c"
+}
