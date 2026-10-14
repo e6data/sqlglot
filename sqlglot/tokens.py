@@ -1065,6 +1065,7 @@ class Tokenizer(metaclass=_Tokenizer):
                 unescaped_sequences=self.dialect.UNESCAPED_SEQUENCES,
                 identifiers_can_start_with_digit=self.dialect.IDENTIFIERS_CAN_START_WITH_DIGIT,
                 numbers_can_be_underscore_separated=self.dialect.NUMBERS_CAN_BE_UNDERSCORE_SEPARATED,
+                string_escape_skip_unknown=self.STRING_ESCAPE_SKIP_UNKNOWN,
             )
 
         self.reset()

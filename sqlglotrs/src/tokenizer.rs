@@ -687,6 +687,10 @@ impl<'a> TokenizerState<'a> {
                     continue;
                 }
             }
+            if self.should_skip_unknown_escape(delimiter, raw_string) {
+                self.advance(1)?;
+                continue;
+            }
             if self.chars(delimiter.len()) == delimiter {
                 if delimiter.len() > 1 {
                     self.advance((delimiter.len() - 1) as isize)?;
@@ -714,6 +718,21 @@ impl<'a> TokenizerState<'a> {
             );
         }
         Ok(text)
+    }
+
+    /// Match Python's dialect-controlled handling of unrecognized escapes.
+    #[deny(missing_docs, clippy::pedantic)]
+    fn should_skip_unknown_escape(&self, delimiter: &str, raw_string: bool) -> bool {
+        if !self.dialect_settings.string_escape_skip_unknown
+            || raw_string
+            || self.is_end
+            || matches!(self.peek_char, '%' | '_')
+            || !self.settings.string_escapes.contains(&self.current_char)
+            || self.settings.string_escapes.contains(&self.peek_char)
+        {
+            return false;
+        }
+        delimiter.len() != self.peek_char.len_utf8() || !delimiter.starts_with(self.peek_char)
     }
 
     fn is_alphabetic_or_underscore(&self, name: char) -> bool {
