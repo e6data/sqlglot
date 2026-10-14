@@ -250,7 +250,7 @@ def main():
     (args.output / "four_way_report.md").write_text(report(runs, summary))
     with (destination / "per_query.csv").open("w") as stream:
         fields = ["corpus", "id", "chars"] + [f"{m}_{v}" for m in METHODS for v in ("success", "wall_ms", "cpu_ms")]
-        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         for key in sorted(indexed["vanilla"]):
             row = {k: indexed["vanilla"][key][k] for k in ("corpus", "id", "chars")}
