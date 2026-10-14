@@ -2,7 +2,7 @@
 
 This is a conservative optimization, not a hybrid tokenizer. SQL containing a
 lexical difference, comments, or changed preprocessing uses the normal tokenizer.
-Python tokens are request-owned: each region consumes its disjoint source tokens
+Discovery tokens are request-owned: each region consumes its disjoint source tokens
 once, adjusting their positions in place after structural discovery is complete.
 """
 
@@ -11,10 +11,15 @@ from functools import lru_cache
 import re
 
 from sqlglot.dialects.dialect import Dialect
-from sqlglot.tokens import Token, TokenType
-
+from sqlglot.tokens import Token, TokenType, _TOKEN_TYPE_TO_INDEX
 from apis.utils.multidialect import MARKER
 
+try:
+    from sqlglotrs import _remap_tokens
+except ImportError:
+    _remap_tokens = None
+
+NATIVE_TOKEN_REUSE = _remap_tokens is not None
 
 @lru_cache(maxsize=1)
 def _different_words():
@@ -65,6 +70,9 @@ class RegionTokens:
             return None
         self.consumed.add(span)
 
+        if self.tokens and not isinstance(self.tokens[0], Token) and NATIVE_TOKEN_REUSE:
+            return self._native_mask(node, body, replacements)
+
         newlines = [match.start() for match in re.finditer(r"\r(?!\n)|\n", body)]
         result = []
         different_words = _different_words()
@@ -113,3 +121,16 @@ class RegionTokens:
             cursor = end
         append(self.tokens[bisect_left(self.starts, cursor):bisect_left(self.starts, node.end)], shift)
         return result if compatible else None
+
+    def _native_mask(self, node, body, replacements):
+        chunks = []
+        cursor = node.start
+        shift = -node.start
+        for start, end, replacement in replacements:
+            chunks.append((self.tokens[bisect_left(self.starts, cursor):bisect_left(self.starts, start)], shift))
+            chunks.append((Dialect().tokenize(replacement), start + shift))
+            shift += len(replacement) - (end - start)
+            cursor = end
+        chunks.append((self.tokens[bisect_left(self.starts, cursor):bisect_left(self.starts, node.end)], shift))
+        return _remap_tokens(chunks, body, self.sql, _different_words(),
+                             {_TOKEN_TYPE_TO_INDEX[t] for t in _QUOTED})

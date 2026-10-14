@@ -25,7 +25,7 @@ from sqlglot.tokens import Token
 
 from apis.utils.lite_parser import lite_parse
 from apis.utils.multidialect import MARKER, _splice
-from apis.utils.region_tokens import RegionTokens
+from apis.utils.region_tokens import RegionTokens, NATIVE_TOKEN_REUSE
 
 logger = logging.getLogger(__name__)
 
@@ -140,11 +140,11 @@ def transpile_multidialect(query: str, pretty: bool = True, emit=None, emit_toke
         len(tokens),
     )
     root = build_tree(query, tokens=tokens)
-    # Native token positions are immutable. Copying them into Python tokens costs
-    # more than native retokenization in the measured workloads.
+    # New native builds can relocate request-owned tokens in bulk. Older wheels
+    # retain normal retokenization rather than copying tokens into Python objects.
     retained = (
         RegionTokens(query, tokens)
-        if emit_tokens is not None and (not tokens or isinstance(tokens[0], Token))
+        if emit_tokens is not None and (not tokens or isinstance(tokens[0], Token) or NATIVE_TOKEN_REUSE)
         else None
     )
 

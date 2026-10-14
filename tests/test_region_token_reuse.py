@@ -137,7 +137,6 @@ class TestRegionTokenReuse(unittest.TestCase):
             self.assertIs(part.parent, column)
         self.assertEqual(len(allocations), 1)
 
-    @unittest.skipIf(USE_RS_TOKENIZER, "Native retokenization is faster than copying tokens")
     def test_regions_do_not_retokenize_postgres(self):
         sql = 'SELECT "a" FROM (SELECT x AS "a" FROM t) s WHERE "a" > 1'
         original = Postgres.tokenize
@@ -151,6 +150,33 @@ class TestRegionTokenReuse(unittest.TestCase):
             result = transpile_multidialect(sql, pretty=False)
         self.assertIn("SELECT", result)
         self.assertEqual(calls, [], "Discovery tokens should serve both PG regions")
+
+    @unittest.skipUnless(USE_RS_TOKENIZER, "Native token identity regression")
+    def test_native_region_keeps_original_token_objects(self):
+        sql = 'SELECT "a"\nFROM (SELECT x AS "a" FROM t) s WHERE "a" > 1'
+        tokens = Dialect().tokenize(sql)
+        root = build_tree(sql, tokens)
+        child = root.children[0]
+        original_child_token = next(token for token in tokens if token.start == child.start)
+        retained = RegionTokens(sql, tokens)
+        body, _ = _mask(root)
+        actual = retained.mask(root, body)
+        self.assertIsNotNone(actual)
+        self.assertIs(actual[0], tokens[0])
+        child_tokens = retained.mask(child, child.raw)
+        self.assertIs(child_tokens[0], original_child_token)
+
+    @unittest.skipUnless(USE_RS_TOKENIZER, "Native relocation rollback regression")
+    def test_native_incompatible_region_leaves_positions_unchanged(self):
+        for sql in ("SELECT * FROM (SELECT x, FLOAT '1') s",
+                    "SELECT * FROM (SELECT x, café) s"):
+            tokens = Dialect().tokenize(sql)
+            root = build_tree(sql, tokens)
+            fields = ("start", "end", "line", "col")
+            before = [tuple(getattr(t, f) for f in fields) for t in tokens]
+            child = root.children[0]
+            self.assertIsNone(RegionTokens(sql, tokens).mask(child, child.raw))
+            self.assertEqual(before, [tuple(getattr(t, f) for f in fields) for t in tokens])
 
     def test_type_literal_does_not_allocate_a_peek_literal(self):
         original = exp.Literal.__init__
