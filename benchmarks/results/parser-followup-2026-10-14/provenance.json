@@ -1,0 +1,8 @@
+{
+  "baseline_commit": "490223fda",
+  "candidate_code_commit": "7bb20c6adea2c3ef56a6e2a094f5b27f74210de2",
+  "native_version": "0.6.3",
+  "wheel_sha256": "3e90eaf6f71bca112f2b013e08882f764a96b81e1635c95a59485585702e1b2c",
+  "source_hashes_verified": true,
+  "profile_outcomes_match": true
+}

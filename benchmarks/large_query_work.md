@@ -113,3 +113,38 @@ Verification: 215 tests on each backend, native one expected skip, Python four.
 Rust allocation regression passes; release build succeeds. Clippy passes with
 five existing unrelated warnings. Full evidence and per-query CSV are linked
 from native_allocation_report.md. Changes committed locally, not pushed.
+
+## Parser and allocation follow-up
+
+User approved a focused pass on current native branch 490223fda, keeping caching
+excluded. Refresh stage and function/allocation profiles first; target measured
+parser/AST bookkeeping or redundant transforms. Demonstrate a failing work or
+behavior regression before implementation, then run output parity and full-corpus
+repeated benchmarks for any retained change. If necessary Python object creation
+dominates, document a bounded native-parser prototype rather than assuming gains.
+Workflow: continue Vibe task note; preserve unrelated outputs/.
+
+Refreshed native stage profile: PG parsing 57.7%, generation 16.1%, transforms
+7.6%. cProfile records 4.72m token-set checks and 4.65m enum-hash calls across 11
+large inputs. Chosen experiments: TokenType identity hashing and collecting tables
+during the existing transform walk. No new caches or parser/validation changes.
+
+Failure-first tests reproduced 92 Python enum-hash calls for a small query and
+38 child traversals for 19 nodes. Both now pass (zero hash calls; 19 traversals).
+Targeted suite: 219 tests each backend, native one skip, Python four. All 567
+dialect tests pass across the initial run and an environment-only retry of
+lazy loading (subprocess needed the venv python on PATH).
+Instrumented sample PG parse 3901 -> 3652 ms, transforms 516 -> 329 ms.
+Full three-pass candidate benchmark is running against a fresh three-pass baseline.
+
+Full corpus complete: 9,768 attempts validated, identical 1,610 SQL hashes and
+18 error hashes. Mean latency 62.45 -> 58.75 ms (5.9%); >=100k 641.31 -> 602.61 ms
+(6.0%). Peak RSS 412.1 -> 365.4 MiB; allocator/GC variability applies. Both small
+changes retained. This pass does not implement a native parser; dispatch and
+traversal still offered a measurable gain without grammar/AST validation changes.
+See parser_followup_report.md and its raw evidence links. No new native build.
+
+Code committed as 7bb20c6ad on codex/experiment-dialect-regions. Benchmarked
+production source hashes verified against the commit; all 16 before/after stage
+profile outcomes also match. Benchmark report and evidence committed separately.
+This pass remains local; not pushed.

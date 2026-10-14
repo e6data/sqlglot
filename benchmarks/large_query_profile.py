@@ -21,7 +21,7 @@ from four_way import FLAGS
 
 
 async def run(args):
-    os.environ.update(FLAGS)
+    os.environ.update(dict(FLAGS, SQLGLOTRS_TOKENIZER="1" if args.tokenizer == "rust" else "0"))
     sys.path.insert(0, str(args.root.resolve()))
     logging.disable(logging.CRITICAL)
     import converter_api as api
@@ -29,6 +29,9 @@ async def run(args):
     from sqlglot import exp
     from sqlglot.dialects.dialect import Dialect
     from sqlglot.parser import Parser
+    from sqlglot.tokens import USE_RS_TOKENIZER
+
+    assert USE_RS_TOKENIZER == (args.tokenizer == "rust"), "Requested tokenizer is unavailable"
 
     api.SUBQUERY_TREE = True
     csv.field_size_limit(sys.maxsize)
@@ -116,11 +119,13 @@ async def run(args):
         gc.callbacks.remove(gc_event)
         for p in reversed(patches):
             p.stop()
-    args.output.write_text(json.dumps({"root": str(args.root), "records": records}, indent=2) + "\n")
+    args.output.write_text(json.dumps({"root": str(args.root), "tokenizer": args.tokenizer,
+        "records": records}, indent=2) + "\n")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--tokenizer", choices=("python", "rust"), default="python")
     asyncio.run(run(parser.parse_args()))
