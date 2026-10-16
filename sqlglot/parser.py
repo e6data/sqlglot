@@ -170,6 +170,24 @@ def build_locate_strposition(args: t.List):
     )
 
 
+# Tokens that can start a query in _parse_select_query (L_PAREN and STREAM are handled there)
+_QUERY_START_TOKENS = {
+    TokenType.WITH,
+    TokenType.FROM,
+    TokenType.SELECT,
+    TokenType.VALUES,
+    TokenType.SUMMARIZE,
+    TokenType.DESCRIBE,
+}
+
+
+# Tokens other than RANGE_PARSERS keys that _parse_range can consume after its operand
+_RANGE_FOLLOW_TOKENS = {TokenType.NOT, TokenType.ISNULL, TokenType.NOTNULL, TokenType.IS}
+
+# Tokens other than BITWISE keys that _parse_bitwise can consume after its operand
+_BITWISE_FOLLOW_TOKENS = {TokenType.DPIPE, TokenType.DQMARK, TokenType.LT, TokenType.GT}
+
+
 class _Parser(type):
     def __new__(cls, clsname, bases, attrs):
         klass = super().__new__(cls, clsname, bases, attrs)
@@ -1768,8 +1786,19 @@ class Parser(metaclass=_Parser):
             The target expression.
         """
         instance = exp_class(**kwargs)
-        instance.add_comments(comments) if comments else self._add_comments(instance)
-        return self.validate_expression(instance)
+        if comments:
+            instance.add_comments(comments)
+        elif self._prev_comments:
+            # Inlined self._add_comments(instance); instance is a freshly built Expression.
+            instance.add_comments(self._prev_comments)
+            self._prev_comments = None
+
+        # Inlined self.validate_expression(instance)
+        if self.error_level != ErrorLevel.IGNORE:
+            for error_message in instance.error_messages():
+                self.raise_error(error_message)
+
+        return instance
 
     def _add_comments(self, expression: t.Optional[exp.Expression]) -> None:
         if expression and self._prev_comments:
@@ -1800,13 +1829,22 @@ class Parser(metaclass=_Parser):
         return self._prev and self._curr and self._prev.end + 1 == self._curr.start
 
     def _advance(self, times: int = 1) -> None:
-        self._index += times
-        self._curr = seq_get(self._tokens, self._index)
-        self._next = seq_get(self._tokens, self._index + 1)
+        # seq_get is inlined here (same IndexError -> None semantics) because this is the
+        # parser's hottest cursor operation.
+        index = self._index = self._index + times
+        tokens = self._tokens
+        try:
+            self._curr = tokens[index]
+        except IndexError:
+            self._curr = None
+        try:
+            self._next = tokens[index + 1]
+        except IndexError:
+            self._next = None
 
-        if self._index > 0:
-            self._prev = self._tokens[self._index - 1]
-            self._prev_comments = self._prev.comments
+        if index > 0:
+            prev = self._prev = tokens[index - 1]
+            self._prev_comments = prev.comments
         else:
             self._prev = None
             self._prev_comments = None
@@ -3276,6 +3314,23 @@ class Parser(metaclass=_Parser):
         parse_subquery_alias: bool = True,
         parse_set_operation: bool = True,
     ) -> t.Optional[exp.Expression]:
+        curr = self._curr
+        if (
+            (
+                not curr
+                or (
+                    curr.token_type not in _QUERY_START_TOKENS
+                    and not ((table or nested) and curr.token_type == TokenType.L_PAREN)
+                    and (curr.token_type == TokenType.STRING or curr.text.upper() != "STREAM")
+                )
+            )
+            and type(self)._parse_with is Parser._parse_with
+            and type(self)._parse_set_operations is Parser._parse_set_operations
+        ):
+            # Fast path: no branch below can match the current token, so the full path would
+            # consume nothing and return None (_parse_set_operations(None) is None).
+            return None
+
         cte = self._parse_with()
 
         if cte:
@@ -5019,7 +5074,8 @@ class Parser(metaclass=_Parser):
     def _parse_equality(self) -> t.Optional[exp.Expression]:
         this = self._parse_comparison()
 
-        while self._match_set(self.EQUALITY):
+        while self._curr and self._curr.token_type in self.EQUALITY:
+            self._advance()  # inlined self._match_set(self.EQUALITY)
             klass = self.EQUALITY[self._prev.token_type]
             token_text = self._prev.text
             this = self.expression(
@@ -5038,6 +5094,15 @@ class Parser(metaclass=_Parser):
 
     def _parse_range(self, this: t.Optional[exp.Expression] = None) -> t.Optional[exp.Expression]:
         this = this or self._parse_bitwise()
+
+        curr = self._curr
+        if not curr or (
+            curr.token_type not in self.RANGE_PARSERS
+            and curr.token_type not in _RANGE_FOLLOW_TOKENS
+        ):
+            # Fast path: every match below would fail, leaving `this` unchanged
+            return this
+
         negate = self._match(TokenType.NOT)
 
         if self._match_set(self.RANGE_PARSERS):
@@ -5213,7 +5278,16 @@ class Parser(metaclass=_Parser):
         this = self._parse_term()
 
         while True:
-            if self._match_set(self.BITWISE):
+            curr = self._curr
+            if not curr or (
+                curr.token_type not in self.BITWISE
+                and curr.token_type not in _BITWISE_FOLLOW_TOKENS
+            ):
+                # Fast path: none of the operators below can match
+                break
+
+            if self._curr and self._curr.token_type in self.BITWISE:
+                self._advance()  # inlined self._match_set(self.BITWISE)
                 this = self.expression(
                     self.BITWISE[self._prev.token_type],
                     this=this,
@@ -5246,7 +5320,8 @@ class Parser(metaclass=_Parser):
     def _parse_term(self) -> t.Optional[exp.Expression]:
         this = self._parse_factor()
 
-        while self._match_set(self.TERM):
+        while self._curr and self._curr.token_type in self.TERM:
+            self._advance()  # inlined self._match_set(self.TERM)
             klass = self.TERM[self._prev.token_type]
             comments = self._prev_comments
             expression = self._parse_factor()
@@ -5269,7 +5344,8 @@ class Parser(metaclass=_Parser):
         parse_method = self._parse_exponent if self.EXPONENT else self._parse_unary
         this = parse_method()
 
-        while self._match_set(self.FACTOR):
+        while self._curr and self._curr.token_type in self.FACTOR:
+            self._advance()  # inlined self._match_set(self.FACTOR)
             klass = self.FACTOR[self._prev.token_type]
             comments = self._prev_comments
             expression = parse_method()
@@ -5290,7 +5366,8 @@ class Parser(metaclass=_Parser):
         return self._parse_tokens(self._parse_unary, self.EXPONENT)
 
     def _parse_unary(self) -> t.Optional[exp.Expression]:
-        if self._match_set(self.UNARY_PARSERS):
+        if self._curr and self._curr.token_type in self.UNARY_PARSERS:
+            self._advance()  # inlined self._match_set(self.UNARY_PARSERS)
             return self.UNARY_PARSERS[self._prev.token_type](self)
         return self._parse_at_time_zone(self._parse_type())
 
@@ -5384,6 +5461,18 @@ class Parser(metaclass=_Parser):
         allow_identifiers: bool = True,
     ) -> t.Optional[exp.Expression]:
         index = self._index
+
+        curr = self._curr
+        if not allow_identifiers and (
+            not curr
+            or (
+                curr.token_type not in self.TYPE_TOKENS
+                and (curr.token_type == TokenType.STRING or curr.text.upper() != "SYSUDTLIB")
+            )
+        ):
+            # Fast path: no type can start here and identifiers are not allowed, so the
+            # code below would consume nothing and return None.
+            return None
 
         this: t.Optional[exp.Expression] = None
         prefix = self._match_text_seq("SYSUDTLIB", ".")
@@ -5756,7 +5845,8 @@ class Parser(metaclass=_Parser):
     def _parse_column_ops(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
         this = self._parse_bracket(this)
 
-        while self._match_set(self.COLUMN_OPERATORS):
+        while self._curr and self._curr.token_type in self.COLUMN_OPERATORS:
+            self._advance()  # inlined self._match_set(self.COLUMN_OPERATORS)
             op_token = self._prev.token_type
             op = self.COLUMN_OPERATORS.get(op_token)
 
@@ -5838,7 +5928,8 @@ class Parser(metaclass=_Parser):
         return this
 
     def _parse_primary(self) -> t.Optional[exp.Expression]:
-        if self._match_set(self.PRIMARY_PARSERS):
+        if self._curr and self._curr.token_type in self.PRIMARY_PARSERS:
+            self._advance()  # inlined self._match_set(self.PRIMARY_PARSERS)
             token_type = self._prev.token_type
             primary = self.PRIMARY_PARSERS[token_type](self, self._prev)
 
@@ -7446,7 +7537,8 @@ class Parser(metaclass=_Parser):
     ) -> t.Optional[exp.Expression]:
         this = parse_method()
 
-        while self._match_set(expressions):
+        while self._curr and self._curr.token_type in expressions:
+            self._advance()  # inlined self._match_set(expressions)
             this = self.expression(
                 expressions[self._prev.token_type],
                 this=this,
@@ -8249,10 +8341,11 @@ class Parser(metaclass=_Parser):
         return None
 
     def _match(self, token_type, advance=True, expression=None):
-        if not self._curr:
+        curr = self._curr
+        if not curr:
             return None
 
-        if self._curr.token_type == token_type:
+        if curr.token_type == token_type:
             if advance:
                 self._advance()
             self._add_comments(expression)
@@ -8261,10 +8354,11 @@ class Parser(metaclass=_Parser):
         return None
 
     def _match_set(self, types, advance=True):
-        if not self._curr:
+        curr = self._curr
+        if not curr:
             return None
 
-        if self._curr.token_type in types:
+        if curr.token_type in types:
             if advance:
                 self._advance()
             return True
@@ -8304,14 +8398,12 @@ class Parser(metaclass=_Parser):
     def _match_text_seq(self, *texts, advance=True):
         index = self._index
         for text in texts:
-            if (
-                self._curr
-                and self._curr.token_type != TokenType.STRING
-                and self._curr.text.upper() == text
-            ):
+            curr = self._curr
+            if curr and curr.token_type != TokenType.STRING and curr.text.upper() == text:
                 self._advance()
             else:
-                self._retreat(index)
+                if index != self._index:
+                    self._retreat(index)
                 return None
 
         if not advance:
