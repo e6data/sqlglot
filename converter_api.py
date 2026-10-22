@@ -212,36 +212,6 @@ async def convert_query(
         inner_dialect = flags_dict.get("INNER_DIALECT", "databricks").lower()
         pretty = flags_dict.get("PRETTY_PRINT", True)
 
-        # SUBQUERY_TREE: transpile via the dialect-agnostic subquery tree. Each region's
-        # e6 goes through the same _region_to_e6 pipeline (dialect decided per region), so
-        # the output matches the split path while reusing one lightweight structural parse.
-        if SUBQUERY_TREE:
-            logger.info(
-                "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars, subquery_tree)",
-                query_id,
-                len(query),
-            )
-            converted_query = subquery_tree_transpile(
-                query,
-                pretty,
-                emit=lambda region, p: _region_to_e6(region, None, p),
-            )
-            logger.info(
-                "%s AT %s — MULTIDIALECT via subquery_tree:\n%s",
-                query_id,
-                timestamp,
-                converted_query,
-            )
-            return {"converted_query": converted_query}
-
-        # --- Stage-by-stage transpile timing ---
-        _t_arrival = time.perf_counter()
-        logger.info(
-            "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars)",
-            query_id,
-            len(query),
-        )
-
         # HYBRID_MULTIDIALECT: rewrite Databricks backtick identifiers to Postgres double-quoted
         # identifiers up front, so the whole query (outer identifiers included) parses as
         # Postgres. Databricks functions Postgres can't resolve surface as Anonymous nodes and
@@ -263,6 +233,45 @@ async def convert_query(
                 for _pos in _bt:
                     _chars[_pos] = '"'
                 query = "".join(_chars)
+
+        # SUBQUERY_TREE: transpile via the dialect-agnostic subquery tree. Each region's
+        # e6 goes through the same _region_to_e6 pipeline (dialect decided per region), so
+        # the output matches the split path while reusing one lightweight structural parse.
+        if SUBQUERY_TREE:
+            logger.info(
+                "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars, subquery_tree)",
+                query_id,
+                len(query),
+            )
+            # HYBRID_MULTIDIALECT: most queries parse whole as Postgres; only build the tree
+            # (HybridLiteParser) when they don't.
+            converted_query = None
+            if HYBRID_MULTIDIALECT:
+                try:
+                    converted_query = _region_to_e6(query, "postgres", pretty)
+                except (ParseError, TokenError):
+                    pass
+            if converted_query is None:
+                converted_query = subquery_tree_transpile(
+                    query,
+                    pretty,
+                    emit=lambda region, p: _region_to_e6(region, None, p),
+                )
+            logger.info(
+                "%s AT %s — MULTIDIALECT via subquery_tree:\n%s",
+                query_id,
+                timestamp,
+                converted_query,
+            )
+            return {"converted_query": converted_query}
+
+        # --- Stage-by-stage transpile timing ---
+        _t_arrival = time.perf_counter()
+        logger.info(
+            "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars)",
+            query_id,
+            len(query),
+        )
 
         # Samsung Tableau dashboards always alias the native subquery "Custom SQL Query", so we
         # detect it by that alias alone (no backtick scan / parse-error fallback).

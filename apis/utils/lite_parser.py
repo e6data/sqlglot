@@ -38,6 +38,7 @@ import time
 import typing as t
 
 from sqlglot import exp
+from sqlglot.dialects import e6
 from sqlglot.dialects.dialect import Dialect
 from sqlglot.parser import Parser
 from sqlglot.tokens import TokenType
@@ -102,7 +103,10 @@ def lite_parse(query: str) -> exp.Expression:
     tokens = dialect.tokenize(query)
     _tokenize_ms = (time.perf_counter() - _t) * 1000
     _t = time.perf_counter()
-    ast = LiteParser(dialect=dialect).parse(tokens, query)[0]
+    parser = LiteParser
+    if e6.HYBRID_MULTIDIALECT:
+        from apis.utils.hybrid_lite_parser import HybridLiteParser as parser
+    ast = parser(dialect=dialect).parse(tokens, query)[0]
     logger.info(
         "[TRANSPILE-TIMING] lite_parse: tokenize=%.1f ms (%d tokens), parse=%.1f ms (%d chars)",
         _tokenize_ms,
