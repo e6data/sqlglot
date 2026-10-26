@@ -3,7 +3,6 @@ import pickle
 import sys
 import unittest
 from enum import Enum
-from unittest.mock import patch
 
 import sqlglot
 from sqlglot import exp
@@ -49,14 +48,16 @@ class TestParserWork(unittest.TestCase):
         )
         nodes = list(tree.walk())
         visits = []
-        original = exp.Expression.iter_expressions
 
-        def children(node, *args, **kwargs):
-            visits.append(node)
-            yield from original(node, *args, **kwargs)
+        # The walk reads each visited node's children from node.args exactly once.
+        class CountingArgs(dict):
+            def values(self):
+                visits.append(self)
+                return super().values()
 
-        with patch.object(exp.Expression, 'iter_expressions', children):
-            result = apply_e6_ast_transforms(tree)
+        for node in nodes:
+            node.args = CountingArgs(node.args)
+        result = apply_e6_ast_transforms(tree)
         self.assertIs(result, tree)
         self.assertEqual(len(visits), len(nodes))
         self.assertEqual(sorted(t.name for t in tree.find_all(exp.Table)), ['Bar', 'Foo'])

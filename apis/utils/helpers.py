@@ -43,6 +43,8 @@ def replace_struct_in_query(query: str) -> str:
     Replace STRUCT(STRUCT()) pattern in SQL queries.
     Example: STRUCT(STRUCT(some_value)) → {{some_value}}
     """
+    if not query or "STRUCT" not in query.upper():
+        return query
     try:
         pattern = re.compile(r"Struct\s*\(\s*Struct\s*\(\s*([^\(\)]+)\s*\)\s*\)", re.IGNORECASE)
 
@@ -567,7 +569,13 @@ def apply_e6_ast_transforms(tree: exp.Expression) -> exp.Expression:
             elif isinstance(node, (exp.Subquery, exp.CTE)) and node.alias:
                 names.append(node.alias)
         # Same pre-order as Expression.dfs; children are read after the visit.
-        stack.extend(node.iter_expressions(reverse=True))
+        for vs in reversed(node.args.values()):
+            if type(vs) is list:
+                for v in reversed(vs):
+                    if hasattr(v, "parent"):
+                        stack.append(v)
+            elif hasattr(vs, "parent"):
+                stack.append(vs)
 
     total_list = list(set(names))
     if total_list:
@@ -622,6 +630,8 @@ def normalize_unicode_spaces(sql: str) -> str:
     Normalize all Unicode whitespace/separator characters (and U+FFFD) to plain ASCII spaces,
     but do NOT touch anything inside single (') or double (") quoted literals.
     """
+    if sql.isascii() and not any(c in sql for c in "\t\x0b\x0c\x1c\x1d\x1e\x1f"):
+        return sql
     if not _UNICODE_SPACE_RE.search(sql):
         return sql
     return _QUOTED_OR_UNICODE_SPACE_RE.sub(

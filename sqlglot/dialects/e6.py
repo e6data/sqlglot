@@ -1791,6 +1791,9 @@ class E6(Dialect):
             pad = self.pad if pad is None else pad
             indent_str = " " * (level * self._indent + pad)
 
+            if "\n" not in sql:
+                return sql if skip_first or skip_last else indent_str + sql
+
             # No line toggles the quote state, so indent every line in one pass (same output).
             if not _has_odd_quote_line(sql):
                 last = sql.rfind("\n") if skip_last else len(sql)
@@ -1959,7 +1962,7 @@ class E6(Dialect):
                 return self.sql(expression.this)
 
             # Check for ::INTERVAL pattern first
-            if expression.is_type(exp.DataType.Type.INTERVAL):
+            if expression.to.this == exp.DataType.Type.INTERVAL:
                 return self.double_colon_interval_sql(expression)
 
             # A CAST over Snowflake variant colon navigation keeps the ::TYPE postfix

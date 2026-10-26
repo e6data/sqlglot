@@ -59,9 +59,11 @@ class LiteParser(Parser):
         """Advance over tokens until a clause boundary at paren-depth 0. Paren-aware,
         so parentheses inside the skipped clause (a scalar subquery, a function call,
         a CASE) never make us stop early or run past the region."""
+        tokens = self._tokens
+        index = self._index
         depth = 0
-        while self._curr:
-            tt = self._curr.token_type
+        while index < len(tokens):
+            tt = tokens[index].token_type
             if tt == TokenType.L_PAREN:
                 depth += 1
             elif tt == TokenType.R_PAREN:
@@ -70,7 +72,9 @@ class LiteParser(Parser):
                 depth -= 1
             elif depth == 0 and (tt in self._SET_OPS or tt in extra):
                 break
-            self._advance()
+            index += 1
+        if index != self._index:
+            self._advance(index - self._index)
 
     # -- override 1: the SELECT list (skip up to FROM) -------------------------
     def _parse_projections(self) -> t.List[exp.Expression]:

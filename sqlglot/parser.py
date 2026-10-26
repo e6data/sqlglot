@@ -3299,7 +3299,8 @@ class Parser(metaclass=_Parser):
 
         if (
             consume_pipe
-            and self._match(TokenType.PIPE_GT, advance=False)
+            and self._curr
+            and self._curr.token_type == TokenType.PIPE_GT
             and isinstance(query, exp.Query)
         ):
             query = self._parse_pipe_syntax_query(query)
@@ -4965,6 +4966,10 @@ class Parser(metaclass=_Parser):
     def parse_set_operation(
         self, this: t.Optional[exp.Expression], consume_pipe: bool = False
     ) -> t.Optional[exp.Expression]:
+        curr = self._curr
+        if not curr or curr.token_type in (TokenType.R_PAREN, TokenType.COMMA):
+            return None
+
         start = self._index
         _, side_token, kind_token = self._parse_join_parts()
 
@@ -5374,7 +5379,13 @@ class Parser(metaclass=_Parser):
     def _parse_type(
         self, parse_interval: bool = True, fallback_to_identifier: bool = False
     ) -> t.Optional[exp.Expression]:
-        interval = parse_interval and self._parse_interval()
+        curr = self._curr
+        interval = (
+            parse_interval
+            and curr
+            and curr.token_type == TokenType.INTERVAL
+            and self._parse_interval()
+        )
         if interval:
             return interval
 
@@ -5750,6 +5761,9 @@ class Parser(metaclass=_Parser):
         return self._parse_column_def(this)
 
     def _parse_at_time_zone(self, this: t.Optional[exp.Expression]) -> t.Optional[exp.Expression]:
+        curr = self._curr
+        if not curr or curr.token_type == TokenType.STRING or curr.text.upper() != "AT":
+            return this
         if not self._match_text_seq("AT", "TIME", "ZONE"):
             return this
         return self.expression(exp.AtTimeZone, this=this, zone=self._parse_unary())
@@ -5989,7 +6003,8 @@ class Parser(metaclass=_Parser):
         # See: https://community.snowflake.com/s/article/SQL-Escape-Sequences
         fn_syntax = False
         if (
-            self._match(TokenType.L_BRACE, advance=False)
+            self._curr
+            and self._curr.token_type == TokenType.L_BRACE
             and self._next
             and self._next.text.upper() == "FN"
         ):
@@ -6229,6 +6244,10 @@ class Parser(metaclass=_Parser):
             )
         else:
             this = self._parse_select_or_expression(alias=alias)
+
+        curr = self._curr
+        if not curr or curr.token_type in (TokenType.R_PAREN, TokenType.COMMA):
+            return this
 
         return self._parse_limit(
             self._parse_order(self._parse_having_max(self._parse_respect_or_ignore_nulls(this)))
@@ -6626,8 +6645,10 @@ class Parser(metaclass=_Parser):
         return expression
 
     def _parse_bracket(self, this: t.Optional[exp.Expression] = None) -> t.Optional[exp.Expression]:
-        if not self._match_set((TokenType.L_BRACKET, TokenType.L_BRACE)):
+        curr = self._curr
+        if not curr or curr.token_type not in (TokenType.L_BRACKET, TokenType.L_BRACE):
             return this
+        self._advance()
 
         if self.MAP_KEYS_ARE_ARBITRARY_EXPRESSIONS:
             map_token = seq_get(self._tokens, self._index - 2)
@@ -7248,6 +7269,14 @@ class Parser(metaclass=_Parser):
     def _parse_window(
         self, this: t.Optional[exp.Expression], alias: bool = False
     ) -> t.Optional[exp.Expression]:
+        curr = self._curr
+        if (
+            not alias
+            and (not curr or curr.token_type in (TokenType.R_PAREN, TokenType.COMMA))
+            and not isinstance(this, exp.AggFunc)
+        ):
+            return this
+
         func = this
         comments = func.comments if isinstance(func, exp.Expression) else None
 
@@ -7383,6 +7412,10 @@ class Parser(metaclass=_Parser):
         # In some dialects, LIMIT and OFFSET can act as both identifiers and keywords (clauses)
         # so this section tries to parse the clause version and if it fails, it treats the token
         # as an identifier (alias)
+        curr = self._curr
+        if not curr or curr.token_type in (TokenType.R_PAREN, TokenType.COMMA):
+            return this
+
         if self._can_parse_limit_or_offset():
             return this
 
@@ -8348,7 +8381,9 @@ class Parser(metaclass=_Parser):
         if curr.token_type == token_type:
             if advance:
                 self._advance()
-            self._add_comments(expression)
+            if expression and self._prev_comments:
+                expression.add_comments(self._prev_comments)
+                self._prev_comments = None
             return True
 
         return None

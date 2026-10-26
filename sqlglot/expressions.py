@@ -58,6 +58,8 @@ class _Expression(type):
         # This is so that docstrings are not inherited in pdoc
         klass.__doc__ = klass.__doc__ or ""
 
+        klass._required_arg_keys = tuple(k for k, mandatory in klass.arg_types.items() if mandatory)
+
         return klass
 
 
@@ -102,6 +104,7 @@ class Expression(metaclass=_Expression):
 
     key = "expression"
     arg_types = {"this": True}
+    _required_arg_keys: t.ClassVar[t.Tuple[str, ...]]
     __slots__ = (
         "args",
         "parent",
@@ -759,11 +762,10 @@ class Expression(metaclass=_Expression):
         for k in expression_args:
             if k not in arg_types:
                 errors.append(f"Unexpected keyword: '{k}' for {self.__class__}")
-        for k, mandatory in arg_types.items():
-            if mandatory:
-                v = expression_args.get(k)
-                if v is None or (isinstance(v, list) and not v):
-                    errors.append(f"Required keyword: '{k}' missing for {self.__class__}")
+        for k in self._required_arg_keys:
+            v = expression_args.get(k)
+            if v is None or (isinstance(v, list) and not v):
+                errors.append(f"Required keyword: '{k}' missing for {self.__class__}")
 
         if (
             args
