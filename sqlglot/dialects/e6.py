@@ -3657,7 +3657,7 @@ class E6(Dialect):
                 if e.args.get("is_index")
                 else e.args.get("length") + e.args.get("from_index"),
             ),
-            exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
+            exp.ArrayUniqueAgg: lambda self, e: f"ARRAY_AGG(DISTINCT {self.sql(e, 'this')})",
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
             exp.SafeDivide: rename_func("TRY_DIVIDE"),
             exp.SortArray: rename_func("ARRAY_SORT"),

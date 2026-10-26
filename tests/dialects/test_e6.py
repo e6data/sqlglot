@@ -3075,9 +3075,16 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT ARRAY_AGG(col) FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
+            "SELECT ARRAY_AGG(DISTINCT col) FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
             read={
                 "databricks": "SELECT collect_set(col) FROM VALUES (1), (2), (NULL), (1) AS tab(col)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_AGG(DISTINCT col1) FROM (SELECT '1' AS col1 UNION ALL SELECT '1' AS col1 UNION ALL SELECT '2' AS col1 UNION ALL SELECT '2' AS col1 UNION ALL SELECT '3' AS col1)",
+            read={
+                "databricks": 'select collect_set(col1) from (select "1" as col1 union all select "1" as col1 union all select "2" as col1 union all select "2" as col1 union all select "3" as col1)',
             },
         )
 
