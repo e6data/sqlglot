@@ -190,6 +190,14 @@ class Databricks(Spark):
         # re-escapes it to `\\`, doubling it. (Python tokenizer only; the Rust tokenizer
         # does not honor this yet.)
         STRING_ESCAPE_SKIP_UNKNOWN = True
+        # Samsung Tableau binds parameters into the Databricks Custom SQL in its Postgres
+        # connection's syntax, so a value holding a control char arrives as E'a\n'. Read it as a
+        # byte string (decoded with the same backslash escapes as a plain Databricks string).
+        BYTE_STRINGS = (
+            [("e'", "'"), ("E'", "'")]
+            if os.getenv("SAMSUNG_TABLEAU_DASHBOARD", "false").lower() == "true"
+            else []
+        )
         KEYWORDS = {
             **Spark.Tokenizer.KEYWORDS,
             "VOID": TokenType.VOID,

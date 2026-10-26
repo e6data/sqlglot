@@ -1363,8 +1363,19 @@ class Generator(metaclass=_Generator):
     def bytestring_sql(self, expression: exp.ByteString) -> str:
         this = self.sql(expression, "this")
         if self.dialect.BYTE_START:
+            if self.dialect.BYTE_STRINGS_SUPPORT_ESCAPED_SEQUENCES:
+                # The tokenizer decoded the escapes; re-escape them. A backslash is kept as is:
+                # it may still start an escape the tokenizer left raw (e.g. \x..).
+                this = "".join(
+                    ch if ch == "\\" else self.dialect.ESCAPED_SEQUENCES.get(ch, ch) for ch in this
+                ).replace(self.dialect.BYTE_END, self.dialect.BYTE_END * 2)
             return f"{self.dialect.BYTE_START}{this}{self.dialect.BYTE_END}"
-        return this
+
+        if "\\" in self.dialect.tokenizer_class.STRING_ESCAPES:
+            return self.sql(exp.Literal.string(this))
+
+        self.unsupported(f"Byte strings are not supported for {self.dialect.__class__.__name__}")
+        return ""
 
     def unicodestring_sql(self, expression: exp.UnicodeString) -> str:
         this = self.sql(expression, "this")
@@ -2448,7 +2459,7 @@ class Generator(metaclass=_Generator):
         return text
 
     def escape_str(self, text: str, escape_backslash: bool = True) -> str:
-        if self.dialect.ESCAPED_SEQUENCES:
+        if self.dialect.STRINGS_SUPPORT_ESCAPED_SEQUENCES:
             to_escaped = self.dialect.ESCAPED_SEQUENCES
             text = "".join(
                 to_escaped.get(ch, ch) if escape_backslash or ch != "\\" else ch for ch in text

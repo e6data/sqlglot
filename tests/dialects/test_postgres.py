@@ -61,6 +61,16 @@ class TestPostgres(Validator):
         self.validate_identity("COMMENT ON TABLE mytable IS 'this'")
         self.validate_identity("COMMENT ON MATERIALIZED VIEW my_view IS 'this'")
         self.validate_identity("SELECT e'\\xDEADBEEF'")
+        self.validate_identity(
+            "SELECT e'foo \\' bar'",
+            "SELECT e'foo '' bar'",
+        )
+        self.validate_identity("SELECT e'\\n'")
+        self.validate_identity("SELECT e'\\t'")
+        self.validate_identity(
+            "SELECT e'update table_name set a = \\'foo\\' where 1 = 0' AS x FROM tab",
+            "SELECT e'update table_name set a = ''foo'' where 1 = 0' AS x FROM tab",
+        )
         self.validate_identity("SELECT CAST(e'\\176' AS BYTEA)")
         self.validate_identity("SELECT * FROM x WHERE SUBSTRING('Thomas' FROM '...$') IN ('mas')")
         self.validate_identity("SELECT TRIM(' X' FROM ' XXX ')")
@@ -390,6 +400,14 @@ FROM json_data, field_ids""",
             },
         )
         self.validate_all(
+            "SELECT E'a\\tb'",
+            write={
+                "postgres": "SELECT e'a\\tb'",
+                "mysql": "SELECT 'a\\tb'",
+                "sqlite": UnsupportedError,
+            },
+        )
+        self.validate_all(
             "SELECT CURRENT_TIMESTAMP + INTERVAL '-3 MONTH'",
             read={
                 "mysql": "SELECT DATE_ADD(CURRENT_TIMESTAMP, INTERVAL -1 QUARTER)",
@@ -558,7 +576,9 @@ FROM json_data, field_ids""",
         self.validate_all(
             "e'x'",
             write={
-                "mysql": "x",
+                "postgres": "e'x'",
+                "mysql": "'x'",
+                "sqlite": UnsupportedError,
             },
         )
         self.validate_all(

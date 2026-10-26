@@ -539,7 +539,13 @@ class _Tokenizer(type):
             **_quotes_to_format(TokenType.UNICODE_STRING, klass.UNICODE_STRINGS),
         }
 
+        if not any(
+            "BYTE_STRING_ESCAPES" in k.__dict__ for k in klass.__mro__ if k.__module__ != __name__
+        ):
+            klass.BYTE_STRING_ESCAPES = klass.STRING_ESCAPES.copy()
+
         klass._STRING_ESCAPES = set(klass.STRING_ESCAPES)
+        klass._BYTE_STRING_ESCAPES = set(klass.BYTE_STRING_ESCAPES)
         klass._IDENTIFIER_ESCAPES = set(klass.IDENTIFIER_ESCAPES)
         klass._COMMENTS = {
             **dict(
@@ -571,6 +577,7 @@ class _Tokenizer(type):
                 identifiers=klass._IDENTIFIERS,
                 identifier_escapes=klass._IDENTIFIER_ESCAPES,
                 string_escapes=klass._STRING_ESCAPES,
+                byte_string_escapes=klass._BYTE_STRING_ESCAPES,
                 quotes=klass._QUOTES,
                 format_strings={
                     k: (v1, _TOKEN_TYPE_TO_INDEX[v2])
@@ -594,6 +601,7 @@ class _Tokenizer(type):
             )
             token_types = RsTokenTypeSettings(
                 bit_string=_TOKEN_TYPE_TO_INDEX[TokenType.BIT_STRING],
+                byte_string=_TOKEN_TYPE_TO_INDEX[TokenType.BYTE_STRING],
                 break_=_TOKEN_TYPE_TO_INDEX[TokenType.BREAK],
                 dcolon=_TOKEN_TYPE_TO_INDEX[TokenType.DCOLON],
                 heredoc_string=_TOKEN_TYPE_TO_INDEX[TokenType.HEREDOC_STRING],
@@ -659,6 +667,7 @@ class Tokenizer(metaclass=_Tokenizer):
     IDENTIFIERS: t.List[str | t.Tuple[str, str]] = ['"']
     QUOTES: t.List[t.Tuple[str, str] | str] = ["'"]
     STRING_ESCAPES = ["'"]
+    BYTE_STRING_ESCAPES: t.List[str] = []
     VAR_SINGLE_TOKENS: t.Set[str] = set()
 
     # The strings in this list can always be used as escapes, regardless of the surrounding
@@ -700,6 +709,7 @@ class Tokenizer(metaclass=_Tokenizer):
     _IDENTIFIER_ESCAPES: t.Set[str] = set()
     _QUOTES: t.Dict[str, str] = {}
     _STRING_ESCAPES: t.Set[str] = set()
+    _BYTE_STRING_ESCAPES: t.Set[str] = set()
     _KEYWORD_TRIE: t.Dict = {}
     _RS_TOKENIZER: t.Optional[t.Any] = None
 
@@ -1459,7 +1469,15 @@ class Tokenizer(metaclass=_Tokenizer):
             return False
 
         self._advance(len(start))
-        text = self._extract_string(end, raw_string=token_type == TokenType.RAW_STRING)
+        text = self._extract_string(
+            end,
+            escapes=(
+                self._BYTE_STRING_ESCAPES
+                if token_type == TokenType.BYTE_STRING
+                else self._STRING_ESCAPES
+            ),
+            raw_string=token_type == TokenType.RAW_STRING,
+        )
 
         if base:
             try:
@@ -1509,7 +1527,7 @@ class Tokenizer(metaclass=_Tokenizer):
                 not raw_string
                 and self.dialect.UNESCAPED_SEQUENCES
                 and self._peek
-                and self._char in self.STRING_ESCAPES
+                and self._char in escapes
             ):
                 unescaped_sequence = self.dialect.UNESCAPED_SEQUENCES.get(self._char + self._peek)
                 if unescaped_sequence:

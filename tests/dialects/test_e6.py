@@ -4106,6 +4106,29 @@ class TestE6(Validator):
             'SELECT "Custom SQL Query"."arr" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
         )
 
+    def test_escape_strings(self):
+        """Tableau's Postgres connector writes a string holding a control char, quote or backslash
+        as an escape string E'...'. Postgres reads it natively; Databricks reads it only under
+        SAMSUNG_TABLEAU_DASHBOARD (flag read at import, so checked in a subprocess)."""
+        import subprocess
+        import sys
+
+        escapes = ["\\n", "\\r", "\\t", "\\b", "\\f", "\\\\", "\\'"]
+        for esc in escapes:
+            with self.subTest(esc):
+                self.validate_all(f"SELECT 'a{esc}b'", read={"postgres": f"SELECT E'a{esc}b'"})
+
+        code = (
+            "import sqlglot; "
+            "print(sqlglot.transpile(\"SELECT split(E'a,b\\\\n', ',') FROM t e\", "
+            "read='databricks', write='e6')[0])"
+        )
+        env = {**os.environ, "SAMSUNG_TABLEAU_DASHBOARD": "true"}
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, env=env
+        )
+        self.assertEqual(result.stdout.strip(), "SELECT SPLIT('a,b\\n', ',') FROM t AS e")
+
     def test_regexp_substr_native(self):
         """On the native executor, a Databricks REGEXP_SUBSTR (no `group`) stays
         REGEXP_SUBSTR; REGEXP_EXTRACT (has `group`) is untouched. The default (java)
