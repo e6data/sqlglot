@@ -190,6 +190,14 @@ class Databricks(Spark):
         # re-escapes it to `\\`, doubling it. (Python tokenizer only; the Rust tokenizer
         # does not honor this yet.)
         STRING_ESCAPE_SKIP_UNKNOWN = True
+        # SAMSUNG_TABLEAU_DASHBOARD + STRIP_E_STRING_PREFIX: Tableau's Postgres connector binds a
+        # parameter holding a control char, quote or backslash as a Postgres escape string E'...'.
+        # Read it as a plain string; Databricks strings decode the same backslash escapes.
+        if (
+            os.getenv("SAMSUNG_TABLEAU_DASHBOARD", "false").lower() == "true"
+            and os.getenv("STRIP_E_STRING_PREFIX", "false").lower() == "true"
+        ):
+            QUOTES = Spark.Tokenizer.QUOTES + [("E'", "'"), ("e'", "'")]
         KEYWORDS = {
             **Spark.Tokenizer.KEYWORDS,
             "VOID": TokenType.VOID,

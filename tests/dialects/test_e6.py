@@ -4113,6 +4113,126 @@ class TestE6(Validator):
             'SELECT "Custom SQL Query"."arr" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
         )
 
+    def test_samsung_tableau_escape_strings(self):
+        """SAMSUNG_TABLEAU_DASHBOARD + STRIP_E_STRING_PREFIX: Databricks reads a Postgres escape string E'...' (e.g. a Tableau
+        parameter bound by its Postgres connector) as a plain string. The flag is read at
+        import, so the flagged cases run in a subprocess."""
+        import json
+        import subprocess
+        import sys
+
+        from sqlglot.errors import ParseError
+
+        with self.assertRaises(ParseError):
+            parse_one("SELECT E'x'", read="databricks")
+
+        cases = {
+            # each escape Tableau's Extended string format writes
+            r"SELECT E'a\nb'": r"SELECT 'a\nb'",
+            r"SELECT E'a\rb'": r"SELECT 'a\rb'",
+            r"SELECT E'a\tb'": r"SELECT 'a\tb'",
+            r"SELECT E'a\bb'": r"SELECT 'a\bb'",
+            r"SELECT E'a\fb'": r"SELECT 'a\fb'",
+            r"SELECT E'C:\\tmp'": r"SELECT 'C:\\tmp'",
+            r"SELECT E'it\'s'": r"SELECT 'it\'s'",
+            r"SELECT e'x\n'": r"SELECT 'x\n'",
+            "SELECT E'한국\\n'": "SELECT '한국\\n'",
+            r"SELECT split(E'a,b\n', ',')": r"SELECT SPLIT('a,b\n', ',')",
+            # an E right before a quote that is not an escape string is unchanged
+            "SELECT e.x FROM t e WHERE e.x='y'": "SELECT e.x FROM t AS e WHERE e.x = 'y'",
+            "SELECT CASE WHEN a THEN 'x' ELSE'y' END": "SELECT CASE WHEN a THEN 'x' ELSE 'y' END",
+            "SELECT * FROM t WHERE name LIKE'%e'": "SELECT * FROM t WHERE name LIKE '%e'",
+            "SELECT date'2020-01-01'": "SELECT CAST('2020-01-01' AS DATE)",
+        }
+        code = (
+            "import json, sys, sqlglot; "
+            "print(json.dumps([sqlglot.transpile(q, read='databricks', write='e6')[0] "
+            "for q in json.loads(sys.argv[1])]))"
+        )
+
+        def run(**flags):
+            return subprocess.run(
+                [sys.executable, "-c", code, json.dumps(list(cases))],
+                capture_output=True,
+                text=True,
+                env={**os.environ, **flags},
+            )
+
+        for flag in ("SAMSUNG_TABLEAU_DASHBOARD", "STRIP_E_STRING_PREFIX"):
+            with self.subTest(only=flag):
+                self.assertIn("ParseError", run(**{flag: "true"}).stderr)
+
+        result = run(SAMSUNG_TABLEAU_DASHBOARD="true", STRIP_E_STRING_PREFIX="true")
+        self.assertEqual(result.stderr.count("Error"), 0, result.stderr)
+        for (sql, expected), actual in zip(cases.items(), json.loads(result.stdout)):
+            with self.subTest(sql):
+                self.assertEqual(actual, expected)
+
+    def test_samsung_tableau_end_to_end(self):
+        """A Samsung Tableau query (Postgres wrapper around the Databricks "Custom SQL Query")
+        whose parameter arrived as E'...\n', through the SAMSUNG_TABLEAU_DASHBOARD split, under
+        each sub-flag. The E' flag is read at import, so each case runs in a subprocess."""
+        import subprocess
+        import sys
+
+        query = (
+            'SELECT "Custom SQL Query"."du_id" AS "du_id" FROM (SELECT * FROM `dlt`.`w`.`t` '
+            "WHERE (E'VZ_1,VZ_2\\n' = 'All' OR GNODEB_ID IN (SELECT trim(v) AS GNODEB_ID "
+            "FROM (SELECT explode(split(E'VZ_1,VZ_2\\n', ',')) AS v) g))) \"Custom SQL Query\""
+        )
+        code = (
+            "import sys, sqlglot\n"
+            "from apis.utils.multidialect import _splice, split_custom_sql_alias\n"
+            "outer, inner = split_custom_sql_alias(sys.argv[1])\n"
+            "out = sqlglot.parse_one(outer, read='postgres').sql("
+            "dialect='e6', from_dialect='postgres')\n"
+            "for marker, sql in inner.items():\n"
+            "    e6 = sqlglot.parse_one(sql, read='databricks').sql("
+            "dialect='e6', from_dialect='databricks')\n"
+            "    out = _splice(out, marker, e6)\n"
+            "print(out)\n"
+        )
+
+        def run(**flags):
+            env = {**os.environ, "SAMSUNG_TABLEAU_DASHBOARD": "true", **flags}
+            return subprocess.run(
+                [sys.executable, "-c", code, query], capture_output=True, text=True, env=env
+            )
+
+        expected = (
+            'SELECT "Custom SQL Query"."du_id" AS "du_id" FROM (SELECT * FROM "dlt"."w"."t" '
+            "WHERE ('VZ_1,VZ_2{nl}' = 'All' OR GNODEB_ID IN (SELECT TRIM(v) AS GNODEB_ID "
+            "FROM (SELECT EXPLODE(SPLIT('VZ_1,VZ_2{nl}', ',')) AS v) AS g))) AS \"Custom SQL Query\""
+        )
+
+        # (importing apis prints a storage-client banner first, so compare the last stdout line)
+        # Samsung flag alone: unchanged from before, Databricks rejects E'...'
+        self.assertIn("ParseError", run().stderr)
+        # + STRIP_E_STRING_PREFIX: parses, the newline is kept
+        result = run(STRIP_E_STRING_PREFIX="true")
+        self.assertEqual(result.stdout.splitlines()[-1], expected.format(nl="\\n"), result.stderr)
+        # + STRIP_STRING_NEWLINES as well: the newline is dropped from the value
+        result = run(STRIP_E_STRING_PREFIX="true", STRIP_STRING_NEWLINES="true")
+        self.assertEqual(result.stdout.splitlines()[-1], expected.format(nl=""), result.stderr)
+
+    def test_strip_string_newlines(self):
+        """SAMSUNG_TABLEAU_DASHBOARD + STRIP_STRING_NEWLINES: every string literal loses its line
+        feeds. Either flag alone leaves strings unchanged."""
+        from unittest import mock
+
+        both = {"SAMSUNG_TABLEAU_DASHBOARD": "true", "STRIP_STRING_NEWLINES": "true"}
+        for flag in both:
+            with self.subTest(only=flag), mock.patch.dict(os.environ, {flag: "true"}):
+                self.validate_identity(r"SELECT 'a\nb'")
+
+        with mock.patch.dict(os.environ, both):
+            self.validate_all(r"SELECT 'ab'", read={"databricks": r"SELECT 'a\nb'"})
+            self.validate_all("SELECT 'ab'", read={"postgres": "SELECT 'a\nb'"})
+            self.validate_all(
+                "SELECT CONCAT(a, '', b), 'x\\ty', 1",
+                read={"databricks": r"SELECT concat(a, '\n', b), 'x\ty', 1"},
+            )
+
     def test_regexp_substr_native(self):
         """On the native executor, a Databricks REGEXP_SUBSTR (no `group`) stays
         REGEXP_SUBSTR; REGEXP_EXTRACT (has `group`) is untouched. The default (java)
