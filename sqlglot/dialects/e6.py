@@ -1749,6 +1749,17 @@ class E6(Dialect):
                 return self._replace_line_breaks(text)
             return super().escape_str(text, escape_backslash)
 
+        def literal_sql(self, expression: exp.Literal) -> str:
+            # SAMSUNG_TABLEAU_DASHBOARD + STRIP_STRING_NEWLINES: drop line feeds from every string
+            # literal (e.g. a Tableau parameter value pasted with a trailing newline).
+            if (
+                expression.is_string
+                and os.getenv("SAMSUNG_TABLEAU_DASHBOARD", "false").lower() == "true"
+                and os.getenv("STRIP_STRING_NEWLINES", "false").lower() == "true"
+            ):
+                expression = exp.Literal.string(expression.this.replace("\n", ""))
+            return super().literal_sql(expression)
+
         def pad_comment(self, comment: str) -> str:
             comment = comment.replace("/*", "/ *").replace("*/", "* /")
             comment = " " + comment if comment[0].strip() else comment
