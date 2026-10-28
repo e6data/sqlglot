@@ -3,7 +3,6 @@ from typing import Optional, Set, Type
 import json
 import logging
 import os
-import unicodedata
 
 import sqlglot
 from sqlglot.optimizer.qualify_columns import quote_identifiers
@@ -523,9 +522,12 @@ def set_cte_names_case_sensitively(sql_query_ast):
     return sql_query_ast
 
 
+_E6_TRANSFORM_KINDS = (exp.Table, exp.CTE, exp.Values, exp.Subquery)
+
+
 def apply_e6_ast_transforms(tree: exp.Expression) -> exp.Expression:
     """sanitize_comments + ensure_select_from_values + set_cte_names_case_sensitively, folded
-    into ONE ``tree.transform`` walk (escape comment markers, rewrite VALUES-only CTEs, collect
+    into ONE pre-order walk (escape comment markers, rewrite VALUES-only CTEs, collect
     CTE/subquery/VALUES aliases and table references), then rename only collected tables.
     This avoids a second full-tree walk. Byte-identical to running the three separately
     (verified on 704 production queries).
@@ -537,35 +539,35 @@ def apply_e6_ast_transforms(tree: exp.Expression) -> exp.Expression:
     names: list = []
     tables: list = []
 
-    def _visit(node: exp.Expression) -> exp.Expression:
-        if isinstance(node, exp.Table):
-            tables.append(node)
+    stack = [tree]
+    while stack:
+        node = stack.pop()
         # sanitize_comments: escape /* */ inside comment strings
         if node.comments:
             node.comments = [c.replace("/*", "/ *").replace("*/", "* /") for c in node.comments]
-        # ensure_select_from_values: a VALUES-only CTE -> SELECT * FROM VALUES(...)
-        if isinstance(node, exp.CTE) and isinstance(node.this, exp.Values):
-            cte_query = node.this
-            if cte_query.alias == "":
-                cte_query.set("alias", '"values_subq"')
-            new_query = exp.Select(expressions=[exp.Star()])
-            new_query.set("from", exp.From(this=cte_query))
-            node.set("this", new_query)
-        # set_cte_names: collect CTE/subquery/VALUES aliases (tables renamed to match, below)
-        if isinstance(node, exp.Values):
-            columns_list = node.alias_column_names
-            if node.alias_or_name:
-                if len(columns_list) > 0:
-                    names.append(f"{node.alias_or_name}({', '.join(columns_list)})")
-                else:
-                    names.append(node.alias_or_name)
-        elif isinstance(node, exp.Subquery) and node.alias:
-            names.append(node.alias)
-        elif isinstance(node, exp.CTE) and node.alias:
-            names.append(node.alias)
-        return node
-
-    tree = tree.transform(_visit, copy=False)
+        if isinstance(node, _E6_TRANSFORM_KINDS):
+            if isinstance(node, exp.Table):
+                tables.append(node)
+            # ensure_select_from_values: a VALUES-only CTE -> SELECT * FROM VALUES(...)
+            if isinstance(node, exp.CTE) and isinstance(node.this, exp.Values):
+                cte_query = node.this
+                if cte_query.alias == "":
+                    cte_query.set("alias", '"values_subq"')
+                new_query = exp.Select(expressions=[exp.Star()])
+                new_query.set("from", exp.From(this=cte_query))
+                node.set("this", new_query)
+            # set_cte_names: collect CTE/subquery/VALUES aliases (tables renamed to match, below)
+            if isinstance(node, exp.Values):
+                columns_list = node.alias_column_names
+                if node.alias_or_name:
+                    if len(columns_list) > 0:
+                        names.append(f"{node.alias_or_name}({', '.join(columns_list)})")
+                    else:
+                        names.append(node.alias_or_name)
+            elif isinstance(node, (exp.Subquery, exp.CTE)) and node.alias:
+                names.append(node.alias)
+        # Same pre-order as Expression.dfs; children are read after the visit.
+        stack.extend(node.iter_expressions(reverse=True))
 
     total_list = list(set(names))
     if total_list:
@@ -605,53 +607,26 @@ def extract_cte_n_subquery_list(sql_query_ast):
     return [cte_list, values_list, subquery_list]
 
 
+# Characters normalize_unicode_spaces turns into a space: re's \s is str.isspace (which covers
+# Unicode categories Zs/Zl/Zp), minus CR/LF and the ASCII space itself, plus U+FFFD.
+_UNICODE_SPACE_RE = re.compile(r"[^\S\r\n ]|\ufffd")
+# A quoted literal ('' escapes inside single quotes; an unterminated one runs to the end), or
+# one such character outside quotes.
+_QUOTED_OR_UNICODE_SPACE_RE = re.compile(
+    r"""'[^']*(?:''[^']*)*(?:'|\Z)|"[^"]*(?:"|\Z)|[^\S\r\n ]|\ufffd"""
+)
+
+
 def normalize_unicode_spaces(sql: str) -> str:
     """
     Normalize all Unicode whitespace/separator characters (and U+FFFD) to plain ASCII spaces,
     but do NOT touch anything inside single (') or double (") quoted literals.
     """
-    out_chars = []
-    in_quote = None  # None, or "'" or '"'
-    i = 0
-    length = len(sql)
-
-    while i < length:
-        ch = sql[i]
-
-        # Are we entering or exiting a quoted literal?
-        if in_quote:
-            out_chars.append(ch)
-            # For SQL, single quotes are escaped by doubling (''),
-            # so only end the quote if it's a lone quote character.
-            if ch == in_quote:
-                if in_quote == "'" and i + 1 < length and sql[i + 1] == "'":
-                    # It's an escaped '' inside a single-quoted literal: consume both
-                    out_chars.append(sql[i + 1])
-                    i += 1
-                else:
-                    # Closing the literal
-                    in_quote = None
-            # Otherwise, we stay inside the literal
-        else:
-            # Not currently in a quote: check for opening
-            if ch in ("'", '"'):
-                in_quote = ch
-                out_chars.append(ch)
-            else:
-                # Normalize only Unicode whitespace/separators and U+FFFD,
-                # preserve all other non-ASCII chars (French, German, EU languages, etc.)
-                cat = unicodedata.category(ch)
-                if (
-                    ch == "\ufffd"
-                    or cat in ("Zs", "Zl", "Zp")
-                    or (ch.isspace() and ch not in "\r\n")
-                ):
-                    out_chars.append(" ")
-                else:
-                    out_chars.append(ch)
-        i += 1
-
-    return "".join(out_chars)
+    if not _UNICODE_SPACE_RE.search(sql):
+        return sql
+    return _QUOTED_OR_UNICODE_SPACE_RE.sub(
+        lambda m: m.group() if m.group()[0] in "'\"" else " ", sql
+    )
 
 
 def fix_quote_escapes(sql: str) -> str:
