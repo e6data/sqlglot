@@ -77,7 +77,8 @@ SQLGLOTRS_TOKENIZER = os.getenv("SQLGLOTRS_TOKENIZER", "0")
 HYBRID_MULTIDIALECT = os.getenv("HYBRID_MULTIDIALECT", "False").lower() == "true"
 # Opt-in (same style as HYBRID_MULTIDIALECT): run the multidialect split through the
 # dialect-agnostic subquery tree (apis.utils.subquery_tree) instead of the
-# split_custom_sql_alias / split_pg_outer helpers.
+# split_custom_sql_alias / split_pg_outer helpers. It only picks the method: the
+# multidialect path itself is triggered by the MULTIDIALECT feature flag (or Samsung).
 SUBQUERY_TREE = os.getenv("SUBQUERY_TREE", "False").lower() == "true"
 
 storage_service_client = None
@@ -205,7 +206,7 @@ async def convert_query(
             return HTTPException(status_code=500, detail=str(je))
 
     samsung = SAMSUNG_TABLEAU_DASHBOARD.lower() == "true"
-    if flags_dict.get("MULTIDIALECT", False) or samsung or SUBQUERY_TREE:
+    if flags_dict.get("MULTIDIALECT", False) or samsung:
         # Multi-dialect BI-tool query: a Postgres outer wrapper around inner subqueries
         # written in another dialect (INNER_DIALECT, default "databricks"). Rule:
         #   - a subquery that FAILS the Postgres parse is inner-dialect  -> INNER_DIALECT -> e6

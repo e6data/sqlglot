@@ -1,4 +1,6 @@
+import json
 import unittest
+from unittest import mock
 
 from apis.utils.subquery_tree import build_tree, reproduce
 
@@ -94,6 +96,34 @@ class TestSubqueryTreeStructure(unittest.TestCase):
         self.assertEqual(len(root.children), 2)
         self.assertIn("a", root.children[0].raw)
         self.assertIn("b", root.children[1].raw)
+
+
+class TestSubqueryTreeTrigger(unittest.TestCase):
+    """SUBQUERY_TREE only picks the multidialect method; the MULTIDIALECT flag triggers it."""
+
+    def test_only_multidialect_triggers_the_tree(self):
+        from fastapi.testclient import TestClient
+
+        import converter_api
+
+        client = TestClient(converter_api.app)
+        for multidialect in (False, True):
+            with (
+                self.subTest(multidialect=multidialect),
+                mock.patch.object(converter_api, "SUBQUERY_TREE", True),
+                mock.patch.object(
+                    converter_api, "subquery_tree_transpile", return_value="SELECT 1"
+                ) as tree,
+            ):
+                client.post(
+                    "/convert-query",
+                    data={
+                        "query": "SELECT 1",
+                        "from_sql": "databricks",
+                        "feature_flags": json.dumps({"MULTIDIALECT": multidialect}),
+                    },
+                )
+                self.assertEqual(tree.called, multidialect)
 
 
 if __name__ == "__main__":

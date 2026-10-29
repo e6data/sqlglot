@@ -11,7 +11,7 @@ each a Postgres/Tableau outer around a Databricks "Custom SQL Query" inner, with
 
 Every all_match query must keep returning e6 exactly under each mode:
 
-- subtree: SUBQUERY_TREE on (apis.utils.subquery_tree);
+- subtree: SUBQUERY_TREE on with the MULTIDIALECT feature flag (apis.utils.subquery_tree);
 - multidialect: the MULTIDIALECT feature flag (split_pg_outer);
 - samsung: SAMSUNG_TABLEAU_DASHBOARD on (split_custom_sql_alias).
 """
@@ -28,7 +28,7 @@ QUERIES = Path(__file__).parent / "queries.csv.gz"
 
 # name: (SUBQUERY_TREE, SAMSUNG_TABLEAU_DASHBOARD, MULTIDIALECT flag)
 MODES = {
-    "subtree": (True, "False", False),
+    "subtree": (True, "False", True),
     "multidialect": (False, "False", True),
     "samsung": (False, "true", False),
 }
