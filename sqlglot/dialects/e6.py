@@ -42,6 +42,7 @@ def _has_odd_quote_line(sql: str) -> bool:
         b'"', b""
     ).replace(b"``", b"")
 
+
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
 
@@ -1385,7 +1386,10 @@ class E6(Dialect):
         """
 
         # Check if the expression is an identifier and matches a reserved keyword.
-        if isinstance(expression, exp.Identifier) and expression.name.upper() in E6_KEYWORDS_TO_QUOTE:
+        if (
+            isinstance(expression, exp.Identifier)
+            and expression.name.upper() in E6_KEYWORDS_TO_QUOTE
+        ):
             # Mark the identifier as quoted.
             expression.set("quoted", True)
 

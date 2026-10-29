@@ -15,18 +15,20 @@ from sqlglot.tokens import Token, TokenType, _TOKEN_TYPE_TO_INDEX
 from apis.utils.multidialect import MARKER
 
 try:
-    from sqlglotrs import _remap_tokens
+    from sqlglotrs import _remap_tokens  # type: ignore
 except ImportError:
     _remap_tokens = None
 
 NATIVE_TOKEN_REUSE = _remap_tokens is not None
+
 
 @lru_cache(maxsize=1)
 def _different_words():
     generic = Dialect().tokenizer_class.KEYWORDS
     postgres = Dialect.get_or_raise("postgres").tokenizer_class.KEYWORDS
     return frozenset(
-        keyword.split()[0] for keyword in generic.keys() | postgres.keys()
+        keyword.split()[0]
+        for keyword in generic.keys() | postgres.keys()
         if generic.get(keyword) != postgres.get(keyword)
     )
 
@@ -56,7 +58,9 @@ class RegionTokens:
         for index, child in enumerate(node.children):
             if node.raw.find(child.raw) != child.start - node.start:
                 return None
-            replacements.append((child.start, child.end, f"(SELECT NULL AS {MARKER.format(index)})"))
+            replacements.append(
+                (child.start, child.end, f"(SELECT NULL AS {MARKER.format(index)})")
+            )
         replacements.sort()
         pieces = []
         cursor = node.start
@@ -65,7 +69,7 @@ class RegionTokens:
                 return None
             pieces.extend((self.sql[cursor:start], replacement))
             cursor = end
-        pieces.append(self.sql[cursor:node.end])
+        pieces.append(self.sql[cursor : node.end])
         if "".join(pieces) != body:
             return None
         self.consumed.add(span)
@@ -86,8 +90,7 @@ class RegionTokens:
                 if token.token_type not in _QUOTED:
                     word = token.text.upper()
                     if word in different_words or (
-                        word in ("B", "E", "X")
-                        and self.sql[token.end + 1:token.end + 2] == "'"
+                        word in ("B", "E", "X") and self.sql[token.end + 1 : token.end + 2] == "'"
                     ):
                         compatible = False
                         return
@@ -96,8 +99,9 @@ class RegionTokens:
                 line = bisect_left(newlines, end) + 1
                 col = end - (newlines[line - 2] if line > 1 else -1)
                 whitespace = (
-                    body[result[-1].end + 1 if result else 0:start]
-                    if hasattr(token, "whitespace_before") else ""
+                    body[result[-1].end + 1 if result else 0 : start]
+                    if hasattr(token, "whitespace_before")
+                    else ""
                 )
                 if isinstance(token, Token):
                     token.start = start
@@ -107,19 +111,33 @@ class RegionTokens:
                     token.whitespace_before = whitespace
                     result.append(token)
                 else:
-                    result.append(Token(
-                        token.token_type, token.text, line, col,
-                        start, end, token.comments, whitespace,
-                    ))
+                    result.append(
+                        Token(
+                            token.token_type,
+                            token.text,
+                            line,
+                            col,
+                            start,
+                            end,
+                            token.comments,
+                            whitespace,
+                        )
+                    )
 
         cursor = node.start
         shift = -node.start
         for start, end, replacement in replacements:
-            append(self.tokens[bisect_left(self.starts, cursor):bisect_left(self.starts, start)], shift)
+            append(
+                self.tokens[bisect_left(self.starts, cursor) : bisect_left(self.starts, start)],
+                shift,
+            )
             append(Dialect().tokenize(replacement), start + shift)
             shift += len(replacement) - (end - start)
             cursor = end
-        append(self.tokens[bisect_left(self.starts, cursor):bisect_left(self.starts, node.end)], shift)
+        append(
+            self.tokens[bisect_left(self.starts, cursor) : bisect_left(self.starts, node.end)],
+            shift,
+        )
         return result if compatible else None
 
     def _native_mask(self, node, body, replacements):
@@ -127,10 +145,21 @@ class RegionTokens:
         cursor = node.start
         shift = -node.start
         for start, end, replacement in replacements:
-            chunks.append((self.tokens[bisect_left(self.starts, cursor):bisect_left(self.starts, start)], shift))
+            chunks.append(
+                (
+                    self.tokens[bisect_left(self.starts, cursor) : bisect_left(self.starts, start)],
+                    shift,
+                )
+            )
             chunks.append((Dialect().tokenize(replacement), start + shift))
             shift += len(replacement) - (end - start)
             cursor = end
-        chunks.append((self.tokens[bisect_left(self.starts, cursor):bisect_left(self.starts, node.end)], shift))
-        return _remap_tokens(chunks, body, self.sql, _different_words(),
-                             {_TOKEN_TYPE_TO_INDEX[t] for t in _QUOTED})
+        chunks.append(
+            (
+                self.tokens[bisect_left(self.starts, cursor) : bisect_left(self.starts, node.end)],
+                shift,
+            )
+        )
+        return _remap_tokens(
+            chunks, body, self.sql, _different_words(), {_TOKEN_TYPE_TO_INDEX[t] for t in _QUOTED}
+        )

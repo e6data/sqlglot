@@ -48,9 +48,9 @@ class TestSamsungQueries(unittest.TestCase):
             cls.queries = list(csv.DictReader(fh))
 
     def convert(self, query, subquery_tree, samsung, multidialect):
-        with mock.patch.object(self.converter_api, "SUBQUERY_TREE", subquery_tree), mock.patch.object(
-            self.converter_api, "SAMSUNG_TABLEAU_DASHBOARD", samsung
-        ):
+        with mock.patch.object(
+            self.converter_api, "SUBQUERY_TREE", subquery_tree
+        ), mock.patch.object(self.converter_api, "SAMSUNG_TABLEAU_DASHBOARD", samsung):
             response = self.client.post(
                 "/convert-query",
                 data={

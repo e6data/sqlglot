@@ -45,6 +45,7 @@ from sqlglot.tokens import TokenType
 
 logger = logging.getLogger(__name__)
 
+
 class LiteParser(Parser):
     """The base sqlglot parser with the value-expression clauses skipped. It still
     walks FROM/JOIN/LATERAL, so sqlglot records each subquery's ``meta["raw_sql"]`` --
@@ -119,7 +120,7 @@ def lite_parse(query: str, tokens=None) -> exp.Expression:
         (time.perf_counter() - _t) * 1000,
         len(query),
     )
-    return ast
+    return t.cast(exp.Expression, ast)
 
 
 def iter_subqueries(ast: exp.Expression) -> t.Iterator[exp.Subquery]:

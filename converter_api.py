@@ -121,7 +121,7 @@ def escape_unicode(s: str) -> str:
     return s.encode("unicode_escape").decode("ascii")
 
 
-def _region_to_e6(region_sql: str, from_sql: str, pretty: bool, tokens=None) -> str:
+def _region_to_e6(region_sql: str, from_sql: Optional[str], pretty: bool, tokens=None) -> str:
     """Transpile ONE region of a multi-dialect BI-tool query to e6.
 
     This deliberately runs the SAME steps as the main /convert-query pipeline

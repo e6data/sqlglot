@@ -29,6 +29,7 @@ from apis.utils.region_tokens import RegionTokens, NATIVE_TOKEN_REUSE
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class SQNode:
     """A subquery: ``label`` (``"ROOT"`` / ``"S0"`` / ...), verbatim ``raw`` source,
@@ -52,8 +53,10 @@ def build_tree(query: str, tokens=None) -> SQNode:
     for sq in ast.find_all(exp.Subquery):
         if sq.meta.get("raw_sql"):
             nodes[id(sq)] = SQNode(
-                label=f"S{len(nodes)}", raw=sq.meta["raw_sql"],
-                start=sq.meta["raw_start"], end=sq.meta["raw_end"],
+                label=f"S{len(nodes)}",
+                raw=sq.meta["raw_sql"],
+                start=sq.meta["raw_start"],
+                end=sq.meta["raw_end"],
             )
 
     for sq in ast.find_all(exp.Subquery):
@@ -103,9 +106,10 @@ def parse_region(region: str, tokens=None) -> tuple[str, exp.Expression]:
             tree = sqlglot.parse_one(region, read="postgres")
         else:
             trees = Dialect.get_or_raise("postgres").parser().parse(tokens, region)
-            tree = trees[0] if trees else None
-            if tree is None:
+            parsed = trees[0] if trees else None
+            if parsed is None:
                 raise ParseError(f"No expression was parsed from '{region}'")
+            tree = parsed
         dialect = "postgres"
     except (ParseError, TokenError):
         dialect, tree = "databricks", sqlglot.parse_one(region, read="databricks", error_level=None)
@@ -144,7 +148,8 @@ def transpile_multidialect(query: str, pretty: bool = True, emit=None, emit_toke
     # retain normal retokenization rather than copying tokens into Python objects.
     retained = (
         RegionTokens(query, tokens)
-        if emit_tokens is not None and (not tokens or isinstance(tokens[0], Token) or NATIVE_TOKEN_REUSE)
+        if emit_tokens is not None
+        and (not tokens or isinstance(tokens[0], Token) or NATIVE_TOKEN_REUSE)
         else None
     )
 

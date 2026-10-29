@@ -15,7 +15,7 @@ class TestSubqueryTreeReproduce(unittest.TestCase):
         self.assertRoundTrips("SELECT a, b FROM t WHERE a > 1")
 
     def test_single_from_subquery(self):
-        self.assertRoundTrips('SELECT x FROM (SELECT a AS x FROM t) AS s')
+        self.assertRoundTrips("SELECT x FROM (SELECT a AS x FROM t) AS s")
 
     def test_nested_subqueries(self):
         self.assertRoundTrips(
@@ -26,9 +26,7 @@ class TestSubqueryTreeReproduce(unittest.TestCase):
         self.assertRoundTrips("SELECT * FROM (SELECT 1 AS a) x, (SELECT 2 AS b) y")
 
     def test_join_subquery(self):
-        self.assertRoundTrips(
-            "SELECT * FROM t JOIN (SELECT id FROM u) AS j ON t.id = j.id"
-        )
+        self.assertRoundTrips("SELECT * FROM t JOIN (SELECT id FROM u) AS j ON t.id = j.id")
 
     def test_union_of_subqueries(self):
         self.assertRoundTrips(
@@ -38,31 +36,21 @@ class TestSubqueryTreeReproduce(unittest.TestCase):
     def test_subquery_in_where_is_not_lost(self):
         # LiteParser skips WHERE, so this subquery is not isolated as a node -- but it
         # stays as body text, so the query still reproduces exactly.
-        self.assertRoundTrips(
-            "SELECT a FROM t WHERE a IN (SELECT id FROM allowed)"
-        )
+        self.assertRoundTrips("SELECT a FROM t WHERE a IN (SELECT id FROM allowed)")
 
     def test_cte_body(self):
-        self.assertRoundTrips(
-            "WITH c AS (SELECT a FROM t) SELECT * FROM c"
-        )
+        self.assertRoundTrips("WITH c AS (SELECT a FROM t) SELECT * FROM c")
 
     def test_multidialect_backtick_custom_sql(self):
         # Postgres outer ("...") wrapping a Databricks inner (`...`), Tableau-style.
-        self.assertRoundTrips(
-            'SELECT "col" FROM (SELECT `x`.`y` FROM `db`.`t`) "Custom SQL Query"'
-        )
+        self.assertRoundTrips('SELECT "col" FROM (SELECT `x`.`y` FROM `db`.`t`) "Custom SQL Query"')
 
     def test_whitespace_and_newlines_preserved(self):
-        self.assertRoundTrips(
-            "SELECT   *\n  FROM (\n    SELECT  a\n    FROM t\n  ) AS s\n"
-        )
+        self.assertRoundTrips("SELECT   *\n  FROM (\n    SELECT  a\n    FROM t\n  ) AS s\n")
 
     def test_plain_table_between_subqueries(self):
         # A non-subquery table sits between two subqueries in the FROM.
-        self.assertRoundTrips(
-            "SELECT * FROM (SELECT 1 AS a) x, plain_table t, (SELECT 2 AS b) y"
-        )
+        self.assertRoundTrips("SELECT * FROM (SELECT 1 AS a) x, plain_table t, (SELECT 2 AS b) y")
 
     def test_plain_content_before_between_and_after(self):
         # Plain columns, a real table, and modifiers surround the subqueries.
@@ -76,24 +64,19 @@ class TestSubqueryTreeReproduce(unittest.TestCase):
     def test_plain_table_joined_inside_subquery(self):
         # Non-subquery content interleaved with a subquery at a deeper level.
         self.assertRoundTrips(
-            "SELECT * FROM (SELECT * FROM plain p "
-            "JOIN (SELECT a FROM t) i ON p.id = i.a) AS o"
+            "SELECT * FROM (SELECT * FROM plain p " "JOIN (SELECT a FROM t) i ON p.id = i.a) AS o"
         )
 
     def test_subquery_only_in_the_middle(self):
         # Leading and trailing plain SQL, one subquery in the middle.
-        self.assertRoundTrips(
-            "SELECT col1, col2, col3 FROM a, b, (SELECT id FROM c) mid, d, e"
-        )
+        self.assertRoundTrips("SELECT col1, col2, col3 FROM a, b, (SELECT id FROM c) mid, d, e")
 
 
 class TestSubqueryTreeStructure(unittest.TestCase):
     """Spot-check labels and hierarchy so transpile can walk them."""
 
     def test_labels_and_nesting(self):
-        root = build_tree(
-            "SELECT * FROM (SELECT * FROM (SELECT a FROM t) AS i) AS o"
-        )
+        root = build_tree("SELECT * FROM (SELECT * FROM (SELECT a FROM t) AS i) AS o")
         self.assertEqual(root.label, "ROOT")
         # One top-level subquery (o), which itself has one child (i).
         self.assertEqual(len(root.children), 1)

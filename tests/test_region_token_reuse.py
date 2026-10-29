@@ -13,7 +13,7 @@ from apis.utils.region_tokens import RegionTokens
 class TestRegionTokenReuse(unittest.TestCase):
     @unittest.skipIf(USE_RS_TOKENIZER, "Native tokens have immutable positions")
     def test_mask_does_not_copy_existing_tokens(self):
-        sql = 'SELECT ' + ', '.join(f'x AS c{i}' for i in range(30)) + ' FROM (SELECT 1) s'
+        sql = "SELECT " + ", ".join(f"x AS c{i}" for i in range(30)) + " FROM (SELECT 1) s"
         tokens = Dialect().tokenize(sql)
         root = build_tree(sql, tokens)
         retained = RegionTokens(sql, tokens)
@@ -33,8 +33,8 @@ class TestRegionTokenReuse(unittest.TestCase):
     def test_masked_token_positions_match_fresh_tokenization(self):
         for sql in (
             'SELECT "a"\nFROM (SELECT x AS "a"\n FROM t) s WHERE "a" > 1',
-            'SELECT *\rFROM (SELECT * FROM (SELECT 1) i) o',
-            'SELECT *\r\nFROM (SELECT 1) a JOIN (SELECT 2) b ON 1 = 1',
+            "SELECT *\rFROM (SELECT * FROM (SELECT 1) i) o",
+            "SELECT *\r\nFROM (SELECT 1) a JOIN (SELECT 2) b ON 1 = 1",
             "SELECT 'Tri-State', 'it''s fine' FROM (SELECT 1) s",
             'SELECT "café" FROM (SELECT \'日本語\' AS "café") s',
         ):
@@ -56,11 +56,20 @@ class TestRegionTokenReuse(unittest.TestCase):
                 pending.extend(node.children)
 
     def test_lexical_differences_use_normal_tokenizer(self):
-        for sql in ("SELECT FLOAT '1'", "SELECT $$value$$", "SELECT E'abc'",
-                    "SELECT B'01'", "SELECT X'AB'", "SELECT a @> b",
-                    "SELECT 1 /* hint */", "SELECT 1 -- comment"):
+        for sql in (
+            "SELECT FLOAT '1'",
+            "SELECT $$value$$",
+            "SELECT E'abc'",
+            "SELECT B'01'",
+            "SELECT X'AB'",
+            "SELECT a @> b",
+            "SELECT 1 /* hint */",
+            "SELECT 1 -- comment",
+        ):
             tokens = Dialect().tokenize(sql)
-            self.assertIsNone(RegionTokens(sql, tokens).mask(SQNode("ROOT", sql, end=len(sql)), sql))
+            self.assertIsNone(
+                RegionTokens(sql, tokens).mask(SQNode("ROOT", sql, end=len(sql)), sql)
+            )
 
     def test_different_keyword_tables_cannot_silently_reuse_tokens(self):
         generic = Dialect().tokenizer_class.KEYWORDS
@@ -81,6 +90,7 @@ class TestRegionTokenReuse(unittest.TestCase):
 
     def test_cleanup_invalidates_tokens(self):
         import converter_api as api
+
         for sql in ("SELECT\t1", "SELECT 1 /* comment */"):
             tokens = Dialect().tokenize(sql)
             original = api.parse_region
@@ -99,14 +109,17 @@ class TestRegionTokenReuse(unittest.TestCase):
 
     def test_databricks_fallback_matches_uncached_emitter(self):
         from apis.utils.subquery_tree import _default_emit
+
         queries = (
             'SELECT "x" FROM (SELECT `x` FROM `table`) s',
-            'SELECT * FROM (SELECT * FROM (SELECT `x` FROM t) i) o',
+            "SELECT * FROM (SELECT * FROM (SELECT `x` FROM t) i) o",
             "SELECT * FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS y) b ON a.x = b.y",
         )
         for sql in queries:
-            self.assertEqual(transpile_multidialect(sql, False),
-                             transpile_multidialect(sql, False, emit=_default_emit))
+            self.assertEqual(
+                transpile_multidialect(sql, False),
+                transpile_multidialect(sql, False, emit=_default_emit),
+            )
 
     def test_function_arguments_do_not_allocate_speculative_identifiers(self):
         original = exp.Identifier.__init__
@@ -168,8 +181,7 @@ class TestRegionTokenReuse(unittest.TestCase):
 
     @unittest.skipUnless(USE_RS_TOKENIZER, "Native relocation rollback regression")
     def test_native_incompatible_region_leaves_positions_unchanged(self):
-        for sql in ("SELECT * FROM (SELECT x, FLOAT '1') s",
-                    "SELECT * FROM (SELECT x, café) s"):
+        for sql in ("SELECT * FROM (SELECT x, FLOAT '1') s", "SELECT * FROM (SELECT x, café) s"):
             tokens = Dialect().tokenize(sql)
             root = build_tree(sql, tokens)
             fields = ("start", "end", "line", "col")

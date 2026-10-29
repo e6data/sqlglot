@@ -81,9 +81,7 @@ class TestCondenastQueries(unittest.TestCase):
             with self.subTest(query_id=case["query_id"]):
                 with self.assertRaises(ValueError):
                     self.convert(case["sql"], *MODES["multidialect"])
-                self.assertEqual(
-                    self.convert(case["sql"], *MODES["subtree"]), case["e6"]
-                )
+                self.assertEqual(self.convert(case["sql"], *MODES["subtree"]), case["e6"])
 
 
 if __name__ == "__main__":
