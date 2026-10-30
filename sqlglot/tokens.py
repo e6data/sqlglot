@@ -26,6 +26,10 @@ except ImportError:
 
 
 class TokenType(AutoName):
+    # Enum members compare by identity. Use the matching C-level hash instead of
+    # calling Python Enum.__hash__ for every parser set/dictionary lookup.
+    __hash__ = object.__hash__
+
     L_PAREN = auto()
     R_PAREN = auto()
     L_BRACKET = auto()
@@ -1065,6 +1069,7 @@ class Tokenizer(metaclass=_Tokenizer):
                 unescaped_sequences=self.dialect.UNESCAPED_SEQUENCES,
                 identifiers_can_start_with_digit=self.dialect.IDENTIFIERS_CAN_START_WITH_DIGIT,
                 numbers_can_be_underscore_separated=self.dialect.NUMBERS_CAN_BE_UNDERSCORE_SEPARATED,
+                string_escape_skip_unknown=self.STRING_ESCAPE_SKIP_UNKNOWN,
             )
 
         self.reset()

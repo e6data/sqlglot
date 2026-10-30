@@ -1,4 +1,4 @@
-.PHONY: install install-dev install-pre-commit test unit style check docs docs-serve
+.PHONY: install install-dev install-pre-commit test test-multidialect unit style check docs docs-serve
 
 install:
 	pip install -e .
@@ -29,6 +29,13 @@ test:
 
 test-rs:
 	RUST_BACKTRACE=1 python -m unittest
+
+# Prod-query corpora (Samsung, Conde Nast, OneTrust) through both multidialect methods;
+# skipped by test/test-rs.
+test-multidialect:
+	MULTIDIALECT_CORPUS=1 SQLGLOTRS_TOKENIZER=0 python -m unittest \
+		tests.samsung.test_samsung_queries tests.condenast.test_condenast_queries \
+		tests.onetrust.test_onetrust_queries
 
 unit:
 	SKIP_INTEGRATION=1 SQLGLOTRS_TOKENIZER=0 python -m unittest

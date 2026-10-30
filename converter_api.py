@@ -17,7 +17,9 @@ from log_collector import setup_logger, log_records
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks
+from sqlglot.errors import ParseError, TokenError
 from apis.utils.multidialect import split_pg_outer, split_custom_sql_alias, _splice
+from apis.utils.subquery_tree import parse_region, transpile_multidialect as subquery_tree_transpile
 from guardrail.main import StorageServiceClient
 from guardrail.main import extract_sql_components_per_table_with_alias, get_table_infos
 from guardrail.rules_validator import validate_queries
@@ -71,6 +73,11 @@ SQLGLOTRS_TOKENIZER = os.getenv("SQLGLOTRS_TOKENIZER", "0")
 # parses as Postgres), and the e6 generator reparses any Anonymous-node function it finds on
 # the postgres path in the Databricks dialect (see e6.anonymous_sql). Read here and in e6.py.
 HYBRID_MULTIDIALECT = os.getenv("HYBRID_MULTIDIALECT", "False").lower() == "true"
+# Opt-in (same style as HYBRID_MULTIDIALECT): run the multidialect split through the
+# dialect-agnostic subquery tree (apis.utils.subquery_tree) instead of the
+# split_custom_sql_alias / split_pg_outer helpers. It only picks the method: the
+# multidialect path itself is triggered by the MULTIDIALECT feature flag (or Samsung).
+SUBQUERY_TREE = os.getenv("SUBQUERY_TREE", "False").lower() == "true"
 
 storage_service_client = None
 
@@ -113,7 +120,7 @@ def escape_unicode(s: str) -> str:
     return s.encode("unicode_escape").decode("ascii")
 
 
-def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
+def _region_to_e6(region_sql: str, from_sql: Optional[str], pretty: bool, tokens=None) -> str:
     """Transpile ONE region of a multi-dialect BI-tool query to e6.
 
     This deliberately runs the SAME steps as the main /convert-query pipeline
@@ -127,17 +134,28 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
       - "postgres" for the fallback OUTER, so e6 applies its Postgres-specific rules
         (e.g. dropping a 1-arg numeric ``TRUNC`` that Databricks would mis-read as a
         date truncation).
+      - None for the subquery tree: ``parse_region`` picks postgres, else databricks,
+        and its parse is reused (no second parse).
     """
     # Same input cleanup the main path does before parsing.
+    _t = time.perf_counter()
+    original_region_sql = region_sql
     region_sql = normalize_unicode_spaces(region_sql)
     if SKIP_COMMENT.lower() == "true":
         region_sql, _ = strip_comment(region_sql)
     # Large IN-clause optimization: pull out oversized literal lists before
     # parsing so sqlglot doesn't build/traverse thousands of AST nodes.
     region_sql, in_replacements = extract_large_in_clauses(region_sql)
+    _cleanup_ms = (time.perf_counter() - _t) * 1000
     # Parse with the region's own source dialect, then run the standard e6 steps.
+    # from_sql=None (subquery tree): parse_region decides the dialect and its parse is reused.
     _t = time.perf_counter()
-    tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
+    if from_sql is None:
+        from_sql, tree = parse_region(
+            region_sql, tokens=tokens if region_sql == original_region_sql else None
+        )
+    else:
+        tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
     _parse_ms = (time.perf_counter() - _t) * 1000
     # AST transforms folded into one combined walk (sanitize comments + VALUES/CTE fixes +
     # case-sensitive CTE table renaming). Identifier quoting is no longer a separate walk here:
@@ -147,15 +165,19 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     _transform_ms = (time.perf_counter() - _t) * 1000
     # from_dialect=from_sql is what lets e6 honor the source dialect's semantics.
     # quote_reserved_keywords=True folds the old quote_identifiers walk into generation.
+    # copy=False: the tree is discarded after this, so skip the generator's deep copy.
     _t = time.perf_counter()
-    out = tree.sql(dialect="e6", from_dialect=from_sql, pretty=pretty, quote_reserved_keywords=True)
+    out = tree.sql(
+        dialect="e6", from_dialect=from_sql, pretty=pretty, quote_reserved_keywords=True, copy=False
+    )
     _generate_ms = (time.perf_counter() - _t) * 1000
     out = replace_struct_in_query(out)
     # Restore original IN-clause values after transpilation.
     out = restore_large_in_clauses(out, in_replacements)
     logger.info(
-        "[TRANSPILE-TIMING] region=%s: parse=%.1f ms, transforms=%.1f ms, generate=%.1f ms",
+        "[TRANSPILE-TIMING] region=%s: cleanup=%.1f ms, parse=%.1f ms, transforms=%.1f ms, generate=%.1f ms",
         from_sql,
+        _cleanup_ms,
         _parse_ms,
         _transform_ms,
         _generate_ms,
@@ -192,14 +214,6 @@ async def convert_query(
         inner_dialect = flags_dict.get("INNER_DIALECT", "databricks").lower()
         pretty = flags_dict.get("PRETTY_PRINT", True)
 
-        # --- Stage-by-stage transpile timing ---
-        _t_arrival = time.perf_counter()
-        logger.info(
-            "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars)",
-            query_id,
-            len(query),
-        )
-
         # HYBRID_MULTIDIALECT: rewrite Databricks backtick identifiers to Postgres double-quoted
         # identifiers up front, so the whole query (outer identifiers included) parses as
         # Postgres. Databricks functions Postgres can't resolve surface as Anonymous nodes and
@@ -221,6 +235,45 @@ async def convert_query(
                 for _pos in _bt:
                     _chars[_pos] = '"'
                 query = "".join(_chars)
+
+        # SUBQUERY_TREE: transpile via the dialect-agnostic subquery tree. Each region's
+        # e6 goes through the same _region_to_e6 pipeline (dialect decided per region), so
+        # the output matches the split path while reusing one lightweight structural parse.
+        if SUBQUERY_TREE:
+            logger.info(
+                "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars, subquery_tree)",
+                query_id,
+                len(query),
+            )
+            # HYBRID_MULTIDIALECT: most queries parse whole as Postgres; only build the tree
+            # (HybridLiteParser) when they don't.
+            converted_query = None
+            if HYBRID_MULTIDIALECT:
+                try:
+                    converted_query = _region_to_e6(query, "postgres", pretty)
+                except (ParseError, TokenError):
+                    pass
+            if converted_query is None:
+                converted_query = subquery_tree_transpile(
+                    query,
+                    pretty,
+                    emit_tokens=lambda region, p, tokens: _region_to_e6(region, None, p, tokens),
+                )
+            logger.info(
+                "%s AT %s — MULTIDIALECT via subquery_tree:\n%s",
+                query_id,
+                timestamp,
+                converted_query,
+            )
+            return {"converted_query": converted_query}
+
+        # --- Stage-by-stage transpile timing ---
+        _t_arrival = time.perf_counter()
+        logger.info(
+            "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars)",
+            query_id,
+            len(query),
+        )
 
         # Samsung Tableau dashboards always alias the native subquery "Custom SQL Query", so we
         # detect it by that alias alone (no backtick scan / parse-error fallback).
