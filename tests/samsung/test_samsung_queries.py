@@ -19,6 +19,7 @@ Every all_match query must keep returning e6 exactly under each mode:
 import csv
 import gzip
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -34,6 +35,9 @@ MODES = {
 }
 
 
+@unittest.skipUnless(
+    os.environ.get("MULTIDIALECT_CORPUS") == "1", "run with make test-multidialect"
+)
 class TestSamsungQueries(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

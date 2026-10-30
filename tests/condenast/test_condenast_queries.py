@@ -25,6 +25,7 @@ SAMSUNG_TABLEAU_DASHBOARD is not a mode here: no query has the "Custom SQL Query
 import csv
 import gzip
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -39,6 +40,9 @@ MODES = {
 }
 
 
+@unittest.skipUnless(
+    os.environ.get("MULTIDIALECT_CORPUS") == "1", "run with make test-multidialect"
+)
 class TestCondenastQueries(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
