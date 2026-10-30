@@ -11,7 +11,7 @@ Qlik), each plain Databricks SQL with no Postgres wrapper, with columns:
 
 Every all_match query must keep returning e6 exactly under each mode:
 
-- subtree: SUBQUERY_TREE on (apis.utils.subquery_tree);
+- subtree: SUBQUERY_TREE on with the MULTIDIALECT feature flag (apis.utils.subquery_tree);
 - multidialect: the MULTIDIALECT feature flag (split_pg_outer).
 
 subtree_fixes are the queries subtree fixes: their Databricks-only syntax (a backtick name, a
@@ -34,7 +34,7 @@ QUERIES = Path(__file__).parent / "queries.csv.gz"
 
 # name: (SUBQUERY_TREE, MULTIDIALECT flag)
 MODES = {
-    "subtree": (True, False),
+    "subtree": (True, True),
     "multidialect": (False, True),
 }
 
@@ -81,9 +81,7 @@ class TestCondenastQueries(unittest.TestCase):
             with self.subTest(query_id=case["query_id"]):
                 with self.assertRaises(ValueError):
                     self.convert(case["sql"], *MODES["multidialect"])
-                self.assertEqual(
-                    self.convert(case["sql"], *MODES["subtree"]), case["e6"]
-                )
+                self.assertEqual(self.convert(case["sql"], *MODES["subtree"]), case["e6"])
 
 
 if __name__ == "__main__":

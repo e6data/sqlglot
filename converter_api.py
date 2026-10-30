@@ -77,7 +77,8 @@ SQLGLOTRS_TOKENIZER = os.getenv("SQLGLOTRS_TOKENIZER", "0")
 HYBRID_MULTIDIALECT = os.getenv("HYBRID_MULTIDIALECT", "False").lower() == "true"
 # Opt-in (same style as HYBRID_MULTIDIALECT): run the multidialect split through the
 # dialect-agnostic subquery tree (apis.utils.subquery_tree) instead of the
-# split_custom_sql_alias / split_pg_outer helpers.
+# split_custom_sql_alias / split_pg_outer helpers. It only picks the method: the
+# multidialect path itself is triggered by the MULTIDIALECT feature flag (or Samsung).
 SUBQUERY_TREE = os.getenv("SUBQUERY_TREE", "False").lower() == "true"
 
 storage_service_client = None
@@ -121,7 +122,7 @@ def escape_unicode(s: str) -> str:
     return s.encode("unicode_escape").decode("ascii")
 
 
-def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
+def _region_to_e6(region_sql: str, from_sql: Optional[str], pretty: bool, tokens=None) -> str:
     """Transpile ONE region of a multi-dialect BI-tool query to e6.
 
     This deliberately runs the SAME steps as the main /convert-query pipeline
@@ -140,6 +141,7 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     """
     # Same input cleanup the main path does before parsing.
     _t = time.perf_counter()
+    original_region_sql = region_sql
     region_sql = normalize_unicode_spaces(region_sql)
     if SKIP_COMMENT.lower() == "true":
         region_sql, _ = strip_comment(region_sql)
@@ -151,7 +153,9 @@ def _region_to_e6(region_sql: str, from_sql: str, pretty: bool) -> str:
     # from_sql=None (subquery tree): parse_region decides the dialect and its parse is reused.
     _t = time.perf_counter()
     if from_sql is None:
-        from_sql, tree = parse_region(region_sql)
+        from_sql, tree = parse_region(
+            region_sql, tokens=tokens if region_sql == original_region_sql else None
+        )
     else:
         tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
     _parse_ms = (time.perf_counter() - _t) * 1000
@@ -202,7 +206,7 @@ async def convert_query(
             return HTTPException(status_code=500, detail=str(je))
 
     samsung = SAMSUNG_TABLEAU_DASHBOARD.lower() == "true"
-    if flags_dict.get("MULTIDIALECT", False) or samsung or SUBQUERY_TREE:
+    if flags_dict.get("MULTIDIALECT", False) or samsung:
         # Multi-dialect BI-tool query: a Postgres outer wrapper around inner subqueries
         # written in another dialect (INNER_DIALECT, default "databricks"). Rule:
         #   - a subquery that FAILS the Postgres parse is inner-dialect  -> INNER_DIALECT -> e6
@@ -255,7 +259,7 @@ async def convert_query(
                 converted_query = subquery_tree_transpile(
                     query,
                     pretty,
-                    emit=lambda region, p: _region_to_e6(region, None, p),
+                    emit_tokens=lambda region, p, tokens: _region_to_e6(region, None, p, tokens),
                 )
             logger.info(
                 "%s AT %s — MULTIDIALECT via subquery_tree:\n%s",

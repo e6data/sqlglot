@@ -8,9 +8,11 @@ pub mod settings;
 pub mod token;
 pub mod tokenizer;
 pub mod trie;
+mod regions;
 
 #[pymodule]
 fn sqlglotrs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(regions::remap_tokens, m)?)?;
     m.add_class::<Token>()?;
     m.add_class::<TokenTypeSettings>()?;
     m.add_class::<TokenizerSettings>()?;

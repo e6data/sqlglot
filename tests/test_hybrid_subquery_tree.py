@@ -23,22 +23,22 @@ CASES = {
         'SELECT "s".x "x" FROM (SELECT arr[1] AS x, k, ts FROM (SELECT col:a.b AS x, k, ts FROM t) c) '
         'AS "s" LEFT JOIN dim AS "b" ON "s".k = "b".k AND timestampadd(MICROSECOND, -1, "s".ts) >= "b".eff',
         'SELECT "s".x AS "x" FROM (SELECT ELEMENT_AT(arr, 2) AS x, k, ts FROM (SELECT '
-        "JSON_EXTRACT(col, '$.a.b') AS x, \"k\", ts FROM t) AS c) AS \"s\" LEFT JOIN dim AS \"b\" "
+        'JSON_EXTRACT(col, \'$.a.b\') AS x, "k", ts FROM t) AS c) AS "s" LEFT JOIN dim AS "b" '
         'ON "s"."k" = "b"."k" AND TIMESTAMP_ADD(\'MICROSECOND\', -1, "s".ts) >= "b".eff',
     ),
     # A sibling that Postgres cannot parse is split out; the tell-linked subquery is not.
     "pg_fail_sibling_of_tell": (
         'SELECT "a".x, "b".y FROM (SELECT col:a.b AS x FROM t) "a" JOIN (SELECT arr[1] AS y, k FROM u) "b" '
         'ON "a".x = "b".k AND timestampadd(MICROSECOND, -1, "b".k) >= 0',
-        "SELECT \"a\".x, \"b\".y FROM (SELECT JSON_EXTRACT(col, '$.a.b') AS x FROM t) AS \"a\" JOIN "
+        'SELECT "a".x, "b".y FROM (SELECT JSON_EXTRACT(col, \'$.a.b\') AS x FROM t) AS "a" JOIN '
         '(SELECT ELEMENT_AT(arr, 2) AS y, "k" FROM u) AS "b" ON "a".x = "b"."k" AND '
-        "TIMESTAMP_ADD('MICROSECOND', -1, \"b\".\"k\") >= 0",
+        'TIMESTAMP_ADD(\'MICROSECOND\', -1, "b"."k") >= 0',
     ),
     # A subquery with its own tell is reparsed as Databricks in its parent's region.
     "pg_fail_plus_pg_tell_subquery": (
         'SELECT "a".x, "b".y FROM (SELECT col:a.b AS x FROM t) "a" JOIN '
         '(SELECT timestampadd(MICROSECOND, -1, ts) AS y, arr[1] AS k FROM u) "b" ON "a".x = "b".k',
-        "SELECT \"a\".x, \"b\".y FROM (SELECT JSON_EXTRACT(col, '$.a.b') AS x FROM t) AS \"a\" JOIN "
+        'SELECT "a".x, "b".y FROM (SELECT JSON_EXTRACT(col, \'$.a.b\') AS x FROM t) AS "a" JOIN '
         "(SELECT TIMESTAMP_ADD('MICROSECOND', -1, ts) AS y, ELEMENT_AT(arr, 2) AS k FROM u) AS \"b\" "
         'ON "a".x = "b"."k"',
     ),
@@ -65,7 +65,9 @@ class TestHybridSubqueryTree(unittest.TestCase):
         with ExitStack() as stack:
             for module, flag in self.flags:
                 stack.enter_context(mock.patch.object(module, flag, True))
-            stack.enter_context(mock.patch.object(self.converter_api, "SUBQUERY_TREE", subquery_tree))
+            stack.enter_context(
+                mock.patch.object(self.converter_api, "SUBQUERY_TREE", subquery_tree)
+            )
             response = self.client.post(
                 "/convert-query",
                 data={

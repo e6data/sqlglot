@@ -45,6 +45,7 @@ from sqlglot.tokens import TokenType
 
 logger = logging.getLogger(__name__)
 
+
 class LiteParser(Parser):
     """The base sqlglot parser with the value-expression clauses skipped. It still
     walks FROM/JOIN/LATERAL, so sqlglot records each subquery's ``meta["raw_sql"]`` --
@@ -60,9 +61,11 @@ class LiteParser(Parser):
         """Advance over tokens until a clause boundary at paren-depth 0. Paren-aware,
         so parentheses inside the skipped clause (a scalar subquery, a function call,
         a CASE) never make us stop early or run past the region."""
+        tokens = self._tokens
+        index = self._index
         depth = 0
-        while self._curr:
-            tt = self._curr.token_type
+        while index < len(tokens):
+            tt = tokens[index].token_type
             if tt == TokenType.L_PAREN:
                 depth += 1
             elif tt == TokenType.R_PAREN:
@@ -71,7 +74,9 @@ class LiteParser(Parser):
                 depth -= 1
             elif depth == 0 and (tt in self._SET_OPS or tt in extra):
                 break
-            self._advance()
+            index += 1
+        if index != self._index:
+            self._advance(index - self._index)
 
     # -- override 1: the SELECT list (skip up to FROM) -------------------------
     def _parse_projections(self) -> t.List[exp.Expression]:
@@ -95,12 +100,13 @@ class LiteParser(Parser):
         return this
 
 
-def lite_parse(query: str) -> exp.Expression:
+def lite_parse(query: str, tokens=None) -> exp.Expression:
     """Parse ``query`` with :class:`LiteParser` and return the AST. Every subquery in
     it carries ``meta["raw_sql"]`` (its verbatim source)."""
     dialect = Dialect()
     _t = time.perf_counter()
-    tokens = dialect.tokenize(query)
+    if tokens is None:
+        tokens = dialect.tokenize(query)
     _tokenize_ms = (time.perf_counter() - _t) * 1000
     _t = time.perf_counter()
     parser = LiteParser
@@ -114,7 +120,7 @@ def lite_parse(query: str) -> exp.Expression:
         (time.perf_counter() - _t) * 1000,
         len(query),
     )
-    return ast
+    return t.cast(exp.Expression, ast)
 
 
 def iter_subqueries(ast: exp.Expression) -> t.Iterator[exp.Subquery]:
