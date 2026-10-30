@@ -849,7 +849,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TIMESTAMP_DIFF(CAST('1900-03-28' AS DATE), CAST('2021-01-01' AS DATE), 'YEAR')",
+            "SELECT TIMESTAMP_DIFF('YEAR', CAST('2021-01-01' AS DATE), CAST('1900-03-28' AS DATE))",
             read={
                 "databricks": "SELECT timestampdiff(SQL_TSI_YEAR, DATE'2021-01-01', DATE'1900-03-28')"
             },
@@ -873,41 +873,42 @@ class TestE6(Validator):
         )
         for unit in ["SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH", "YEAR"]:
             self.validate_all(
-                f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                f"SELECT TIMESTAMP_DIFF('{unit}', date1, date2)",
                 read={
                     "databricks": f"SELECT TIMEDIFF('{unit}', date1, date2)",
+                    "e6": f"SELECT TIMESTAMP_DIFF('{unit}', date1, date2)",
                 },
                 write={
-                    "e6": f"SELECT TIMESTAMP_DIFF(date1, date2, '{unit}')",
+                    "e6": f"SELECT TIMESTAMP_DIFF('{unit}', date1, date2)",
                 },
             )
 
             self.validate_all(
-                "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                "SELECT TIMESTAMP_DIFF('HOUR', start1, end1), TIMESTAMP_DIFF('MINUTE', start2, end2)",
                 read={
                     "databricks": "SELECT TIMEDIFF('HOUR', start1, end1), TIMEDIFF('MINUTE', start2, end2)",
                 },
                 write={
-                    "e6": "SELECT TIMESTAMP_DIFF(start1, end1, 'HOUR'), TIMESTAMP_DIFF(start2, end2, 'MINUTE')",
+                    "e6": "SELECT TIMESTAMP_DIFF('HOUR', start1, end1), TIMESTAMP_DIFF('MINUTE', start2, end2)",
                 },
             )
 
             self.validate_all(
-                "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                "SELECT ABS(TIMESTAMP_DIFF('MINUTE', start_time, end_time))",
                 read={
                     "databricks": "SELECT ABS(TIMEDIFF('MINUTE', start_time, end_time))",
                 },
                 write={
-                    "e6": "SELECT ABS(TIMESTAMP_DIFF(start_time, end_time, 'MINUTE'))",
+                    "e6": "SELECT ABS(TIMESTAMP_DIFF('MINUTE', start_time, end_time))",
                 },
             )
             self.validate_all(
-                "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                "SELECT AVG(TIMESTAMP_DIFF('HOUR', start_time, end_time)) FROM sessions",
                 read={
                     "databricks": "SELECT AVG(TIMEDIFF('HOUR', start_time, end_time)) FROM sessions",
                 },
                 write={
-                    "e6": "SELECT AVG(TIMESTAMP_DIFF(start_time, end_time, 'HOUR')) FROM sessions",
+                    "e6": "SELECT AVG(TIMESTAMP_DIFF('HOUR', start_time, end_time)) FROM sessions",
                 },
             )
 
@@ -2294,7 +2295,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT TIMESTAMP_DIFF(CAST('1900-03-28' AS DATE), CAST('2021-01-01' AS DATE), 'YEAR')",
+            "SELECT TIMESTAMP_DIFF('YEAR', CAST('2021-01-01' AS DATE), CAST('1900-03-28' AS DATE))",
             read={"databricks": "SELECT timestampdiff(YEAR, DATE'2021-01-01', DATE'1900-03-28')"},
         )
 
@@ -2768,6 +2769,28 @@ class TestE6(Validator):
             read={"databricks": "SELECT UNIX_TIMESTAMP(A)"},
         )
 
+    def test_to_timestamp_native_executor(self):
+        # With E6_EXECUTOR_TYPE=native, a Databricks TO_TIMESTAMP format is kept verbatim
+        # and its inner quotes are doubled.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            self.assertEqual(
+                parse_one(
+                    """SELECT to_timestamp(d, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS")""", read="databricks"
+                ).sql(dialect="e6", from_dialect="databricks"),
+                "SELECT TO_TIMESTAMP(d, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSS')",
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+    def test_databricks_mod_precedence(self):
+        # Databricks binds % like * and /: tighter than + and -, left to right with * and /
+        self.validate_all("SELECT a - MOD(b, 7)", read={"databricks": "SELECT a - b % 7"})
+        self.validate_all("SELECT a + MOD(b, 7) = 0", read={"databricks": "SELECT a + b % 7 = 0"})
+        self.validate_all("SELECT MOD(a * b, 7)", read={"databricks": "SELECT a * b % 7"})
+        self.validate_all("SELECT MOD(a, 7) * b", read={"databricks": "SELECT a % 7 * b"})
+        self.validate_all("SELECT MOD((a - b), 7)", read={"databricks": "SELECT (a - b) % 7"})
+
     def test_date_add_native_executor(self):
         # With E6_EXECUTOR_TYPE=native, preserve DBR DATE_ADD arity:
         # 2-arg DATE_ADD(date, n) returns DATE -> emit e6 2-arg form;
@@ -2787,6 +2810,20 @@ class TestE6(Validator):
                 "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)",
                 read={"databricks": "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)"},
             )
+            # 2-arg DATE_ADD(date, n) rejects a BIGINT count on e6 -> cast to INT
+            self.validate_all(
+                "SELECT DATE_ADD(d, CAST(MOD(x, 7) AS INT))",
+                read={"databricks": "SELECT DATE_ADD(d, x % 7)"},
+            )
+            self.validate_all(
+                "SELECT DATE_ADD(d, CAST(n AS INT))",
+                read={"databricks": "SELECT DATE_ADD(d, n)"},
+            )
+            # a literal count needs no cast
+            self.validate_all("SELECT DATE_ADD(d, 2)", read={"databricks": "SELECT DATE_ADD(d, 2)"})
+            self.validate_all(
+                "SELECT DATE_ADD(d, -3)", read={"databricks": "SELECT DATE_ADD(d, -3)"}
+            )
         finally:
             os.environ.pop("E6_EXECUTOR_TYPE", None)
 
@@ -2794,6 +2831,92 @@ class TestE6(Validator):
         self.validate_all(
             "SELECT DATE_ADD('DAY', 2, CURRENT_TIMESTAMP)",
             read={"databricks": "SELECT DATE_ADD(CURRENT_TIMESTAMP, 2)"},
+        )
+
+    def test_with_rollup_native_executor(self):
+        # e6 has no GROUP BY ... WITH ROLLUP / WITH CUBE: with E6_EXECUTOR_TYPE=native they
+        # become the equivalent ROLLUP(...) / CUBE(...) over the group-by columns.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            self.validate_all(
+                "SELECT a, b, COUNT(*) FROM t GROUP BY ROLLUP (a, b)",
+                read={"databricks": "SELECT a, b, count(*) FROM t GROUP BY a, b WITH ROLLUP"},
+            )
+            self.validate_all(
+                "SELECT a, b, COUNT(*) FROM t GROUP BY CUBE (a, b)",
+                read={"databricks": "SELECT a, b, count(*) FROM t GROUP BY a, b WITH CUBE"},
+            )
+            self.validate_all(
+                "SELECT a, COUNT(*) FROM t GROUP BY ROLLUP (1)",
+                read={"databricks": "SELECT a, count(*) FROM t GROUP BY 1 WITH ROLLUP"},
+            )
+            # already-valid forms are unchanged
+            self.validate_all(
+                "SELECT a, b, COUNT(*) FROM t GROUP BY a, ROLLUP (b)",
+                read={"databricks": "SELECT a, b, count(*) FROM t GROUP BY a, ROLLUP(b)"},
+            )
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (java): unchanged
+        self.validate_all(
+            "SELECT a, COUNT(*) FROM t GROUP BY a WITH ROLLUP",
+            read={"databricks": "SELECT a, count(*) FROM t GROUP BY a WITH ROLLUP"},
+        )
+
+    def test_databricks_explain(self):
+        # A Databricks EXPLAIN [EXTENDED|CODEGEN|COST|FORMATTED] <query> keeps its query in the
+        # AST, so the query is transpiled like on its own; the Databricks-only style is dropped
+        self.validate_all(
+            "EXPLAIN SELECT DATE_TRUNC('DAY', TO_TIMESTAMP(date, 'MM/dd/y')) \"time\" FROM t GROUP BY 1",
+            read={
+                "databricks": "EXPLAIN SELECT date_trunc('day', to_timestamp(date, 'MM/dd/yyyy')) AS time FROM t GROUP BY 1"
+            },
+        )
+        self.validate_all(
+            'EXPLAIN WITH x AS (SELECT DATE_DIFF(\'DAY\', s, e) AS d FROM "db"."t") SELECT d FROM x',
+            read={
+                "databricks": "explain formatted WITH x AS (SELECT datediff(day, s, e) AS d FROM `db`.`t`) SELECT d FROM x"
+            },
+        )
+
+        # Other dialects still write it back verbatim, and a bare or unparseable EXPLAIN stays a Command
+        query = "EXPLAIN EXTENDED SELECT a AS time FROM `db`.`t`"
+        self.assertEqual(parse_one(query, read="databricks").sql("databricks"), query)
+        self.assertEqual(parse_one("EXPLAIN", read="databricks").sql("e6"), "EXPLAIN")
+        self.assertEqual(
+            parse_one("EXPLAIN SELECT (", read="databricks").sql("e6"), "EXPLAIN SELECT ("
+        )
+
+    def test_get_json_object_native_executor(self):
+        # E6 supports GET_JSON_OBJECT with Databricks' results, while its JSON_EXTRACT returns
+        # JSON text (quoted strings): with E6_EXECUTOR_TYPE=native a Databricks
+        # get_json_object is kept as is. Nothing else changes.
+        os.environ["E6_EXECUTOR_TYPE"] = "native"
+        try:
+            self.validate_all(
+                "SELECT GET_JSON_OBJECT(j, '$.status') FROM t WHERE GET_JSON_OBJECT(j, '$.status') = 'ok'",
+                read={
+                    "databricks": "SELECT get_json_object(j, '$.status') FROM t WHERE get_json_object(j, '$.status') = 'ok'"
+                },
+            )
+            self.validate_all(
+                "SELECT GET_JSON_OBJECT(j, '$.arr[2].x')",
+                read={"databricks": "SELECT get_json_object(j, '$.arr[2].x')"},
+            )
+            # only a source GET_JSON_OBJECT is kept
+            self.validate_all(
+                "SELECT JSON_EXTRACT(j, '$.a')",
+                read={"databricks": "SELECT json_extract(j, '$.a')"},
+            )
+            self.validate_all("SELECT j:status", read={"databricks": "SELECT j:status"})
+        finally:
+            os.environ.pop("E6_EXECUTOR_TYPE", None)
+
+        # Default (java): unchanged
+        self.validate_all(
+            "SELECT JSON_EXTRACT(j, '$.status')",
+            read={"databricks": "SELECT get_json_object(j, '$.status')"},
         )
 
     def test_date_format_native_executor(self):
@@ -2952,9 +3075,16 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT ARRAY_AGG(col) FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
+            "SELECT ARRAY_AGG(DISTINCT col) FROM (VALUES (1), (2), (NULL), (1)) AS tab(col)",
             read={
                 "databricks": "SELECT collect_set(col) FROM VALUES (1), (2), (NULL), (1) AS tab(col)",
+            },
+        )
+
+        self.validate_all(
+            "SELECT ARRAY_AGG(DISTINCT col1) FROM (SELECT '1' AS col1 UNION ALL SELECT '1' AS col1 UNION ALL SELECT '2' AS col1 UNION ALL SELECT '2' AS col1 UNION ALL SELECT '3' AS col1)",
+            read={
+                "databricks": 'select collect_set(col1) from (select "1" as col1 union all select "1" as col1 union all select "2" as col1 union all select "2" as col1 union all select "3" as col1)',
             },
         )
 
@@ -3603,7 +3733,7 @@ class TestE6(Validator):
         )
         self.assertEqual(
             dbr_to_e6("SELECT TIMESTAMPDIFF(MONTH, ts_start, ts_end)"),
-            "SELECT TIMESTAMP_DIFF(ts_end, ts_start, 'MONTH')",
+            "SELECT TIMESTAMP_DIFF('MONTH', ts_start, ts_end)",
         )
         self.assertEqual(dbr_to_e6("SELECT TO_TIMESTAMP(x)"), "SELECT CAST(x AS TIMESTAMP)")
 
@@ -3982,6 +4112,126 @@ class TestE6(Validator):
             ),
             'SELECT "Custom SQL Query"."arr" FROM (SELECT SPLIT(\'1,2\', \',\') AS arr FROM dlt.s.t) AS "Custom SQL Query"',
         )
+
+    def test_samsung_tableau_escape_strings(self):
+        """SAMSUNG_TABLEAU_DASHBOARD + STRIP_E_STRING_PREFIX: Databricks reads a Postgres escape string E'...' (e.g. a Tableau
+        parameter bound by its Postgres connector) as a plain string. The flag is read at
+        import, so the flagged cases run in a subprocess."""
+        import json
+        import subprocess
+        import sys
+
+        from sqlglot.errors import ParseError
+
+        with self.assertRaises(ParseError):
+            parse_one("SELECT E'x'", read="databricks")
+
+        cases = {
+            # each escape Tableau's Extended string format writes
+            r"SELECT E'a\nb'": r"SELECT 'a\nb'",
+            r"SELECT E'a\rb'": r"SELECT 'a\rb'",
+            r"SELECT E'a\tb'": r"SELECT 'a\tb'",
+            r"SELECT E'a\bb'": r"SELECT 'a\bb'",
+            r"SELECT E'a\fb'": r"SELECT 'a\fb'",
+            r"SELECT E'C:\\tmp'": r"SELECT 'C:\\tmp'",
+            r"SELECT E'it\'s'": r"SELECT 'it\'s'",
+            r"SELECT e'x\n'": r"SELECT 'x\n'",
+            "SELECT E'한국\\n'": "SELECT '한국\\n'",
+            r"SELECT split(E'a,b\n', ',')": r"SELECT SPLIT('a,b\n', ',')",
+            # an E right before a quote that is not an escape string is unchanged
+            "SELECT e.x FROM t e WHERE e.x='y'": "SELECT e.x FROM t AS e WHERE e.x = 'y'",
+            "SELECT CASE WHEN a THEN 'x' ELSE'y' END": "SELECT CASE WHEN a THEN 'x' ELSE 'y' END",
+            "SELECT * FROM t WHERE name LIKE'%e'": "SELECT * FROM t WHERE name LIKE '%e'",
+            "SELECT date'2020-01-01'": "SELECT CAST('2020-01-01' AS DATE)",
+        }
+        code = (
+            "import json, sys, sqlglot; "
+            "print(json.dumps([sqlglot.transpile(q, read='databricks', write='e6')[0] "
+            "for q in json.loads(sys.argv[1])]))"
+        )
+
+        def run(**flags):
+            return subprocess.run(
+                [sys.executable, "-c", code, json.dumps(list(cases))],
+                capture_output=True,
+                text=True,
+                env={**os.environ, **flags},
+            )
+
+        for flag in ("SAMSUNG_TABLEAU_DASHBOARD", "STRIP_E_STRING_PREFIX"):
+            with self.subTest(only=flag):
+                self.assertIn("ParseError", run(**{flag: "true"}).stderr)
+
+        result = run(SAMSUNG_TABLEAU_DASHBOARD="true", STRIP_E_STRING_PREFIX="true")
+        self.assertEqual(result.stderr.count("Error"), 0, result.stderr)
+        for (sql, expected), actual in zip(cases.items(), json.loads(result.stdout)):
+            with self.subTest(sql):
+                self.assertEqual(actual, expected)
+
+    def test_samsung_tableau_end_to_end(self):
+        """A Samsung Tableau query (Postgres wrapper around the Databricks "Custom SQL Query")
+        whose parameter arrived as E'...\n', through the SAMSUNG_TABLEAU_DASHBOARD split, under
+        each sub-flag. The E' flag is read at import, so each case runs in a subprocess."""
+        import subprocess
+        import sys
+
+        query = (
+            'SELECT "Custom SQL Query"."du_id" AS "du_id" FROM (SELECT * FROM `dlt`.`w`.`t` '
+            "WHERE (E'VZ_1,VZ_2\\n' = 'All' OR GNODEB_ID IN (SELECT trim(v) AS GNODEB_ID "
+            "FROM (SELECT explode(split(E'VZ_1,VZ_2\\n', ',')) AS v) g))) \"Custom SQL Query\""
+        )
+        code = (
+            "import sys, sqlglot\n"
+            "from apis.utils.multidialect import _splice, split_custom_sql_alias\n"
+            "outer, inner = split_custom_sql_alias(sys.argv[1])\n"
+            "out = sqlglot.parse_one(outer, read='postgres').sql("
+            "dialect='e6', from_dialect='postgres')\n"
+            "for marker, sql in inner.items():\n"
+            "    e6 = sqlglot.parse_one(sql, read='databricks').sql("
+            "dialect='e6', from_dialect='databricks')\n"
+            "    out = _splice(out, marker, e6)\n"
+            "print(out)\n"
+        )
+
+        def run(**flags):
+            env = {**os.environ, "SAMSUNG_TABLEAU_DASHBOARD": "true", **flags}
+            return subprocess.run(
+                [sys.executable, "-c", code, query], capture_output=True, text=True, env=env
+            )
+
+        expected = (
+            'SELECT "Custom SQL Query"."du_id" AS "du_id" FROM (SELECT * FROM "dlt"."w"."t" '
+            "WHERE ('VZ_1,VZ_2{nl}' = 'All' OR GNODEB_ID IN (SELECT TRIM(v) AS GNODEB_ID "
+            "FROM (SELECT EXPLODE(SPLIT('VZ_1,VZ_2{nl}', ',')) AS v) AS g))) AS \"Custom SQL Query\""
+        )
+
+        # (importing apis prints a storage-client banner first, so compare the last stdout line)
+        # Samsung flag alone: unchanged from before, Databricks rejects E'...'
+        self.assertIn("ParseError", run().stderr)
+        # + STRIP_E_STRING_PREFIX: parses, the newline is kept
+        result = run(STRIP_E_STRING_PREFIX="true")
+        self.assertEqual(result.stdout.splitlines()[-1], expected.format(nl="\\n"), result.stderr)
+        # + STRIP_STRING_NEWLINES as well: the newline is dropped from the value
+        result = run(STRIP_E_STRING_PREFIX="true", STRIP_STRING_NEWLINES="true")
+        self.assertEqual(result.stdout.splitlines()[-1], expected.format(nl=""), result.stderr)
+
+    def test_strip_string_newlines(self):
+        """SAMSUNG_TABLEAU_DASHBOARD + STRIP_STRING_NEWLINES: every string literal loses its line
+        feeds. Either flag alone leaves strings unchanged."""
+        from unittest import mock
+
+        both = {"SAMSUNG_TABLEAU_DASHBOARD": "true", "STRIP_STRING_NEWLINES": "true"}
+        for flag in both:
+            with self.subTest(only=flag), mock.patch.dict(os.environ, {flag: "true"}):
+                self.validate_identity(r"SELECT 'a\nb'")
+
+        with mock.patch.dict(os.environ, both):
+            self.validate_all(r"SELECT 'ab'", read={"databricks": r"SELECT 'a\nb'"})
+            self.validate_all("SELECT 'ab'", read={"postgres": "SELECT 'a\nb'"})
+            self.validate_all(
+                "SELECT CONCAT(a, '', b), 'x\\ty', 1",
+                read={"databricks": r"SELECT concat(a, '\n', b), 'x\ty', 1"},
+            )
 
     def test_regexp_substr_native(self):
         """On the native executor, a Databricks REGEXP_SUBSTR (no `group`) stays

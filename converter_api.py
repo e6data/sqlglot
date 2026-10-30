@@ -14,8 +14,6 @@ import sqlglot
 import logging
 from datetime import datetime
 from log_collector import setup_logger, log_records
-import pyarrow.parquet as pq
-import pyarrow.fs as fs
 from sqlglot.optimizer.qualify_columns import quote_identifiers
 from sqlglot import parse_one
 from sqlglot.dialects.snowflake_backticks import SnowflakeBackticks

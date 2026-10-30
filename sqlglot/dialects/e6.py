@@ -1639,7 +1639,7 @@ class E6(Dialect):
                 this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "TIMESTAMP_DIFF": lambda args: exp.TimestampDiff(
-                this=seq_get(args, 0), expression=seq_get(args, 1), unit=seq_get(args, 2)
+                this=seq_get(args, 2), expression=seq_get(args, 1), unit=seq_get(args, 0)
             ),
             "TO_CHAR": lambda args: exp.ToChar(
                 this=seq_get(args, 0), format=E6().convert_format_time(expression=seq_get(args, 1))
@@ -1769,6 +1769,17 @@ class E6(Dialect):
                     )
                 return self._replace_line_breaks(text)
             return super().escape_str(text, escape_backslash)
+
+        def literal_sql(self, expression: exp.Literal) -> str:
+            # SAMSUNG_TABLEAU_DASHBOARD + STRIP_STRING_NEWLINES: drop line feeds from every string
+            # literal (e.g. a Tableau parameter value pasted with a trailing newline).
+            if (
+                expression.is_string
+                and os.getenv("SAMSUNG_TABLEAU_DASHBOARD", "false").lower() == "true"
+                and os.getenv("STRIP_STRING_NEWLINES", "false").lower() == "true"
+            ):
+                expression = exp.Literal.string(expression.this.replace("\n", ""))
+            return super().literal_sql(expression)
 
         def pad_comment(self, comment: str) -> str:
             comment = comment.replace("/*", "/ *").replace("*/", "* /")
@@ -2823,6 +2834,15 @@ class E6(Dialect):
 
         def to_timestamp_sql(self: E6.Generator, expression: exp.StrToTime) -> str:
             date_expr = expression.this
+            # On the native executor, keep the Databricks format as written (same as
+            # format_date_sql) and double its inner quotes.
+            is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+            if is_native and self.from_dialect == "databricks":
+                from sqlglot.dialects.databricks import Databricks
+
+                format_expr = Databricks().generator().format_time(expression)
+                if format_expr:
+                    return self.func("TO_TIMESTAMP", date_expr, format_expr.replace("\\'", "''"))
             format_expr = self.convert_format_time(expression)
             format_str = f"'{format_expr}'"
             return self.func("TO_TIMESTAMP", date_expr, format_str)
@@ -2955,6 +2975,15 @@ class E6(Dialect):
         #     return f"{struct_expr}"
 
         def group_sql_modified(self, expression: exp.Group) -> str:
+            # E6 has no GROUP BY a, b WITH ROLLUP / WITH CUBE; on the native executor emit the
+            # equivalent GROUP BY ROLLUP(a, b) / CUBE(a, b) (same rows).
+            if os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native" and expression.expressions:
+                for key, kind in (("rollup", exp.Rollup), ("cube", exp.Cube)):
+                    if any(not g.expressions for g in expression.args.get(key) or []):
+                        expression = expression.copy()
+                        expression.set(key, [kind(expressions=expression.expressions)])
+                        expression.set("expressions", [])
+                        break
             if os.getenv("IGNORE_DECIMAL_GROUP_BY", False) or (
                 self.from_dialect and self.from_dialect.lower() == Dialect.get("databricks")
             ):
@@ -3001,7 +3030,11 @@ class E6(Dialect):
             is_native = os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
 
             if is_native and unit is None:
-                return self.func("DATE_ADD", expression.this, _to_int(expression.expression))
+                # E6's 2-arg DATE_ADD(date, n) rejects a BIGINT count, so cast it to INT.
+                n = expression.expression
+                return self.func(
+                    "DATE_ADD", expression.this, n if n.is_number else exp.cast(n, "INT")
+                )
 
             return self.func(
                 "DATE_ADD", unit_to_str(expression), _to_int(expression.expression), expression.this
@@ -3251,8 +3284,9 @@ class E6(Dialect):
                     expression.expression,
                     exp.Literal.string(expression.this.name),
                 )
+            # E6 only accepts the unit-first form TIMESTAMP_DIFF(unit, start, end).
             return self.func(
-                "TIMESTAMP_DIFF", expression.this, expression.expression, unit_to_str(expression)
+                "TIMESTAMP_DIFF", unit_to_str(expression), expression.expression, expression.this
             )
 
         def attimezone_sql(self, expression: exp.AtTimeZone) -> str:
@@ -3390,6 +3424,15 @@ class E6(Dialect):
                             path = add_single_quotes("$." + path_sql)
                     else:
                         path = path_sql
+
+            # On the native executor, keep a Databricks GET_JSON_OBJECT as is: E6 supports it
+            # with the same results, whereas its JSON_EXTRACT returns JSON text (quoted strings),
+            # so e.g. JSON_EXTRACT(j, '$.s') = 'ok' never matches.
+            if (
+                isinstance(e, databricks.GetJsonObject)
+                and os.getenv("E6_EXECUTOR_TYPE", "java").lower() == "native"
+            ):
+                return self.func("GET_JSON_OBJECT", e.this, path)
 
             return self.func("JSON_EXTRACT", e.this, path)
 
@@ -3657,7 +3700,7 @@ class E6(Dialect):
                 if e.args.get("is_index")
                 else e.args.get("length") + e.args.get("from_index"),
             ),
-            exp.ArrayUniqueAgg: rename_func("ARRAY_AGG"),
+            exp.ArrayUniqueAgg: lambda self, e: f"ARRAY_AGG(DISTINCT {self.sql(e, 'this')})",
             exp.ArrayPosition: lambda self, e: self.func("ARRAY_POSITION", e.expression, e.this),
             exp.SafeDivide: rename_func("TRY_DIVIDE"),
             exp.SortArray: rename_func("ARRAY_SORT"),
@@ -3710,6 +3753,8 @@ class E6(Dialect):
             exp.Hex: rename_func("TO_HEX"),
             exp.Interval: interval_sql,
             exp.JSONExtract: json_extract_sql,
+            databricks.GetJsonObject: json_extract_sql,
+            databricks.Explain: lambda self, e: f"EXPLAIN {self.sql(e, 'statement')}",
             exp.JSONExtractScalar: json_extract_sql,
             exp.JSONFormat: json_format_sql,
             exp.JSONObject: lambda self, e: self.func("NAMED_STRUCT", e.this, *e.expressions),

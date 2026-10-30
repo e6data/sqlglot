@@ -16,7 +16,7 @@ def sqlglotrs_version():
 setup(
     extras_require={
         "dev": [
-            "duckdb>=0.6",
+            "duckdb>=0.6,<2",
             "mypy==1.14.1",
             "pandas",
             "pandas-stubs",
