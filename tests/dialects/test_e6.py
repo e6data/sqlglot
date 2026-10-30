@@ -912,6 +912,15 @@ class TestE6(Validator):
                 },
             )
 
+        # A multidialect region read as Postgres keeps the Databricks TIMESTAMPDIFF(unit, start, end)
+        self.validate_all(
+            "SELECT TIMESTAMP_DIFF('MONTH', start_time, end_time)",
+            read={
+                "databricks": "SELECT TIMESTAMPDIFF(MONTH, start_time, end_time)",
+                "postgres": "SELECT TIMESTAMPDIFF(MONTH, start_time, end_time)",
+            },
+        )
+
         self.validate_all(
             "SELECT CORR(c1, c2) FROM (VALUES (3, 2), (3, 3), (3, 3), (6, 4)) AS tab(c1, c2)",
             read={
@@ -3702,12 +3711,11 @@ class TestE6(Validator):
                 pg_to_e6("SELECT DATE_DIFF(d_end, d_start)"),
                 "SELECT DATE_DIFF(d_end, d_start, 'DAY')",
             )
-            # TIMESTAMPDIFF: PG scrambles (unit, start, end) -> reassemble (end, start, 'unit').
-            # A bare-column end-arg is captured as a Var, so it renders upper-cased
-            # (harmless: the engine folds unquoted identifiers case-insensitively).
+            # TIMESTAMPDIFF: Postgres reads the Databricks (unit, start, end) form, so E6 gets
+            # the same unit-first TIMESTAMP_DIFF as the Databricks path
             self.assertEqual(
                 pg_to_e6("SELECT TIMESTAMPDIFF(MONTH, ts_start, ts_end)"),
-                "SELECT TIMESTAMP_DIFF(TS_END, ts_start, 'MONTH')",
+                "SELECT TIMESTAMP_DIFF('MONTH', ts_start, ts_end)",
             )
             # TO_TIMESTAMP is a cast in Databricks, not FROM_UNIXTIME (epoch -> ts)
             self.assertEqual(pg_to_e6("SELECT TO_TIMESTAMP(x)"), "SELECT CAST(x AS TIMESTAMP)")
