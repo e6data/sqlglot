@@ -5011,6 +5011,26 @@ FROM dual"""
         )
 
         self.assertEqual(
+            transpile("SELECT CURRENT_DATE + -2 * INTERVAL '1 DAY'"),
+            "SELECT CURRENT_DATE - 2 * INTERVAL '1 DAY'",
+        )
+
+        self.assertEqual(
+            transpile("SELECT CURRENT_DATE + 2 * INTERVAL '1 DAY'"),
+            "SELECT CURRENT_DATE + 2 * INTERVAL '1 DAY'",
+        )
+
+        self.assertEqual(
+            transpile("SELECT EXTRACT(YEAR FROM (CURRENT_DATE + -2 * INTERVAL '1 DAY'))"),
+            "SELECT EXTRACT(YEAR FROM (CURRENT_DATE - 2 * INTERVAL '1 DAY'))",
+        )
+
+        self.assertEqual(
+            transpile("SELECT CURRENT_DATE + (-7 * INTERVAL '1 MONTH')"),
+            "SELECT CURRENT_DATE - 7 * INTERVAL '1 MONTH'",
+        )
+
+        self.assertEqual(
             transpile("SELECT 10 + 5"),
             "SELECT 10 + 5",
         )

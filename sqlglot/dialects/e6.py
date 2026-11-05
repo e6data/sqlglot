@@ -3594,6 +3594,22 @@ class E6(Dialect):
                     expression.this,
                 )
 
+            # date + -N * INTERVAL -> date - N * INTERVAL; date + N * INTERVAL stays as is
+            if isinstance(unwrapped_rhs, exp.Mul) and isinstance(
+                unwrapped_rhs.expression, exp.Interval
+            ):
+                if isinstance(unwrapped_rhs.this, exp.Neg):
+                    return self.sql(
+                        exp.Sub(
+                            this=expression.this,
+                            expression=exp.Mul(
+                                this=unwrapped_rhs.this.this,
+                                expression=unwrapped_rhs.expression,
+                            ),
+                        )
+                    )
+                return self.binary(expression, "+")
+
             return self.func(
                 "DATE_ADD",
                 exp.Literal.string("DAY"),
