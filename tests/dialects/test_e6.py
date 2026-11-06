@@ -992,7 +992,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "WITH cte AS (SELECT ARRAY_AGG(1) AS \"values\") SELECT MAP_FROM_ENTRIES(ARRAY_AGG(NAMED_STRUCT('col1', 2, 'values', \"values\"))) FROM cte",
+            'WITH cte AS (SELECT ARRAY_AGG(1) AS "values") SELECT MAP_FROM_ENTRIES(ARRAY_AGG(STRUCT(2, "values"))) FROM cte',
             read={
                 "databricks": "with cte as (select array_agg(1) as values) SELECT map_from_entries(array_agg(struct(2, values))) from cte"
             },
@@ -1305,7 +1305,6 @@ class TestE6(Validator):
                 "bigquery": "JSON_OBJECT(['key_1', 'key_2'], ['one', NULL])",
                 "duckdb": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
                 "snowflake": "OBJECT_CONSTRUCT_KEEP_NULL('key_1', 'one', 'key_2', NULL)",
-                "databricks": "struct ('one' as key_1, NULL as key_2)",
             },
             write={
                 "bigquery": "JSON_OBJECT('key_1', 'one', 'key_2', NULL)",
@@ -1315,9 +1314,34 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT a.*, TO_JSON(ARRAY[NAMED_STRUCT('x', x_start, 'y', y_start), NAMED_STRUCT('x', x_end, 'y', y_start), NAMED_STRUCT('x', x_end, 'y', y_end), NAMED_STRUCT('x', x_start, 'y', y_end)]) AS geometry",
+            "SELECT a.*, TO_JSON(ARRAY[STRUCT(x_start AS x, y_start AS y), STRUCT(x_end AS x, y_start AS y), STRUCT(x_end AS x, y_end AS y), STRUCT(x_start AS x, y_end AS y)]) AS geometry",
             read={
                 "databricks": "select a.*, to_json(array(struct (x_start as x, y_start as y),struct (x_end as x, y_start as y),struct (x_end as x, y_end as y),struct (x_start as x, y_end as y))) as geometry",
+            },
+        )
+
+    def test_struct(self):
+        # STRUCT goes to the planner as STRUCT, never rewritten to NAMED_STRUCT
+        self.validate_identity("SELECT STRUCT(1, 2)")
+        self.validate_identity("SELECT STRUCT(a AS x, b) FROM t")
+
+        self.validate_all(
+            "STRUCT('one' AS key_1, NULL AS key_2)",
+            read={"databricks": "struct ('one' as key_1, NULL as key_2)"},
+        )
+        self.validate_all(
+            "SELECT STRUCT(1, 2)",
+            read={"databricks": "SELECT struct(1, 2)"},
+        )
+        self.validate_all(
+            "SELECT STRUCT(a AS x, b) FROM t",
+            read={"databricks": "SELECT struct(a AS x, b) FROM t"},
+        )
+        self.validate_all(
+            "SELECT STRUCT(1, 2)",
+            read={
+                "snowflake": "SELECT STRUCT(1, 2)",
+                "bigquery": "SELECT STRUCT(1, 2)",
             },
         )
 

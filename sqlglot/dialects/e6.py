@@ -18,7 +18,7 @@ from sqlglot.dialects.dialect import (
     datestrtodate_sql,
     trim_sql,
 )
-from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset, flatten
+from sqlglot.helper import is_float, is_int, seq_get, apply_index_offset
 from sqlglot.tokens import TokenType
 from sqlglot.parser import build_coalesce
 from typing import Any, Optional
@@ -2443,20 +2443,17 @@ class E6(Dialect):
             )
 
         def struct_sql(self, expression: exp.Struct) -> str:
-            keys = []
-            values = []
-
-            for i, e in enumerate(expression.expressions):
-                if isinstance(e, exp.PropertyEQ):
-                    keys.append(
-                        exp.Literal.string(e.name) if isinstance(e.this, exp.Identifier) else e.this
-                    )
-                    values.append(e.expression)
-                else:
-                    keys.append(exp.Literal.string(f"_{i}"))
-                    values.append(e)
-
-            return self.func("NAMED_STRUCT", *flatten(zip(keys, values)))
+            # Drop the default names the Databricks parser adds (col<n>, or the column's own
+            # name) so STRUCT goes to the planner as written
+            args = [
+                e.expression
+                if isinstance(e, exp.PropertyEQ)
+                and e.name
+                == (e.expression.name if isinstance(e.expression, exp.Column) else f"col{i + 1}")
+                else e
+                for i, e in enumerate(expression.expressions)
+            ]
+            return super().struct_sql(exp.Struct(expressions=args))
 
         def neq_sql(self, expression: exp.NEQ) -> str:
             return self.binary(expression, expression.meta.get("neq_op", "!="))
