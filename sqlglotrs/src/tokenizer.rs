@@ -65,6 +65,8 @@ impl Tokenizer {
 
 #[derive(Debug)]
 struct TokenizerState<'a> {
+    #[cfg(test)]
+    materialized_lookaheads: std::cell::Cell<usize>,
     sql: Vec<char>,
     size: usize,
     tokens: Vec<Token>,
@@ -94,6 +96,8 @@ impl<'a> TokenizerState<'a> {
         let sql_vec = sql.chars().collect::<Vec<char>>();
         let sql_vec_len = sql_vec.len();
         TokenizerState {
+            #[cfg(test)]
+            materialized_lookaheads: std::cell::Cell::new(0),
             sql: sql_vec,
             size: sql_vec_len,
             tokens: Vec::new(),
@@ -196,6 +200,9 @@ impl<'a> TokenizerState<'a> {
     }
 
     fn chars(&self, size: usize) -> String {
+        #[cfg(test)]
+        self.materialized_lookaheads
+            .set(self.materialized_lookaheads.get() + 1);
         let start = self.current - 1;
         let end = start + size;
         if end <= self.size {
@@ -632,15 +639,14 @@ impl<'a> TokenizerState<'a> {
         raise_unmatched: bool,
     ) -> Result<String, TokenizerError> {
         let mut text = String::new();
-        let mut combined_identifier_escapes = None;
-        if use_identifier_escapes {
-            let mut tmp = self.settings.identifier_escapes.clone();
-            tmp.extend(delimiter.chars());
-            combined_identifier_escapes = Some(tmp);
-        }
-        let escapes = match combined_identifier_escapes {
-            Some(ref v) => v,
-            None => &self.settings.string_escapes,
+        let escapes = if use_identifier_escapes {
+            &self.settings.identifier_escapes
+        } else {
+            &self.settings.string_escapes
+        };
+        let is_escape = |character| {
+            escapes.contains(&character)
+                || (use_identifier_escapes && delimiter.contains(character))
         };
 
         loop {
@@ -660,16 +666,12 @@ impl<'a> TokenizerState<'a> {
             }
 
             if (self.settings.string_escapes_allowed_in_raw_strings || !raw_string)
-                && escapes.contains(&self.current_char)
-                && (self.current_char == self.peek_char
-                    || !self
-                        .settings
-                        .quotes
-                        .contains_key(&self.current_char.to_string()))
+                && is_escape(self.current_char)
+                && (self.current_char == self.peek_char || !self.is_quote_char(self.current_char))
             {
-                let peek_char_str = self.peek_char.to_string();
-                let equal_delimiter = delimiter == peek_char_str;
-                if equal_delimiter || escapes.contains(&self.peek_char) {
+                let equal_delimiter = delimiter.len() == self.peek_char.len_utf8()
+                    && delimiter.starts_with(self.peek_char);
+                if equal_delimiter || is_escape(self.peek_char) {
                     if equal_delimiter {
                         text.push(self.peek_char);
                     } else {
@@ -687,7 +689,11 @@ impl<'a> TokenizerState<'a> {
                     continue;
                 }
             }
-            if self.chars(delimiter.len()) == delimiter {
+            if self.should_skip_unknown_escape(delimiter, raw_string) {
+                self.advance(1)?;
+                continue;
+            }
+            if self.matches_delimiter(delimiter) {
                 if delimiter.len() > 1 {
                     self.advance((delimiter.len() - 1) as isize)?;
                 }
@@ -705,15 +711,44 @@ impl<'a> TokenizerState<'a> {
                 ));
             }
 
-            let current = self.current - 1;
+            let character = self.current_char;
             self.advance(1)?;
-            text.push_str(
-                &self.sql[current..self.current - 1]
-                    .iter()
-                    .collect::<String>(),
-            );
+            text.push(character);
         }
         Ok(text)
+    }
+
+    /// Compare a delimiter without materializing a lookahead string.
+    #[deny(missing_docs, clippy::pedantic)]
+    fn matches_delimiter(&self, delimiter: &str) -> bool {
+        let start = self.current - 1;
+        self.sql
+            .get(start..start + delimiter.len())
+            .is_some_and(|chars| chars.iter().copied().eq(delimiter.chars()))
+    }
+
+    /// Look up a single-character quote with a stack-backed UTF-8 key.
+    #[deny(missing_docs, clippy::pedantic)]
+    fn is_quote_char(&self, character: char) -> bool {
+        let mut buffer = [0; 4];
+        self.settings
+            .quotes
+            .contains_key(character.encode_utf8(&mut buffer) as &str)
+    }
+
+    /// Match Python's dialect-controlled handling of unrecognized escapes.
+    #[deny(missing_docs, clippy::pedantic)]
+    fn should_skip_unknown_escape(&self, delimiter: &str, raw_string: bool) -> bool {
+        if !self.dialect_settings.string_escape_skip_unknown
+            || raw_string
+            || self.is_end
+            || matches!(self.peek_char, '%' | '_')
+            || !self.settings.string_escapes.contains(&self.current_char)
+            || self.settings.string_escapes.contains(&self.peek_char)
+        {
+            return false;
+        }
+        delimiter.len() != self.peek_char.len_utf8() || !delimiter.starts_with(self.peek_char)
     }
 
     fn is_alphabetic_or_underscore(&self, name: char) -> bool {
@@ -757,5 +792,33 @@ impl<'a> TokenizerState<'a> {
 
     fn error_result<T>(&self, message: String) -> Result<T, TokenizerError> {
         Err(self.error(message))
+    }
+}
+
+#[cfg(test)]
+mod scanner_tests {
+    #![deny(missing_docs, clippy::pedantic)]
+
+    use super::*;
+
+    #[test]
+    fn long_string_does_not_materialize_character_lookaheads() {
+        let settings: TokenizerSettings =
+            serde_json::from_str(include_str!("../benches/tokenizer_settings.json")).unwrap();
+        let types: TokenTypeSettings =
+            serde_json::from_str(include_str!("../benches/token_type_settings.json")).unwrap();
+        let dialect: TokenizerDialectSettings =
+            serde_json::from_str(include_str!("../benches/tokenizer_dialect_settings.json"))
+                .unwrap();
+        let trie = Trie::default();
+        let payload = "café日本語".repeat(1000);
+        let sql = format!("'{payload}'");
+        let mut state = TokenizerState::new(&sql, &settings, &types, &dialect, &trie);
+        state.advance(2).unwrap();
+        assert_eq!(
+            state.extract_string("'", false, false, true).unwrap(),
+            payload
+        );
+        assert_eq!(state.materialized_lookaheads.get(), 0);
     }
 }

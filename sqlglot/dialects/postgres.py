@@ -12,6 +12,7 @@ from sqlglot.dialects.dialect import (
     binary_from_function,
     bool_xor_sql,
     datestrtodate_sql,
+    build_date_delta,
     build_formatted_time,
     filter_array_using_unnest,
     inline_array_sql,
@@ -413,6 +414,8 @@ class Postgres(Dialect):
             "TO_CHAR": build_formatted_time(exp.TimeToStr, "postgres"),
             "TO_DATE": build_formatted_time(exp.StrToDate, "postgres"),
             "TO_TIMESTAMP": _build_to_timestamp,
+            # Not in Postgres; BI tools emit the Databricks/MySQL TIMESTAMPDIFF(unit, start, end)
+            "TIMESTAMPDIFF": build_date_delta(exp.TimestampDiff),
             "UNNEST": exp.Explode.from_arg_list,
             "SHA256": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(256)),
             "SHA384": lambda args: exp.SHA2(this=seq_get(args, 0), length=exp.Literal.number(384)),

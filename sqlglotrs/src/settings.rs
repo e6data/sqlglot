@@ -212,20 +212,25 @@ pub struct TokenizerDialectSettings {
     pub unescaped_sequences: HashMap<String, String>,
     pub identifiers_can_start_with_digit: bool,
     pub numbers_can_be_underscore_separated: bool,
+    #[cfg_attr(feature = "profiling", serde(default))]
+    pub string_escape_skip_unknown: bool,
 }
 
 #[pymethods]
 impl TokenizerDialectSettings {
     #[new]
+    #[pyo3(signature = (unescaped_sequences, identifiers_can_start_with_digit, numbers_can_be_underscore_separated, string_escape_skip_unknown=false))]
     pub fn new(
         unescaped_sequences: HashMap<String, String>,
         identifiers_can_start_with_digit: bool,
         numbers_can_be_underscore_separated: bool,
+        string_escape_skip_unknown: bool,
     ) -> Self {
         let settings = TokenizerDialectSettings {
             unescaped_sequences,
             identifiers_can_start_with_digit,
             numbers_can_be_underscore_separated,
+            string_escape_skip_unknown,
         };
 
         #[cfg(feature = "profiling")]

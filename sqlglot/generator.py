@@ -965,7 +965,9 @@ class Generator(metaclass=_Generator):
         else:
             raise ValueError(f"Expected an Expression. Received {type(expression)}: {expression}")
 
-        return self.maybe_comment(sql, expression) if self.comments and comment else sql
+        if self.comments and comment and expression.comments:
+            return self.maybe_comment(sql, expression)
+        return sql
 
     def uncache_sql(self, expression: exp.Uncache) -> str:
         table = self.sql(expression, "this")
