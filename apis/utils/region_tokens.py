@@ -12,7 +12,7 @@ import re
 
 from sqlglot.dialects.dialect import Dialect
 from sqlglot.tokens import Token, TokenType, _TOKEN_TYPE_TO_INDEX
-from apis.utils.multidialect import MARKER
+from apis.utils.multidialect import MARKER, PLACEHOLDER
 
 try:
     from sqlglotrs import _remap_tokens  # type: ignore
@@ -58,9 +58,7 @@ class RegionTokens:
         for index, child in enumerate(node.children):
             if node.raw.find(child.raw) != child.start - node.start:
                 return None
-            replacements.append(
-                (child.start, child.end, f"(SELECT NULL AS {MARKER.format(index)})")
-            )
+            replacements.append((child.start, child.end, PLACEHOLDER.format(MARKER.format(index))))
         replacements.sort()
         pieces = []
         cursor = node.start

@@ -120,7 +120,13 @@ def escape_unicode(s: str) -> str:
     return s.encode("unicode_escape").decode("ascii")
 
 
-def _region_to_e6(region_sql: str, from_sql: Optional[str], pretty: bool, tokens=None) -> str:
+def _region_to_e6(
+    region_sql: str,
+    from_sql: Optional[str],
+    pretty: bool,
+    tokens=None,
+    inner_dialect: str = "databricks",
+) -> str:
     """Transpile ONE region of a multi-dialect BI-tool query to e6.
 
     This deliberately runs the SAME steps as the main /convert-query pipeline
@@ -134,7 +140,7 @@ def _region_to_e6(region_sql: str, from_sql: Optional[str], pretty: bool, tokens
       - "postgres" for the fallback OUTER, so e6 applies its Postgres-specific rules
         (e.g. dropping a 1-arg numeric ``TRUNC`` that Databricks would mis-read as a
         date truncation).
-      - None for the subquery tree: ``parse_region`` picks postgres, else databricks,
+      - None for the subquery tree: ``parse_region`` picks postgres, else ``inner_dialect``,
         and its parse is reused (no second parse).
     """
     # Same input cleanup the main path does before parsing.
@@ -152,7 +158,9 @@ def _region_to_e6(region_sql: str, from_sql: Optional[str], pretty: bool, tokens
     _t = time.perf_counter()
     if from_sql is None:
         from_sql, tree = parse_region(
-            region_sql, tokens=tokens if region_sql == original_region_sql else None
+            region_sql,
+            tokens=tokens if region_sql == original_region_sql else None,
+            inner_dialect=inner_dialect,
         )
     else:
         tree = sqlglot.parse_one(region_sql, read=from_sql, error_level=None)
@@ -257,7 +265,9 @@ async def convert_query(
                 converted_query = subquery_tree_transpile(
                     query,
                     pretty,
-                    emit_tokens=lambda region, p, tokens: _region_to_e6(region, None, p, tokens),
+                    emit_tokens=lambda region, p, tokens: _region_to_e6(
+                        region, None, p, tokens, inner_dialect
+                    ),
                 )
             logger.info(
                 "%s AT %s — MULTIDIALECT via subquery_tree:\n%s",

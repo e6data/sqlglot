@@ -51,6 +51,7 @@ SUBQUERY_OPENERS = {TokenType.SELECT, TokenType.WITH, TokenType.VALUES, TokenTyp
 # subquery; unlikely to collide with a real identifier. MAX_ROUNDS bounds the loop so a
 # query that never converges fails fast instead of spinning.
 MARKER = "__E6_INNER_{}__"
+PLACEHOLDER = "(SELECT NULL AS {})"
 MAX_ROUNDS = 64
 
 # Tableau aliases the native custom-SQL subquery ``"Custom SQL Query"``. Postgres tokenizes
@@ -206,7 +207,7 @@ def split_custom_sql_alias(query):
     for s, e in sorted(spans, reverse=True):  # right-to-left so earlier offsets stay valid
         marker = MARKER.format(len(raw))
         raw[marker] = query[s : e + 1]
-        outer = outer[:s] + f"(SELECT NULL AS {marker})" + outer[e + 1 :]
+        outer = outer[:s] + PLACEHOLDER.format(marker) + outer[e + 1 :]
     return outer, raw
 
 
@@ -262,7 +263,7 @@ def split_pg_outer(query):
     for s, e in reversed(outermost):  # right-to-left so earlier offsets stay valid
         marker = MARKER.format(len(raw))
         raw[marker] = query[s : e + 1]
-        outer = outer[:s] + f"(SELECT NULL AS {marker})" + outer[e + 1 :]
+        outer = outer[:s] + PLACEHOLDER.format(marker) + outer[e + 1 :]
 
     # Fallback: catch any inner subquery the backtick scan can't see (a non-backtick inner,
     # or a Snowflake inner), one parse error at a time. For a pure Databricks query the fast
@@ -278,5 +279,5 @@ def split_pg_outer(query):
         s, e = span
         marker = MARKER.format(len(raw))
         raw[marker] = outer[s : e + 1]
-        outer = outer[:s] + f"(SELECT NULL AS {marker})" + outer[e + 1 :]
+        outer = outer[:s] + PLACEHOLDER.format(marker) + outer[e + 1 :]
     raise ValueError("Multidialect two-pass: did not converge")

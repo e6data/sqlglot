@@ -125,6 +125,34 @@ class TestSubqueryTreeTrigger(unittest.TestCase):
                 )
                 self.assertEqual(tree.called, multidialect)
 
+    def test_inner_dialect_matches_split_path(self):
+        # A region that fails the Postgres parse is read as INNER_DIALECT, as in split_pg_outer.
+        from fastapi.testclient import TestClient
+
+        import converter_api
+
+        client = TestClient(converter_api.app)
+        query = 'SELECT "$Table"."v" AS "v" FROM (SELECT a::VARIANT:b::STRING AS v FROM t) "$Table"'
+        flags = {"PRETTY_PRINT": False, "MULTIDIALECT": True, "INNER_DIALECT": "snowflake"}
+        outputs = []
+        for subquery_tree in (False, True):
+            with mock.patch.object(converter_api, "SUBQUERY_TREE", subquery_tree):
+                response = client.post(
+                    "/convert-query",
+                    data={
+                        "query": query,
+                        "from_sql": "snowflake",
+                        "feature_flags": json.dumps(flags),
+                    },
+                )
+            outputs.append(response.json().get("converted_query"))
+        self.assertEqual(
+            outputs[1],
+            'SELECT "$Table"."v" AS "v" FROM (SELECT CAST(JSON_EXTRACT(CAST(a AS VARIANT), '
+            "'$.b') AS VARCHAR) AS v FROM t) AS \"$Table\"",
+        )
+        self.assertEqual(outputs[1], outputs[0])
+
 
 if __name__ == "__main__":
     unittest.main()

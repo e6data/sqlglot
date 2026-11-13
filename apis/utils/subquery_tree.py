@@ -24,7 +24,7 @@ from sqlglot.dialects.dialect import Dialect
 from sqlglot.tokens import Token
 
 from apis.utils.lite_parser import lite_parse
-from apis.utils.multidialect import MARKER, _splice
+from apis.utils.multidialect import MARKER, PLACEHOLDER, _splice
 from apis.utils.region_tokens import RegionTokens, NATIVE_TOKEN_REUSE
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def _mask(node: SQNode) -> tuple[str, dict[str, SQNode]]:
     children: dict[str, SQNode] = {}
     for k, child in enumerate(node.children):
         marker = MARKER.format(k)
-        body = body.replace(child.raw, f"(SELECT NULL AS {marker})", 1)
+        body = body.replace(child.raw, PLACEHOLDER.format(marker), 1)
         children[marker] = child
     return body, children
 
@@ -96,8 +96,10 @@ def reproduce(node: SQNode) -> str:
     return body
 
 
-def parse_region(region: str, tokens=None) -> tuple[str, exp.Expression]:
-    """A region is Postgres unless it fails to parse as Postgres, then Databricks.
+def parse_region(
+    region: str, tokens=None, inner_dialect: str = "databricks"
+) -> tuple[str, exp.Expression]:
+    """A region is Postgres unless it fails to parse as Postgres, then ``inner_dialect``.
     Returns ``(dialect, tree)`` so the deciding parse is the one that gets transpiled
     (the region is never parsed twice)."""
     _t = time.perf_counter()
@@ -112,7 +114,10 @@ def parse_region(region: str, tokens=None) -> tuple[str, exp.Expression]:
             tree = parsed
         dialect = "postgres"
     except (ParseError, TokenError):
-        dialect, tree = "databricks", sqlglot.parse_one(region, read="databricks", error_level=None)
+        dialect, tree = (
+            inner_dialect,
+            sqlglot.parse_one(region, read=inner_dialect, error_level=None),
+        )
     logger.info(
         "[TRANSPILE-TIMING] parse_region=%.1f ms -> %s (%d chars)",
         (time.perf_counter() - _t) * 1000,
