@@ -73,10 +73,9 @@ SQLGLOTRS_TOKENIZER = os.getenv("SQLGLOTRS_TOKENIZER", "0")
 # parses as Postgres), and the e6 generator reparses any Anonymous-node function it finds on
 # the postgres path in the Databricks dialect (see e6.anonymous_sql). Read here and in e6.py.
 HYBRID_MULTIDIALECT = os.getenv("HYBRID_MULTIDIALECT", "False").lower() == "true"
-# Opt-in (same style as HYBRID_MULTIDIALECT): run the multidialect split through the
-# dialect-agnostic subquery tree (apis.utils.subquery_tree) instead of the
-# split_custom_sql_alias / split_pg_outer helpers. It only picks the method: the
-# multidialect path itself is triggered by the MULTIDIALECT feature flag (or Samsung).
+# Opt-in (same style as HYBRID_MULTIDIALECT): run EVERY query through the dialect-agnostic
+# subquery tree (apis.utils.subquery_tree), whether or not the planner sends the MULTIDIALECT
+# feature flag. A single-dialect query is just a tree whose regions all parse the same way.
 SUBQUERY_TREE = os.getenv("SUBQUERY_TREE", "False").lower() == "true"
 
 storage_service_client = None
@@ -212,7 +211,7 @@ async def convert_query(
             return HTTPException(status_code=500, detail=str(je))
 
     samsung = SAMSUNG_TABLEAU_DASHBOARD.lower() == "true"
-    if flags_dict.get("MULTIDIALECT", False) or samsung:
+    if flags_dict.get("MULTIDIALECT", False) or samsung or SUBQUERY_TREE:
         # Multi-dialect BI-tool query: a Postgres outer wrapper around inner subqueries
         # written in another dialect (INNER_DIALECT, default "databricks"). Rule:
         #   - a subquery that FAILS the Postgres parse is inner-dialect  -> INNER_DIALECT -> e6
