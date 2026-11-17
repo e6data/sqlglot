@@ -1,3 +1,4 @@
+import itertools
 import json
 import unittest
 from unittest import mock
@@ -97,20 +98,35 @@ class TestSubqueryTreeStructure(unittest.TestCase):
         self.assertIn("a", root.children[0].raw)
         self.assertIn("b", root.children[1].raw)
 
+    def test_join_condition_is_skipped(self):
+        # A JOIN's ON / USING is not parsed, so a dialect-specific token there (a backtick)
+        # neither fails the parse nor hides the subquery joined after it. LEFT(...) is a
+        # function, not a join.
+        for query in (
+            "SELECT * FROM t JOIN u ON CAST(u.`x` AS INT) = t.id JOIN (SELECT id FROM v) j ON t.id = j.id",
+            "SELECT * FROM t JOIN u ON COALESCE(u.`x`, 0) = t.id, (SELECT id FROM v) j",
+            "SELECT * FROM t JOIN u USING (`x`) LEFT JOIN (SELECT id FROM v) j ON t.id = j.id",
+            "SELECT * FROM t JOIN u ON LEFT(u.`x`, 2) = t.id LEFT JOIN (SELECT id FROM v) j ON 1 = 1",
+        ):
+            with self.subTest(query=query):
+                root = build_tree(query)
+                self.assertEqual(reproduce(root), query)
+                self.assertEqual([c.raw for c in root.children], ["(SELECT id FROM v)"])
+
 
 class TestSubqueryTreeTrigger(unittest.TestCase):
-    """SUBQUERY_TREE only picks the multidialect method; the MULTIDIALECT flag triggers it."""
+    """SUBQUERY_TREE runs every query through the tree, with or without the MULTIDIALECT flag."""
 
-    def test_only_multidialect_triggers_the_tree(self):
+    def test_subquery_tree_triggers_the_tree(self):
         from fastapi.testclient import TestClient
 
         import converter_api
 
         client = TestClient(converter_api.app)
-        for multidialect in (False, True):
+        for subquery_tree, multidialect in itertools.product((False, True), repeat=2):
             with (
-                self.subTest(multidialect=multidialect),
-                mock.patch.object(converter_api, "SUBQUERY_TREE", True),
+                self.subTest(subquery_tree=subquery_tree, multidialect=multidialect),
+                mock.patch.object(converter_api, "SUBQUERY_TREE", subquery_tree),
                 mock.patch.object(
                     converter_api, "subquery_tree_transpile", return_value="SELECT 1"
                 ) as tree,
@@ -123,7 +139,31 @@ class TestSubqueryTreeTrigger(unittest.TestCase):
                         "feature_flags": json.dumps({"MULTIDIALECT": multidialect}),
                     },
                 )
-                self.assertEqual(tree.called, multidialect)
+                self.assertEqual(tree.called, subquery_tree)
+
+    def test_backtick_in_join_condition(self):
+        # Without the MULTIDIALECT flag, a Databricks query with a backtick in a JOIN's ON
+        # transpiles through the tree to the same e6 as the plain Databricks path.
+        from fastapi.testclient import TestClient
+
+        import converter_api
+
+        client = TestClient(converter_api.app)
+        query = "SELECT t.a FROM t JOIN u ON CAST(u.`x` AS INT) = t.id"
+        outputs = []
+        for subquery_tree in (False, True):
+            with mock.patch.object(converter_api, "SUBQUERY_TREE", subquery_tree):
+                response = client.post(
+                    "/convert-query",
+                    data={
+                        "query": query,
+                        "from_sql": "databricks",
+                        "feature_flags": json.dumps({"PRETTY_PRINT": False}),
+                    },
+                )
+            outputs.append(response.json().get("converted_query"))
+        self.assertEqual(outputs[1], 'SELECT t.a FROM t JOIN u ON CAST(u."x" AS INT) = t.id')
+        self.assertEqual(outputs[1], outputs[0])
 
     def test_inner_dialect_matches_split_path(self):
         # A region that fails the Postgres parse is read as INNER_DIALECT, as in split_pg_outer.

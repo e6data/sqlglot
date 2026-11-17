@@ -56,6 +56,14 @@ class LiteParser(Parser):
     _SET_OPS = frozenset(
         {TokenType.UNION, TokenType.EXCEPT, TokenType.INTERSECT, TokenType.SEMICOLON}
     )
+    # A JOIN's ON / USING condition ends at the next join or a clause after the joins.
+    # LEFT / RIGHT etc. only start a join when not followed by "(" (else it is LEFT(...)).
+    _JOIN_PREFIXES = Parser.JOIN_METHODS | Parser.JOIN_SIDES | Parser.JOIN_KINDS
+    _JOIN_END = (
+        {TokenType.JOIN, TokenType.COMMA, TokenType.LATERAL}
+        | _JOIN_PREFIXES
+        | set(Parser.QUERY_MODIFIER_PARSERS)
+    )
 
     def _skip(self, extra: t.AbstractSet[TokenType] = frozenset()) -> None:
         """Advance over tokens until a clause boundary at paren-depth 0. Paren-aware,
@@ -73,7 +81,12 @@ class LiteParser(Parser):
                     break
                 depth -= 1
             elif depth == 0 and (tt in self._SET_OPS or tt in extra):
-                break
+                if not (
+                    tt in self._JOIN_PREFIXES
+                    and index + 1 < len(tokens)
+                    and tokens[index + 1].token_type == TokenType.L_PAREN
+                ):
+                    break
             index += 1
         if index != self._index:
             self._advance(index - self._index)
@@ -98,6 +111,19 @@ class LiteParser(Parser):
             # or end-of-input). None of them hold a dialect-boundary subquery.
             self._skip()
         return this
+
+    # -- override 3: a JOIN's ON condition / USING list ---------------------------
+    # Value expressions too: a dialect-specific token there (e.g. a Databricks backtick in
+    # CAST(u.`x` AS INT)) would fail the parse or end it early, missing later subqueries.
+    def _parse_assignment(self) -> t.Optional[exp.Expression]:
+        if self._prev and self._prev.token_type == TokenType.ON:
+            self._skip(extra=self._JOIN_END)
+            return exp.true()
+        return super()._parse_assignment()
+
+    def _parse_using_identifiers(self) -> t.List[exp.Expression]:
+        self._skip(extra=self._JOIN_END)
+        return []
 
 
 def lite_parse(query: str, tokens=None) -> exp.Expression:
