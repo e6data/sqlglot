@@ -58,6 +58,8 @@ class _Expression(type):
         # This is so that docstrings are not inherited in pdoc
         klass.__doc__ = klass.__doc__ or ""
 
+        klass._required_arg_keys = tuple(k for k, mandatory in klass.arg_types.items() if mandatory)
+
         return klass
 
 
@@ -102,6 +104,7 @@ class Expression(metaclass=_Expression):
 
     key = "expression"
     arg_types = {"this": True}
+    _required_arg_keys: t.ClassVar[t.Tuple[str, ...]]
     __slots__ = (
         "args",
         "parent",
@@ -123,8 +126,19 @@ class Expression(metaclass=_Expression):
         self._meta: t.Optional[t.Dict[str, t.Any]] = None
         self._hash: t.Optional[int] = None
 
-        for arg_key, value in self.args.items():
-            self._set_parent(arg_key, value)
+        # Same as calling self._set_parent(arg_key, value) for each arg, inlined because
+        # every AST node goes through here.
+        for arg_key, value in args.items():
+            if hasattr(value, "parent"):
+                value.parent = self
+                value.arg_key = arg_key
+                value.index = None
+            elif type(value) is list:
+                for index, v in enumerate(value):
+                    if hasattr(v, "parent"):
+                        v.parent = self
+                        v.arg_key = arg_key
+                        v.index = index
 
     def __eq__(self, other) -> bool:
         return type(self) is type(other) and hash(self) == hash(other)
@@ -742,13 +756,15 @@ class Expression(metaclass=_Expression):
             A list of error messages for all possible errors that were found.
         """
         errors: t.List[str] = []
+        arg_types = self.arg_types
+        expression_args = self.args
 
-        for k in self.args:
-            if k not in self.arg_types:
+        for k in expression_args:
+            if k not in arg_types:
                 errors.append(f"Unexpected keyword: '{k}' for {self.__class__}")
-        for k, mandatory in self.arg_types.items():
-            v = self.args.get(k)
-            if mandatory and (v is None or (isinstance(v, list) and not v)):
+        for k in self._required_arg_keys:
+            v = expression_args.get(k)
+            if v is None or (isinstance(v, list) and not v):
                 errors.append(f"Required keyword: '{k}' missing for {self.__class__}")
 
         if (
@@ -869,19 +885,17 @@ class Expression(metaclass=_Expression):
         Returns:
             The updated expression.
         """
+        meta = self.meta
         if isinstance(other, Expression):
-            self.meta.update({k: v for k, v in other.meta.items() if k in POSITION_META_KEYS})
+            meta.update({k: v for k, v in other.meta.items() if k in POSITION_META_KEYS})
         elif other is not None:
-            self.meta.update(
-                {
-                    "line": other.line,
-                    "col": other.col,
-                    "start": other.start,
-                    "end": other.end,
-                    "whitespace_before": getattr(other, "whitespace_before", ""),
-                }
-            )
-        self.meta.update({k: v for k, v in kwargs.items() if k in POSITION_META_KEYS})
+            meta["line"] = other.line
+            meta["col"] = other.col
+            meta["start"] = other.start
+            meta["end"] = other.end
+            meta["whitespace_before"] = getattr(other, "whitespace_before", "")
+        if kwargs:
+            meta.update({k: v for k, v in kwargs.items() if k in POSITION_META_KEYS})
         return self
 
     def as_(
