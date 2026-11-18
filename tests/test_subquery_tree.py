@@ -115,7 +115,8 @@ class TestSubqueryTreeStructure(unittest.TestCase):
 
 
 class TestSubqueryTreeTrigger(unittest.TestCase):
-    """SUBQUERY_TREE runs every query through the tree, with or without the MULTIDIALECT flag."""
+    """SUBQUERY_TREE uses the tree for every query; SUBQUERY_TREE_MULTIDIALECT only when the
+    planner sends the MULTIDIALECT flag."""
 
     def test_subquery_tree_triggers_the_tree(self):
         from fastapi.testclient import TestClient
@@ -123,10 +124,11 @@ class TestSubqueryTreeTrigger(unittest.TestCase):
         import converter_api
 
         client = TestClient(converter_api.app)
-        for subquery_tree, multidialect in itertools.product((False, True), repeat=2):
+        for subquery_tree, tree_md, multidialect in itertools.product((False, True), repeat=3):
             with (
-                self.subTest(subquery_tree=subquery_tree, multidialect=multidialect),
+                self.subTest(subquery_tree=subquery_tree, md=tree_md, multidialect=multidialect),
                 mock.patch.object(converter_api, "SUBQUERY_TREE", subquery_tree),
+                mock.patch.object(converter_api, "SUBQUERY_TREE_MULTIDIALECT", tree_md),
                 mock.patch.object(
                     converter_api, "subquery_tree_transpile", return_value="SELECT 1"
                 ) as tree,
@@ -139,7 +141,7 @@ class TestSubqueryTreeTrigger(unittest.TestCase):
                         "feature_flags": json.dumps({"MULTIDIALECT": multidialect}),
                     },
                 )
-                self.assertEqual(tree.called, subquery_tree)
+                self.assertEqual(tree.called, subquery_tree or (tree_md and multidialect))
 
     def test_backtick_in_join_condition(self):
         # Without the MULTIDIALECT flag, a Databricks query with a backtick in a JOIN's ON
