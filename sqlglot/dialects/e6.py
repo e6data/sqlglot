@@ -1771,11 +1771,19 @@ class E6(Dialect):
             return super().escape_str(text, escape_backslash)
 
         def literal_sql(self, expression: exp.Literal) -> str:
-            # SAMSUNG_TABLEAU_DASHBOARD + STRIP_STRING_NEWLINES: drop line feeds from every string
-            # literal (e.g. a Tableau parameter value pasted with a trailing newline).
+            # (SAMSUNG_TABLEAU_DASHBOARD, SUBQUERY_TREE or SUBQUERY_TREE_MULTIDIALECT) +
+            # STRIP_STRING_NEWLINES: drop line feeds from every string literal (e.g. a Tableau
+            # parameter value pasted with a trailing newline).
             if (
                 expression.is_string
-                and os.getenv("SAMSUNG_TABLEAU_DASHBOARD", "false").lower() == "true"
+                and any(
+                    os.getenv(flag, "false").lower() == "true"
+                    for flag in (
+                        "SAMSUNG_TABLEAU_DASHBOARD",
+                        "SUBQUERY_TREE",
+                        "SUBQUERY_TREE_MULTIDIALECT",
+                    )
+                )
                 and os.getenv("STRIP_STRING_NEWLINES", "false").lower() == "true"
             ):
                 expression = exp.Literal.string(expression.this.replace("\n", ""))
