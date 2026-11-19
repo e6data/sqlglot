@@ -77,6 +77,9 @@ HYBRID_MULTIDIALECT = os.getenv("HYBRID_MULTIDIALECT", "False").lower() == "true
 # subquery tree (apis.utils.subquery_tree), whether or not the planner sends the MULTIDIALECT
 # feature flag. A single-dialect query is just a tree whose regions all parse the same way.
 SUBQUERY_TREE = os.getenv("SUBQUERY_TREE", "False").lower() == "true"
+# Opt-in: use the subquery tree only on the planner's multidialect path (the MULTIDIALECT
+# feature flag, or Samsung), instead of the split_custom_sql_alias / split_pg_outer helpers.
+SUBQUERY_TREE_MULTIDIALECT = os.getenv("SUBQUERY_TREE_MULTIDIALECT", "False").lower() == "true"
 
 storage_service_client = None
 
@@ -246,7 +249,7 @@ async def convert_query(
         # SUBQUERY_TREE: transpile via the dialect-agnostic subquery tree. Each region's
         # e6 goes through the same _region_to_e6 pipeline (dialect decided per region), so
         # the output matches the split path while reusing one lightweight structural parse.
-        if SUBQUERY_TREE:
+        if SUBQUERY_TREE or SUBQUERY_TREE_MULTIDIALECT:
             logger.info(
                 "[TRANSPILE-TIMING] %s — query arrived at transpiler (%d chars, subquery_tree)",
                 query_id,
