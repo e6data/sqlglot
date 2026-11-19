@@ -167,6 +167,50 @@ class TestSubqueryTreeTrigger(unittest.TestCase):
         self.assertEqual(outputs[1], 'SELECT t.a FROM t JOIN u ON CAST(u."x" AS INT) = t.id')
         self.assertEqual(outputs[1], outputs[0])
 
+    def test_tableau_escape_strings_without_samsung_flag(self):
+        # A Samsung Tableau query whose parameter arrived as E'...\n' goes through the subquery
+        # tree with SUBQUERY_TREE + STRIP_E_STRING_PREFIX + STRIP_STRING_NEWLINES, no
+        # SAMSUNG_TABLEAU_DASHBOARD. The flags are read at import, so this runs in a subprocess.
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        query = (
+            'SELECT "Custom SQL Query"."du_id" AS "du_id" FROM (SELECT * FROM `dlt`.`w`.`t` '
+            "WHERE (E'VZ_1,\\nVZ_2' = 'All' OR GNODEB_ID IN (SELECT trim(v) AS GNODEB_ID "
+            "FROM (SELECT explode(split(E'VZ_1,\\nVZ_2', ',')) AS v) g))) \"Custom SQL Query\""
+        )
+        code = (
+            "import json, logging, sys\n"
+            "logging.disable(logging.CRITICAL)\n"
+            "from fastapi.testclient import TestClient\n"
+            "import converter_api\n"
+            "r = TestClient(converter_api.app).post('/convert-query', data={'query': sys.argv[1], "
+            "'from_sql': 'postgres', 'feature_flags': json.dumps({'PRETTY_PRINT': False})})\n"
+            "print(r.json()['converted_query'])\n"
+        )
+        env = {
+            **{k: v for k, v in os.environ.items() if k != "SAMSUNG_TABLEAU_DASHBOARD"},
+            "SUBQUERY_TREE": "true",
+            "STRIP_E_STRING_PREFIX": "true",
+            "STRIP_STRING_NEWLINES": "true",
+        }
+        result = subprocess.run(
+            [sys.executable, "-c", code, query],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=Path(__file__).parents[1],
+        )
+        # (importing converter_api prints a storage-client banner first, so take the last line)
+        self.assertEqual(
+            result.stdout.splitlines()[-1] if result.stdout else result.stderr,
+            'SELECT "Custom SQL Query"."du_id" AS "du_id" FROM (SELECT * FROM "dlt"."w"."t" '
+            "WHERE ('VZ_1,VZ_2' = 'All' OR GNODEB_ID IN (SELECT TRIM(v) AS GNODEB_ID "
+            "FROM (SELECT EXPLODE(SPLIT('VZ_1,VZ_2', ',')) AS v) AS \"g\"))) AS \"Custom SQL Query\"",
+        )
+
     def test_inner_dialect_matches_split_path(self):
         # A region that fails the Postgres parse is read as INNER_DIALECT, as in split_pg_outer.
         from fastapi.testclient import TestClient

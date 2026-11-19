@@ -4146,7 +4146,8 @@ class TestE6(Validator):
         )
 
     def test_samsung_tableau_escape_strings(self):
-        """SAMSUNG_TABLEAU_DASHBOARD + STRIP_E_STRING_PREFIX: Databricks reads a Postgres escape string E'...' (e.g. a Tableau
+        """(SAMSUNG_TABLEAU_DASHBOARD, SUBQUERY_TREE or SUBQUERY_TREE_MULTIDIALECT) +
+        STRIP_E_STRING_PREFIX: Databricks reads a Postgres escape string E'...' (e.g. a Tableau
         parameter bound by its Postgres connector) as a plain string. The flag is read at
         import, so the flagged cases run in a subprocess."""
         import json
@@ -4190,15 +4191,17 @@ class TestE6(Validator):
                 env={**os.environ, **flags},
             )
 
-        for flag in ("SAMSUNG_TABLEAU_DASHBOARD", "STRIP_E_STRING_PREFIX"):
+        gates = ("SAMSUNG_TABLEAU_DASHBOARD", "SUBQUERY_TREE", "SUBQUERY_TREE_MULTIDIALECT")
+        for flag in (*gates, "STRIP_E_STRING_PREFIX"):
             with self.subTest(only=flag):
                 self.assertIn("ParseError", run(**{flag: "true"}).stderr)
 
-        result = run(SAMSUNG_TABLEAU_DASHBOARD="true", STRIP_E_STRING_PREFIX="true")
-        self.assertEqual(result.stderr.count("Error"), 0, result.stderr)
-        for (sql, expected), actual in zip(cases.items(), json.loads(result.stdout)):
-            with self.subTest(sql):
-                self.assertEqual(actual, expected)
+        for gate in gates:
+            result = run(**{gate: "true", "STRIP_E_STRING_PREFIX": "true"})
+            self.assertEqual(result.stderr.count("Error"), 0, result.stderr)
+            for (sql, expected), actual in zip(cases.items(), json.loads(result.stdout)):
+                with self.subTest(gate=gate, sql=sql):
+                    self.assertEqual(actual, expected)
 
     def test_samsung_tableau_end_to_end(self):
         """A Samsung Tableau query (Postgres wrapper around the Databricks "Custom SQL Query")
@@ -4248,22 +4251,27 @@ class TestE6(Validator):
         self.assertEqual(result.stdout.splitlines()[-1], expected.format(nl=""), result.stderr)
 
     def test_strip_string_newlines(self):
-        """SAMSUNG_TABLEAU_DASHBOARD + STRIP_STRING_NEWLINES: every string literal loses its line
-        feeds. Either flag alone leaves strings unchanged."""
+        """(SAMSUNG_TABLEAU_DASHBOARD, SUBQUERY_TREE or SUBQUERY_TREE_MULTIDIALECT) +
+        STRIP_STRING_NEWLINES: every string literal loses its line feeds. Either flag alone
+        leaves strings unchanged."""
         from unittest import mock
 
-        both = {"SAMSUNG_TABLEAU_DASHBOARD": "true", "STRIP_STRING_NEWLINES": "true"}
-        for flag in both:
+        gates = ("SAMSUNG_TABLEAU_DASHBOARD", "SUBQUERY_TREE", "SUBQUERY_TREE_MULTIDIALECT")
+        for flag in (*gates, "STRIP_STRING_NEWLINES"):
             with self.subTest(only=flag), mock.patch.dict(os.environ, {flag: "true"}):
                 self.validate_identity(r"SELECT 'a\nb'")
 
-        with mock.patch.dict(os.environ, both):
-            self.validate_all(r"SELECT 'ab'", read={"databricks": r"SELECT 'a\nb'"})
-            self.validate_all("SELECT 'ab'", read={"postgres": "SELECT 'a\nb'"})
-            self.validate_all(
-                "SELECT CONCAT(a, '', b), 'x\\ty', 1",
-                read={"databricks": r"SELECT concat(a, '\n', b), 'x\ty', 1"},
-            )
+        for gate in gates:
+            with (
+                self.subTest(gate=gate),
+                mock.patch.dict(os.environ, {gate: "true", "STRIP_STRING_NEWLINES": "true"}),
+            ):
+                self.validate_all(r"SELECT 'ab'", read={"databricks": r"SELECT 'a\nb'"})
+                self.validate_all("SELECT 'ab'", read={"postgres": "SELECT 'a\nb'"})
+                self.validate_all(
+                    "SELECT CONCAT(a, '', b), 'x\\ty', 1",
+                    read={"databricks": r"SELECT concat(a, '\n', b), 'x\ty', 1"},
+                )
 
     def test_regexp_substr_native(self):
         """On the native executor, a Databricks REGEXP_SUBSTR (no `group`) stays
