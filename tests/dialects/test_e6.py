@@ -4273,6 +4273,57 @@ class TestE6(Validator):
                     read={"databricks": r"SELECT concat(a, '\n', b), 'x\ty', 1"},
                 )
 
+    def test_postgres_tableau_escape_strings(self):
+        """(SAMSUNG_TABLEAU_DASHBOARD, SUBQUERY_TREE or SUBQUERY_TREE_MULTIDIALECT) +
+        STRIP_E_STRING_PREFIX: Postgres reads a Tableau E'...' parameter as a plain string with
+        its backslash escapes decoded, as Databricks does. The flag is read at import, so the
+        cases run in a subprocess."""
+        import json
+        import subprocess
+        import sys
+
+        cases = {
+            r"SELECT E'a\nb'": r"SELECT 'a\nb'",
+            r"SELECT E'a\rb', E'a\tb', E'a\bb', E'a\fb'": r"SELECT 'a\rb', 'a\tb', 'a\bb', 'a\fb'",
+            r"SELECT E'C:\\tmp'": r"SELECT 'C:\\tmp'",
+            r"SELECT E'it\'s', E'it''s'": r"SELECT 'it\'s', 'it\'s'",
+            r"SELECT e'x\n'": r"SELECT 'x\n'",
+            r"SELECT * FROM t WHERE (E'1,2\n' = 'All' OR x IN ('1'))": r"SELECT * FROM t WHERE ('1,2\n' = 'All' OR x IN ('1'))",
+            "SELECT e.x FROM t AS e WHERE e.x = 'y'": "SELECT e.x FROM t AS e WHERE e.x = 'y'",
+        }
+        code = (
+            "import json, sys, sqlglot; "
+            "print(json.dumps([sqlglot.transpile(q, read='postgres', write='e6', "
+            "from_dialect='postgres')[0] for q in json.loads(sys.argv[1])]))"
+        )
+
+        def run(**flags):
+            return subprocess.run(
+                [sys.executable, "-c", code, json.dumps(list(cases))],
+                capture_output=True,
+                text=True,
+                env={**os.environ, **flags},
+            )
+
+        # either flag alone: unchanged, E'...' stays a Postgres byte string
+        gates = ("SAMSUNG_TABLEAU_DASHBOARD", "SUBQUERY_TREE", "SUBQUERY_TREE_MULTIDIALECT")
+        for flag in gates:
+            with self.subTest(only=flag):
+                self.assertNotIn("'a\\nb'", run(**{flag: "true"}).stdout)
+
+        for gate in gates:
+            result = run(**{gate: "true", "STRIP_E_STRING_PREFIX": "true"})
+            self.assertEqual(result.stderr.count("Error"), 0, result.stderr)
+            for (sql, expected), actual in zip(cases.items(), json.loads(result.stdout)):
+                with self.subTest(gate=gate, sql=sql):
+                    self.assertEqual(actual, expected)
+
+        # + STRIP_STRING_NEWLINES: the Tableau parameter loses its newline
+        result = run(
+            SUBQUERY_TREE="true", STRIP_E_STRING_PREFIX="true", STRIP_STRING_NEWLINES="true"
+        )
+        self.assertEqual(json.loads(result.stdout)[0], "SELECT 'ab'", result.stderr)
+
     def test_regexp_substr_native(self):
         """On the native executor, a Databricks REGEXP_SUBSTR (no `group`) stays
         REGEXP_SUBSTR; REGEXP_EXTRACT (has `group`) is untouched. The default (java)

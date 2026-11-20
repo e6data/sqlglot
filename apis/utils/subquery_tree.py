@@ -21,13 +21,19 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.errors import ParseError, TokenError
 from sqlglot.dialects.dialect import Dialect
-from sqlglot.tokens import Token
+from sqlglot.tokens import Token, Tokenizer
 
 from apis.utils.lite_parser import lite_parse
 from apis.utils.multidialect import MARKER, PLACEHOLDER, _splice
 from apis.utils.region_tokens import RegionTokens, NATIVE_TOKEN_REUSE
 
 logger = logging.getLogger(__name__)
+
+
+class _BackslashTokenizer(Tokenizer):
+    # Discovery only needs the structure: a backslash-escaped quote ('it\'s', Tableau
+    # E'it\'s') must not end a string early
+    STRING_ESCAPES = ["'", "\\"]
 
 
 @dataclass
@@ -142,7 +148,7 @@ def transpile_multidialect(query: str, pretty: bool = True, emit=None, emit_toke
     if emit is None and emit_tokens is None:
         emit_tokens = _default_emit
     _t_total = time.perf_counter()
-    tokens = Dialect().tokenize(query)
+    tokens = _BackslashTokenizer().tokenize(query)
     logger.info(
         "[TRANSPILE-TIMING] discovery tokenize=%.1f ms (%d tokens)",
         (time.perf_counter() - _t_total) * 1000,
