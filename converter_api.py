@@ -3,6 +3,7 @@ from typing import Optional
 import typing as t
 import uvicorn
 import re
+import gc
 import os
 import time
 import json
@@ -203,6 +204,19 @@ async def convert_query(
     to_sql: Optional[str] = Form("e6"),
     feature_flags: Optional[str] = Form(None),
 ):
+    # A sqlglot AST is cyclic (parent pointers), so a finished tree is only freed by the
+    # cyclic GC. Left on, the GC rescans the growing tree (and the previous request's dead
+    # one) during the parse. Pause it for the request and free this request's tree at the end.
+    # Safe: there is no await between disable and enable, so requests never interleave here.
+    gc.disable()
+    try:
+        return _convert_query(query, query_id, from_sql, to_sql, feature_flags)
+    finally:
+        gc.enable()
+        gc.collect()
+
+
+def _convert_query(query, query_id, from_sql, to_sql, feature_flags):
     timestamp = datetime.now().isoformat()
     to_sql = to_sql.lower()
 
@@ -1008,6 +1022,11 @@ def _effective_cpus():
     except AttributeError:
         return float(os.cpu_count() or 1)
 
+
+# Move import-time objects to the permanent generation so the per-request gc.collect()
+# never rescans them.
+gc.collect()
+gc.freeze()
 
 if __name__ == "__main__":
     cpu_cores = _effective_cpus()
