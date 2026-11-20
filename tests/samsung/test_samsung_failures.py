@@ -59,9 +59,7 @@ class TestSamsungFailures(unittest.TestCase):
         csv.field_size_limit(sys.maxsize)
         with gzip.open(FAILURES, "rt", encoding="utf-8", newline="") as fh:
             cases = list(csv.DictReader(fh))
-        self.assertEqual(
-            (len(cases), sum(int(case["failures"]) for case in cases)), (30, 858)
-        )
+        self.assertEqual((len(cases), sum(int(case["failures"]) for case in cases)), (30, 858))
 
         env = {
             **{k: v for k, v in os.environ.items() if k != "SAMSUNG_TABLEAU_DASHBOARD"},
