@@ -211,6 +211,105 @@ class TestSubqueryTreeTrigger(unittest.TestCase):
             "FROM (SELECT EXPLODE(SPLIT('VZ_1,VZ_2', ',')) AS v) AS \"g\"))) AS \"Custom SQL Query\"",
         )
 
+    def test_tableau_escape_strings_in_postgres_region(self):
+        # Without backticks the Custom SQL region parses as Postgres, so its E'...\n' parameter
+        # is a Postgres escape string; it must come out quoted and without the newline under
+        # SUBQUERY_TREE, or SUBQUERY_TREE_MULTIDIALECT with the MULTIDIALECT feature flag.
+        import os
+
+        from fastapi.testclient import TestClient
+
+        import converter_api
+
+        client = TestClient(converter_api.app)
+        query = (
+            'SELECT "Custom SQL Query"."du_id" AS "du_id" FROM (SELECT * FROM dlt.w.t '
+            "WHERE (E'VZ_1,VZ_2\\n' = 'All' OR du_id IN (SELECT trim(v) AS du_id "
+            "FROM (SELECT explode(split(E'VZ_1,VZ_2\\n', ',')) AS v) g))) \"Custom SQL Query\""
+        )
+        env = {"STRIP_E_STRING_PREFIX": "true", "STRIP_STRING_NEWLINES": "true"}
+        for flag, multidialect in (("SUBQUERY_TREE", False), ("SUBQUERY_TREE_MULTIDIALECT", True)):
+            with (
+                self.subTest(flag=flag),
+                mock.patch.dict(os.environ, {**env, flag: "true"}),
+                mock.patch.object(converter_api, flag, True),
+            ):
+                response = client.post(
+                    "/convert-query",
+                    data={
+                        "query": query,
+                        "from_sql": "postgres",
+                        "feature_flags": json.dumps(
+                            {"PRETTY_PRINT": False, "MULTIDIALECT": multidialect}
+                        ),
+                    },
+                )
+                self.assertEqual(
+                    response.json().get("converted_query"),
+                    'SELECT "Custom SQL Query"."du_id" AS "du_id" FROM (SELECT * FROM dlt.w.t '
+                    "WHERE ('VZ_1,VZ_2' = 'All' OR du_id IN (SELECT TRIM(v) AS du_id "
+                    "FROM (SELECT EXPLODE(SPLIT('VZ_1,VZ_2', ',')) AS v) AS \"g\"))) "
+                    'AS "Custom SQL Query"',
+                )
+
+    def test_backslash_escaped_quote(self):
+        # A backslash-escaped quote must not end a string early when the tree finds the
+        # subqueries: a Databricks 'O\'Brien' and a Tableau E'O\'Brien' both convert. The
+        # E'...' flags are read at import, so the Tableau case runs in a subprocess.
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        from fastapi.testclient import TestClient
+
+        import converter_api
+
+        with mock.patch.object(converter_api, "SUBQUERY_TREE", True):
+            response = TestClient(converter_api.app).post(
+                "/convert-query",
+                data={
+                    "query": r"SELECT a FROM (SELECT * FROM t WHERE name = 'O\'Brien') x",
+                    "from_sql": "databricks",
+                    "feature_flags": json.dumps({"PRETTY_PRINT": False}),
+                },
+            )
+        self.assertEqual(
+            response.json().get("converted_query"),
+            r"""SELECT a FROM (SELECT * FROM t WHERE "name" = 'O\'Brien') AS x""",
+        )
+
+        code = (
+            "import logging, sys\n"
+            "logging.disable(logging.CRITICAL)\n"
+            "from fastapi.testclient import TestClient\n"
+            "import converter_api\n"
+            "r = TestClient(converter_api.app).post('/convert-query', data={'query': sys.argv[1], "
+            "'from_sql': 'postgres', 'feature_flags': '{\"PRETTY_PRINT\": false}'})\n"
+            "print(r.json()['converted_query'])\n"
+        )
+        env = {
+            **{k: v for k, v in os.environ.items() if k != "SAMSUNG_TABLEAU_DASHBOARD"},
+            "SUBQUERY_TREE": "true",
+            "STRIP_E_STRING_PREFIX": "true",
+        }
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                code,
+                r"""SELECT "q"."a" AS "a" FROM (SELECT * FROM t WHERE name = E'O\'Brien') "q\"""",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=Path(__file__).parents[1],
+        )
+        self.assertEqual(
+            result.stdout.splitlines()[-1] if result.stdout else result.stderr,
+            r"""SELECT "q"."a" AS "a" FROM (SELECT * FROM t WHERE "name" = 'O\'Brien') AS "q\"""",
+        )
+
     def test_inner_dialect_matches_split_path(self):
         # A region that fails the Postgres parse is read as INNER_DIALECT, as in split_pg_outer.
         from fastapi.testclient import TestClient

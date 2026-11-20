@@ -4273,6 +4273,59 @@ class TestE6(Validator):
                     read={"databricks": r"SELECT concat(a, '\n', b), 'x\ty', 1"},
                 )
 
+    def test_postgres_escape_string(self):
+        """(SAMSUNG_TABLEAU_DASHBOARD, SUBQUERY_TREE or SUBQUERY_TREE_MULTIDIALECT) +
+        STRIP_E_STRING_PREFIX: a Postgres E'...' becomes a quoted string with its backslash
+        escapes decoded. Either flag alone leaves it unchanged."""
+        import sqlglot
+        from unittest import mock
+
+        gates = ("SAMSUNG_TABLEAU_DASHBOARD", "SUBQUERY_TREE", "SUBQUERY_TREE_MULTIDIALECT")
+        for flag in (*gates, "STRIP_E_STRING_PREFIX"):
+            with self.subTest(only=flag), mock.patch.dict(os.environ, {flag: "true"}):
+                self.assertEqual(
+                    sqlglot.transpile(
+                        r"SELECT E'a\nb'", read="postgres", write="e6", from_dialect="postgres"
+                    )[0],
+                    r"SELECT a\nb",
+                )
+
+        for gate in gates:
+            with (
+                self.subTest(gate=gate),
+                mock.patch.dict(os.environ, {gate: "true", "STRIP_E_STRING_PREFIX": "true"}),
+            ):
+                self.validate_all(r"SELECT 'a\nb'", read={"postgres": r"SELECT E'a\nb'"})
+                self.validate_all(
+                    r"SELECT 'a\\b', 'x\ty'",
+                    read={"postgres": r"SELECT E'a\\b', e'x\ty'"},
+                )
+                # octal, hex and unicode escapes; \a, \v and other letters are literal
+                self.validate_all(
+                    "SELECT 'AAA', 'av', 'it\\'s'",
+                    read={"postgres": r"SELECT E'\101\x41A', E'\a\v', E'it''s'"},
+                )
+                self.validate_all(
+                    r"SELECT * FROM t WHERE ('1,2\n' = 'All' OR x IN ('1', '2'))",
+                    read={
+                        "postgres": r"SELECT * FROM t WHERE (E'1,2\n' = 'All' OR x IN ('1', '2'))"
+                    },
+                )
+
+            # with STRIP_STRING_NEWLINES too, the Tableau parameter loses its newline
+            with (
+                self.subTest(gate=gate, strip_newlines=True),
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        gate: "true",
+                        "STRIP_E_STRING_PREFIX": "true",
+                        "STRIP_STRING_NEWLINES": "true",
+                    },
+                ),
+            ):
+                self.validate_all("SELECT '1,2'", read={"postgres": r"SELECT E'1,2\n'"})
+
     def test_regexp_substr_native(self):
         """On the native executor, a Databricks REGEXP_SUBSTR (no `group`) stays
         REGEXP_SUBSTR; REGEXP_EXTRACT (has `group`) is untouched. The default (java)
