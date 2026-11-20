@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 import typing as t
 
 from sqlglot import exp, generator, parser, tokens, transforms
@@ -2495,43 +2494,6 @@ class E6(Dialect):
                 for i, e in enumerate(expression.expressions)
             ]
             return super().struct_sql(exp.Struct(expressions=args))
-
-        def bytestring_sql(self, expression: exp.ByteString) -> str:
-            # (SAMSUNG_TABLEAU_DASHBOARD, SUBQUERY_TREE or SUBQUERY_TREE_MULTIDIALECT) +
-            # STRIP_E_STRING_PREFIX: a Postgres E'...' escape string (a Tableau parameter in a
-            # region read as Postgres) becomes a quoted string with its backslash escapes
-            # decoded as Postgres does; the default prints it bare, e.g. E'a\n' -> a\n.
-            def unescape(m: t.Match) -> str:
-                esc = m.group(1)
-                if esc[0] in "xuU" and len(esc) > 1:
-                    return chr(int(esc[1:], 16))
-                if esc[0] in "01234567":
-                    return chr(int(esc, 8))
-                return {"b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}.get(esc, esc)
-
-            if (
-                self.from_dialect == "postgres"
-                and any(
-                    os.getenv(flag, "false").lower() == "true"
-                    for flag in (
-                        "SAMSUNG_TABLEAU_DASHBOARD",
-                        "SUBQUERY_TREE",
-                        "SUBQUERY_TREE_MULTIDIALECT",
-                    )
-                )
-                and os.getenv("STRIP_E_STRING_PREFIX", "false").lower() == "true"
-            ):
-                return self.sql(
-                    exp.Literal.string(
-                        re.sub(
-                            r"\\(x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[0-7]{1,3}|.)",
-                            unescape,
-                            expression.name,
-                            flags=re.S,
-                        )
-                    )
-                )
-            return super().bytestring_sql(expression)
 
         def neq_sql(self, expression: exp.NEQ) -> str:
             return self.binary(expression, expression.meta.get("neq_op", "!="))

@@ -324,6 +324,23 @@ class Postgres(Dialect):
         BIT_STRINGS = [("b'", "'"), ("B'", "'")]
         HEX_STRINGS = [("x'", "'"), ("X'", "'")]
         BYTE_STRINGS = [("e'", "'"), ("E'", "'")]
+        # (SAMSUNG_TABLEAU_DASHBOARD, SUBQUERY_TREE or SUBQUERY_TREE_MULTIDIALECT) +
+        # STRIP_E_STRING_PREFIX: read a Tableau E'...' parameter as a plain string with its
+        # backslash escapes decoded, as the Databricks tokenizer does.
+        if (
+            any(
+                os.getenv(flag, "false").lower() == "true"
+                for flag in (
+                    "SAMSUNG_TABLEAU_DASHBOARD",
+                    "SUBQUERY_TREE",
+                    "SUBQUERY_TREE_MULTIDIALECT",
+                )
+            )
+            and os.getenv("STRIP_E_STRING_PREFIX", "false").lower() == "true"
+        ):
+            BYTE_STRINGS = []
+            QUOTES = ["'", ("E'", "'"), ("e'", "'")]
+            STRING_ESCAPES = ["'", "\\"]
         HEREDOC_STRINGS = ["$"]
 
         HEREDOC_TAG_IS_IDENTIFIER = True
