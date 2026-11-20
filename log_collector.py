@@ -1,7 +1,8 @@
 import logging
+from collections import deque
 
-# Shared list to collect logs
-log_records = []
+# Shared buffer of the most recent logs (bounded: each request logs its full converted query)
+log_records: deque = deque(maxlen=1000)
 
 
 class ListLogHandler(logging.Handler):
