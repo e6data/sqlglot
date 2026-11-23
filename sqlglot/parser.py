@@ -625,6 +625,18 @@ class Parser(metaclass=_Parser):
 
     TRIM_TYPES = {"LEADING", "TRAILING", "BOTH"}
 
+    # Postfix tokens that prevent the literal fast path
+    COLUMN_POSTFIX_TOKENS = {
+        TokenType.L_PAREN,
+        TokenType.L_BRACKET,
+        TokenType.L_BRACE,
+        TokenType.COLON,
+        TokenType.JOIN_MARKER,
+    }
+
+    # Tokens that indicate a simple column reference
+    FAST_COLUMN_TOKENS = {TokenType.VAR, TokenType.IDENTIFIER}
+
     FUNC_TOKENS = {
         TokenType.COLLATE,
         TokenType.COMMAND,
@@ -1794,7 +1806,7 @@ class Parser(metaclass=_Parser):
             self._prev_comments = None
 
         # Inlined self.validate_expression(instance)
-        if self.error_level != ErrorLevel.IGNORE:
+        if not instance.is_primitive and self.error_level != ErrorLevel.IGNORE:
             for error_message in instance.error_messages():
                 self.raise_error(error_message)
 
@@ -5071,10 +5083,28 @@ class Parser(metaclass=_Parser):
         return this
 
     def _parse_disjunction(self) -> t.Optional[exp.Expression]:
-        return self._parse_tokens(self._parse_conjunction, self.DISJUNCTION)
+        this = self._parse_conjunction()
+        while self._curr and self._curr.token_type in self.DISJUNCTION:
+            self._advance()  # inlined self._match_set(self.DISJUNCTION)
+            this = self.expression(
+                self.DISJUNCTION[self._prev.token_type],
+                this=this,
+                comments=self._prev_comments,
+                expression=self._parse_conjunction(),
+            )
+        return this
 
     def _parse_conjunction(self) -> t.Optional[exp.Expression]:
-        return self._parse_tokens(self._parse_equality, self.CONJUNCTION)
+        this = self._parse_equality()
+        while self._curr and self._curr.token_type in self.CONJUNCTION:
+            self._advance()  # inlined self._match_set(self.CONJUNCTION)
+            this = self.expression(
+                self.CONJUNCTION[self._prev.token_type],
+                this=this,
+                comments=self._prev_comments,
+                expression=self._parse_equality(),
+            )
+        return this
 
     def _parse_equality(self) -> t.Optional[exp.Expression]:
         this = self._parse_comparison()
@@ -5095,7 +5125,16 @@ class Parser(metaclass=_Parser):
         return this
 
     def _parse_comparison(self) -> t.Optional[exp.Expression]:
-        return self._parse_tokens(self._parse_range, self.COMPARISON)
+        this = self._parse_range()
+        while self._curr and self._curr.token_type in self.COMPARISON:
+            self._advance()  # inlined self._match_set(self.COMPARISON)
+            this = self.expression(
+                self.COMPARISON[self._prev.token_type],
+                this=this,
+                comments=self._prev_comments,
+                expression=self._parse_range(),
+            )
+        return this
 
     def _parse_range(self, this: t.Optional[exp.Expression] = None) -> t.Optional[exp.Expression]:
         this = this or self._parse_bitwise()
@@ -5368,7 +5407,16 @@ class Parser(metaclass=_Parser):
         return this
 
     def _parse_exponent(self) -> t.Optional[exp.Expression]:
-        return self._parse_tokens(self._parse_unary, self.EXPONENT)
+        this = self._parse_unary()
+        while self._curr and self._curr.token_type in self.EXPONENT:
+            self._advance()  # inlined self._match_set(self.EXPONENT)
+            this = self.expression(
+                self.EXPONENT[self._prev.token_type],
+                this=this,
+                comments=self._prev_comments,
+                expression=self._parse_unary(),
+            )
+        return this
 
     def _parse_unary(self) -> t.Optional[exp.Expression]:
         if self._curr and self._curr.token_type in self.UNARY_PARSERS:
@@ -5380,6 +5428,19 @@ class Parser(metaclass=_Parser):
         self, parse_interval: bool = True, fallback_to_identifier: bool = False
     ) -> t.Optional[exp.Expression]:
         curr = self._curr
+        if not fallback_to_identifier and curr:
+            token_type = curr.token_type
+            primary_parser = self.PRIMARY_PARSERS.get(token_type)
+            if primary_parser and token_type in (TokenType.NUMBER, TokenType.STRING):
+                next_type = self._next.token_type if self._next else None
+                if not (
+                    next_type in self.COLUMN_OPERATORS
+                    or next_type in self.COLUMN_POSTFIX_TOKENS
+                    or (token_type == TokenType.STRING and next_type == TokenType.STRING)
+                ):
+                    self._advance()
+                    return primary_parser(self, curr)
+
         interval = (
             parse_interval
             and curr
@@ -5769,11 +5830,82 @@ class Parser(metaclass=_Parser):
         return self.expression(exp.AtTimeZone, this=this, zone=self._parse_unary())
 
     def _parse_column(self) -> t.Optional[exp.Expression]:
-        this = self._parse_column_reference()
-        column = self._parse_column_ops(this) if this else self._parse_bracket(this)
+        column: t.Optional[exp.Expression] = self._parse_column_fast_path()
+        if column is None:
+            this = self._parse_column_reference()
+            column = self._parse_column_ops(this) if this else self._parse_bracket(this)
 
         if self.dialect.SUPPORTS_COLUMN_JOIN_MARKS and column:
             column.set("join_mark", self._match(TokenType.JOIN_MARKER))
+
+        return column
+
+    def _parse_column_fast_path(self) -> t.Optional[exp.Column | exp.Dot]:
+        """Fast path for simple column and dot references (a, a.b, ...).
+
+        Greedily consumes VAR/IDENTIFIER tokens separated by DOTs, then checks
+        that nothing complex follows. If it does, retreats and returns None so
+        the slow path can handle it. For >4 parts, wraps in exp.Dot nodes.
+        """
+        index = self._index
+        parts: t.Optional[t.List[exp.Identifier]] = None
+        all_comments: t.Optional[t.List[str]] = None
+
+        while self._curr and self._curr.token_type in self.FAST_COLUMN_TOKENS:
+            self._advance()
+            token = self._prev
+            comments = self._prev_comments
+
+            if parts is None and token.text.upper() in self.NO_PAREN_FUNCTION_PARSERS:
+                self._retreat(index)
+                return None
+
+            has_dot = self._match(TokenType.DOT)
+            curr_tt = self._curr.token_type if self._curr else None
+
+            if not has_dot:
+                if curr_tt in self.COLUMN_OPERATORS or curr_tt in self.COLUMN_POSTFIX_TOKENS:
+                    self._retreat(index)
+                    return None
+            elif curr_tt not in self.FAST_COLUMN_TOKENS:
+                self._retreat(index)
+                return None
+
+            if parts is None:
+                parts = []
+
+            if comments:
+                if all_comments is None:
+                    all_comments = []
+                all_comments.extend(comments)
+                self._prev_comments = None
+
+            parts.append(
+                self._identifier_expression(token, quoted=token.token_type == TokenType.IDENTIFIER)
+            )
+
+            if not has_dot:
+                break
+
+        if parts is None:
+            return None
+
+        n = len(parts)
+
+        if n == 1:
+            column: exp.Column | exp.Dot = exp.Column(this=parts[0])
+        elif n == 2:
+            column = exp.Column(this=parts[1], table=parts[0])
+        elif n == 3:
+            column = exp.Column(this=parts[2], table=parts[1], db=parts[0])
+        else:
+            column = exp.Column(this=parts[3], table=parts[2], db=parts[1], catalog=parts[0])
+
+            for i in range(4, n):
+                column = exp.Dot(this=column, expression=parts[i])
+
+        if all_comments:
+            column.add_comments(all_comments)
 
         return column
 
@@ -7607,10 +7739,13 @@ class Parser(metaclass=_Parser):
         return self._parse_csv(self._parse_expression)
 
     def _parse_select_or_expression(self, alias: bool = False) -> t.Optional[exp.Expression]:
-        return self._parse_select() or self._parse_set_operations(
-            self._parse_alias(self._parse_assignment(), explicit=True)
-            if alias
-            else self._parse_assignment()
+        return (
+            self._parse_set_operations(
+                self._parse_alias(self._parse_assignment(), explicit=True)
+                if alias
+                else self._parse_assignment()
+            )
+            or self._parse_select()
         )
 
     def _parse_ddl_select(self) -> t.Optional[exp.Expression]:

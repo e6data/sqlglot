@@ -105,6 +105,7 @@ class Expression(metaclass=_Expression):
     key = "expression"
     arg_types = {"this": True}
     _required_arg_keys: t.ClassVar[t.Tuple[str, ...]]
+    is_primitive: t.ClassVar[bool] = False
     __slots__ = (
         "args",
         "parent",
@@ -128,6 +129,8 @@ class Expression(metaclass=_Expression):
 
         # Same as calling self._set_parent(arg_key, value) for each arg, inlined because
         # every AST node goes through here.
+        if self.is_primitive:
+            return
         for arg_key, value in args.items():
             if hasattr(value, "parent"):
                 value.parent = self
@@ -2315,6 +2318,8 @@ class JoinHint(Expression):
 
 
 class Identifier(Expression):
+    is_primitive = True
+
     arg_types = {"this": True, "quoted": False, "global": False, "temporary": False}
 
     @property
@@ -2553,6 +2558,8 @@ class LimitOptions(Expression):
 
 
 class Literal(Condition):
+    is_primitive = True
+
     arg_types = {"this": True, "is_string": True}
 
     @property
@@ -3806,6 +3813,8 @@ class Values(UDTF):
 
 
 class Var(Expression):
+    is_primitive = True
+
     pass
 
 
@@ -4548,6 +4557,8 @@ class Null(Condition):
 
 
 class Boolean(Condition):
+    is_primitive = True
+
     def to_py(self) -> bool:
         return self.this
 

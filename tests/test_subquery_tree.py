@@ -345,6 +345,31 @@ class TestSubqueryTreeTrigger(unittest.TestCase):
         )
         self.assertEqual(outputs[1], outputs[0])
 
+    def test_gc_reenabled_and_logs_bounded(self):
+        # The GC is paused only for the request, even when the transpile raises.
+        import gc
+
+        from fastapi.testclient import TestClient
+
+        import converter_api
+        from log_collector import log_records
+
+        client = TestClient(converter_api.app, raise_server_exceptions=False)
+        for side_effect in (None, RuntimeError("boom")):
+            with (
+                self.subTest(side_effect=side_effect),
+                mock.patch.object(converter_api, "SUBQUERY_TREE", True),
+                mock.patch.object(
+                    converter_api,
+                    "subquery_tree_transpile",
+                    return_value="SELECT 1",
+                    side_effect=side_effect,
+                ),
+            ):
+                client.post("/convert-query", data={"query": "SELECT 1", "from_sql": "postgres"})
+                self.assertTrue(gc.isenabled())
+        self.assertEqual(log_records.maxlen, 1000)
+
 
 if __name__ == "__main__":
     unittest.main()
