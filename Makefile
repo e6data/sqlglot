@@ -34,8 +34,8 @@ test-rs:
 # skipped by test/test-rs.
 test-multidialect:
 	MULTIDIALECT_CORPUS=1 SQLGLOTRS_TOKENIZER=0 python -m unittest \
-		tests.samsung.test_samsung_queries tests.condenast.test_condenast_queries \
-		tests.onetrust.test_onetrust_queries
+		tests.samsung.test_samsung_queries tests.samsung.test_samsung_failures \
+		tests.condenast.test_condenast_queries tests.onetrust.test_onetrust_queries
 
 unit:
 	SKIP_INTEGRATION=1 SQLGLOTRS_TOKENIZER=0 python -m unittest
