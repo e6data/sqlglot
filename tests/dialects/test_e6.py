@@ -8,6 +8,28 @@ class TestE6(Validator):
     maxDiff = None
     dialect = "e6"
 
+    def test_unbase64(self):
+        self.validate_all(
+            "SELECT UNBASE64(encoded)",
+            read={
+                "databricks": "SELECT unbase64(encoded)",
+                "spark": "SELECT unbase64(encoded)",
+                "bigquery": "SELECT FROM_BASE64(encoded)",
+            },
+            write={
+                "databricks": "SELECT UNBASE64(encoded)",
+                "spark": "SELECT UNBASE64(encoded)",
+            },
+        )
+        self.validate_all(
+            "SELECT AES_DECRYPT(COALESCE(UNBASE64(encoded), UNBASE64(fallback)), UNBASE64(crypto_key))",
+            read={
+                "databricks": "SELECT aes_decrypt(coalesce(unbase64(encoded), unbase64(fallback)), unbase64(crypto_key))",
+            },
+        )
+        self.validate_identity("SELECT UNBASE64('')")
+        self.validate_identity("SELECT UNBASE64(NULL)")
+
     def test_E6(self):
         self.validate_all(
             'SELECT status_change_event:"location" FROM silver_postgres_v2.dms.delivery',
@@ -1008,7 +1030,7 @@ class TestE6(Validator):
         )
 
         self.validate_all(
-            "SELECT CAST(UNBASE64_BINARY('U3BhcmsgU1FM') AS VARCHAR)",
+            "SELECT CAST(UNBASE64('U3BhcmsgU1FM') AS VARCHAR)",
             read={"databricks": "SELECT cast(unbase64('U3BhcmsgU1FM') AS STRING)"},
         )
 

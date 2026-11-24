@@ -1527,6 +1527,7 @@ class E6(Dialect):
 
         FUNCTIONS = {
             **parser.Parser.FUNCTIONS,
+            "UNBASE64": exp.FromBase64.from_arg_list,
             "APPROX_COUNT_DISTINCT": exp.ApproxDistinct.from_arg_list,
             # TODO:: Need to understand this funcitons
             # Have to refer the documentation
@@ -3749,7 +3750,7 @@ class E6(Dialect):
             exp.First: rename_func("FIRST_VALUE"),
             exp.Format: rename_func("FORMAT"),
             exp.FormatDatetime: rename_func("FORMAT_DATETIME"),
-            exp.FromBase64: rename_func("unbase64_binary"),
+            exp.FromBase64: rename_func("unbase64"),
             exp.FromTimeZone: lambda self, e: self.func(
                 "CONVERT_TIMEZONE", e.args.get("zone"), "'UTC'", e.this
             ),
