@@ -4437,9 +4437,9 @@ class TestE6(Validator):
             },
         )
 
-        # Column references - columns are quoted, units in single quotes
+        # Column references - identifiers are quoted, units are bare
         self.validate_all(
-            """SELECT col + INTERVAL "year" 'YEAR' + INTERVAL "month" 'MONTH' + INTERVAL "week" 'WEEK' + INTERVAL "days" 'DAY' + INTERVAL "hours" 'HOUR' + INTERVAL "mins" 'MINUTE' + INTERVAL "secs" 'SECOND'""",
+            """SELECT col + INTERVAL "year" YEAR + INTERVAL "month" MONTH + INTERVAL "week" WEEK + INTERVAL "days" DAY + INTERVAL "hours" HOUR + INTERVAL "mins" MINUTE + INTERVAL "secs" SECOND""",
             read={
                 "databricks": "SELECT col + make_interval(year, month, week, days, hours, mins, secs)",
             },
@@ -4447,19 +4447,39 @@ class TestE6(Validator):
 
         # INTERVAL with column reference in CTE
         self.validate_all(
-            "WITH cte AS (SELECT id AS UTCOffsetMinutes FROM RANGE(-1440, 1440, 15)) SELECT CURRENT_TIMESTAMP + INTERVAL \"UTCOffsetMinutes\" 'WEEK' FROM cte",
+            "WITH cte AS (SELECT id AS UTCOffsetMinutes FROM RANGE(-1440, 1440, 15)) SELECT CURRENT_TIMESTAMP + INTERVAL \"UTCOffsetMinutes\" WEEK FROM cte",
             read={
                 "databricks": "with cte as (SELECT id AS UTCOffsetMinutes FROM RANGE(-1440, 1440, 15)) select current_timestamp + interval UTCOffsetMinutes week from cte",
             },
         )
 
-        # Mixed literals and column reference - literals quoted, column with unit in quotes
+        # Mixed literals and column reference - literal syntax is unchanged
         self.validate_all(
-            """SELECT col1 + INTERVAL '1 YEAR' + INTERVAL '2 MONTH' + INTERVAL '3 WEEK' + INTERVAL '4 DAY' + INTERVAL "col" 'HOUR'""",
+            """SELECT col1 + INTERVAL '1 YEAR' + INTERVAL '2 MONTH' + INTERVAL '3 WEEK' + INTERVAL '4 DAY' + INTERVAL "col" HOUR""",
             read={
                 "databricks": "SELECT col1 + make_interval(1, 2, 3, 4, col)",
             },
         )
+
+    def test_make_interval_with_qualified_minute_amount(self):
+        zero_parts = (
+            "INTERVAL '0 YEAR' + INTERVAL '0 MONTH' + INTERVAL '0 WEEK' "
+            "+ INTERVAL '0 DAY' + INTERVAL '0 HOUR'"
+        )
+        for source_amount, target_amount in (
+            ("UO.utcOffsetMinutes", 'UO."utcOffsetMinutes"'),
+            ("UO.utcOffsetMinutes + 1", "(UO.utcOffsetMinutes + 1)"),
+            ("(UO.utcOffsetMinutes + 1)", "(UO.utcOffsetMinutes + 1)"),
+        ):
+            with self.subTest(amount=source_amount):
+                self.validate_all(
+                    f"SELECT {zero_parts} + INTERVAL {target_amount} MINUTE FROM offsets AS UO",
+                    read={
+                        "databricks": (
+                            f"SELECT make_interval(0, 0, 0, 0, 0, {source_amount}) FROM offsets AS UO"
+                        ),
+                    },
+                )
 
     def test_snowflake_flatten_passthrough(self):
         """Snowflake TABLE(FLATTEN(...)) is passed through unchanged for the E6 planner."""

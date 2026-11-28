@@ -456,10 +456,10 @@ def make_interval_sql(self: E6.Generator, expression: exp.MakeInterval) -> str:
     Convert MakeInterval to E6 format using exp.Interval objects.
 
     Handles:
-    - make_interval(100, 11) -> INTERVAL 100 YEAR + INTERVAL 11 MONTH
+    - make_interval(100, 11) -> INTERVAL '100 YEAR' + INTERVAL '11 MONTH'
     - make_interval(100, null) -> NULL (any null arg returns NULL)
     - make_interval() -> INTERVAL 0 SECOND
-    - make_interval(1,2,3,4,col) -> INTERVAL 1 YEAR + ... + INTERVAL "col" 'HOUR'
+    - make_interval(1,2,3,4,col) -> INTERVAL '1 YEAR' + ... + INTERVAL "col" HOUR
     """
     unit_order = [
         ("year", "YEAR"),
@@ -2049,7 +2049,7 @@ class E6(Dialect):
             >>> expr = exp.Interval(this=exp.Literal(5), unit=exp.Literal('DAY'))
             >>> generator = Generator()
             >>> generator.interval_sql(expr)
-            'INTERVAL 5 DAY'
+            "INTERVAL '5 DAY'"
             """
             # TODO:: Ask Adithya, how he has guessed about this `.this` & `.unit`
             # While you debug anything, you can see the tree like structures there and see what are our candidates to fetch and do manipulations
@@ -2101,7 +2101,7 @@ class E6(Dialect):
                     unit = self.TIME_PART_SINGULARS.get(unit, unit)
 
                 # For literal values, use INTERVAL 'value UNIT' format
-                # For non-literals (columns, expressions), use INTERVAL expr 'UNIT' format
+                # The E6 planner expects a bare unit after a nonliteral amount.
                 if isinstance(expression.this, exp.Literal):
                     value = expression.this.name
                     interval_str = f"INTERVAL '{value} {unit}'"
@@ -2111,7 +2111,10 @@ class E6(Dialect):
                     if isinstance(value_expr, exp.Column):
                         value_expr.this.set("quoted", True)
                     value_sql = self.sql(value_expr)
-                    interval_str = f"INTERVAL {value_sql} '{unit}'"
+                    # Only an identifier can appear bare here; wrap other expressions.
+                    if not isinstance(value_expr, (exp.Column, exp.Paren)):
+                        value_sql = f"({value_sql})"
+                    interval_str = f"INTERVAL {value_sql} {unit}"
                 return interval_str
             elif expression.this and not expression.unit:
                 # Handle compound intervals like '5 minutes 30 seconds'
