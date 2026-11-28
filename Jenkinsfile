@@ -3,8 +3,11 @@ pipeline {
         RELEASE_NAME = "transpiler"
         IMAGE_TAG_PREFIX = "3.0.${BUILD_NUMBER}-"
         
-        GCP_PROJECT_ID = credentials('GCP_PROJECT_ID')
-        PROD_IMAGE = "us-docker.pkg.dev/${GCP_PROJECT_ID}/e6-engine/${RELEASE_NAME}"
+        // Uniphi ECR is the build's registry: per-arch images are pushed here by
+        // digest and the multi-arch tag is assembled here, then copied to ACR.
+        // Jenkins itself runs in the uniphi account (jenkins:jenkins IRSA role,
+        // which already holds ecr:PutImage), so the pod's own creds suffice.
+        PROD_IMAGE = "298655976287.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
 
         TRIVY_VERSION = "v0.69.2"
         TRIVY_OPTIONS = "--db-repository public.ecr.aws/aquasecurity/trivy-db"
@@ -13,19 +16,6 @@ pipeline {
         AZURE_IMAGE = "e6labs.azurecr.io/${RELEASE_NAME}"
         
         AWS_REGION = "us-east-1"
-        ASSUMED_ROLE_ARN = credentials('ASSUMED_ROLE_ARN')
-        DEV_IMAGE = "670514002493.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}:latest"
-
-        // Serverless beta/prod push targets (added)
-        SERVERLESS_BETA_ROLE_ARN = credentials('SERVERLESS_BETA_ROLE_ARN')
-        SERVERLESS_PROD_ROLE_ARN = credentials('SERVERLESS_PROD_ROLE_ARN')
-        SERVERLESS_BETA_IMAGE = "908027423391.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
-        SERVERLESS_PROD_IMAGE = "390844744777.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
-
-        // Uniphi push target (added). Jenkins itself runs in the uniphi account
-        // (jenkins:jenkins IRSA role, which already holds ecr:PutImage), so unlike
-        // beta/prod this needs no cross-account role — the pod's own creds suffice.
-        UNIPHI_IMAGE = "298655976287.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}"
     }
 
     options {
@@ -106,40 +96,17 @@ pipeline {
                 }
             }
 
-            environment {
-                GCP_SA_PATH = credentials('JENKINS_GCP_SA')
-            }    
-
             steps {
                 checkout scm
                 sh 'git config --global --add safe.directory "*"'
-                sh 'cp ${GCP_SA_PATH} hello.json && gcloud auth activate-service-account --key-file=hello.json'
-                sh 'gcloud config set project ${GCP_PROJECT_ID}'
-                sh 'gcloud auth configure-docker us-central1-docker.pkg.dev'
                 script {
                     env.GIT_COMMIT_HASH = sh(script: 'git rev-parse --short HEAD', returnStdout: true)
                     env.TAG_VALUE = "${IMAGE_TAG_PREFIX}${GIT_COMMIT_HASH}"
-                    env.GCP_DOCKER_TOKEN = sh(returnStdout: true, script: "gcloud auth print-access-token").trim() 
 
-                    // Uniphi ECR token (added) — read from the agent's own IRSA
-                    // credentials, which are already in the uniphi account. Must be taken
-                    // FIRST: the serverless captures below scope their creds inline, but
-                    // the dev assume further down replaces the ambient ones for good.
+                    // Uniphi ECR token — read from the agent's own IRSA credentials,
+                    // which are already in the uniphi account. No assume-role anywhere in
+                    // this pipeline, so nothing overrides the ambient identity.
                     env.UNIPHI_ECR_TOKEN = sh(returnStdout: true, script: 'aws ecr get-login-password --region ${AWS_REGION} --output text').trim()
-
-                    // Serverless beta/prod ECR tokens (added) — assumed by the OIDC role BEFORE
-                    // the dev assume below overwrites AWS_ACCESS_KEY_ID/SECRET/SESSION.
-                    env.SERVERLESS_BETA_TEMP_ROLE = sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${SERVERLESS_BETA_ROLE_ARN} --role-session-name transpiler-slbeta-${BUILD_NUMBER}').trim()
-                    env.SERVERLESS_BETA_ECR_TOKEN = sh(returnStdout: true, script: 'AWS_ACCESS_KEY_ID=$(echo $SERVERLESS_BETA_TEMP_ROLE | jq -r ".Credentials.AccessKeyId") AWS_SECRET_ACCESS_KEY=$(echo $SERVERLESS_BETA_TEMP_ROLE | jq -r ".Credentials.SecretAccessKey") AWS_SESSION_TOKEN=$(echo $SERVERLESS_BETA_TEMP_ROLE | jq -r ".Credentials.SessionToken") aws ecr get-login-password --region ${AWS_REGION} --output text').trim()
-
-                    env.SERVERLESS_PROD_TEMP_ROLE = sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${SERVERLESS_PROD_ROLE_ARN} --role-session-name transpiler-slprod-${BUILD_NUMBER}').trim()
-                    env.SERVERLESS_PROD_ECR_TOKEN = sh(returnStdout: true, script: 'AWS_ACCESS_KEY_ID=$(echo $SERVERLESS_PROD_TEMP_ROLE | jq -r ".Credentials.AccessKeyId") AWS_SECRET_ACCESS_KEY=$(echo $SERVERLESS_PROD_TEMP_ROLE | jq -r ".Credentials.SecretAccessKey") AWS_SESSION_TOKEN=$(echo $SERVERLESS_PROD_TEMP_ROLE | jq -r ".Credentials.SessionToken") aws ecr get-login-password --region ${AWS_REGION} --output text').trim()
-
-                    env.TEMP_ROLE = sh(returnStdout: true, script: 'aws sts assume-role --role-arn ${ASSUMED_ROLE_ARN} --role-session-name storage-service-${BUILD_NUMBER}').trim()
-                    env.AWS_ACCESS_KEY_ID = sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.AccessKeyId"').trim()
-                    env.AWS_SECRET_ACCESS_KEY = sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SecretAccessKey"').trim()
-                    env.AWS_SESSION_TOKEN = sh(returnStdout: true, script: 'echo $TEMP_ROLE | jq -r ".Credentials.SessionToken"').trim()
-                    env.ECR_TOKEN = sh(returnStdout: true, script: "aws ecr get-login-password --region ${AWS_REGION} --output text").trim()
                 }
             }
         }
@@ -156,7 +123,7 @@ pipeline {
                 
                     steps {
                         checkout scm
-                        sh 'docker login -u oauth2accesstoken -p ${GCP_DOCKER_TOKEN} https://us-docker.pkg.dev'
+                        sh 'docker login --username AWS --password ${UNIPHI_ECR_TOKEN} 298655976287.dkr.ecr.us-east-1.amazonaws.com'
                         sh 'docker buildx create --name mybuilder  --use --platform linux/arm64,linux/amd64'
                         // sh 'mkdir -p /tmp/trivy/'
                         // sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
@@ -181,7 +148,7 @@ pipeline {
                 
                     steps {
                         checkout scm
-                        sh 'docker login -u oauth2accesstoken -p ${GCP_DOCKER_TOKEN} https://us-docker.pkg.dev'
+                        sh 'docker login --username AWS --password ${UNIPHI_ECR_TOKEN} 298655976287.dkr.ecr.us-east-1.amazonaws.com'
                         sh 'docker buildx create --name mybuilder  --use --platform linux/arm64,linux/amd64'
                         // sh 'mkdir -p /tmp/trivy/'
                         // sh 'aws s3 cp s3://e6-trivy-db/db.tar.gz /tmp/trivy/'
@@ -207,19 +174,13 @@ pipeline {
             }
 
             steps {
-                sh 'docker login -u oauth2accesstoken -p ${GCP_DOCKER_TOKEN} https://us-docker.pkg.dev'
+                sh 'docker login --username AWS --password ${UNIPHI_ECR_TOKEN} 298655976287.dkr.ecr.us-east-1.amazonaws.com'
                 sh 'docker buildx imagetools create  --tag ${PROD_IMAGE}:${TAG_VALUE} ${AMD_HASH} ${ARM_HASH}'
                 sh 'apk add skopeo'
-                sh 'skopeo login -u oauth2accesstoken -p ${GCP_DOCKER_TOKEN} https://us-docker.pkg.dev'
-                sh 'skopeo login --username AWS --password ${ECR_TOKEN} 670514002493.dkr.ecr.us-east-1.amazonaws.com'
-                sh 'skopeo login --username e6labs --password ${ACR_TOKEN} e6labs.azurecr.io'
-                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${DEV_IMAGE}'
-                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://670514002493.dkr.ecr.us-east-1.amazonaws.com/${RELEASE_NAME}:${TAG_VALUE}'
-                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${AZURE_IMAGE}:${TAG_VALUE}'
-
-                // Push to Uniphi ECR (added)
                 sh 'skopeo login --username AWS --password ${UNIPHI_ECR_TOKEN} 298655976287.dkr.ecr.us-east-1.amazonaws.com'
-                sh 'skopeo copy docker://${PROD_IMAGE}:${TAG_VALUE} docker://${UNIPHI_IMAGE}:${TAG_VALUE}'
+                sh 'skopeo login --username e6labs --password ${ACR_TOKEN} e6labs.azurecr.io'
+                // --all keeps the multi-arch manifest list (plain copy flattens to one arch).
+                sh 'skopeo copy --all docker://${PROD_IMAGE}:${TAG_VALUE} docker://${AZURE_IMAGE}:${TAG_VALUE}'
             }
         }
     }
